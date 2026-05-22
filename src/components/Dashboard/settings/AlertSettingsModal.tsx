@@ -323,10 +323,18 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     if (!companyId || funnels.length > 0) return
     setLoadingFunnels(true)
     try {
+      // #region agent log
+      console.log('[debug:loadFunnels] calling getFunnels with companyId=', companyId)
+      // #endregion
       const data = await funnelApi.getFunnels(companyId)
+      // #region agent log
+      console.log('[debug:loadFunnels] getFunnels returned count=', data?.length, 'data=', data)
+      // #endregion
       setFunnels(data)
-    } catch {
-      // silencioso — o usuário verá lista vazia e poderá tentar novamente
+    } catch (err) {
+      // #region agent log
+      console.log('[debug:loadFunnels] getFunnels THREW error=', err)
+      // #endregion
     } finally {
       setLoadingFunnels(false)
     }
