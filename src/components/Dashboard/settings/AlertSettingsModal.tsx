@@ -329,6 +329,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
   // Carrega funis quando modo custom é ativado (lazy)
   const loadFunnels = useCallback(async () => {
+    // #region agent log
+    console.log('[dbg:D] loadFunnels ENTERED companyId=', companyId, 'funnels.length=', funnels.length)
+    // #endregion
     if (!companyId || funnels.length > 0) return
     setLoadingFunnels(true)
     try {
@@ -348,6 +351,15 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
       setLoadingFunnels(false)
     }
   }, [companyId, funnels.length])
+
+  // Se o form carrega com mode='custom' (configuração salva), dispara a carga dos funis
+  useEffect(() => {
+    if (form?.funnelScope?.mode === 'custom') {
+      void loadFunnels()
+    }
+  // loadFunnels muda quando funnels.length muda — a guard interna evita re-fetch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form?.funnelScope?.mode])
 
   // Carrega etapas de um funil ao expandir no accordion
   const loadStagesForFunnel = useCallback(async (funnelId: string) => {
