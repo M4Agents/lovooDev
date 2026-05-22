@@ -39,10 +39,16 @@ export interface SellerRiskSettings {
   limit:           number
 }
 
+export interface FunnelScopeSettings {
+  mode:       'all' | 'custom'
+  stage_ids?: string[]   // obrigatório quando mode = 'custom'; deve ser array não vazio
+}
+
 export interface AlertSettings {
-  sla_settings:          SlaSettings
-  stalled_settings:      StalledSettings
-  seller_risk_settings:  SellerRiskSettings
+  sla_settings:           SlaSettings
+  stalled_settings:       StalledSettings
+  seller_risk_settings:   SellerRiskSettings
+  funnel_scope_settings:  FunnelScopeSettings
 }
 
 // ---------------------------------------------------------------------------
@@ -71,9 +77,10 @@ export const SELLER_RISK_DEFAULTS: SellerRiskSettings = {
 } as const
 
 export const GLOBAL_DEFAULTS: AlertSettings = {
-  sla_settings:         SLA_DEFAULTS,
-  stalled_settings:     STALLED_DEFAULTS,
-  seller_risk_settings: SELLER_RISK_DEFAULTS,
+  sla_settings:           SLA_DEFAULTS,
+  stalled_settings:       STALLED_DEFAULTS,
+  seller_risk_settings:   SELLER_RISK_DEFAULTS,
+  funnel_scope_settings:  { mode: 'all' },
 } as const
 
 // ---------------------------------------------------------------------------
@@ -230,6 +237,44 @@ export function validateSellerRiskSettings(s: unknown): string | null {
 
   const limitErr = checkRange(s.limit, 'limit', SETTINGS_LIMITS.seller_risk.limit)
   if (limitErr) return `seller_risk_settings: ${limitErr}`
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// validateFunnelScopeSettings
+// ---------------------------------------------------------------------------
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function validateFunnelScopeSettings(s: unknown): string | null {
+  if (!isPlainObject(s)) {
+    return 'funnel_scope_settings deve ser um objeto JSON'
+  }
+
+  const mode = s.mode
+  if (mode !== 'all' && mode !== 'custom') {
+    return 'funnel_scope_settings: "mode" deve ser "all" ou "custom"'
+  }
+
+  if (mode === 'all') {
+    return null
+  }
+
+  // mode = 'custom': stage_ids obrigatório, array não vazio de UUIDs válidos
+  if (!Array.isArray(s.stage_ids)) {
+    return 'funnel_scope_settings: "stage_ids" é obrigatório e deve ser um array quando mode = "custom"'
+  }
+
+  if (s.stage_ids.length === 0) {
+    return 'funnel_scope_settings: "stage_ids" não pode ser vazio em mode = "custom". Selecione ao menos uma etapa ou escolha mode = "all"'
+  }
+
+  for (const id of s.stage_ids) {
+    if (typeof id !== 'string' || !UUID_RE.test(id)) {
+      return `funnel_scope_settings: stage_ids contém um valor inválido: "${id}". Todos os itens devem ser UUIDs válidos`
+    }
+  }
 
   return null
 }

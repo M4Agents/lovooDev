@@ -11,7 +11,7 @@
 //   Se houver registro salvo:     retorna os valores do banco com meta.updated_at
 //
 // POST — restrito a admin / system_admin / super_admin:
-//   Body: { company_id, sla_settings?, stalled_settings?, seller_risk_settings? }
+//   Body: { company_id, sla_settings?, stalled_settings?, seller_risk_settings?, funnel_scope_settings? }
 //   Merge seguro: seção ausente mantém valor atual/default; seção presente deve estar completa
 //   Campos extras dentro de cada seção são REJEITADOS (evita persistência silenciosa)
 //   updated_by é SEMPRE user.id do JWT — nunca aceito do payload
@@ -39,10 +39,12 @@ import {
   validateSlaSettings,
   validateStalledSettings,
   validateSellerRiskSettings,
+  validateFunnelScopeSettings,
   type AlertSettings,
   type SlaSettings,
   type StalledSettings,
   type SellerRiskSettings,
+  type FunnelScopeSettings,
 } from '../lib/dashboard/alertSettingsDefaults.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -88,7 +90,7 @@ async function handleGet(req: any, res: any): Promise<void> {
     // 4. Leitura das configurações
     const { data, error: dbError } = await svc
       .from('dashboard_alert_settings')
-      .select('sla_settings, stalled_settings, seller_risk_settings, updated_at')
+      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, updated_at')
       .eq('company_id', companyId)
       .maybeSingle()
 
@@ -110,9 +112,10 @@ async function handleGet(req: any, res: any): Promise<void> {
     return res.status(200).json({
       ok:   true,
       data: {
-        sla_settings:         data.sla_settings         as SlaSettings,
-        stalled_settings:     data.stalled_settings     as StalledSettings,
-        seller_risk_settings: data.seller_risk_settings as SellerRiskSettings,
+        sla_settings:          data.sla_settings          as SlaSettings,
+        stalled_settings:      data.stalled_settings      as StalledSettings,
+        seller_risk_settings:  data.seller_risk_settings  as SellerRiskSettings,
+        funnel_scope_settings: (data.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings,
       } satisfies AlertSettings,
       meta: {
         is_default: false,
@@ -161,9 +164,10 @@ async function handlePost(req: any, res: any): Promise<void> {
     const hasSla         = 'sla_settings' in body
     const hasStalled     = 'stalled_settings' in body
     const hasSellerRisk  = 'seller_risk_settings' in body
+    const hasFunnelScope = 'funnel_scope_settings' in body
 
-    if (!hasSla && !hasStalled && !hasSellerRisk) {
-      jsonError(res, 400, 'Informe ao menos uma seção: sla_settings, stalled_settings ou seller_risk_settings'); return
+    if (!hasSla && !hasStalled && !hasSellerRisk && !hasFunnelScope) {
+      jsonError(res, 400, 'Informe ao menos uma seção: sla_settings, stalled_settings, seller_risk_settings ou funnel_scope_settings'); return
     }
 
     // 5. Validar cada seção presente (completa e sem campos extras)
@@ -179,33 +183,62 @@ async function handlePost(req: any, res: any): Promise<void> {
       const err = validateSellerRiskSettings(body.seller_risk_settings)
       if (err) { jsonError(res, 400, err); return }
     }
+    if (hasFunnelScope) {
+      const err = validateFunnelScopeSettings(body.funnel_scope_settings)
+      if (err) { jsonError(res, 400, err); return }
+
+      // Validação de ownership: todos os stage_ids devem pertencer à empresa atual
+      // Impede referência cruzada entre tenants
+      const scope = body.funnel_scope_settings as FunnelScopeSettings
+      if (scope.mode === 'custom' && scope.stage_ids && scope.stage_ids.length > 0) {
+        const { data: validStages, error: stagesError } = await svc
+          .from('funnel_stages')
+          .select('id, funnel_id, sales_funnels!inner(company_id)')
+          .in('id', scope.stage_ids)
+          .eq('sales_funnels.company_id', companyId)
+
+        if (stagesError) {
+          logDashboardError('dashboard.alert-settings.post.stages', stagesError, { companyId })
+          jsonError(res, 500, 'Erro ao validar etapas'); return
+        }
+
+        const validIds = new Set((validStages ?? []).map((s: { id: string }) => s.id))
+        const invalid  = scope.stage_ids.filter(id => !validIds.has(id))
+
+        if (invalid.length > 0) {
+          jsonError(res, 400, `funnel_scope_settings: stage_ids contém etapas inválidas ou de outra empresa`); return
+        }
+      }
+    }
 
     // 6. Merge seguro:
     //    - Seção presente: usa o valor validado do body (completo)
     //    - Seção ausente:  usa o valor atual do banco ou o default global
-    //    Garante que nenhuma seção fique null/undefined no upsert.
     let currentSla         = GLOBAL_DEFAULTS.sla_settings
     let currentStalled     = GLOBAL_DEFAULTS.stalled_settings
     let currentSellerRisk  = GLOBAL_DEFAULTS.seller_risk_settings
+    let currentFunnelScope = GLOBAL_DEFAULTS.funnel_scope_settings
 
-    if (!hasSla || !hasStalled || !hasSellerRisk) {
+    if (!hasSla || !hasStalled || !hasSellerRisk || !hasFunnelScope) {
       // Só busca o estado atual quando há seções ausentes (evita query desnecessária)
       const { data: existing } = await svc
         .from('dashboard_alert_settings')
-        .select('sla_settings, stalled_settings, seller_risk_settings')
+        .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings')
         .eq('company_id', companyId)
         .maybeSingle()
 
       if (existing) {
-        currentSla        = (existing.sla_settings         as SlaSettings)        ?? GLOBAL_DEFAULTS.sla_settings
-        currentStalled    = (existing.stalled_settings     as StalledSettings)    ?? GLOBAL_DEFAULTS.stalled_settings
-        currentSellerRisk = (existing.seller_risk_settings as SellerRiskSettings) ?? GLOBAL_DEFAULTS.seller_risk_settings
+        currentSla         = (existing.sla_settings          as SlaSettings)        ?? GLOBAL_DEFAULTS.sla_settings
+        currentStalled     = (existing.stalled_settings      as StalledSettings)    ?? GLOBAL_DEFAULTS.stalled_settings
+        currentSellerRisk  = (existing.seller_risk_settings  as SellerRiskSettings) ?? GLOBAL_DEFAULTS.seller_risk_settings
+        currentFunnelScope = (existing.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings
       }
     }
 
-    const mergedSla         = hasSla        ? (body.sla_settings         as SlaSettings)        : currentSla
-    const mergedStalled     = hasStalled    ? (body.stalled_settings     as StalledSettings)    : currentStalled
-    const mergedSellerRisk  = hasSellerRisk ? (body.seller_risk_settings as SellerRiskSettings) : currentSellerRisk
+    const mergedSla         = hasSla         ? (body.sla_settings          as SlaSettings)        : currentSla
+    const mergedStalled     = hasStalled     ? (body.stalled_settings      as StalledSettings)    : currentStalled
+    const mergedSellerRisk  = hasSellerRisk  ? (body.seller_risk_settings  as SellerRiskSettings) : currentSellerRisk
+    const mergedFunnelScope = hasFunnelScope ? (body.funnel_scope_settings as FunnelScopeSettings) : currentFunnelScope
 
     // 7. Upsert — service_role (autorização já validada acima)
     //    updated_by é SEMPRE user.id do JWT, nunca aceito do payload
@@ -216,15 +249,16 @@ async function handlePost(req: any, res: any): Promise<void> {
       .from('dashboard_alert_settings')
       .upsert(
         {
-          company_id:           companyId,
-          sla_settings:         mergedSla,
-          stalled_settings:     mergedStalled,
-          seller_risk_settings: mergedSellerRisk,
-          updated_by:           user.id,
+          company_id:            companyId,
+          sla_settings:          mergedSla,
+          stalled_settings:      mergedStalled,
+          seller_risk_settings:  mergedSellerRisk,
+          funnel_scope_settings: mergedFunnelScope,
+          updated_by:            user.id,
         },
         { onConflict: 'company_id' },
       )
-      .select('sla_settings, stalled_settings, seller_risk_settings, updated_at')
+      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, updated_at')
       .single()
 
     if (upsertError) {
@@ -235,9 +269,10 @@ async function handlePost(req: any, res: any): Promise<void> {
     return res.status(200).json({
       ok:   true,
       data: {
-        sla_settings:         saved.sla_settings         as SlaSettings,
-        stalled_settings:     saved.stalled_settings     as StalledSettings,
-        seller_risk_settings: saved.seller_risk_settings as SellerRiskSettings,
+        sla_settings:          saved.sla_settings          as SlaSettings,
+        stalled_settings:      saved.stalled_settings      as StalledSettings,
+        seller_risk_settings:  saved.seller_risk_settings  as SellerRiskSettings,
+        funnel_scope_settings: (saved.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings,
       } satisfies AlertSettings,
       meta: {
         updated_at: saved.updated_at as string,

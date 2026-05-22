@@ -25,14 +25,16 @@
 // Sem delay artificial — save ok → onSaved() → onClose() imediato.
 // =====================================================
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   X, Save, Loader2, AlertCircle, CheckCircle2,
-  Info, ArrowRight, ChevronLeft,
+  Info, ArrowRight, ChevronLeft, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useAlertSettings }    from '../../../hooks/dashboard/useAlertSettings'
 import { useAccessControl }    from '../../../hooks/useAccessControl'
-import type { AlertSettings }  from '../../../types/dashboard'
+import { funnelApi }           from '../../../services/funnelApi'
+import type { AlertSettings, FunnelScopeSettings } from '../../../types/dashboard'
+import type { SalesFunnel, FunnelStage }           from '../../../types/sales-funnel'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -73,16 +75,23 @@ interface FormSellerRisk {
   limit:         number
 }
 
+interface FormFunnelScope {
+  mode:      'all' | 'custom'
+  stage_ids: string[]
+}
+
 interface FormState {
-  sla:        FormSla
-  stalled:    FormStalled
-  sellerRisk: FormSellerRisk
+  sla:         FormSla
+  stalled:     FormStalled
+  sellerRisk:  FormSellerRisk
+  funnelScope: FormFunnelScope
 }
 
 interface ValidationErrors {
-  sla?:        string
-  stalled?:    string
-  sellerRisk?: string
+  sla?:         string
+  stalled?:     string
+  sellerRisk?:  string
+  funnelScope?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +123,10 @@ function settingsToForm(s: AlertSettings): FormState {
       min_leads:     s.seller_risk_settings.min_leads,
       limit:         s.seller_risk_settings.limit,
     },
+    funnelScope: {
+      mode:      s.funnel_scope_settings?.mode ?? 'all',
+      stage_ids: s.funnel_scope_settings?.stage_ids ?? [],
+    },
   }
 }
 
@@ -137,6 +150,10 @@ function formToSettings(f: FormState): AlertSettings {
       min_leads:       f.sellerRisk.min_leads,
       limit:           f.sellerRisk.limit,
     },
+    funnel_scope_settings: {
+      mode:      f.funnelScope.mode,
+      stage_ids: f.funnelScope.mode === 'custom' ? f.funnelScope.stage_ids : undefined,
+    } as FunnelScopeSettings,
   }
 }
 
@@ -176,6 +193,11 @@ function validateForm(f: FormState): ValidationErrors {
     errors.sellerRisk = 'Mínimo de leads deve ser um inteiro positivo'
   } else if (!Number.isInteger(f.sellerRisk.limit) || f.sellerRisk.limit < 1) {
     errors.sellerRisk = 'Limite deve ser um inteiro positivo'
+  }
+
+  // Escopo de funil
+  if (f.funnelScope.mode === 'custom' && f.funnelScope.stage_ids.length === 0) {
+    errors.funnelScope = 'Selecione ao menos uma etapa ou escolha "Todos os funis"'
   }
 
   return errors
@@ -270,11 +292,20 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
   const [originalForm, setOriginalForm] = useState<FormState | null>(null)
   const [step,         setStep]         = useState<ModalStep>('editing')
 
+  // Estado para o picker de funis/etapas
+  const [funnels,        setFunnels]        = useState<SalesFunnel[]>([])
+  const [stagesByFunnel, setStagesByFunnel] = useState<Record<string, FunnelStage[]>>({})
+  const [loadingFunnels, setLoadingFunnels] = useState(false)
+  const [expandedFunnel, setExpandedFunnel] = useState<string | null>(null)
+
   // Reinicia estados ao abrir
   useEffect(() => {
     if (isOpen) {
       setStep('editing')
       setOriginalForm(null)
+      setFunnels([])
+      setStagesByFunnel({})
+      setExpandedFunnel(null)
     }
   }, [isOpen])
 
@@ -286,6 +317,31 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
       setOriginalForm(initial)
     }
   }, [settings, originalForm])
+
+  // Carrega funis quando modo custom é ativado (lazy)
+  const loadFunnels = useCallback(async () => {
+    if (!companyId || funnels.length > 0) return
+    setLoadingFunnels(true)
+    try {
+      const data = await funnelApi.getFunnels(companyId)
+      setFunnels(data)
+    } catch {
+      // silencioso — o usuário verá lista vazia e poderá tentar novamente
+    } finally {
+      setLoadingFunnels(false)
+    }
+  }, [companyId, funnels.length])
+
+  // Carrega etapas de um funil ao expandir no accordion
+  const loadStagesForFunnel = useCallback(async (funnelId: string) => {
+    if (stagesByFunnel[funnelId]) return
+    try {
+      const stages = await funnelApi.getStages(funnelId)
+      setStagesByFunnel(prev => ({ ...prev, [funnelId]: stages }))
+    } catch {
+      setStagesByFunnel(prev => ({ ...prev, [funnelId]: [] }))
+    }
+  }, [stagesByFunnel])
 
   // useMemo antes de qualquer early return (Rules of Hooks)
   const validationErrors: ValidationErrors = useMemo(
@@ -308,6 +364,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     if (JSON.stringify(orig.sla_settings)          !== JSON.stringify(curr.sla_settings))          result.push('SLA sem resposta')
     if (JSON.stringify(orig.stalled_settings)       !== JSON.stringify(curr.stalled_settings))       result.push('Oportunidade parada')
     if (JSON.stringify(orig.seller_risk_settings)   !== JSON.stringify(curr.seller_risk_settings))   result.push('Risco de vendedor')
+    if (JSON.stringify(orig.funnel_scope_settings)  !== JSON.stringify(curr.funnel_scope_settings))  result.push('Escopo para Oportunidades Paradas')
     return result
   }, [form, originalForm])
 
@@ -327,6 +384,29 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
   function setSellerRisk(patch: Partial<FormSellerRisk>) {
     setForm((prev) => prev ? { ...prev, sellerRisk: { ...prev.sellerRisk, ...patch } } : prev)
+  }
+
+  function setFunnelScope(patch: Partial<FormFunnelScope>) {
+    setForm((prev) => prev ? { ...prev, funnelScope: { ...prev.funnelScope, ...patch } } : prev)
+  }
+
+  function handleToggleStage(stageId: string) {
+    setFunnelScope({
+      stage_ids: form?.funnelScope.stage_ids.includes(stageId)
+        ? form.funnelScope.stage_ids.filter(id => id !== stageId)
+        : [...(form?.funnelScope.stage_ids ?? []), stageId],
+    })
+  }
+
+  function handleToggleFunnelAll(funnelId: string, stages: FunnelStage[]) {
+    const allIds = stages.map(s => s.id)
+    const currentIds = form?.funnelScope.stage_ids ?? []
+    const allSelected = allIds.every(id => currentIds.includes(id))
+    setFunnelScope({
+      stage_ids: allSelected
+        ? currentIds.filter(id => !allIds.includes(id))
+        : [...currentIds, ...allIds.filter(id => !currentIds.includes(id))],
+    })
   }
 
   function handleRequestSave() {
@@ -618,6 +698,163 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   <div className="flex items-center gap-1.5 text-xs text-red-600">
                     <AlertCircle size={12} className="flex-shrink-0" />
                     {validationErrors.sellerRisk}
+                  </div>
+                )}
+              </div>
+
+              <hr className="border-gray-100" />
+
+              {/* ── Seção 4: Escopo para Oportunidades Paradas ────── */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">Escopo para Oportunidades Paradas</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    Este filtro afeta apenas alertas de oportunidades paradas. SLA sem resposta e risco por
+                    vendedor continuam usando suas próprias regras.
+                  </p>
+                </div>
+
+                {/* Toggle Todos / Personalizado */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => {
+                      setFunnelScope({ mode: 'all', stage_ids: [] })
+                    }}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:cursor-not-allowed ${
+                      form.funnelScope.mode === 'all'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    Todos os funis
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => {
+                      setFunnelScope({ mode: 'custom' })
+                      void loadFunnels()
+                    }}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:cursor-not-allowed ${
+                      form.funnelScope.mode === 'custom'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    Personalizado
+                  </button>
+                </div>
+
+                {/* Picker de funis/etapas — modo custom */}
+                {form.funnelScope.mode === 'custom' && (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    {loadingFunnels && (
+                      <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-400">
+                        <Loader2 size={14} className="animate-spin" />
+                        Carregando funis...
+                      </div>
+                    )}
+
+                    {!loadingFunnels && funnels.length === 0 && (
+                      <p className="text-xs text-gray-500 text-center py-4">
+                        Nenhum funil encontrado para esta empresa.
+                      </p>
+                    )}
+
+                    {!loadingFunnels && funnels.map((funnel) => {
+                      const stages       = stagesByFunnel[funnel.id] ?? []
+                      const isExpanded   = expandedFunnel === funnel.id
+                      const selectedInFunnel = stages.filter(s => form.funnelScope.stage_ids.includes(s.id)).length
+                      const allSelected  = stages.length > 0 && selectedInFunnel === stages.length
+
+                      return (
+                        <div key={funnel.id} className="border-b border-gray-100 last:border-b-0">
+                          {/* Header do funil */}
+                          <button
+                            type="button"
+                            disabled={!canEdit}
+                            className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50 disabled:cursor-not-allowed transition-colors"
+                            onClick={() => {
+                              const next = isExpanded ? null : funnel.id
+                              setExpandedFunnel(next)
+                              if (next) void loadStagesForFunnel(funnel.id)
+                            }}
+                          >
+                            <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                              {funnel.name}
+                              {selectedInFunnel > 0 && (
+                                <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">
+                                  {selectedInFunnel}/{stages.length > 0 ? stages.length : '…'}
+                                </span>
+                              )}
+                            </span>
+                            {isExpanded
+                              ? <ChevronUp size={14} className="text-gray-400" />
+                              : <ChevronDown size={14} className="text-gray-400" />
+                            }
+                          </button>
+
+                          {/* Etapas do funil */}
+                          {isExpanded && (
+                            <div className="bg-gray-50 px-3 pb-2 pt-1 space-y-1">
+                              {stages.length === 0 && (
+                                <p className="text-xs text-gray-400 py-1">Sem etapas cadastradas.</p>
+                              )}
+
+                              {stages.length > 0 && (
+                                <div className="flex items-center justify-between py-1 mb-1">
+                                  <span className="text-xs text-gray-500">{stages.length} etapa(s)</span>
+                                  <button
+                                    type="button"
+                                    disabled={!canEdit}
+                                    onClick={() => handleToggleFunnelAll(funnel.id, stages)}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 disabled:cursor-not-allowed"
+                                  >
+                                    {allSelected ? 'Limpar funil' : 'Selecionar tudo'}
+                                  </button>
+                                </div>
+                              )}
+
+                              {stages.map((stage) => {
+                                const checked = form.funnelScope.stage_ids.includes(stage.id)
+                                return (
+                                  <label
+                                    key={stage.id}
+                                    className={`flex items-center gap-2 py-1 cursor-pointer group ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={!canEdit}
+                                      checked={checked}
+                                      onChange={() => handleToggleStage(stage.id)}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                                    />
+                                    <span className="flex items-center gap-1.5 text-sm text-gray-700">
+                                      {stage.color && (
+                                        <span
+                                          className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                          style={{ backgroundColor: stage.color }}
+                                        />
+                                      )}
+                                      {stage.name}
+                                    </span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {validationErrors.funnelScope && (
+                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+                    <AlertCircle size={12} className="flex-shrink-0" />
+                    {validationErrors.funnelScope}
                   </div>
                 )}
               </div>

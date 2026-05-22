@@ -853,10 +853,16 @@ export interface SellerRiskSettings {
   limit:           number
 }
 
+export interface FunnelScopeSettings {
+  mode:       'all' | 'custom'
+  stage_ids?: string[]   // obrigatório quando mode = 'custom'; deve ser array não vazio
+}
+
 export interface AlertSettings {
-  sla_settings:         SlaSettings
-  stalled_settings:     StalledSettings
-  seller_risk_settings: SellerRiskSettings
+  sla_settings:           SlaSettings
+  stalled_settings:       StalledSettings
+  seller_risk_settings:   SellerRiskSettings
+  funnel_scope_settings:  FunnelScopeSettings
 }
 
 /** Resposta do GET /api/dashboard/alert-settings */
