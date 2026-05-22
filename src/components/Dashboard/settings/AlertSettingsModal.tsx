@@ -318,35 +318,15 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     }
   }, [settings, originalForm])
 
-  // #region agent log
-  useEffect(() => {
-    console.log('[dbg:D] funnels state changed → length=', funnels.length, 'ids=', funnels.map(f => f.id))
-  }, [funnels])
-  useEffect(() => {
-    console.log('[dbg:E] form.funnelScope.mode changed →', form?.funnelScope?.mode ?? '(no form)')
-  }, [form?.funnelScope?.mode])
-  // #endregion
-
   // Carrega funis quando modo custom é ativado (lazy)
   const loadFunnels = useCallback(async () => {
-    // #region agent log
-    console.log('[dbg:D] loadFunnels ENTERED companyId=', companyId, 'funnels.length=', funnels.length)
-    // #endregion
     if (!companyId || funnels.length > 0) return
     setLoadingFunnels(true)
     try {
-      // #region agent log
-      console.log('[dbg:D] loadFunnels → calling getFunnels companyId=', companyId)
-      // #endregion
       const data = await funnelApi.getFunnels(companyId)
-      // #region agent log
-      console.log('[dbg:D] loadFunnels → getFunnels resolved count=', data?.length, '→ calling setFunnels')
-      // #endregion
       setFunnels(data)
-    } catch (err) {
-      // #region agent log
-      console.log('[dbg:D] loadFunnels → getFunnels THREW', err)
-      // #endregion
+    } catch {
+      // silently ignore — UI já mostra "Nenhum funil encontrado"
     } finally {
       setLoadingFunnels(false)
     }
@@ -779,9 +759,6 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 {/* Picker de funis/etapas — modo custom */}
                 {form.funnelScope.mode === 'custom' && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    {/* #region agent log */}
-                    {(()=>{console.log('[dbg:E] render picker → funnelsLength=',funnels.length,'loadingFunnels=',loadingFunnels,'mode=',form.funnelScope.mode);return null})()}
-                    {/* #endregion */}
                     {loadingFunnels && (
                       <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-400">
                         <Loader2 size={14} className="animate-spin" />
