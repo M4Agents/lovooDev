@@ -1,77 +1,136 @@
-import { createClient } from '@supabase/supabase-js';
+// =====================================================
+// POST /api/leads/merge
+//
+// Mescla dois leads duplicados via RPC merge_leads_webhook.
+//
+// Body: { sourceId, targetId, strategy, notificationId? }
+//   sourceId      — INTEGER, lead de origem (será descartado)
+//   targetId      — INTEGER, lead de destino (sobrevivente na maioria das estratégias)
+//   strategy      — 'keep_existing' | 'keep_new' | 'merge_fields'
+//   notificationId — UUID opcional da duplicate_notification
+//
+// Segurança:
+//   • JWT validado via getUserFromToken (anon key + Authorization header)
+//   • Membership validado via assertMembership (Trilha 1 + Trilha 2 parent admin)
+//   • company_id resolvido a partir do lead (não confiado do payload)
+//   • RBAC: admin / system_admin / super_admin apenas
+//   • service_role para chamar a RPC (bypass de RLS necessário para SECURITY DEFINER)
+// =====================================================
 
-const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
+import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
+import { extractToken, getUserFromToken, jsonError } from '../lib/dashboard/auth.ts'
+
+const ADMIN_ROLES = new Set(['admin', 'system_admin', 'super_admin'])
 
 export default async function handler(req, res) {
-  // Configurar CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+  if (req.method === 'OPTIONS') { res.status(200).end(); return }
+  if (req.method !== 'POST') return jsonError(res, 405, 'Método não permitido')
+
+  // ── 1. Autenticação ────────────────────────────────────────────────────────
+  const token = extractToken(req.headers['authorization'])
+  if (!token) return jsonError(res, 401, 'Token de autenticação ausente')
+
+  const { user, error: authError } = await getUserFromToken(token)
+  if (authError || !user) return jsonError(res, 401, 'Sessão inválida ou expirada')
+
+  // ── 2. Validar body ────────────────────────────────────────────────────────
+  const { sourceId, targetId, strategy, notificationId } = req.body ?? {}
+
+  if (!sourceId || !targetId || !strategy) {
+    return jsonError(res, 400, 'sourceId, targetId e strategy são obrigatórios')
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido' });
+  const VALID_STRATEGIES = ['keep_existing', 'keep_new', 'merge_fields']
+  if (!VALID_STRATEGIES.includes(strategy)) {
+    return jsonError(res, 400, 'Estratégia inválida')
   }
 
-  try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const { sourceId, targetId, strategy, notificationId, userId } = req.body;
+  // ── 3. Resolver company_id a partir do lead (não confiar no payload) ───────
+  const svc = getSupabaseAdmin()
 
-    if (!sourceId || !targetId || !strategy) {
-      return res.status(400).json({
-        error: 'sourceId, targetId e strategy são obrigatórios'
-      });
+  const { data: sourceLead, error: leadError } = await svc
+    .from('leads')
+    .select('id, company_id')
+    .eq('id', sourceId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (leadError || !sourceLead) {
+    return jsonError(res, 404, 'Lead de origem não encontrado')
+  }
+
+  const companyId = sourceLead.company_id
+
+  // ── 4. Autorização: membership + RBAC ─────────────────────────────────────
+  const { data: member } = await svc
+    .from('company_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  let memberRole = member?.role ?? null
+
+  // Trilha 2: super_admin / system_admin da empresa pai
+  if (!memberRole) {
+    const { data: company } = await svc
+      .from('companies')
+      .select('parent_company_id')
+      .eq('id', companyId)
+      .maybeSingle()
+
+    if (company?.parent_company_id) {
+      const { data: parentMember } = await svc
+        .from('company_users')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('company_id', company.parent_company_id)
+        .eq('is_active', true)
+        .in('role', ['super_admin', 'system_admin'])
+        .maybeSingle()
+
+      memberRole = parentMember?.role ?? null
     }
+  }
 
-    console.log(`Iniciando mesclagem via RPC: ${sourceId} -> ${targetId} (${strategy})`);
+  if (!memberRole) return jsonError(res, 403, 'Acesso negado a esta empresa')
+  if (!ADMIN_ROLES.has(memberRole)) return jsonError(res, 403, 'Permissão insuficiente para mesclar leads')
 
-    // Usar RPC para contornar RLS (mesmo padrão do webhook-lead que funciona 100%)
-    const { data: result, error: rpcError } = await supabase
+  // ── 5. Executar RPC ────────────────────────────────────────────────────────
+  try {
+    const { data: result, error: rpcError } = await svc
       .rpc('merge_leads_webhook', {
-        p_source_id: sourceId,
-        p_target_id: targetId,
-        p_strategy: strategy,
-        p_notification_id: notificationId || null,
-        p_user_id: userId || null
-      });
-
-    console.log('Resultado da RPC de mesclagem:', result);
+        p_source_id:       Number(sourceId),
+        p_target_id:       Number(targetId),
+        p_strategy:        strategy,
+        p_notification_id: notificationId ?? null,
+        p_user_id:         user.id,
+      })
 
     if (rpcError) {
-      console.error('Erro na RPC de mesclagem:', rpcError);
-      return res.status(500).json({ 
-        error: 'Erro ao executar mesclagem',
-        details: rpcError.message 
-      });
+      console.error('[merge] RPC error:', rpcError)
+      return res.status(500).json({ ok: false, error: 'Erro ao executar mesclagem', details: rpcError.message })
     }
 
-    if (!result || !result.success) {
-      console.error('RPC de mesclagem falhou:', result);
-      return res.status(400).json({ 
-        error: result?.error || 'Falha na mesclagem de leads' 
-      });
+    if (!result?.success) {
+      console.error('[merge] RPC returned failure:', result)
+      return res.status(400).json({ ok: false, error: result?.error ?? 'Falha na mesclagem de leads' })
     }
-
-    console.log(`Mesclagem concluída via RPC: Lead ${result.result_lead_id} é o resultado`);
 
     return res.status(200).json({
-      success: true,
-      message: result.message,
+      ok:          true,
+      message:     result.message,
       resultLeadId: result.result_lead_id,
-      strategy: result.strategy,
-      mergedData: result.merged_data
-    });
-
-  } catch (error) {
-    console.error('Erro na mesclagem de leads:', error);
-    return res.status(500).json({
-      error: 'Erro interno do servidor',
-      details: error.message
-    });
+      strategy:    result.strategy,
+      mergedData:  result.merged_data,
+    })
+  } catch (err) {
+    console.error('[merge] Unexpected error:', err)
+    return res.status(500).json({ ok: false, error: 'Erro interno do servidor', details: err.message })
   }
 }

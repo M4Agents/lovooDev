@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Users, Mail, Phone, Calendar, Merge, AlertTriangle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface DuplicateNotification {
   notification_id: number;
@@ -39,17 +40,21 @@ export const DuplicateMergeModal: React.FC<DuplicateMergeModalProps> = ({
     try {
       console.log('Iniciando mesclagem de leads...');
 
-      // Chamar API de mesclagem
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
       const mergeResponse = await fetch('/api/leads/merge', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           sourceId: notification.lead_id,
           targetId: notification.duplicate_of_lead_id,
           strategy,
-          notificationId: notification.notification_id
+          notificationId: notification.notification_id,
         })
       });
 

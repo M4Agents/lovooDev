@@ -1022,8 +1022,9 @@ async function processMessage(payload) {
       try {
         console.log('🎯 CRIANDO LEAD AUTOMATICAMENTE VIA SECURITY DEFINER...');
         
-        // Usar RPC SECURITY DEFINER para criar lead (bypass controlado do RLS)
-        const { data: leadResult, error: leadError } = await supabase
+        // Usar service_role para garantir que a RPC encontre leads de qualquer formato de telefone
+        const supabaseAdminForLead = getSupabaseAdmin();
+        const { data: leadResult, error: leadError } = await supabaseAdminForLead
           .rpc('create_lead_from_whatsapp_safe', {
             p_company_id: company.id,
             p_phone: phoneNumber,
