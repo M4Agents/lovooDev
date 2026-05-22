@@ -318,22 +318,31 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     }
   }, [settings, originalForm])
 
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:funnels-effect',message:'funnels state changed',data:{funnelsLength:funnels.length,funnelIds:funnels.map(f=>f.id)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
+  }, [funnels])
+  useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:mode-effect',message:'form.funnelScope.mode changed',data:{mode:form?.funnelScope?.mode??'(no form)'},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{})
+  }, [form?.funnelScope?.mode])
+  // #endregion
+
   // Carrega funis quando modo custom é ativado (lazy)
   const loadFunnels = useCallback(async () => {
     if (!companyId || funnels.length > 0) return
     setLoadingFunnels(true)
     try {
       // #region agent log
-      console.log('[debug:loadFunnels] calling getFunnels with companyId=', companyId)
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-start',message:'calling getFunnels',data:{companyId},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
       // #endregion
       const data = await funnelApi.getFunnels(companyId)
       // #region agent log
-      console.log('[debug:loadFunnels] getFunnels returned count=', data?.length, 'data=', data)
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-got-data',message:'getFunnels resolved, calling setFunnels',data:{count:data?.length,ids:data?.map((f:{id:string})=>f.id)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
       // #endregion
       setFunnels(data)
     } catch (err) {
       // #region agent log
-      console.log('[debug:loadFunnels] getFunnels THREW error=', err)
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-error',message:'getFunnels THREW',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
       // #endregion
     } finally {
       setLoadingFunnels(false)
@@ -758,6 +767,9 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 {/* Picker de funis/etapas — modo custom */}
                 {form.funnelScope.mode === 'custom' && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* #region agent log */}
+                    {(()=>{fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:render-picker',message:'rendering picker block',data:{funnelsLength:funnels.length,loadingFunnels,mode:form.funnelScope.mode},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});return null})()}
+                    {/* #endregion */}
                     {loadingFunnels && (
                       <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-400">
                         <Loader2 size={14} className="animate-spin" />
