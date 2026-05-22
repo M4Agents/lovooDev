@@ -646,7 +646,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     loadInstances()
   }, [companyId, conversation?.instance_id])
 
-  // Carregar usuários da empresa
+  // Carregar usuários da empresa para atribuição de responsável
+  // Usa get_assignable_users (acessível a qualquer membro ativo, incluindo manager/seller)
   useEffect(() => {
     const loadCompanyUsers = async () => {
       if (!companyId) return
@@ -654,10 +655,14 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       try {
         setLoadingUsers(true)
         const { data, error } = await supabase
-          .rpc('get_company_users_with_details', {
+          .rpc('get_assignable_users', {
             p_company_id: companyId
           })
         
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'LeadPanel.tsx:loadCompanyUsers',message:'get_assignable_users result',data:{companyId,count:data?.length??0,error:error?.message??null,firstUser:data?.[0]?.display_name??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
         if (error) throw error
         setCompanyUsers(data || [])
       } catch (error) {
