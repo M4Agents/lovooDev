@@ -320,10 +320,10 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
   // #region agent log
   useEffect(() => {
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:funnels-effect',message:'funnels state changed',data:{funnelsLength:funnels.length,funnelIds:funnels.map(f=>f.id)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
+    console.log('[dbg:D] funnels state changed → length=', funnels.length, 'ids=', funnels.map(f => f.id))
   }, [funnels])
   useEffect(() => {
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:mode-effect',message:'form.funnelScope.mode changed',data:{mode:form?.funnelScope?.mode??'(no form)'},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{})
+    console.log('[dbg:E] form.funnelScope.mode changed →', form?.funnelScope?.mode ?? '(no form)')
   }, [form?.funnelScope?.mode])
   // #endregion
 
@@ -333,16 +333,16 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     setLoadingFunnels(true)
     try {
       // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-start',message:'calling getFunnels',data:{companyId},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
+      console.log('[dbg:D] loadFunnels → calling getFunnels companyId=', companyId)
       // #endregion
       const data = await funnelApi.getFunnels(companyId)
       // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-got-data',message:'getFunnels resolved, calling setFunnels',data:{count:data?.length,ids:data?.map((f:{id:string})=>f.id)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
+      console.log('[dbg:D] loadFunnels → getFunnels resolved count=', data?.length, '→ calling setFunnels')
       // #endregion
       setFunnels(data)
     } catch (err) {
       // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:loadFunnels-error',message:'getFunnels THREW',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{})
+      console.log('[dbg:D] loadFunnels → getFunnels THREW', err)
       // #endregion
     } finally {
       setLoadingFunnels(false)
@@ -768,7 +768,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 {form.funnelScope.mode === 'custom' && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     {/* #region agent log */}
-                    {(()=>{fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'AlertSettingsModal.tsx:render-picker',message:'rendering picker block',data:{funnelsLength:funnels.length,loadingFunnels,mode:form.funnelScope.mode},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});return null})()}
+                    {(()=>{console.log('[dbg:E] render picker → funnelsLength=',funnels.length,'loadingFunnels=',loadingFunnels,'mode=',form.funnelScope.mode);return null})()}
                     {/* #endregion */}
                     {loadingFunnels && (
                       <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-400">
