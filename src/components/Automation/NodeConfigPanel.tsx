@@ -125,13 +125,14 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   }
 
   const loadUsers = async () => {
+    if (!company?.id) return
     setLoadingUsers(true)
     try {
-      const { data } = await supabase
-        .from('users')
-        .select('id, name, email')
-        .eq('company_id', company?.id)
-        .order('name')
+      const { data, error } = await supabase
+        .rpc('get_company_users_with_details', { p_company_id: company.id })
+      if (error) {
+        console.error('Erro ao carregar usuários:', error)
+      }
       setUsers(data || [])
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
@@ -415,8 +416,8 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                   >
                     <option value="">-- Selecione um usuário --</option>
                     {users.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} ({user.email})
+                      <option key={user.user_id} value={user.user_id}>
+                        {user.display_name || user.email}
                       </option>
                     ))}
                   </select>
