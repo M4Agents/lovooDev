@@ -1,13 +1,10 @@
 // =====================================================
 // TrendsSection — seção de operação inbound diária (v4).
-// Layout: dois gráficos empilhados.
-//   [Inbound por Dia]   → WhatsApp + webhook
-//   [Novos Leads]       → importação de planilha/CSV
+// Layout: gráfico único "Entrada de Leads por Dia".
 // =====================================================
 
 import React from 'react'
 import { CombinedTrendsChart } from '../charts/CombinedTrendsChart'
-import { LeadsTrendChart }     from '../charts/LeadsTrendChart'
 import type { TrendsData }     from '../../../types/dashboard'
 
 interface TrendsSectionProps {
@@ -23,12 +20,6 @@ export function TrendsSection({ data, loading, error, onRetry }: TrendsSectionPr
       <CombinedTrendsChart
         attendanceData={data?.attendance_by_day}
         totalUnanswered={data?.total_unanswered ?? 0}
-        loading={loading}
-        error={error}
-        onRetry={onRetry}
-      />
-      <LeadsTrendChart
-        data={data?.leads_by_day}
         loading={loading}
         error={error}
         onRetry={onRetry}
