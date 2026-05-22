@@ -51,11 +51,15 @@ export const useLeadPermissions = (): LeadPermissions => {
   /**
    * Verifica se o usuário pode editar um lead.
    * edit_all_leads: true → pode editar qualquer lead.
-   * edit_all_leads: false → apenas leads próprios (manager e seller).
+   * edit_all_leads: false → leads próprios OU sem responsável (manager e seller).
    */
   const canEditLead = (lead: Lead): boolean => {
     if (hasPermission('edit_all_leads')) return true;
-    return lead.responsible_user_id === currentUserId;
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'useLeadPermissions.ts:canEditLead',message:'canEditLead check',data:{leadId:lead.id,responsible:lead.responsible_user_id??null,currentUserId:currentUserId??null,hasNoResponsible:!lead.responsible_user_id,isOwn:lead.responsible_user_id===currentUserId},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    // Manager/seller: pode editar leads sem responsável ou atribuídos a si
+    return !lead.responsible_user_id || lead.responsible_user_id === currentUserId;
   };
 
   /**
