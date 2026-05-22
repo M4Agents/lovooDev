@@ -122,6 +122,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (rpcError) {
       console.error('[merge] RPC error:', rpcError)
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'merge.ts:rpcError',message:'RPC merge_leads_webhook falhou',data:{message:rpcError.message,code:(rpcError as {code?:string}).code,details:(rpcError as {details?:string}).details,hint:(rpcError as {hint?:string}).hint,sourceId:Number(sourceId),targetId:Number(targetId),strategy,notificationId:notificationId??null,userId:user.id,companyId},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return res.status(500).json({ ok: false, error: 'Erro ao executar mesclagem', details: rpcError.message })
     }
 
