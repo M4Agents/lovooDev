@@ -18,12 +18,12 @@
 // (Meta faz retry se receber 4xx/5xx após a validação)
 // =============================================================================
 
-import { getSupabaseAdmin }           from '../../lib/automation/supabaseAdmin.js';
+import { getSupabaseAdmin }           from '../lib/automation/supabaseAdmin.js';
 import { readRawBody,
-         verifyWebhookSignature }     from '../../lib/instagram/verifyWebhookSignature.js';
+         verifyWebhookSignature }     from '../lib/instagram/verifyWebhookSignature.js';
 import { parseDmEvents,
          parseCommentEvents,
-         parseSkippedMessagingEvents } from '../../lib/instagram/parseInstagramWebhook.js';
+         parseSkippedMessagingEvents } from '../lib/instagram/parseInstagramWebhook.js';
 
 // Desabilita body parser do Vercel — obrigatório para HMAC validation
 export const config = { api: { bodyParser: false } };
