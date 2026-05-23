@@ -186,6 +186,10 @@ export default async function handler(req, res) {
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
+      // O id retornado pelo /me é o Instagram User ID real (usado pelo webhook
+      // como recipient.id). Tem prioridade sobre o user_id do token exchange,
+      // que pode ser um ID scoped diferente dependendo da versão da API.
+      if (meData.id) igUserId = String(meData.id);
     }
   } catch {
     // Não-fatal: continua com igUserId como fallback de username
