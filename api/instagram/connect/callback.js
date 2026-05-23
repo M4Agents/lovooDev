@@ -173,18 +173,19 @@ export default async function handler(req, res) {
   }
 
   // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
-  let username = igUserId, displayName = '';
+  let username = igUserId, displayName = '', profilePictureUrl = null;
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
-    meUrl.searchParams.set('fields',       'id,username,name');
+    meUrl.searchParams.set('fields',       'id,username,name,profile_picture_url');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
 
     if (!meData.error) {
-      username    = meData.username ?? igUserId;
-      displayName = meData.name     ?? '';
+      username          = meData.username            ?? igUserId;
+      displayName       = meData.name                ?? '';
+      profilePictureUrl = meData.profile_picture_url ?? null;
     }
   } catch {
     // Não-fatal: continua com igUserId como fallback de username
@@ -211,6 +212,7 @@ export default async function handler(req, res) {
       company_id:         companyId,
       instagram_user_id:  igUserId,
       instagram_username: username,
+      profile_picture_url: profilePictureUrl,
       access_token_enc:   accessTokenEnc,
       encryption_version: 1,
       token_expires_at:   tokenExpiresAt,

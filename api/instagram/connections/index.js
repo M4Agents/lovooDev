@@ -20,6 +20,7 @@ import { validateInstagramCaller } from '../../lib/instagram/validateInstagramCa
 const SAFE_FIELDS = [
   'id',
   'instagram_username',
+  'profile_picture_url',
   'status',
   'token_expires_at',
   'created_at',

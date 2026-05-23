@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 export interface InstagramConnection {
   id: string;
   instagram_username: string;
+  profile_picture_url: string | null;
   status: 'active' | 'revoked' | 'error';
   token_expires_at: string | null;
   created_at: string;
@@ -18,6 +19,7 @@ interface UseInstagramConnectionsReturn {
   refetch: () => void;
   connect: (companyId: string) => Promise<void>;
   disconnect: (connectionId: string) => Promise<{ success: boolean; error?: string }>;
+  syncPhoto: (connectionId: string) => Promise<{ success: boolean; photoUrl?: string | null; error?: string }>;
 }
 
 async function getToken(): Promise<string | null> {
@@ -140,6 +142,51 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     }
   }, [fetchConnections]);
 
+  const syncPhoto = useCallback(async (connectionId: string): Promise<{ success: boolean; photoUrl?: string | null; error?: string }> => {
+    setLoadingAction(true);
+    setError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        return { success: false, error: 'Sessão expirada. Recarregue a página.' };
+      }
+
+      const res = await fetch(`/api/instagram/connections/${connectionId}/sync-photo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const isExpired = json.error === 'token_expired';
+        const msg = isExpired
+          ? 'Token expirado. Reconecte a conta para atualizar a foto.'
+          : (json.message ?? 'Erro ao atualizar foto.');
+        setError(msg);
+        return { success: false, error: msg };
+      }
+
+      // Atualiza a foto localmente sem re-fetch completo
+      setConnections(prev =>
+        prev.map(c =>
+          c.id === connectionId
+            ? { ...c, profile_picture_url: json.profile_picture_url }
+            : c
+        )
+      );
+
+      return { success: true, photoUrl: json.profile_picture_url };
+    } catch {
+      const msg = 'Erro ao atualizar foto. Tente novamente.';
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setLoadingAction(false);
+    }
+  }, []);
+
   return {
     connections,
     loading,
@@ -148,5 +195,6 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     refetch: fetchConnections,
     connect,
     disconnect,
+    syncPhoto,
   };
 }

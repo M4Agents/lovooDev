@@ -194,10 +194,12 @@
       "connect": "Conectar Instagram",
       "disconnect": "Desconectar",
       "reconnect": "Reconectar",
-      "expires": "Expira em",
+      "syncPhoto": "Atualizar foto de perfil",
+      "syncPhotoSuccess": "Foto de @{{account}} atualizada com sucesso.",
       "empty": "Nenhuma conta Instagram conectada.",
       "emptyHint": "Conecte uma conta para receber DMs e comentários.",
       "errorGeneric": "Erro ao conectar conta Instagram. Tente novamente.",
+      "errorTokenExpired": "Token expirado. Reconecte a conta para atualizar a foto.",
       "disconnectConfirm": "Tem certeza que deseja desconectar @{{account}}?",
       "disconnectSuccess": "Conta @{{account}} desconectada com sucesso.",
       "status": {

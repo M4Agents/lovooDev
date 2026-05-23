@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera } from 'lucide-react';
 import { useInstagramConnections, InstagramConnection } from '../../hooks/useInstagramConnections';
 import { useAccessControl } from '../../hooks/useAccessControl';
 
@@ -24,20 +24,14 @@ function StatusBadge({ status }: { status: InstagramConnection['status'] }) {
   );
 }
 
-function formatExpiry(isoDate: string | null): string {
-  if (!isoDate) return '—';
-  return new Date(isoDate).toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
-}
-
 export function InstagramConnectionPanel({ companyId }: Props) {
   const { t } = useTranslation('settings.app');
   const ig = (key: string, opts?: Record<string, unknown>) =>
     t(`integrations.instagram.${key}`, opts);
   const { canConnectInstagram } = useAccessControl();
-  const { connections, loading, loadingAction, error, refetch, connect, disconnect } = useInstagramConnections(companyId);
+  const { connections, loading, loadingAction, error, refetch, connect, disconnect, syncPhoto } = useInstagramConnections(companyId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [syncingPhotoId, setSyncingPhotoId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -58,6 +52,22 @@ export function InstagramConnectionPanel({ companyId }: Props) {
 
     if (result.success) {
       setSuccessMsg(ig('disconnectSuccess', { account: conn.instagram_username }));
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } else {
+      setActionError(result.error ?? ig('errorGeneric'));
+    }
+  }
+
+  async function handleSyncPhoto(conn: InstagramConnection) {
+    setSyncingPhotoId(conn.id);
+    setActionError(null);
+    setSuccessMsg(null);
+
+    const result = await syncPhoto(conn.id);
+    setSyncingPhotoId(null);
+
+    if (result.success) {
+      setSuccessMsg(ig('syncPhotoSuccess', { account: conn.instagram_username }));
       setTimeout(() => setSuccessMsg(null), 4000);
     } else {
       setActionError(result.error ?? ig('errorGeneric'));
@@ -147,20 +157,34 @@ export function InstagramConnectionPanel({ companyId }: Props) {
               className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg hover:border-purple-200 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shrink-0">
-                  <Instagram className="w-5 h-5 text-white" />
+                <div className="relative w-10 h-10 shrink-0">
+                  {conn.profile_picture_url ? (
+                    <img
+                      src={conn.profile_picture_url}
+                      alt={`@${conn.instagram_username}`}
+                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <Instagram className="w-5 h-5 text-white" />
+                    </div>
+                  )}
+                  {canConnectInstagram && conn.status === 'active' && (
+                    <button
+                      onClick={() => handleSyncPhoto(conn)}
+                      disabled={loadingAction || syncingPhotoId === conn.id}
+                      title={ig('syncPhoto')}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-purple-600 hover:border-purple-300 transition-colors disabled:opacity-50"
+                    >
+                      <Camera className={`w-3 h-3 ${syncingPhotoId === conn.id ? 'animate-pulse' : ''}`} />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-900">@{conn.instagram_username}</span>
                     <StatusBadge status={conn.status} />
                   </div>
-                  {conn.token_expires_at && (
-                    <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
-                      <Clock className="w-3 h-3" />
-                    <span>{ig('expires')}: {formatExpiry(conn.token_expires_at)}</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
