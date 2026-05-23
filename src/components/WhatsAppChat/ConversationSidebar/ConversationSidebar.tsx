@@ -1,18 +1,43 @@
 // =====================================================
 // CONVERSATION SIDEBAR - COMPONENTE ISOLADO
 // =====================================================
-// Sidebar com lista de conversas e filtros
-// NÃO MODIFICA componentes existentes
+// Sidebar com lista de conversas e filtros.
+// Suporta canal WhatsApp e Instagram via ChannelSelector.
+// O comportamento do canal WhatsApp permanece intacto.
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
+import type {
+  InstagramChatConversation,
+  InstagramChannelFilter,
+  InstagramConnection,
+  ChatChannel,
+} from '../../../types/instagram-chat'
 import { InstanceSelector } from '../InstanceSelector'
+import { ChannelSelector } from '../ChannelSelector/ChannelSelector'
+import { InstagramAccountSelector } from '../InstagramAccountSelector/InstagramAccountSelector'
 import { resolvePhotoUrl } from '../../../utils/imageUtils'
 
 // =====================================================
 // TIPOS DO COMPONENTE
 // =====================================================
+
+/** Dados do canal Instagram passados do ChatLayout */
+export interface InstagramSidebarData {
+  connections: InstagramConnection[]
+  conversations: InstagramChatConversation[]
+  filteredConversations: InstagramChatConversation[]
+  selectedConnectionId: string
+  selectedConversationId?: string
+  filter: InstagramChannelFilter
+  loading: boolean
+  onSelectConnection: (id: string) => void
+  onSelectConversation: (id: string) => void
+  onFilterChange: (f: InstagramChannelFilter) => void
+  onRefresh: () => void
+}
 
 interface ConversationSidebarProps {
   instances: any[]
@@ -25,6 +50,11 @@ interface ConversationSidebarProps {
   onSelectConversation: (conversationId: string) => void
   onFilterChange: (filter: ConversationFilter) => void
   onRefresh: () => void
+  /** Canal ativo — padrão 'whatsapp' */
+  selectedChannel: ChatChannel
+  onChannelChange: (channel: ChatChannel) => void
+  /** Dados do canal Instagram (opcional quando whatsapp selecionado) */
+  igData?: InstagramSidebarData
 }
 
 // =====================================================
@@ -41,44 +71,44 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onSelectInstance,
   onSelectConversation,
   onFilterChange,
-  onRefresh
+  onRefresh,
+  selectedChannel,
+  onChannelChange,
+  igData,
 }) => {
   const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
 
-  // =====================================================
-  // FILTROS
-  // =====================================================
-
-  const filterOptions = useMemo(
-    () => [
-      { key: 'all' as const, label: t('sidebar.filters.all'), count: conversations.length },
-      {
-        key: 'unread' as const,
-        label: t('sidebar.filters.unread'),
-        count: conversations.filter(c => c.unread_count > 0).length
-      },
-      {
-        key: 'assigned' as const,
-        label: t('sidebar.filters.assigned'),
-        count: conversations.filter(c => c.assigned_to).length
-      },
-      {
-        key: 'unassigned' as const,
-        label: t('sidebar.filters.unassigned'),
-        count: conversations.filter(c => !c.assigned_to).length
-      }
-    ],
-    [conversations, t]
-  )
+  const isInstagram = selectedChannel === 'instagram'
 
   // =====================================================
-  // CONVERSAS FILTRADAS
+  // FILTROS (dinâmicos por canal)
   // =====================================================
 
-  const filteredConversations = conversations.filter(conversation => {
+  const filterOptions = useMemo(() => {
+    if (isInstagram && igData) {
+      const convs = igData.conversations
+      return [
+        { key: 'all' as const,        label: t('sidebar.filters.all'),        count: convs.length },
+        { key: 'unread' as const,     label: t('sidebar.filters.unread'),     count: convs.filter(c => c.unread_count > 0).length },
+        { key: 'assigned' as const,   label: t('sidebar.filters.assigned'),   count: convs.filter(c => c.assigned_to).length },
+        { key: 'unassigned' as const, label: t('sidebar.filters.unassigned'), count: convs.filter(c => !c.assigned_to).length },
+      ]
+    }
+    return [
+      { key: 'all' as const,        label: t('sidebar.filters.all'),        count: conversations.length },
+      { key: 'unread' as const,     label: t('sidebar.filters.unread'),     count: conversations.filter(c => c.unread_count > 0).length },
+      { key: 'assigned' as const,   label: t('sidebar.filters.assigned'),   count: conversations.filter(c => c.assigned_to).length },
+      { key: 'unassigned' as const, label: t('sidebar.filters.unassigned'), count: conversations.filter(c => !c.assigned_to).length },
+    ]
+  }, [conversations, igData, isInstagram, t])
+
+  // =====================================================
+  // CONVERSAS WA FILTRADAS POR BUSCA LOCAL
+  // =====================================================
+
+  const filteredWaConversations = conversations.filter(conversation => {
     if (!searchTerm) return true
-    
     const searchLower = searchTerm.toLowerCase()
     const isRestricted = conversation.is_lead_over_plan === true
     return (
@@ -89,8 +119,18 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   })
 
   // =====================================================
+  // HANDLERS DO CANAL INSTAGRAM
+  // =====================================================
+
+  const handleIgFilterChange = (type: typeof filter.type) => {
+    igData?.onFilterChange({ ...igData.filter, type: type as any })
+  }
+
+  // =====================================================
   // RENDER
   // =====================================================
+
+  const activeLoading = isInstagram ? (igData?.loading ?? false) : loading
 
   return (
     <div className="flex flex-col h-full">
@@ -98,26 +138,40 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       <div className="p-6 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <div className="h-8 w-8 bg-[#00a884] rounded-lg flex items-center justify-center shadow-sm">
-              <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-              </svg>
+            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shadow-sm ${
+              isInstagram ? 'bg-gradient-to-br from-pink-500 to-purple-600' : 'bg-[#00a884]'
+            }`}>
+              {isInstagram ? (
+                <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                </svg>
+              )}
             </div>
             <h2 className="text-xl font-bold text-slate-800">{t('sidebar.title')}</h2>
           </div>
           <button
-            onClick={onRefresh}
-            disabled={loading}
+            onClick={isInstagram ? igData?.onRefresh : onRefresh}
+            disabled={activeLoading}
             className="p-2.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-white/60 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow-md"
           >
-            <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-5 h-5 ${activeLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         </div>
 
-        {/* Seletor de Instância */}
-        {instances.length > 0 && (
+        {/* Seletor de Canal */}
+        <ChannelSelector
+          selectedChannel={selectedChannel}
+          onChannelChange={onChannelChange}
+        />
+
+        {/* Seletor de Instância (WhatsApp) ou Conta (Instagram) */}
+        {!isInstagram && instances.length > 0 && (
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2 mb-2">
               <img src="/images/emails/wpp.png" alt="WhatsApp" className="w-4 h-4" />
@@ -133,13 +187,32 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           </div>
         )}
 
+        {isInstagram && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+              {t('instagram.accountSelectorLabel')}
+            </label>
+            <InstagramAccountSelector
+              connections={igData?.connections ?? []}
+              selectedConnectionId={igData?.selectedConnectionId ?? 'all'}
+              onSelectConnection={igData?.onSelectConnection ?? (() => {})}
+              conversationCount={igData?.filteredConversations.length ?? 0}
+            />
+          </div>
+        )}
+
         {/* Busca */}
         <div className="relative">
           <input
             type="text"
             placeholder={t('sidebar.searchPlaceholder')}
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value)
+              if (isInstagram) {
+                igData?.onFilterChange({ ...(igData.filter), search: e.target.value })
+              }
+            }}
             className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-slate-400"
           />
           <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
@@ -154,57 +227,49 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       <div className="px-4 py-3 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {filterOptions.map(option => {
+            const activeKey = isInstagram ? igData?.filter.type : filter.type
+            const isActive = activeKey === option.key
+
             const getCardStyles = () => {
-              if (filter.type !== option.key) {
+              if (!isActive) {
                 return 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-white/80 hover:shadow-sm border border-slate-100/50 hover:border-slate-200/50 transition-all duration-200 ease-out'
               }
+              const color = isInstagram ? 'from-pink-500 to-pink-600 shadow-pink-600/20 border-pink-500/30' : 'from-[#009E7E] to-[#009E7E] shadow-green-600/20 border-green-600/30'
+              return `bg-gradient-to-br ${color} text-white shadow-sm hover:opacity-90 border transition-all duration-200 ease-out`
+            }
 
-              switch (option.key) {
-                case 'all':
-                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
-                case 'unread':
-                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
-                case 'assigned':
-                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
-                case 'unassigned':
-                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
-                default:
-                  return 'bg-[#009E7E] text-white shadow-sm shadow-green-600/20 hover:bg-[#008A6E] hover:shadow-md hover:shadow-green-600/25 border border-green-600/30 transition-all duration-200 ease-out'
+            const handleClick = () => {
+              if (isInstagram) {
+                handleIgFilterChange(option.key)
+              } else {
+                onFilterChange({ ...filter, type: option.key as any })
               }
             }
 
             return (
-            <button
-              key={option.key}
-              onClick={() => onFilterChange({ ...filter, type: option.key as any })}
-              className={`group relative overflow-hidden rounded-lg p-2.5 text-center transform hover:scale-[1.005] ${getCardStyles()}`}
-            >
-              {/* Efeito de brilho no hover */}
-              <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
-                filter.type === option.key ? 'translate-x-full' : 'group-hover:translate-x-full -translate-x-full'
-              }`} />
-              
-              <div className="relative z-10">
-                <div className={`text-xs font-medium mb-1 leading-tight ${
-                  filter.type === option.key ? 'text-white' : 'text-slate-700'
-                }`}>
-                  {option.label}
+              <button
+                key={option.key}
+                onClick={handleClick}
+                className={`group relative overflow-hidden rounded-lg p-2.5 text-center transform hover:scale-[1.005] ${getCardStyles()}`}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
+                  isActive ? 'translate-x-full' : 'group-hover:translate-x-full -translate-x-full'
+                }`} />
+                <div className="relative z-10">
+                  <div className={`text-xs font-medium mb-1 leading-tight ${isActive ? 'text-white' : 'text-slate-700'}`}>
+                    {option.label}
+                  </div>
+                  <div className={`text-lg font-semibold ${isActive ? 'text-white' : 'text-slate-700'}`}>
+                    {option.count}
+                  </div>
+                  {option.count > 0 && option.key === 'unread' && (
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                  )}
                 </div>
-                <div className={`text-lg font-semibold ${
-                  filter.type === option.key ? 'text-white' : 'text-slate-700'
-                }`}>
-                  {option.count}
-                </div>
-                {option.count > 0 && option.key === 'unread' && (
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                {isActive && !(option.count > 0 && option.key === 'unread') && (
+                  <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse bg-white" />
                 )}
-              </div>
-              
-              {/* Indicador ativo */}
-              {filter.type === option.key && !(option.count > 0 && option.key === 'unread') && (
-                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse bg-white" />
-              )}
-            </button>
+              </button>
             )
           })}
         </div>
@@ -212,53 +277,258 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Lista de Conversas */}
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-slate-50/50">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="relative">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-[#00a884]"></div>
-              <div className="absolute inset-0 rounded-full h-8 w-8 border-2 border-transparent border-t-[#00a884] animate-pulse"></div>
-            </div>
-          </div>
-        ) : filteredConversations.length === 0 ? (
-          <div className="text-center py-12 px-6">
-            <div className="mb-4">
-              <div className="mx-auto h-16 w-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center shadow-sm">
-                <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                </svg>
-              </div>
-            </div>
-            <h4 className="text-lg font-semibold text-slate-700 mb-2">
-              {searchTerm ? t('sidebar.emptyNoResults') : t('sidebar.emptyNoConversations')}
-            </h4>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              {searchTerm
-                ? t('sidebar.emptyHintSearch')
-                : t('sidebar.emptyHintDefault')
-              }
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {filteredConversations.map(conversation => (
-              <ConversationItem
-                key={conversation.id}
-                conversation={conversation}
-                isSelected={conversation.id === selectedConversation}
-                onClick={() => onSelectConversation(conversation.id)}
-                photoUrl={conversation.profile_picture_url}
-                showInstanceBadge={!selectedInstance || selectedInstance === 'all'}
-              />
-            ))}
-          </div>
-        )}
+        {isInstagram
+          ? <InstagramConversationList igData={igData} searchTerm={searchTerm} />
+          : <WhatsAppConversationList
+              loading={loading}
+              filteredConversations={filteredWaConversations}
+              selectedConversation={selectedConversation}
+              onSelectConversation={onSelectConversation}
+              selectedInstance={selectedInstance}
+              searchTerm={searchTerm}
+            />
+        }
       </div>
     </div>
   )
 }
 
 // =====================================================
-// COMPONENTE ITEM DA CONVERSA
+// SUB-COMPONENTE: Lista WhatsApp
+// =====================================================
+
+interface WhatsAppConversationListProps {
+  loading: boolean
+  filteredConversations: ChatConversation[]
+  selectedConversation?: string
+  onSelectConversation: (id: string) => void
+  selectedInstance?: string
+  searchTerm: string
+}
+
+const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
+  loading, filteredConversations, selectedConversation, onSelectConversation, selectedInstance, searchTerm
+}) => {
+  const { t } = useTranslation('chat')
+  return loading ? (
+    <div className="flex items-center justify-center py-12">
+      <div className="relative">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-[#00a884]"></div>
+        <div className="absolute inset-0 rounded-full h-8 w-8 border-2 border-transparent border-t-[#00a884] animate-pulse"></div>
+      </div>
+    </div>
+  ) : filteredConversations.length === 0 ? (
+    <div className="text-center py-12 px-6">
+      <div className="mb-4">
+        <div className="mx-auto h-16 w-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center shadow-sm">
+          <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+          </svg>
+        </div>
+      </div>
+      <h4 className="text-lg font-semibold text-slate-700 mb-2">
+        {searchTerm ? t('sidebar.emptyNoResults') : t('sidebar.emptyNoConversations')}
+      </h4>
+      <p className="text-slate-500 text-sm leading-relaxed">
+        {searchTerm ? t('sidebar.emptyHintSearch') : t('sidebar.emptyHintDefault')}
+      </p>
+    </div>
+  ) : (
+    <div className="divide-y divide-slate-100">
+      {filteredConversations.map(conversation => (
+        <ConversationItem
+          key={conversation.id}
+          conversation={conversation}
+          isSelected={conversation.id === selectedConversation}
+          onClick={() => onSelectConversation(conversation.id)}
+          photoUrl={conversation.profile_picture_url}
+          showInstanceBadge={!selectedInstance || selectedInstance === 'all'}
+        />
+      ))}
+    </div>
+  )
+}
+
+// =====================================================
+// SUB-COMPONENTE: Lista Instagram
+// =====================================================
+
+interface InstagramConversationListProps {
+  igData?: InstagramSidebarData
+  searchTerm: string
+}
+
+const InstagramConversationList: React.FC<InstagramConversationListProps> = ({ igData }) => {
+  const { t } = useTranslation('chat')
+  const navigate = useNavigate()
+
+  if (!igData) return null
+
+  if (igData.loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-pink-500"></div>
+      </div>
+    )
+  }
+
+  // Nenhuma conta ativa conectada
+  if (igData.connections.filter(c => c.status === 'active').length === 0) {
+    return (
+      <div className="text-center py-12 px-6">
+        <div className="mb-4">
+          <div className="mx-auto h-16 w-16 rounded-2xl flex items-center justify-center shadow-sm"
+            style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
+          >
+            <svg className="h-8 w-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+            </svg>
+          </div>
+        </div>
+        <h4 className="text-lg font-semibold text-slate-700 mb-2">{t('instagram.noAccounts')}</h4>
+        <p className="text-slate-500 text-sm leading-relaxed mb-4">{t('instagram.noAccountsHint')}</p>
+        <button
+          onClick={() => navigate('/settings?tab=integracoes&integration=instagram')}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md transition-all"
+        >
+          {t('instagram.connectButton')}
+        </button>
+      </div>
+    )
+  }
+
+  const convs = igData.filteredConversations
+
+  if (convs.length === 0) {
+    return (
+      <div className="text-center py-12 px-6">
+        <div className="mb-4">
+          <div className="mx-auto h-16 w-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center shadow-sm">
+            <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+            </svg>
+          </div>
+        </div>
+        <h4 className="text-lg font-semibold text-slate-700 mb-2">{t('instagram.noConversations')}</h4>
+        <p className="text-slate-500 text-sm leading-relaxed">{t('instagram.noConversationsHint')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-slate-100">
+      {convs.map(conv => (
+        <InstagramConversationItem
+          key={conv.id}
+          conversation={conv}
+          isSelected={conv.id === igData.selectedConversationId}
+          onClick={() => igData.onSelectConversation(conv.id)}
+        />
+      ))}
+    </div>
+  )
+}
+
+// =====================================================
+// COMPONENTE ITEM DA CONVERSA INSTAGRAM
+// =====================================================
+
+interface InstagramConversationItemProps {
+  conversation: InstagramChatConversation
+  isSelected: boolean
+  onClick: () => void
+}
+
+const InstagramConversationItem: React.FC<InstagramConversationItemProps> = ({
+  conversation, isSelected, onClick
+}) => {
+  const formatTime = (ts: string | null) => {
+    if (!ts) return ''
+    try {
+      const d = new Date(ts)
+      const now = new Date()
+      const diff = now.getTime() - d.getTime()
+      const minutes = Math.floor(diff / 60000)
+      const hours   = Math.floor(diff / 3600000)
+      const days    = Math.floor(diff / 86400000)
+      if (minutes < 1)  return 'Agora'
+      if (minutes < 60) return `${minutes}m`
+      if (hours < 24)   return `${hours}h`
+      if (days < 7)     return `${days}d`
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    } catch { return '' }
+  }
+
+  const displayName = conversation.participant_name
+    || (conversation.participant_username ? `@${conversation.participant_username}` : 'Usuário Instagram')
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-4 text-left transition-all duration-200 ${
+        isSelected
+          ? 'bg-pink-50 border-r-4 border-pink-500 shadow-sm'
+          : conversation.unread_count > 0
+            ? 'bg-pink-50/50 hover:bg-pink-50 border-l-4 border-pink-400 shadow-sm'
+            : 'hover:bg-white/80 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-start space-x-3">
+        {/* Avatar */}
+        <div className="flex-shrink-0">
+          {conversation.participant_avatar ? (
+            <img
+              src={conversation.participant_avatar}
+              alt={displayName}
+              className="w-12 h-12 rounded-xl object-cover shadow-sm"
+            />
+          ) : (
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow-sm"
+              style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
+            >
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        {/* Conteúdo */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <h4 className={`text-sm truncate ${
+              conversation.unread_count > 0 ? 'font-bold' : 'font-semibold'
+            } ${isSelected ? 'text-slate-800' : 'text-slate-700'}`}>
+              {displayName}
+            </h4>
+            <div className="flex items-center space-x-2 ml-3 flex-shrink-0">
+              {conversation.last_message_at && (
+                <span className="text-xs font-medium text-slate-500">
+                  {formatTime(conversation.last_message_at)}
+                </span>
+              )}
+              {conversation.unread_count > 0 && (
+                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-pink-500 rounded-full shadow-sm">
+                  {conversation.unread_count}
+                </span>
+              )}
+            </div>
+          </div>
+          {conversation.participant_username && conversation.participant_name && (
+            <p className="text-xs text-slate-400 truncate">@{conversation.participant_username}</p>
+          )}
+          {conversation.last_message_preview && (
+            <p className={`text-sm truncate mt-1 ${isSelected ? 'text-slate-600' : 'text-slate-500'}`}>
+              {conversation.last_message_preview}
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// =====================================================
+// COMPONENTE ITEM DA CONVERSA WHATSAPP (sem alterações)
 // =====================================================
 
 interface ConversationItemProps {

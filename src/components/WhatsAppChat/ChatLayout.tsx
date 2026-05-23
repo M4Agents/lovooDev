@@ -1,17 +1,22 @@
 // =====================================================
 // CHAT LAYOUT - COMPONENTE PRINCIPAL ISOLADO
 // =====================================================
-// Layout principal do chat com 3 colunas
-// NÃO MODIFICA componentes existentes
+// Layout principal do chat com 3 colunas.
+// Suporta canal WhatsApp (comportamento original) e Instagram.
+// NÃO refatora lógica WhatsApp existente.
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatData } from '../../hooks/chat/useChatData'
+import { useInstagramChatData } from '../../hooks/chat/useInstagramChatData'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
+import { InstagramChatArea } from './ChatArea/InstagramChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
 import { LockedChatPanel } from './LockedChatPanel'
 import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
+import type { ChatChannel } from '../../types/instagram-chat'
+import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -26,15 +31,51 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   const { t } = useTranslation('chat')
   const chatData = useChatData(companyId, userId, initialConversationId)
 
-  // Conversa clicada que está bloqueada (lead is_over_plan = true)
+  // Canal ativo — persiste entre sessões com fallback seguro
+  const [selectedChannel, setSelectedChannel] = useState<ChatChannel>(() => {
+    const saved = localStorage.getItem(`chat_channel_${userId}`)
+    return saved === 'instagram' || saved === 'whatsapp' ? saved : 'whatsapp'
+  })
+
+  const handleChannelChange = useCallback((channel: ChatChannel) => {
+    setSelectedChannel(channel)
+    localStorage.setItem(`chat_channel_${userId}`, channel)
+  }, [userId])
+
+  // Hook Instagram — sempre chamado (regra dos hooks), enabled apenas quando canal = instagram
+  const igChatData = useInstagramChatData(companyId, userId, selectedChannel === 'instagram')
+
+  // igSidebarData memoizado para evitar re-render do Sidebar a cada render do ChatLayout
+  const igSidebarData: InstagramSidebarData = useMemo(() => ({
+    connections:            igChatData.connections,
+    conversations:          igChatData.conversations,
+    filteredConversations:  igChatData.filteredConversations,
+    selectedConnectionId:   igChatData.selectedConnectionId,
+    selectedConversationId: igChatData.selectedConversationId,
+    filter:                 igChatData.filter,
+    loading:                igChatData.conversationsLoading,
+    onSelectConnection:     igChatData.setSelectedConnection,
+    onSelectConversation:   igChatData.setSelectedConversation,
+    onFilterChange:         igChatData.setFilter,
+    onRefresh:              igChatData.refreshConversations,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    igChatData.connections,
+    igChatData.conversations,
+    igChatData.filteredConversations,
+    igChatData.selectedConnectionId,
+    igChatData.selectedConversationId,
+    igChatData.filter,
+    igChatData.conversationsLoading,
+  ])
+
+  // Conversa clicada que está bloqueada (lead is_over_plan = true) — apenas WhatsApp
   const [lockedConversation, setLockedConversation] = useState<ChatConversation | null>(null)
 
-  // Intercepta o clique na conversa: bloqueia se lead restrito
   const handleSelectConversation = useCallback((conversationId: string) => {
     const conversation = chatData.conversations.find(c => c.id === conversationId)
     if (conversation?.is_lead_over_plan) {
       setLockedConversation(conversation)
-      // Não seta selectedConversation → ChatArea não é montada
       return
     }
     setLockedConversation(null)
@@ -42,10 +83,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   }, [chatData])
 
   // =====================================================
-  // LOADING STATE
+  // LOADING STATE — apenas para WhatsApp (Instagram não bloqueia o layout)
   // =====================================================
 
-  if (chatData.instancesLoading) {
+  if (selectedChannel === 'whatsapp' && chatData.instancesLoading) {
     return (
       <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
         <div className="text-center">
@@ -61,10 +102,10 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   }
 
   // =====================================================
-  // NO INSTANCES STATE
+  // NO INSTANCES STATE — apenas para WhatsApp
   // =====================================================
 
-  if (chatData.instances.length === 0) {
+  if (selectedChannel === 'whatsapp' && chatData.instances.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
         <div className="text-center max-w-md p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20">
@@ -96,12 +137,22 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   }
 
   // =====================================================
-  // LAYOUT PRINCIPAL
+  // LAYOUT PRINCIPAL — Instagram ou WhatsApp
   // =====================================================
+
+  // Conversa Instagram selecionada
+  const selectedIgConversation = igChatData.selectedConversationId
+    ? igChatData.conversations.find(c => c.id === igChatData.selectedConversationId)
+    : undefined
+
+  // Conexão ativa da conversa Instagram selecionada
+  const igConnectionActive = selectedIgConversation
+    ? (igChatData.connections.find(c => c.id === selectedIgConversation.connection_id)?.status === 'active')
+    : true
 
   return (
     <div className="flex h-full bg-gradient-to-br from-slate-50 to-gray-100">
-      {/* Sidebar Conversas - 25% (oculta se hideConversationSidebar = true) */}
+      {/* Sidebar Conversas - 25% */}
       {!hideConversationSidebar && (
         <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
           <ConversationSidebar
@@ -115,44 +166,84 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             onSelectConversation={handleSelectConversation}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
+            selectedChannel={selectedChannel}
+            onChannelChange={handleChannelChange}
+            igData={igSidebarData}
           />
         </div>
       )}
 
-      {/* Área Chat - 50% ou 60% se sidebar oculta */}
+      {/* Área Chat - 50% */}
       <div className={`${hideConversationSidebar ? 'flex-[3]' : 'flex-1'} flex flex-col bg-white/60 backdrop-blur-sm`}>
-        {lockedConversation ? (
-          <LockedChatPanel contactName={lockedConversation.contact_name} />
-        ) : chatData.selectedConversation ? (
-          <ChatArea
-            conversationId={chatData.selectedConversation}
-            companyId={companyId}
-            userId={userId}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
-              <div className="mb-6">
-                <div className="mx-auto h-20 w-20 bg-gradient-to-br from-slate-400 to-slate-600 rounded-3xl flex items-center justify-center shadow-lg">
-                  <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                  </svg>
+        {selectedChannel === 'instagram' ? (
+          selectedIgConversation ? (
+            <InstagramChatArea
+              conversation={selectedIgConversation}
+              messages={igChatData.messages}
+              messagesLoading={igChatData.messagesLoading}
+              messagesError={igChatData.messagesError}
+              sendLoading={igChatData.sendLoading}
+              sendError={igChatData.sendError}
+              onSendMessage={(text) => igChatData.sendMessage({ text })}
+              onRetryLoadMessages={() => igChatData.setSelectedConversation(selectedIgConversation.id)}
+              onClearSendError={igChatData.clearSendError}
+              connectionActive={igConnectionActive}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+                <div className="mb-6">
+                  <div className="mx-auto h-20 w-20 rounded-3xl flex items-center justify-center shadow-lg"
+                    style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
+                  >
+                    <svg className="h-10 w-10 text-white" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                    </svg>
+                  </div>
                 </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-3">
+                  {t('instagram.noConversationSelected')}
+                </h3>
+                <p className="text-slate-600 leading-relaxed">
+                  {t('instagram.noConversationSelectedHint')}
+                </p>
               </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                {t('layout.selectConversationTitle')}
-              </h3>
-              <p className="text-slate-600 leading-relaxed">
-                {t('layout.selectConversationBody')}
-              </p>
             </div>
-          </div>
+          )
+        ) : (
+          lockedConversation ? (
+            <LockedChatPanel contactName={lockedConversation.contact_name} />
+          ) : chatData.selectedConversation ? (
+            <ChatArea
+              conversationId={chatData.selectedConversation}
+              companyId={companyId}
+              userId={userId}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+                <div className="mb-6">
+                  <div className="mx-auto h-20 w-20 bg-gradient-to-br from-slate-400 to-slate-600 rounded-3xl flex items-center justify-center shadow-lg">
+                    <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-3">
+                  {t('layout.selectConversationTitle')}
+                </h3>
+                <p className="text-slate-600 leading-relaxed">
+                  {t('layout.selectConversationBody')}
+                </p>
+              </div>
+            </div>
+          )
         )}
       </div>
 
-      {/* Painel Lead - 25% ou 40% se sidebar oculta */}
+      {/* Painel Lead - 25% (apenas WhatsApp por ora) */}
       <div className={`${hideConversationSidebar ? 'flex-[2] h-full' : 'w-1/4 min-w-[320px]'} bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
-        {!lockedConversation && chatData.selectedConversation ? (
+        {selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (
           <LeadPanel
             conversationId={chatData.selectedConversation}
             companyId={companyId}
