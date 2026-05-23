@@ -128,9 +128,9 @@ export default async function handler(req, res) {
   const { data: rpc, error: rpcErr } = await svc.rpc('create_or_link_instagram_lead', {
     p_conversation_id: conversationId,
     p_name:            trimmedName,
+    p_performed_by:    auth.userId,
     p_phone:           trimmedPhone || null,
     p_email:           trimmedEmail || null,
-    p_performed_by:    auth.userId,
     p_ip_address:      ipAddress,
     p_user_agent:      userAgent,
   });

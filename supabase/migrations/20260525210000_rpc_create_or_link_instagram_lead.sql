@@ -23,9 +23,9 @@
 CREATE OR REPLACE FUNCTION public.create_or_link_instagram_lead(
   p_conversation_id UUID,
   p_name            TEXT,
+  p_performed_by    UUID,
   p_phone           TEXT    DEFAULT NULL,
   p_email           TEXT    DEFAULT NULL,
-  p_performed_by    UUID,
   p_ip_address      TEXT    DEFAULT NULL,
   p_user_agent      TEXT    DEFAULT NULL
 )
@@ -388,12 +388,12 @@ $$;
 -- ── Permissões ────────────────────────────────────────────────────────────────
 -- Revogar de todos; conceder apenas para service_role.
 -- Guard interno (auth.role()) é a segunda camada de proteção.
-REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT)
+REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, UUID, TEXT, TEXT, TEXT, TEXT)
   FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT)
+REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, UUID, TEXT, TEXT, TEXT, TEXT)
   FROM anon;
-REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT)
+REVOKE EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, UUID, TEXT, TEXT, TEXT, TEXT)
   FROM authenticated;
 
-GRANT EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT)
+GRANT EXECUTE ON FUNCTION public.create_or_link_instagram_lead(UUID, TEXT, UUID, TEXT, TEXT, TEXT, TEXT)
   TO service_role;

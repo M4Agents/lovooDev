@@ -24,7 +24,11 @@
 //   - Usuário inativo (is_active = false) é tratado como sem acesso.
 // =============================================================================
 
-const ALLOWED_ROLES = ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'];
+/** Roles que podem usar qualquer operação Instagram (leitura incluída). */
+export const ALLOWED_ROLES = ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'];
+
+/** Roles restritas: conectar/desconectar contas (admin+). */
+export const CONNECT_ROLES = ['super_admin', 'system_admin', 'admin', 'partner'];
 
 /**
  * Valida JWT + RBAC para endpoints Instagram.
@@ -32,10 +36,13 @@ const ALLOWED_ROLES = ['super_admin', 'system_admin', 'partner', 'admin', 'manag
  * @param {import('http').IncomingMessage} req        - Request (precisa de headers.authorization)
  * @param {import('@supabase/supabase-js').SupabaseClient} svc - Client service_role
  * @param {string} companyId - UUID da empresa dona do recurso (resolvido do banco, nunca do payload)
+ * @param {{ roles?: string[] }} [options]
+ *   - roles: lista de roles permitidas (padrão: ALLOWED_ROLES; use CONNECT_ROLES para admin+)
  *
  * @returns {Promise<{ ok: boolean, status?: number, error?: string, userId?: string, role?: string }>}
  */
-export async function validateInstagramCaller(req, svc, companyId) {
+export async function validateInstagramCaller(req, svc, companyId, options = {}) {
+  const roles = options.roles ?? ALLOWED_ROLES;
   const authHeader = req.headers?.authorization ?? '';
 
   if (!authHeader.startsWith('Bearer ')) {
@@ -59,7 +66,7 @@ export async function validateInstagramCaller(req, svc, companyId) {
     .maybeSingle();
 
   if (directMem) {
-    if (!ALLOWED_ROLES.includes(directMem.role)) {
+    if (!roles.includes(directMem.role)) {
       return {
         ok:     false,
         status: 403,
