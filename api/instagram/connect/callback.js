@@ -234,9 +234,7 @@ export default async function handler(req, res) {
   // ── 10. Criar configurações padrão da empresa (idempotente) ───────────────
   await svc
     .from('instagram_company_settings')
-    .insert({ company_id: companyId })
-    .onConflict('company_id')
-    .ignoreDuplicates();
+    .upsert({ company_id: companyId }, { onConflict: 'company_id', ignoreDuplicates: true });
 
   // ── 11. Audit log ──────────────────────────────────────────────────────────
   await svc.from('instagram_audit_logs').insert({
