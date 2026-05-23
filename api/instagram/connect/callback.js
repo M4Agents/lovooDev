@@ -29,17 +29,16 @@ import { encryptInstagramToken } from '../../lib/instagram/tokenCrypto.js';
 
 const CONNECT_ROLES = ['super_admin', 'system_admin', 'admin', 'partner'];
 
-function getAppBaseUrl() {
-  return (process.env.APP_BASE_URL ?? 'https://app.lovoocrm.com').replace(/\/$/, '');
-}
-
 function redirectError(res, code) {
-  return res.redirect(`${getAppBaseUrl()}/instagram/connect?error=${encodeURIComponent(code)}`);
+  const base   = (process.env.APP_BASE_URL ?? 'https://app.lovoocrm.com').replace(/\/$/, '');
+  const params = new URLSearchParams({ tab: 'integracoes', integration: 'instagram', ig_error: code });
+  return res.redirect(`${base}/settings?${params.toString()}`);
 }
 
 function redirectSuccess(res, username) {
-  const params = new URLSearchParams({ connected: '1', account: username });
-  return res.redirect(`${getAppBaseUrl()}/instagram/connect?${params.toString()}`);
+  const base   = (process.env.APP_BASE_URL ?? 'https://app.lovoocrm.com').replace(/\/$/, '');
+  const params = new URLSearchParams({ tab: 'integracoes', integration: 'instagram', connected: '1', account: username });
+  return res.redirect(`${base}/settings?${params.toString()}`);
 }
 
 export default async function handler(req, res) {

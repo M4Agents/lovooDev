@@ -150,6 +150,23 @@ export function useAccessControl() {
     isSaaSAdmin
   )
 
+  // ── Integração Instagram ───────────────────────────────────
+  // Ver aba: admin, manager, super_admin, system_admin, impersonando
+  const canManageInstagramIntegration =
+    currentRole === 'admin' ||
+    currentRole === 'manager' ||
+    currentRole === 'super_admin' ||
+    currentRole === 'system_admin' ||
+    isImpersonating
+
+  // Conectar/desconectar: admin+ apenas (alinha com CONNECT_ROLES do backend)
+  // manager visualiza mas NÃO pode conectar/desconectar
+  const canConnectInstagram =
+    currentRole === 'admin' ||
+    currentRole === 'super_admin' ||
+    currentRole === 'system_admin' ||
+    isImpersonating
+
   // ── Landing pages ──────────────────────────────────────────
   const canSeeLandingPageOwner = currentRole === 'super_admin'
 
@@ -219,5 +236,9 @@ export function useAccessControl() {
 
     // Importação de leads por arquivo
     canImportLeads,
+
+    // Integração Instagram
+    canManageInstagramIntegration,
+    canConnectInstagram,
   }
 }

@@ -23,7 +23,8 @@
     "webhookAdvanced": "Webhook Avançado",
     "salesFunnel": "Funil de Vendas",
     "openai": "OpenAI",
-    "elevenlabs": "ElevenLabs"
+    "elevenlabs": "ElevenLabs",
+    "instagram": "Instagram"
   },
   "integrations": {
     "cards": {
@@ -42,6 +43,10 @@
       "salesFunnel": {
         "badge": "API REST",
         "description": "Mover leads entre etapas via API"
+      },
+      "instagram": {
+        "badge": "DM + Comentários",
+        "description": "Conecte contas Instagram Business"
       },
       "openai": {
         "badge": "IA",
@@ -182,6 +187,24 @@
     "actions": {
       "copy": "Copiar",
       "loading": "Carregando..."
+    },
+    "instagram": {
+      "tab": "Instagram",
+      "description": "Conecte contas Instagram Business para receber DMs e comentários.",
+      "connect": "Conectar Instagram",
+      "disconnect": "Desconectar",
+      "reconnect": "Reconectar",
+      "expires": "Expira em",
+      "empty": "Nenhuma conta Instagram conectada.",
+      "emptyHint": "Conecte uma conta para receber DMs e comentários.",
+      "errorGeneric": "Erro ao conectar conta Instagram. Tente novamente.",
+      "disconnectConfirm": "Tem certeza que deseja desconectar @{{account}}?",
+      "disconnectSuccess": "Conta @{{account}} desconectada com sucesso.",
+      "status": {
+        "active": "Conectada",
+        "revoked": "Desconectada",
+        "error": "Com erro"
+      }
     },
     "apiLeads": {
       "title": "API para Leads",
