@@ -19,7 +19,7 @@ function StatusBadge({ status }: { status: InstagramConnection['status'] }) {
 
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[status]}`}>
-      {t(`instagram.status.${status}`)}
+      {t(`integrations.instagram.status.${status}`)}
     </span>
   );
 }
@@ -33,6 +33,8 @@ function formatExpiry(isoDate: string | null): string {
 
 export function InstagramConnectionPanel({ companyId }: Props) {
   const { t } = useTranslation('settings.app');
+  const ig = (key: string, opts?: Record<string, unknown>) =>
+    t(`integrations.instagram.${key}`, opts);
   const { canConnectInstagram } = useAccessControl();
   const { connections, loading, loadingAction, error, refetch, connect, disconnect } = useInstagramConnections(companyId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
   }
 
   async function handleDisconnect(conn: InstagramConnection) {
-    if (!window.confirm(t('instagram.disconnectConfirm', { account: conn.instagram_username }))) return;
+    if (!window.confirm(ig('disconnectConfirm', { account: conn.instagram_username }))) return;
     setDisconnectingId(conn.id);
     setActionError(null);
     setSuccessMsg(null);
@@ -55,10 +57,10 @@ export function InstagramConnectionPanel({ companyId }: Props) {
     setDisconnectingId(null);
 
     if (result.success) {
-      setSuccessMsg(t('instagram.disconnectSuccess', { account: conn.instagram_username }));
+      setSuccessMsg(ig('disconnectSuccess', { account: conn.instagram_username }));
       setTimeout(() => setSuccessMsg(null), 4000);
     } else {
-      setActionError(result.error ?? t('instagram.errorGeneric'));
+      setActionError(result.error ?? ig('errorGeneric'));
     }
   }
 
@@ -67,8 +69,8 @@ export function InstagramConnectionPanel({ companyId }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">{t('instagram.tab')}</h3>
-          <p className="text-sm text-slate-500 mt-0.5">{t('instagram.description')}</p>
+          <h3 className="text-lg font-semibold text-slate-900">{ig('tab')}</h3>
+          <p className="text-sm text-slate-500 mt-0.5">{ig('description')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -86,7 +88,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
               className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              {loadingAction ? 'Conectando...' : t('instagram.connect')}
+              {loadingAction ? 'Conectando...' : ig('connect')}
             </button>
           )}
         </div>
@@ -121,8 +123,8 @@ export function InstagramConnectionPanel({ companyId }: Props) {
           <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mb-4">
             <Instagram className="w-8 h-8 text-purple-500" />
           </div>
-          <p className="text-slate-700 font-medium">{t('instagram.empty')}</p>
-          <p className="text-sm text-slate-400 mt-1">{t('instagram.emptyHint')}</p>
+          <p className="text-slate-700 font-medium">{ig('empty')}</p>
+          <p className="text-sm text-slate-400 mt-1">{ig('emptyHint')}</p>
           {canConnectInstagram && (
             <button
               onClick={handleConnect}
@@ -130,7 +132,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
               className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              {t('instagram.connect')}
+              {ig('connect')}
             </button>
           )}
         </div>
@@ -156,7 +158,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
                   {conn.token_expires_at && (
                     <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
                       <Clock className="w-3 h-3" />
-                      <span>{t('instagram.expires')}: {formatExpiry(conn.token_expires_at)}</span>
+                    <span>{ig('expires')}: {formatExpiry(conn.token_expires_at)}</span>
                     </div>
                   )}
                 </div>
@@ -169,7 +171,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Unlink className="w-3.5 h-3.5" />
-                  {disconnectingId === conn.id ? 'Desconectando...' : t('instagram.disconnect')}
+                  {disconnectingId === conn.id ? 'Desconectando...' : ig('disconnect')}
                 </button>
               )}
 
@@ -180,7 +182,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-purple-600 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  {t('instagram.reconnect')}
+                  {ig('reconnect')}
                 </button>
               )}
             </div>

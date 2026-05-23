@@ -78,6 +78,7 @@ export default async function handler(req, res) {
     .maybeSingle();
 
   if (!membership || !membership.is_active || !CONNECT_ROLES.includes(membership.role)) {
+    console.error('[instagram/callback] membership_revoked userId=%s companyId=%s membership=%o', userId, companyId, membership);
     return redirectError(res, 'membership_revoked');
   }
 
@@ -119,6 +120,7 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
 
     if (!tokenRes.ok || tokenData.error_type || tokenData.error) {
+      console.error('[instagram/callback] short-lived token exchange error:', JSON.stringify(tokenData));
       return redirectError(res, 'token_exchange_failed');
     }
 
@@ -129,7 +131,8 @@ export default async function handler(req, res) {
     igUserId         = String(entry.user_id ?? '');
     grantedScopes    = (entry.permissions ?? '')
       .split(',').map(s => s.trim()).filter(Boolean);
-  } catch {
+  } catch (err) {
+    console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
   }
 
@@ -154,12 +157,14 @@ export default async function handler(req, res) {
     const llData = await llRes.json();
 
     if (!llRes.ok || llData.error) {
+      console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
       return redirectError(res, 'token_exchange_failed');
     }
 
     longLivedToken = llData.access_token;
     expiresIn      = llData.expires_in; // segundos
-  } catch {
+  } catch (err) {
+    console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
   }
 
