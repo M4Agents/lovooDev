@@ -196,6 +196,7 @@
       "reconnect": "Reconectar",
       "syncPhoto": "Atualizar foto de perfil",
       "syncPhotoSuccess": "Foto de @{{account}} atualizada com sucesso.",
+      "connectHint": "A conta conectada será a conta Instagram em que você está logado no navegador no momento da autorização. Para conectar uma conta diferente, faça login nela no Instagram antes de clicar em Conectar, ou use uma janela anônima.",
       "empty": "Nenhuma conta Instagram conectada.",
       "emptyHint": "Conecte uma conta para receber DMs e comentários.",
       "errorGeneric": "Erro ao conectar conta Instagram. Tente novamente.",

@@ -104,6 +104,14 @@ export function InstagramConnectionPanel({ companyId }: Props) {
         </div>
       </div>
 
+      {/* Dica: conta conectada = conta logada no navegador */}
+      {canConnectInstagram && (
+        <div className="flex items-start gap-2.5 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-400" />
+          <p>{ig('connectHint')}</p>
+        </div>
+      )}
+
       {/* Mensagens de feedback */}
       {successMsg && (
         <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
