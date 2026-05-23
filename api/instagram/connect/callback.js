@@ -126,11 +126,15 @@ export default async function handler(req, res) {
 
     // Business Login retorna { data: [{ access_token, user_id, permissions }] }
     // ou diretamente { access_token, user_id, permissions }
+    // permissions pode ser array ["scope1","scope2"] OU string "scope1,scope2"
     const entry      = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
     shortLivedToken  = entry.access_token;
     igUserId         = String(entry.user_id ?? '');
-    grantedScopes    = (entry.permissions ?? '')
-      .split(',').map(s => s.trim()).filter(Boolean);
+
+    const rawPerms = entry.permissions ?? [];
+    grantedScopes  = Array.isArray(rawPerms)
+      ? rawPerms.map((s) => String(s).trim()).filter(Boolean)
+      : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
   } catch (err) {
     console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
