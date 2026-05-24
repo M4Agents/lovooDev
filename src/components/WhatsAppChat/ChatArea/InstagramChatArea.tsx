@@ -13,7 +13,7 @@
 //   - Reaction picker (6 emojis Meta)
 // =====================================================
 
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import type {
