@@ -20,6 +20,7 @@ import type {
   InstagramChatMessage,
   InstagramChannelFilter,
   InstagramSendMessagePayload,
+  InstagramSendMediaPayload,
   InstagramReactPayload,
   InstagramMessageReaction,
 } from '../../types/instagram-chat'
@@ -56,8 +57,10 @@ export interface UseInstagramChatDataReturn {
   setFilter: (f: InstagramChannelFilter) => void
   refreshConversations: () => void
   sendMessage: (payload: InstagramSendMessagePayload) => Promise<void>
+  sendMedia: (payload: InstagramSendMediaPayload) => Promise<void>
   reactToMessage: (payload: InstagramReactPayload) => Promise<void>
   sendLoading: boolean
+  sendMediaLoading: boolean
   sendError: string | undefined
   clearSendError: () => void
 }
@@ -134,8 +137,9 @@ export function useInstagramChatData(
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [messagesError,   setMessagesError]   = useState<string | undefined>()
 
-  const [sendLoading, setSendLoading] = useState(false)
-  const [sendError,   setSendError]   = useState<string | undefined>()
+  const [sendLoading,      setSendLoading]      = useState(false)
+  const [sendMediaLoading, setSendMediaLoading] = useState(false)
+  const [sendError,        setSendError]        = useState<string | undefined>()
   const [replyingTo, setReplyingTo]   = useState<InstagramChatMessage | null>(null)
 
   // =====================================================
@@ -488,6 +492,36 @@ export function useInstagramChatData(
     }
   }, [selectedConversationId])
 
+  const sendMedia = useCallback(async ({ media_url, media_type, reply_to_ig_message_id }: InstagramSendMediaPayload) => {
+    if (!selectedConversationId) return
+    setSendMediaLoading(true)
+    setSendError(undefined)
+    try {
+      const body: Record<string, unknown> = { media_url, media_type }
+      if (reply_to_ig_message_id) body.reply_to_ig_message_id = reply_to_ig_message_id
+
+      const data = await postWithAuth<{ message: InstagramChatMessage }>(
+        `/api/instagram/conversations/${selectedConversationId}/send-media`,
+        body
+      )
+      if (data.message) {
+        setMessages(prev => [...prev, { ...data.message, reactions: data.message.reactions ?? [] }])
+      }
+      setReplyingTo(null)
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === selectedConversationId
+            ? { ...c, last_message_preview: `[${media_type}]`, last_message_at: new Date().toISOString() }
+            : c
+        )
+      )
+    } catch (err: any) {
+      setSendError(err.message ?? 'Erro ao enviar mídia')
+    } finally {
+      setSendMediaLoading(false)
+    }
+  }, [selectedConversationId])
+
   const reactToMessage = useCallback(async ({ ig_message_id, emoji, action }: InstagramReactPayload) => {
     if (!selectedConversationId) return
     try {
@@ -529,8 +563,10 @@ export function useInstagramChatData(
     setFilter,
     refreshConversations,
     sendMessage,
+    sendMedia,
     reactToMessage,
     sendLoading,
+    sendMediaLoading,
     sendError,
     clearSendError,
   }

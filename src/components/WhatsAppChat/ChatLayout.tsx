@@ -183,16 +183,19 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               messagesLoading={igChatData.messagesLoading}
               messagesError={igChatData.messagesError}
               sendLoading={igChatData.sendLoading}
+              sendMediaLoading={igChatData.sendMediaLoading}
               sendError={igChatData.sendError}
               replyingTo={igChatData.replyingTo}
               onSetReplyingTo={igChatData.setReplyingTo}
               onSendMessage={(text, replyToIgMessageId) =>
                 igChatData.sendMessage({ text, reply_to_ig_message_id: replyToIgMessageId ?? null })
               }
+              onSendMedia={igChatData.sendMedia}
               onReactToMessage={igChatData.reactToMessage}
               onRetryLoadMessages={() => igChatData.setSelectedConversation(selectedIgConversation.id)}
               onClearSendError={igChatData.clearSendError}
               connectionActive={igConnectionActive}
+              companyId={companyId}
             />
           ) : (
             <div className="flex items-center justify-center h-full">

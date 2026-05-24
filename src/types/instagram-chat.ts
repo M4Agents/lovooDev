@@ -93,6 +93,14 @@ export interface InstagramReactPayload {
   action: 'react' | 'unreact'
 }
 
+export type InstagramMediaType = 'image' | 'video' | 'audio'
+
+export interface InstagramSendMediaPayload {
+  media_url:              string
+  media_type:             InstagramMediaType
+  reply_to_ig_message_id?: string | null
+}
+
 // =====================================================
 // SELETOR DE CANAL
 // =====================================================
