@@ -38,10 +38,6 @@ export default async function handler(req, res) {
   const { conversationId } = req.query;
   const { text, reply_to_ig_message_id } = req.body ?? {};
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'send.js:39',message:'SEND_ENTRY',data:{hasText:!!text, replyToId: reply_to_ig_message_id ?? null, replyToType: typeof reply_to_ig_message_id, startsWithLocal: typeof reply_to_ig_message_id === 'string' ? reply_to_ig_message_id.startsWith('local_') : null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (!conversationId) {
     return res.status(400).json({ error: 'conversationId é obrigatório' });
   }
@@ -117,12 +113,8 @@ export default async function handler(req, res) {
         message:   { text: trimmedText },
       };
       if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
-        metaBody.message.reply_to = { mid: reply_to_ig_message_id };
+        metaBody.reply_to = { mid: reply_to_ig_message_id };
       }
-
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'send.js:119',message:'META_SEND_BODY',data:{replyToId: reply_to_ig_message_id ?? null, bodyKeys: Object.keys(metaBody.message), recipientId: conversation.ig_participant_id?.slice(0,6)+'...'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
@@ -134,10 +126,6 @@ export default async function handler(req, res) {
         signal: controller.signal,
       });
       metaData = await metaRes.json();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'send.js:135',message:'META_RESPONSE',data:{httpStatus: metaRes.status, ok: metaRes.ok, errCode: metaData?.error?.code ?? null, errType: metaData?.error?.type ?? null, errMsg: metaData?.error?.message ?? null, msgId: metaData?.message_id ?? null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } finally {
       clearTimeout(timeout);
     }
@@ -178,7 +166,7 @@ export default async function handler(req, res) {
 
       return res.status(502).json({
         error:   'meta_send_failed',
-        message: `[DEBUG] Meta error ${errCode}: ${errMsg || 'sem mensagem'} | HTTP ${metaRes?.status}`,
+        message: 'Falha ao enviar mensagem. Tente novamente.',
       });
     }
 
