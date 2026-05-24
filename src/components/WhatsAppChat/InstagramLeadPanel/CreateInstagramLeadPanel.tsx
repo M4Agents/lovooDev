@@ -28,7 +28,11 @@ import type { InstagramChatConversation, CreateInstagramLeadPayload, CreateInsta
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function cleanPhone(raw: string): string {
-  return raw.replace(/\D/g, '')
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+  // Adiciona código do país Brasil (55) se ausente — padrão do projeto
+  if (digits.startsWith('55') && digits.length >= 12) return digits
+  return `55${digits}`
 }
 
 interface ValidationErrors {
@@ -143,6 +147,10 @@ export const CreateInstagramLeadPanel: React.FC<CreateInstagramLeadPanelProps> =
       email: email.trim() || null,
     }
 
+    // #region agent log
+    console.log('[DEBUG createLead] phoneRaw:', phone, '| phoneCleaned:', payload.phone)
+    // #endregion
+
     const result = await onCreateLead(conversation.id, payload)
 
     if (!result) {
@@ -245,7 +253,7 @@ export const CreateInstagramLeadPanel: React.FC<CreateInstagramLeadPanelProps> =
                 type="tel"
                 value={phone}
                 onChange={e => { setPhone(e.target.value); setErrors(prev => ({ ...prev, phone: undefined, phoneOrEmail: undefined })) }}
-                placeholder="(11) 99999-9999"
+                placeholder="11 99999-9999"
                 className={`w-full px-3 py-2 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-pink-400 transition-colors ${
                   errors.phone ? 'border-red-400' : 'border-slate-300'
                 }`}
