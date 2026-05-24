@@ -217,6 +217,103 @@ export function useInstagramChatData(
   }, [selectedConversationId, fetchMessages])
 
   // =====================================================
+  // REALTIME — instagram_conversations (sidebar)
+  // =====================================================
+  // Atualiza a lista de conversas em tempo real quando:
+  //   - chega nova mensagem inbound (webhook → UPDATE na conversa)
+  //   - nova conversa é criada (INSERT)
+  // Segue o mesmo padrão do useChatData (WhatsApp).
+
+  useEffect(() => {
+    if (!enabled || !companyId) return
+
+    const channel = supabase
+      .channel(`ig_conversations_${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'instagram_conversations',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newConv = payload.new as InstagramChatConversation
+            setConversations(prev => {
+              if (prev.some(c => c.id === newConv.id)) return prev
+              return [newConv, ...prev]
+            })
+          } else if (payload.eventType === 'UPDATE') {
+            setConversations(prev =>
+              prev.map(c =>
+                c.id === payload.new.id
+                  ? {
+                      ...c,
+                      unread_count:         payload.new.unread_count         ?? c.unread_count,
+                      last_message_at:      payload.new.last_message_at      ?? c.last_message_at,
+                      last_message_preview: payload.new.last_message_preview ?? c.last_message_preview,
+                      assigned_to:          payload.new.assigned_to          ?? c.assigned_to,
+                      updated_at:           payload.new.updated_at           ?? c.updated_at,
+                    }
+                  : c
+              )
+            )
+          }
+        }
+      )
+      .subscribe()
+
+    return () => { channel.unsubscribe() }
+  }, [enabled, companyId])
+
+  // =====================================================
+  // REALTIME — instagram_messages (thread da conversa aberta)
+  // =====================================================
+  // Recebe mensagens inbound em tempo real para a conversa selecionada.
+  // Deduplicação por ig_message_id evita duplicar mensagens outbound
+  // que já foram adicionadas localmente pelo sendMessage.
+
+  useEffect(() => {
+    if (!selectedConversationId) return
+
+    const channel = supabase
+      .channel(`ig_messages_${selectedConversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'INSERT',
+          schema: 'public',
+          table:  'instagram_messages',
+          filter: `conversation_id=eq.${selectedConversationId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as InstagramChatMessage
+          setMessages(prev => {
+            // Deduplicar: ig_message_id real ou prefixo local_ (outbound já adicionado)
+            const isDupe = prev.some(m =>
+              m.ig_message_id === newMsg.ig_message_id ||
+              // Substituir placeholder local_ pelo registro real quando chegar do banco
+              (newMsg.direction === 'outbound' && m.ig_message_id?.startsWith('local_') && m.content === newMsg.content)
+            )
+            if (isDupe) {
+              // Atualizar o placeholder local pelo registro definitivo do banco
+              return prev.map(m =>
+                m.ig_message_id?.startsWith('local_') && m.content === newMsg.content && newMsg.direction === 'outbound'
+                  ? { ...m, ...newMsg }
+                  : m
+              )
+            }
+            return [...prev, newMsg]
+          })
+        }
+      )
+      .subscribe()
+
+    return () => { channel.unsubscribe() }
+  }, [selectedConversationId])
+
+  // =====================================================
   // CONVERSAS FILTRADAS (busca local sobre resultado já filtrado)
   // =====================================================
 
