@@ -248,8 +248,6 @@ export function useInstagramChatData(
         .catch(() => {
           // Não-fatal: o perfil simplesmente não aparece enriquecido
         })
-          // Não-fatal: o perfil simplesmente não aparece enriquecido
-        })
     }
   }, [selectedConversationId, fetchMessages])
 
