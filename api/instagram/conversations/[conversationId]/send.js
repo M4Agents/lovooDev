@@ -112,9 +112,8 @@ export default async function handler(req, res) {
         recipient: { id: conversation.ig_participant_id },
         message:   { text: trimmedText },
       };
-      if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
-        metaBody.reply_to = { mid: reply_to_ig_message_id };
-      }
+      // Nota: Instagram Messaging API não suporta reply_to no payload de envio.
+      // O campo reply_to é persistido no banco para exibição de citação na UI do CRM.
 
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
