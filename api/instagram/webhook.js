@@ -23,6 +23,7 @@ import { readRawBody,
          verifyWebhookSignature }     from '../lib/instagram/verifyWebhookSignature.js';
 import { parseDmEvents,
          parseCommentEvents,
+         parseReactionEvents,
          parseSkippedMessagingEvents } from '../lib/instagram/parseInstagramWebhook.js';
 import { decryptInstagramToken }      from '../lib/instagram/tokenCrypto.js';
 import { uploadAvatarToStorage }      from '../lib/instagram/uploadAvatarToStorage.js';
@@ -118,6 +119,11 @@ async function processEntry(entry, svc) {
     await processCommentEvent(ev, companyId, connectionId, svc);
   }
 
+  // Processar reações inbound
+  for (const ev of parseReactionEvents(entry)) {
+    processReactionEvent(ev, companyId, connectionId, svc).catch(() => {});
+  }
+
   // Registrar eventos não tratados como skipped
   for (const ev of parseSkippedMessagingEvents(entry)) {
     await saveWebhookEvent(svc, {
@@ -148,17 +154,33 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
     processingStatus: 'received',
   });
 
+  // Resolver snapshot do conteúdo citado (se for reply)
+  let replyToContent   = null;
+  let replyToDirection = null;
+  if (ev.replyToIgMessageId) {
+    const { data: quoted } = await svc
+      .from('instagram_messages')
+      .select('content, direction')
+      .eq('ig_message_id', ev.replyToIgMessageId)
+      .maybeSingle();
+    replyToContent   = quoted?.content   ?? null;
+    replyToDirection = quoted?.direction ?? null;
+  }
+
   // Chamar RPC process_instagram_dm_webhook
   const { data: rpc, error: rpcErr } = await svc.rpc('process_instagram_dm_webhook', {
-    p_instagram_user_id:     ev.instagramUserId,
-    p_ig_message_id:         ev.igMessageId,
-    p_ig_thread_id:          ev.igThreadId,
+    p_instagram_user_id:      ev.instagramUserId,
+    p_ig_message_id:          ev.igMessageId,
+    p_ig_thread_id:           ev.igThreadId,
     p_participant_ig_user_id: ev.participantIgUserId,
-    p_direction:             ev.direction,
-    p_message_type:          ev.messageType,
-    p_content:               ev.content,
-    p_media_url:             ev.mediaUrl,
-    p_timestamp:             ev.timestamp.toISOString(),
+    p_direction:              ev.direction,
+    p_message_type:           ev.messageType,
+    p_content:                ev.content,
+    p_media_url:              ev.mediaUrl,
+    p_timestamp:              ev.timestamp.toISOString(),
+    p_reply_to_ig_message_id: ev.replyToIgMessageId ?? null,
+    p_reply_to_content:       replyToContent,
+    p_reply_to_direction:     replyToDirection,
   });
 
   if (!eventId) return;
@@ -322,4 +344,60 @@ async function updateWebhookEvent(svc, eventId, status, errorDetail = null) {
       processed_at:      new Date().toISOString(),
     })
     .eq('id', eventId);
+}
+
+// =============================================================================
+// processReactionEvent — persiste reação inbound do participante
+// Chamado fire-and-forget; não bloqueia resposta à Meta.
+// =============================================================================
+
+async function processReactionEvent(ev, companyId, connectionId, svc) {
+  if (!ev.igMessageId || !ev.participantIgUserId) return;
+
+  // Localizar mensagem por ig_message_id
+  const { data: message } = await svc
+    .from('instagram_messages')
+    .select('id, company_id')
+    .eq('ig_message_id', ev.igMessageId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (!message) return; // mensagem ainda não persistida — ignorar
+
+  if (ev.action === 'unreact') {
+    await svc
+      .from('instagram_message_reactions')
+      .update({ removed_at: new Date().toISOString() })
+      .eq('message_id', message.id)
+      .eq('actor_ig_id', ev.participantIgUserId);
+    return;
+  }
+
+  // Normalizar emoji unicode para slug Meta: ❤️ → 'love', etc.
+  const emojiSlug = unicodeToEmojiSlug(ev.emoji) ?? 'like';
+
+  await svc
+    .from('instagram_message_reactions')
+    .upsert({
+      message_id:   message.id,
+      company_id:   companyId,
+      ig_message_id: ev.igMessageId,
+      source:       'participant',
+      actor_ig_id:  ev.participantIgUserId,
+      emoji:        emojiSlug,
+      removed_at:   null,
+    }, { onConflict: 'message_id,actor_ig_id', ignoreDuplicates: false });
+}
+
+/** Mapeamento de emoji unicode → slug Meta */
+function unicodeToEmojiSlug(emoji) {
+  const map = {
+    '❤️': 'love', '❤': 'love',
+    '😆': 'haha', '😂': 'haha',
+    '😮': 'wow',  '😮‍💨': 'wow',
+    '😢': 'sad',  '😭': 'sad',
+    '😠': 'angry','😡': 'angry',
+    '👍': 'like', '🙂': 'like',
+  };
+  return emoji ? (map[emoji] ?? null) : null;
 }

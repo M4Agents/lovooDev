@@ -49,6 +49,7 @@ export default async function handler(req, res) {
       'id', 'conversation_id', 'company_id', 'ig_message_id',
       'direction', 'message_type', 'content', 'media_url',
       'sent_by', 'status', 'timestamp', 'created_at',
+      'reply_to_ig_message_id', 'reply_to_content', 'reply_to_direction',
     ].join(', '))
     .eq('conversation_id', conversationId)
     .order('timestamp', { ascending: true })
@@ -59,5 +60,32 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Erro ao buscar mensagens' });
   }
 
-  return res.status(200).json({ messages: data ?? [] });
+  // Buscar reactions agrupadas pelas mensagens retornadas
+  const messageIds = (data ?? []).map(m => m.id);
+  let reactionsMap = {};
+
+  if (messageIds.length > 0) {
+    const { data: reactions } = await svc
+      .from('instagram_message_reactions')
+      .select('message_id, emoji, source, actor_ig_id, user_id, removed_at')
+      .in('message_id', messageIds);
+
+    for (const r of (reactions ?? [])) {
+      if (r.removed_at) continue; // ignorar removidas
+      if (!reactionsMap[r.message_id]) reactionsMap[r.message_id] = [];
+      reactionsMap[r.message_id].push({
+        emoji:        r.emoji,
+        source:       r.source,
+        actor_ig_id:  r.actor_ig_id,
+        user_id:      r.user_id,
+      });
+    }
+  }
+
+  const messages = (data ?? []).map(m => ({
+    ...m,
+    reactions: reactionsMap[m.id] ?? [],
+  }));
+
+  return res.status(200).json({ messages });
 }

@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   }
 
   const { conversationId } = req.query;
-  const { text }           = req.body ?? {};
+  const { text, reply_to_ig_message_id } = req.body ?? {};
 
   if (!conversationId) {
     return res.status(400).json({ error: 'conversationId é obrigatório' });
@@ -108,16 +108,21 @@ export default async function handler(req, res) {
 
     let metaRes, metaData;
     try {
+      const metaBody = {
+        recipient: { id: conversation.ig_participant_id },
+        message:   { text: trimmedText },
+      };
+      if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
+        metaBody.message.reply_to = { mid: reply_to_ig_message_id };
+      }
+
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
         headers: {
           Authorization:  `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          recipient: { id: conversation.ig_participant_id },
-          message:   { text: trimmedText },
-        }),
+        body:   JSON.stringify(metaBody),
         signal: controller.signal,
       });
       metaData = await metaRes.json();
@@ -197,20 +202,36 @@ export default async function handler(req, res) {
   // ── 6. Persistir mensagem outbound ─────────────────────────────────────────
   const now = new Date().toISOString();
 
+  // Resolver snapshot do conteúdo citado
+  let replyToContent   = null;
+  let replyToDirection = null;
+  if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
+    const { data: quoted } = await svc
+      .from('instagram_messages')
+      .select('content, direction')
+      .eq('ig_message_id', reply_to_ig_message_id)
+      .maybeSingle();
+    replyToContent   = quoted?.content   ?? null;
+    replyToDirection = quoted?.direction ?? null;
+  }
+
   const { data: savedMessage, error: insertErr } = await svc
     .from('instagram_messages')
     .insert({
-      conversation_id: conversationId,
-      company_id:      conversation.company_id,
-      ig_message_id:   metaMessageId ?? `local_${Date.now()}`,
-      direction:       'outbound',
-      message_type:    'text',
-      content:         trimmedText,
-      sent_by:         auth.userId,
-      status:          'sent',
-      timestamp:       now,
+      conversation_id:         conversationId,
+      company_id:              conversation.company_id,
+      ig_message_id:           metaMessageId ?? `local_${Date.now()}`,
+      direction:               'outbound',
+      message_type:            'text',
+      content:                 trimmedText,
+      sent_by:                 auth.userId,
+      status:                  'sent',
+      timestamp:               now,
+      reply_to_ig_message_id:  reply_to_ig_message_id ?? null,
+      reply_to_content:        replyToContent,
+      reply_to_direction:      replyToDirection,
     })
-    .select('id, ig_message_id, direction, message_type, content, sent_by, status, timestamp, created_at')
+    .select('id, ig_message_id, direction, message_type, content, sent_by, status, timestamp, created_at, reply_to_ig_message_id, reply_to_content, reply_to_direction')
     .single();
 
   if (insertErr) {

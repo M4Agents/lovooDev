@@ -10,40 +10,11 @@
 //   https://developers.facebook.com/docs/instagram-platform/webhooks/
 //
 // NÃO suportado intencionalmente nesta fase:
-//   - Reactions (message_reactions)
 //   - Seen/read receipts (messaging_seen)
 //   - Story mentions
 //   - Typing indicators
 //
-// Formato DM payload (entry.messaging):
-// {
-//   sender:    { id: "IGSID" }         // customer (inbound) or business (echo)
-//   recipient: { id: "IGID" }          // business (inbound) or customer (echo)
-//   timestamp: 1569262485349           // ms
-//   message: {
-//     mid: "MESSAGE-ID",
-//     text: "...",                      // optional
-//     attachments: [{ type, payload: { url } }],  // optional
-//     is_echo: true,                    // outbound (business sent)
-//     is_deleted: true,                 // customer deleted message
-//     is_unsupported: true,
-//     reply_to: { mid }                 // inline reply
-//   }
-// }
-//
-// Formato comment payload (entry.changes):
-// {
-//   field: "comments",
-//   value: {
-//     from:   { id: "USER_ID", username: "..." },
-//     media:  { id: "MEDIA_ID", media_product_type: "POST"|"REEL"|"STORY" },
-//     id:     "COMMENT_ID",
-//     text:   "...",
-//     parent_id: "PARENT_COMMENT_ID",  // optional (reply)
-//     timestamp: 1234567890            // optional (seconds)
-//   }
-// }
-// =============================================================================
+// Reactions (message_reactions) são suportados via parseReactionEvents()
 
 /**
  * Extrai eventos de DM de uma entry do payload Meta.
@@ -57,19 +28,16 @@ export function parseDmEvents(entry) {
 
   for (const messaging of (entry.messaging ?? [])) {
     const msg = messaging.message;
-    if (!msg) continue; // reactions, seen, postbacks — ignorados nesta fase
+    if (!msg) continue; // reactions, seen, postbacks — tratados em funções próprias
 
     const senderId    = String(messaging.sender?.id    ?? '');
     const recipientId = String(messaging.recipient?.id ?? '');
     const isEcho      = !!msg.is_echo;
 
-    // Para inbound: sender = cliente, recipient = conta business
-    // Para outbound (echo): sender = conta business, recipient = cliente
     const participantId = isEcho ? recipientId : senderId;
 
-    if (!participantId || !msg.mid) continue; // dados obrigatórios ausentes
+    if (!participantId || !msg.mid) continue;
 
-    // Derivar tipo e conteúdo
     let messageType = 'text';
     let content     = msg.text ?? null;
     let mediaUrl    = null;
@@ -82,7 +50,7 @@ export function parseDmEvents(entry) {
       content     = null;
     } else if (msg.attachments?.length > 0) {
       const att   = msg.attachments[0];
-      messageType = att.type ?? 'attachment';  // 'image', 'video', 'audio', 'file', 'share', etc.
+      messageType = att.type ?? 'attachment';
       mediaUrl    = att.payload?.url ?? null;
       content     = null;
     }
@@ -90,14 +58,53 @@ export function parseDmEvents(entry) {
     events.push({
       instagramUserId,
       igMessageId:         String(msg.mid),
-      igThreadId:          participantId, // IGSID do cliente — identifica a conversa
+      igThreadId:          participantId,
       participantIgUserId: participantId,
       direction:           isEcho ? 'outbound' : 'inbound',
       messageType,
       content,
       mediaUrl,
+      replyToIgMessageId:  msg.reply_to?.mid ?? null,
       timestamp: new Date(messaging.timestamp ?? Date.now()),
       raw:       messaging,
+    });
+  }
+
+  return events;
+}
+
+/**
+ * Extrai eventos de reação de uma entry do payload Meta.
+ * messaging.reaction = { mid, action: 'react'|'unreact', emoji }
+ *
+ * @param {object} entry
+ * @returns {Array<ReactionEvent>}
+ */
+export function parseReactionEvents(entry) {
+  const instagramUserId = String(entry.id ?? '');
+  const events = [];
+
+  for (const messaging of (entry.messaging ?? [])) {
+    if (!messaging.reaction) continue;
+
+    const senderId    = String(messaging.sender?.id    ?? '');
+    const recipientId = String(messaging.recipient?.id ?? '');
+    const reaction    = messaging.reaction;
+
+    if (!reaction.mid) continue;
+
+    // actor: quem reagiu. Para inbound reactions, sender = participante
+    const participantId = senderId;
+
+    events.push({
+      instagramUserId,
+      participantIgUserId: participantId,
+      recipientId,
+      igMessageId: String(reaction.mid),
+      emoji:       reaction.emoji ?? null,   // unicode emoji (ex: '❤️')
+      action:      reaction.action ?? 'react', // 'react' | 'unreact'
+      timestamp:   new Date(messaging.timestamp ?? Date.now()),
+      raw:         messaging,
     });
   }
 
@@ -159,10 +166,10 @@ export function parseSkippedMessagingEvents(entry) {
   const events = [];
 
   for (const messaging of (entry.messaging ?? [])) {
-    if (messaging.message) continue; // DMs já tratados
+    if (messaging.message)  continue; // DMs já tratados
+    if (messaging.reaction) continue; // reactions tratados por parseReactionEvents
 
-    const eventType = messaging.reaction  ? 'reaction'
-      : messaging.read      ? 'seen'
+    const eventType = messaging.read      ? 'seen'
       : messaging.postback  ? 'postback'
       : messaging.referral  ? 'referral'
       : 'other_messaging';

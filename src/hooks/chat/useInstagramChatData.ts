@@ -20,6 +20,8 @@ import type {
   InstagramChatMessage,
   InstagramChannelFilter,
   InstagramSendMessagePayload,
+  InstagramReactPayload,
+  InstagramMessageReaction,
 } from '../../types/instagram-chat'
 
 // =====================================================
@@ -44,12 +46,17 @@ export interface UseInstagramChatDataReturn {
   messagesLoading: boolean
   messagesError: string | undefined
 
+  // Reply
+  replyingTo: InstagramChatMessage | null
+  setReplyingTo: (msg: InstagramChatMessage | null) => void
+
   // Actions
   setSelectedConnection: (id: string) => void
   setSelectedConversation: (id: string) => void
   setFilter: (f: InstagramChannelFilter) => void
   refreshConversations: () => void
   sendMessage: (payload: InstagramSendMessagePayload) => Promise<void>
+  reactToMessage: (payload: InstagramReactPayload) => Promise<void>
   sendLoading: boolean
   sendError: string | undefined
   clearSendError: () => void
@@ -129,6 +136,7 @@ export function useInstagramChatData(
 
   const [sendLoading, setSendLoading] = useState(false)
   const [sendError,   setSendError]   = useState<string | undefined>()
+  const [replyingTo, setReplyingTo]   = useState<InstagramChatMessage | null>(null)
 
   // =====================================================
   // FETCH CONEXÕES
@@ -346,6 +354,68 @@ export function useInstagramChatData(
   }, [selectedConversationId])
 
   // =====================================================
+  // REALTIME — instagram_message_reactions
+  // =====================================================
+  // Atualiza reactions nas mensagens da conversa aberta em tempo real.
+
+  useEffect(() => {
+    if (!selectedConversationId) return
+
+    const channel = supabase
+      .channel(`ig_reactions_${selectedConversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  '*',
+          schema: 'public',
+          table:  'instagram_message_reactions',
+        },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as {
+            message_id: string
+            emoji: string
+            source: 'business' | 'participant'
+            actor_ig_id: string
+            user_id: string | null
+            removed_at: string | null
+          }
+          if (!row?.message_id) return
+
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id !== row.message_id) return m
+
+              const reaction: InstagramMessageReaction = {
+                emoji:       row.emoji,
+                source:      row.source,
+                actor_ig_id: row.actor_ig_id,
+                user_id:     row.user_id,
+              }
+
+              if (payload.eventType === 'DELETE' || row.removed_at) {
+                return {
+                  ...m,
+                  reactions: m.reactions.filter(r => r.actor_ig_id !== row.actor_ig_id),
+                }
+              }
+
+              const exists = m.reactions.some(r => r.actor_ig_id === row.actor_ig_id)
+              return {
+                ...m,
+                reactions: exists
+                  ? m.reactions.map(r => r.actor_ig_id === row.actor_ig_id ? reaction : r)
+                  : [...m.reactions, reaction],
+              }
+            })
+          )
+        }
+      )
+      .subscribe()
+
+    return () => { channel.unsubscribe() }
+  }, [selectedConversationId])
+
+  // =====================================================
   // CONVERSAS FILTRADAS (busca local sobre resultado já filtrado)
   // =====================================================
 
@@ -384,20 +454,22 @@ export function useInstagramChatData(
     fetchConversations()
   }, [fetchConversations])
 
-  const sendMessage = useCallback(async ({ text }: InstagramSendMessagePayload) => {
+  const sendMessage = useCallback(async ({ text, reply_to_ig_message_id }: InstagramSendMessagePayload) => {
     if (!selectedConversationId) return
     setSendLoading(true)
     setSendError(undefined)
     try {
+      const body: Record<string, unknown> = { text }
+      if (reply_to_ig_message_id) body.reply_to_ig_message_id = reply_to_ig_message_id
+
       const data = await postWithAuth<{ message: InstagramChatMessage }>(
         `/api/instagram/conversations/${selectedConversationId}/send`,
-        { text }
+        body
       )
-      // Adicionar localmente para feedback imediato
       if (data.message) {
-        setMessages(prev => [...prev, data.message])
+        setMessages(prev => [...prev, { ...data.message, reactions: data.message.reactions ?? [] }])
       }
-      // Atualizar preview na lista de conversas
+      setReplyingTo(null)
       setConversations(prev =>
         prev.map(c =>
           c.id === selectedConversationId
@@ -413,6 +485,18 @@ export function useInstagramChatData(
       setSendError(err.message ?? 'Erro ao enviar mensagem')
     } finally {
       setSendLoading(false)
+    }
+  }, [selectedConversationId])
+
+  const reactToMessage = useCallback(async ({ ig_message_id, emoji, action }: InstagramReactPayload) => {
+    if (!selectedConversationId) return
+    try {
+      await postWithAuth(
+        `/api/instagram/conversations/${selectedConversationId}/react`,
+        { ig_message_id, emoji, action }
+      )
+    } catch {
+      // Não-fatal: reação simplesmente não persiste
     }
   }, [selectedConversationId])
 
@@ -437,11 +521,15 @@ export function useInstagramChatData(
     messagesLoading,
     messagesError,
 
+    replyingTo,
+    setReplyingTo,
+
     setSelectedConnection,
     setSelectedConversation,
     setFilter,
     refreshConversations,
     sendMessage,
+    reactToMessage,
     sendLoading,
     sendError,
     clearSendError,

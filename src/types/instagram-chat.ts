@@ -37,6 +37,13 @@ export interface InstagramChatConversation {
   updated_at: string
 }
 
+export interface InstagramMessageReaction {
+  emoji: string
+  source: 'business' | 'participant'
+  actor_ig_id: string
+  user_id: string | null
+}
+
 export interface InstagramChatMessage {
   id: string
   conversation_id: string
@@ -50,6 +57,14 @@ export interface InstagramChatMessage {
   status: 'sent' | 'delivered' | 'read' | 'failed' | 'sending'
   timestamp: string
   created_at: string
+  /** ig_message_id da mensagem citada */
+  reply_to_ig_message_id: string | null
+  /** snapshot do conteúdo citado para exibição */
+  reply_to_content: string | null
+  /** direction da mensagem citada */
+  reply_to_direction: 'inbound' | 'outbound' | null
+  /** reações ativas nesta mensagem */
+  reactions: InstagramMessageReaction[]
 }
 
 // =====================================================
@@ -64,11 +79,18 @@ export interface InstagramChannelFilter {
 }
 
 // =====================================================
-// PAYLOAD DE ENVIO
+// PAYLOADS
 // =====================================================
 
 export interface InstagramSendMessagePayload {
   text: string
+  reply_to_ig_message_id?: string | null
+}
+
+export interface InstagramReactPayload {
+  ig_message_id: string
+  emoji: 'love' | 'haha' | 'wow' | 'sad' | 'angry' | 'like'
+  action: 'react' | 'unreact'
 }
 
 // =====================================================

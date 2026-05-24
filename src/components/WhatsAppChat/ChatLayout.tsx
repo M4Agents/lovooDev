@@ -184,7 +184,12 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
               messagesError={igChatData.messagesError}
               sendLoading={igChatData.sendLoading}
               sendError={igChatData.sendError}
-              onSendMessage={(text) => igChatData.sendMessage({ text })}
+              replyingTo={igChatData.replyingTo}
+              onSetReplyingTo={igChatData.setReplyingTo}
+              onSendMessage={(text, replyToIgMessageId) =>
+                igChatData.sendMessage({ text, reply_to_ig_message_id: replyToIgMessageId ?? null })
+              }
+              onReactToMessage={igChatData.reactToMessage}
               onRetryLoadMessages={() => igChatData.setSelectedConversation(selectedIgConversation.id)}
               onClearSendError={igChatData.clearSendError}
               connectionActive={igConnectionActive}
