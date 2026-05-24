@@ -178,7 +178,7 @@ export default async function handler(req, res) {
 
       return res.status(502).json({
         error:   'meta_send_failed',
-        message: 'Falha ao enviar mensagem. Tente novamente.',
+        message: `[DEBUG] Meta error ${errCode}: ${errMsg || 'sem mensagem'} | HTTP ${metaRes?.status}`,
       });
     }
 
