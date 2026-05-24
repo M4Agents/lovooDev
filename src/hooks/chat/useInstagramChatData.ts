@@ -12,7 +12,7 @@
 //   - Gerenciar estados de loading/error
 //   - Persistir seleção de conexão no localStorage
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import type {
   InstagramConnection,
@@ -117,6 +117,10 @@ export function useInstagramChatData(
   const [conversationsLoading, setConversationsLoading] = useState(false)
   const [selectedConversationId, setSelectedConversationIdState] = useState<string | undefined>()
 
+  // Ref para acessar conversations dentro do useEffect sem adicioná-la como dependência
+  const conversationsRef = useRef(conversations)
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
+
   const [filter, setFilterState] = useState<InstagramChannelFilter>({ type: 'all' })
 
   const [messages,        setMessages]        = useState<InstagramChatMessage[]>([])
@@ -208,11 +212,42 @@ export function useInstagramChatData(
   }, [fetchConversations, enabled])
 
   useEffect(() => {
-    if (selectedConversationId) {
-      fetchMessages(selectedConversationId)
-    } else {
+    if (!selectedConversationId) {
       setMessages([])
       setMessagesError(undefined)
+      return
+    }
+
+    fetchMessages(selectedConversationId)
+
+    // Enriquecer perfil do participante se ainda não preenchido
+    const conv = conversationsRef.current.find(c => c.id === selectedConversationId)
+    if (conv && !conv.participant_name) {
+      postWithAuth<{
+        participant_name:     string | null
+        participant_username: string | null
+        participant_avatar:   string | null
+      }>(
+        `/api/instagram/conversations/${selectedConversationId}/enrich-participant`,
+        {}
+      )
+        .then((data) => {
+          setConversations(prev =>
+            prev.map(c =>
+              c.id === selectedConversationId
+                ? {
+                    ...c,
+                    participant_name:     data.participant_name,
+                    participant_username: data.participant_username,
+                    participant_avatar:   data.participant_avatar,
+                  }
+                : c
+            )
+          )
+        })
+        .catch(() => {
+          // Não-fatal: o perfil simplesmente não aparece enriquecido
+        })
     }
   }, [selectedConversationId, fetchMessages])
 
@@ -225,9 +260,6 @@ export function useInstagramChatData(
   // Segue o mesmo padrão do useChatData (WhatsApp).
 
   useEffect(() => {
-    // #region agent log
-    console.log('[IG-RT][H3,H4] conversations effect →', { enabled, companyId })
-    // #endregion
     if (!enabled || !companyId) return
 
     const channel = supabase
@@ -241,9 +273,6 @@ export function useInstagramChatData(
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          // #region agent log
-          console.log('[IG-RT][H1,H2] conversations event received →', payload.eventType, (payload.new as any)?.id)
-          // #endregion
           if (payload.eventType === 'INSERT') {
             const newConv = payload.new as InstagramChatConversation
             setConversations(prev => {
@@ -268,11 +297,7 @@ export function useInstagramChatData(
           }
         }
       )
-      .subscribe((status) => {
-        // #region agent log
-        console.log('[IG-RT][H3] conversations channel status →', status, { companyId })
-        // #endregion
-      })
+      .subscribe()
 
     return () => { channel.unsubscribe() }
   }, [enabled, companyId])
@@ -285,9 +310,6 @@ export function useInstagramChatData(
   // que já foram adicionadas localmente pelo sendMessage.
 
   useEffect(() => {
-    // #region agent log
-    console.log('[IG-RT][H4] messages effect →', { selectedConversationId })
-    // #endregion
     if (!selectedConversationId) return
 
     const channel = supabase
@@ -301,9 +323,6 @@ export function useInstagramChatData(
           filter: `conversation_id=eq.${selectedConversationId}`,
         },
         (payload) => {
-          // #region agent log
-          console.log('[IG-RT][H1,H2] messages INSERT received →', (payload.new as any)?.ig_message_id, (payload.new as any)?.direction)
-          // #endregion
           const newMsg = payload.new as InstagramChatMessage
           setMessages(prev => {
             const isDupe = prev.some(m =>
@@ -321,11 +340,7 @@ export function useInstagramChatData(
           })
         }
       )
-      .subscribe((status) => {
-        // #region agent log
-        console.log('[IG-RT][H3] messages channel status →', status, { selectedConversationId })
-        // #endregion
-      })
+      .subscribe()
 
     return () => { channel.unsubscribe() }
   }, [selectedConversationId])

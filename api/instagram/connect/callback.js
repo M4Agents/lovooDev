@@ -26,6 +26,7 @@
 import { getSupabaseAdmin }      from '../../lib/automation/supabaseAdmin.js';
 import { verifyState }           from '../../lib/instagram/instagramState.js';
 import { encryptInstagramToken } from '../../lib/instagram/tokenCrypto.js';
+import { uploadAvatarToStorage } from '../../lib/instagram/uploadAvatarToStorage.js';
 
 const CONNECT_ROLES = ['super_admin', 'system_admin', 'admin', 'partner'];
 
@@ -206,6 +207,17 @@ export default async function handler(req, res) {
   const tokenExpiresAt = expiresIn
     ? new Date(Date.now() + expiresIn * 1000).toISOString()
     : null;
+
+  // ── 8b. Fazer upload da foto para storage permanente ───────────────────────
+  // Fallback para URL temporária caso o upload falhe (não deve bloquear o OAuth)
+  if (profilePictureUrl && companyId) {
+    const permanentUrl = await uploadAvatarToStorage(svc, {
+      cdnUrl:    profilePictureUrl,
+      companyId: companyId,
+      filename:  `ig_account_${igUserId}.jpg`,
+    });
+    if (permanentUrl) profilePictureUrl = permanentUrl;
+  }
 
   // ── 9. UPSERT instagram_connections ───────────────────────────────────────
   // ON CONFLICT (company_id, instagram_user_id): atualiza token e status.

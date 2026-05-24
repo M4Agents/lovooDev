@@ -24,6 +24,10 @@ import { readRawBody,
 import { parseDmEvents,
          parseCommentEvents,
          parseSkippedMessagingEvents } from '../lib/instagram/parseInstagramWebhook.js';
+import { decryptInstagramToken }      from '../lib/instagram/tokenCrypto.js';
+import { uploadAvatarToStorage }      from '../lib/instagram/uploadAvatarToStorage.js';
+
+const GRAPH_API_VERSION = 'v21.0';
 
 // Desabilita body parser do Vercel — obrigatório para HMAC validation
 export const config = { api: { bodyParser: false } };
@@ -96,7 +100,7 @@ async function processEntry(entry, svc) {
   // Resolver conexão ativa (company_id NUNCA vem do payload)
   const { data: connection } = await svc
     .from('instagram_connections')
-    .select('id, company_id')
+    .select('id, company_id, access_token_enc')
     .eq('instagram_user_id', igUserId)
     .eq('status', 'active')
     .maybeSingle();
@@ -106,7 +110,7 @@ async function processEntry(entry, svc) {
 
   // Processar DMs
   for (const ev of parseDmEvents(entry)) {
-    await processDmEvent(ev, companyId, connectionId, svc);
+    await processDmEvent(ev, companyId, connectionId, connection, svc);
   }
 
   // Processar comentários
@@ -132,7 +136,7 @@ async function processEntry(entry, svc) {
 // DM: salvar event log + chamar RPC
 // =============================================================================
 
-async function processDmEvent(ev, companyId, connectionId, svc) {
+async function processDmEvent(ev, companyId, connectionId, connection, svc) {
   // Salvar event log (status inicial: received)
   const eventId = await saveWebhookEvent(svc, {
     instagramUserId:  ev.instagramUserId,
@@ -167,6 +171,76 @@ async function processDmEvent(ev, companyId, connectionId, svc) {
   const status = rpc?.skipped ? 'skipped' : (rpc?.ok ? 'processed' : 'failed');
   const detail = rpc?.skipped ? rpc.reason : (rpc?.ok ? null : (rpc?.error ?? 'rpc_returned_not_ok'));
   await updateWebhookEvent(svc, eventId, status, detail);
+
+  // Enriquecer perfil do participante (fire-and-forget — não bloqueia resposta Meta)
+  if (rpc?.ok && rpc?.conversation_id && ev.participantIgUserId && connection) {
+    enrichParticipantIfNeeded(rpc.conversation_id, ev.participantIgUserId, connection, svc).catch(() => {});
+  }
+}
+
+// =============================================================================
+// Enriquecimento do perfil do participante (fire-and-forget)
+// =============================================================================
+// Chamada após processar uma DM. Busca nome, username e foto na Graph API
+// e salva permanentemente no Supabase Storage. Nunca lança exceção.
+
+async function enrichParticipantIfNeeded(conversationId, participantIgsid, connection, svc) {
+  try {
+    // Verificar se já tem nome (evitar chamadas desnecessárias à Meta)
+    const { data: conv } = await svc
+      .from('instagram_conversations')
+      .select('participant_name, company_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+
+    if (!conv || conv.participant_name) return;
+
+    // Descriptografar token
+    let accessToken;
+    try {
+      accessToken = decryptInstagramToken(connection.access_token_enc);
+    } catch {
+      return;
+    }
+
+    // Buscar perfil do participante na Graph API
+    const profileUrl = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${participantIgsid}`);
+    profileUrl.searchParams.set('fields',       'name,username,profile_pic');
+    profileUrl.searchParams.set('access_token', accessToken);
+
+    const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
+    const profileData = await profileRes.json();
+
+    if (profileData.error || !profileRes.ok) return;
+
+    const name     = profileData.name     ?? null;
+    const username = profileData.username ?? null;
+    const picUrl   = profileData.profile_pic ?? null;
+
+    // Fazer upload da foto para storage permanente
+    let avatarUrl = null;
+    if (picUrl && conv.company_id) {
+      avatarUrl = await uploadAvatarToStorage(svc, {
+        cdnUrl:    picUrl,
+        companyId: conv.company_id,
+        filename:  `ig_${participantIgsid}.jpg`,
+      });
+    }
+
+    // Atualizar conversa
+    await svc
+      .from('instagram_conversations')
+      .update({
+        participant_name:     name,
+        participant_username: username,
+        participant_avatar:   avatarUrl,
+        updated_at:           new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+
+  } catch {
+    // Silencioso — não deve impactar o fluxo principal do webhook
+  }
 }
 
 // =============================================================================

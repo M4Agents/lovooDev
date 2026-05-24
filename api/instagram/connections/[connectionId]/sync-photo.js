@@ -18,6 +18,7 @@
 import { getSupabaseAdmin }       from '../../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller } from '../../../lib/instagram/validateInstagramCaller.js';
 import { decryptInstagramToken }  from '../../../lib/instagram/tokenCrypto.js';
+import { uploadAvatarToStorage }  from '../../../lib/instagram/uploadAvatarToStorage.js';
 
 const CONNECT_ROLES = ['super_admin', 'system_admin', 'admin'];
 
@@ -101,11 +102,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ profile_picture_url: null, message: 'Foto não disponível nesta conta' });
   }
 
-  // ── 5. Salvar URL atualizada no banco ──────────────────────────────────────
+  // ── 5. Fazer upload para storage permanente ────────────────────────────────
+  const permanentUrl = await uploadAvatarToStorage(svc, {
+    cdnUrl:    profilePictureUrl,
+    companyId: conn.company_id,
+    filename:  `ig_account_${connectionId}.jpg`,
+  });
+  const finalUrl = permanentUrl ?? profilePictureUrl;
+
+  // ── 6. Salvar URL atualizada no banco ──────────────────────────────────────
   const { error: updateErr } = await svc
     .from('instagram_connections')
     .update({
-      profile_picture_url: profilePictureUrl,
+      profile_picture_url: finalUrl,
       updated_at:          new Date().toISOString(),
     })
     .eq('id', connectionId);
@@ -115,5 +124,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'db_error', message: 'Erro ao salvar foto' });
   }
 
-  return res.status(200).json({ profile_picture_url: profilePictureUrl });
+  return res.status(200).json({ profile_picture_url: finalUrl });
 }
