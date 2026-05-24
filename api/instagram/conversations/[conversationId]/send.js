@@ -95,7 +95,35 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Erro ao processar credenciais da conexão' });
   }
 
-  // ── 5. Enviar via Meta Graph API ───────────────────────────────────────────
+  // ── 5. Resolver snapshot do conteúdo citado (antes do envio Meta) ──────────
+  // Necessário para incluir prefixo de contexto no texto enviado ao Instagram,
+  // já que a API não suporta reply_to nativo em mensagens outbound.
+  let replyToContent   = null;
+  let replyToDirection = null;
+  if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
+    const { data: quoted } = await svc
+      .from('instagram_messages')
+      .select('content, direction')
+      .eq('ig_message_id', reply_to_ig_message_id)
+      .maybeSingle();
+    replyToContent   = quoted?.content   ?? null;
+    replyToDirection = quoted?.direction ?? null;
+  }
+
+  // Montar texto para Meta: se há citação com conteúdo textual, adicionar prefixo
+  let textForMeta = trimmedText;
+  if (replyToContent) {
+    const snippet   = replyToContent.length > 80
+      ? replyToContent.slice(0, 80) + '…'
+      : replyToContent;
+    const prefixed  = `↩ ${snippet}\n\n${trimmedText}`;
+    // Só usar o prefixo se não ultrapassar o limite de bytes da Meta
+    if (Buffer.byteLength(prefixed, 'utf8') <= TEXT_MAX_BYTES) {
+      textForMeta = prefixed;
+    }
+  }
+
+  // ── 6. Enviar via Meta Graph API ───────────────────────────────────────────
   const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${connection.instagram_user_id}/messages`;
 
   let metaMessageId   = null;
@@ -110,10 +138,8 @@ export default async function handler(req, res) {
     try {
       const metaBody = {
         recipient: { id: conversation.ig_participant_id },
-        message:   { text: trimmedText },
+        message:   { text: textForMeta },
       };
-      // Nota: Instagram Messaging API não suporta reply_to no payload de envio.
-      // O campo reply_to é persistido no banco para exibição de citação na UI do CRM.
 
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
@@ -198,22 +224,10 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── 6. Persistir mensagem outbound ─────────────────────────────────────────
+  // ── 7. Persistir mensagem outbound ─────────────────────────────────────────
   const now = new Date().toISOString();
 
-  // Resolver snapshot do conteúdo citado
-  let replyToContent   = null;
-  let replyToDirection = null;
-  if (reply_to_ig_message_id && typeof reply_to_ig_message_id === 'string') {
-    const { data: quoted } = await svc
-      .from('instagram_messages')
-      .select('content, direction')
-      .eq('ig_message_id', reply_to_ig_message_id)
-      .maybeSingle();
-    replyToContent   = quoted?.content   ?? null;
-    replyToDirection = quoted?.direction ?? null;
-  }
-
+  // content armazena o texto ORIGINAL (sem prefixo) — o CRM exibe o bloco de citação separado
   const { data: savedMessage, error: insertErr } = await svc
     .from('instagram_messages')
     .insert({
@@ -238,7 +252,7 @@ export default async function handler(req, res) {
     console.error('[ig/send] failed to persist message:', insertErr.message);
   }
 
-  // ── 7. Atualizar última mensagem da conversa ────────────────────────────────
+  // ── 8. Atualizar última mensagem da conversa ────────────────────────────────
   await svc
     .from('instagram_conversations')
     .update({
@@ -248,7 +262,7 @@ export default async function handler(req, res) {
     })
     .eq('id', conversationId);
 
-  // ── 8. Audit log ───────────────────────────────────────────────────────────
+  // ── 9. Audit log ───────────────────────────────────────────────────────────
   svc.from('instagram_audit_logs').insert({
     company_id:    conversation.company_id,
     connection_id: conversation.connection_id,
