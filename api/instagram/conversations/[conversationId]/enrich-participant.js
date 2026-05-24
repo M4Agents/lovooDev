@@ -93,20 +93,11 @@ export default async function handler(req, res) {
     const profileRes = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
     profileData = await profileRes.json();
 
-    // #region agent log
-    console.log('[enrich-participant][H1,H2,H3,H4] meta response status:', profileRes.status, 'body:', JSON.stringify(profileData));
-    // #endregion
-
     if (profileData.error) {
-      // #region agent log
-      return res.status(502).json({ error: 'meta_api_error', message: 'Erro ao buscar perfil no Instagram', _debug: { code: profileData.error?.code, type: profileData.error?.type, message: profileData.error?.message, fbtrace: profileData.error?.fbtrace_id } });
-      // #endregion
+      return res.status(502).json({ error: 'meta_api_error', message: 'Erro ao buscar perfil no Instagram' });
     }
   } catch (err) {
-    // #region agent log
-    console.log('[enrich-participant][H5] fetch threw:', err?.message ?? err);
-    // #endregion
-    return res.status(502).json({ error: 'meta_api_unavailable', message: 'API do Instagram indisponível', _debug: { thrown: err?.message ?? String(err) } });
+    return res.status(502).json({ error: 'meta_api_unavailable', message: 'API do Instagram indisponível' });
   }
 
   const name     = profileData.name     ?? null;
