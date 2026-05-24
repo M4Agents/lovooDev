@@ -204,7 +204,7 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
     }
 
     // Buscar perfil do participante na Graph API
-    const profileUrl = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${participantIgsid}`);
+    const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${participantIgsid}`);
     profileUrl.searchParams.set('fields',       'name,username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 

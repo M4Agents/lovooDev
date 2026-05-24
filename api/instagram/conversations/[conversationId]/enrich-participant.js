@@ -86,7 +86,7 @@ export default async function handler(req, res) {
   // ── 5. Buscar perfil do participante na Graph API ───────────────────────────
   let profileData;
   try {
-    const profileUrl = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${conv.ig_participant_id}`);
+    const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${conv.ig_participant_id}`);
     profileUrl.searchParams.set('fields',       'name,username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 
