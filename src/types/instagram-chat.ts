@@ -27,7 +27,7 @@ export interface InstagramChatConversation {
   participant_name: string | null
   participant_username: string | null
   participant_avatar: string | null
-  lead_id: string | null
+  lead_id: number | null
   status: 'active' | 'archived'
   unread_count: number
   last_message_preview: string | null
@@ -106,3 +106,20 @@ export interface InstagramSendMediaPayload {
 // =====================================================
 
 export type ChatChannel = 'whatsapp' | 'instagram'
+
+// =====================================================
+// LEAD — CRIAÇÃO E VÍNCULO
+// =====================================================
+
+export interface CreateInstagramLeadPayload {
+  name: string
+  phone?: string | null
+  email?: string | null
+}
+
+export interface CreateInstagramLeadResponse {
+  success: boolean
+  action: 'lead_created' | 'lead_linked' | 'already_linked'
+  lead_id: number
+  conversation_id: string
+}

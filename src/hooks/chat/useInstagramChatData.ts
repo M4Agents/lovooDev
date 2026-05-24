@@ -23,6 +23,8 @@ import type {
   InstagramSendMediaPayload,
   InstagramReactPayload,
   InstagramMessageReaction,
+  CreateInstagramLeadPayload,
+  CreateInstagramLeadResponse,
 } from '../../types/instagram-chat'
 
 // =====================================================
@@ -59,10 +61,14 @@ export interface UseInstagramChatDataReturn {
   sendMessage: (payload: InstagramSendMessagePayload) => Promise<void>
   sendMedia: (payload: InstagramSendMediaPayload) => Promise<void>
   reactToMessage: (payload: InstagramReactPayload) => Promise<void>
+  createLead: (conversationId: string, payload: CreateInstagramLeadPayload) => Promise<CreateInstagramLeadResponse | null>
   sendLoading: boolean
   sendMediaLoading: boolean
+  createLeadLoading: boolean
   sendError: string | undefined
+  createLeadError: string | undefined
   clearSendError: () => void
+  clearCreateLeadError: () => void
 }
 
 // =====================================================
@@ -139,7 +145,9 @@ export function useInstagramChatData(
 
   const [sendLoading,      setSendLoading]      = useState(false)
   const [sendMediaLoading, setSendMediaLoading] = useState(false)
+  const [createLeadLoading, setCreateLeadLoading] = useState(false)
   const [sendError,        setSendError]        = useState<string | undefined>()
+  const [createLeadError,  setCreateLeadError]  = useState<string | undefined>()
   const [replyingTo, setReplyingTo]   = useState<InstagramChatMessage | null>(null)
 
   // =====================================================
@@ -534,7 +542,40 @@ export function useInstagramChatData(
     }
   }, [selectedConversationId])
 
+  const createLead = useCallback(async (
+    conversationId: string,
+    payload: CreateInstagramLeadPayload
+  ): Promise<CreateInstagramLeadResponse | null> => {
+    setCreateLeadLoading(true)
+    setCreateLeadError(undefined)
+    try {
+      const res = await postWithAuth<CreateInstagramLeadResponse>(
+        `/api/instagram/conversations/${conversationId}/create-lead`,
+        payload
+      )
+      // Atualiza lead_id localmente para todos os actions (lead_created, lead_linked, already_linked)
+      if (res.lead_id) {
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === conversationId ? { ...c, lead_id: res.lead_id } : c
+          )
+        )
+      }
+      return res
+    } catch (err: any) {
+      // Tratamento especial para plan_limit_exceeded
+      const msg = err.errorCode === 'plan_limit_exceeded'
+        ? 'plan_limit_exceeded'
+        : (err.message ?? 'Erro ao criar lead')
+      setCreateLeadError(msg)
+      return null
+    } finally {
+      setCreateLeadLoading(false)
+    }
+  }, [])
+
   const clearSendError = useCallback(() => setSendError(undefined), [])
+  const clearCreateLeadError = useCallback(() => setCreateLeadError(undefined), [])
 
   // =====================================================
   // RETORNO
@@ -565,9 +606,13 @@ export function useInstagramChatData(
     sendMessage,
     sendMedia,
     reactToMessage,
+    createLead,
     sendLoading,
     sendMediaLoading,
+    createLeadLoading,
     sendError,
+    createLeadError,
     clearSendError,
+    clearCreateLeadError,
   }
 }

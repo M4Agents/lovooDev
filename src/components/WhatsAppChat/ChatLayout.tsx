@@ -13,7 +13,8 @@ import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
 import { InstagramChatArea } from './ChatArea/InstagramChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
-import { LockedChatPanel } from './LockedChatPanel'
+import { CreateInstagramLeadPanel } from './InstagramLeadPanel/CreateInstagramLeadPanel'
+import { LinkedInstagramLeadCard } from './InstagramLeadPanel/LinkedInstagramLeadCard'
 import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
 import type { ChatChannel } from '../../types/instagram-chat'
 import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
@@ -249,7 +250,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         )}
       </div>
 
-      {/* Painel Lead - 25% (apenas WhatsApp por ora) */}
+      {/* Painel Lead - 25% */}
       <div className={`${hideConversationSidebar ? 'flex-[2] h-full' : 'w-1/4 min-w-[320px]'} bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
         {selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (
           <LeadPanel
@@ -258,6 +259,21 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             userId={userId}
             onLeadSaved={chatData.refreshConversations}
           />
+        ) : selectedChannel === 'instagram' && selectedIgConversation ? (
+          selectedIgConversation.lead_id ? (
+            <LinkedInstagramLeadCard
+              conversation={selectedIgConversation}
+              leadId={selectedIgConversation.lead_id}
+            />
+          ) : (
+            <CreateInstagramLeadPanel
+              conversation={selectedIgConversation}
+              onCreateLead={igChatData.createLead}
+              createLeadLoading={igChatData.createLeadLoading}
+              createLeadError={igChatData.createLeadError}
+              onClearError={igChatData.clearCreateLeadError}
+            />
+          )
         ) : (
           <div className="flex items-center justify-center h-full p-6">
             <div className="text-center">
