@@ -225,6 +225,9 @@ export function useInstagramChatData(
   // Segue o mesmo padrão do useChatData (WhatsApp).
 
   useEffect(() => {
+    // #region agent log
+    console.log('[IG-RT][H3,H4] conversations effect →', { enabled, companyId })
+    // #endregion
     if (!enabled || !companyId) return
 
     const channel = supabase
@@ -238,6 +241,9 @@ export function useInstagramChatData(
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
+          // #region agent log
+          console.log('[IG-RT][H1,H2] conversations event received →', payload.eventType, (payload.new as any)?.id)
+          // #endregion
           if (payload.eventType === 'INSERT') {
             const newConv = payload.new as InstagramChatConversation
             setConversations(prev => {
@@ -262,7 +268,11 @@ export function useInstagramChatData(
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        // #region agent log
+        console.log('[IG-RT][H3] conversations channel status →', status, { companyId })
+        // #endregion
+      })
 
     return () => { channel.unsubscribe() }
   }, [enabled, companyId])
@@ -275,6 +285,9 @@ export function useInstagramChatData(
   // que já foram adicionadas localmente pelo sendMessage.
 
   useEffect(() => {
+    // #region agent log
+    console.log('[IG-RT][H4] messages effect →', { selectedConversationId })
+    // #endregion
     if (!selectedConversationId) return
 
     const channel = supabase
@@ -288,16 +301,16 @@ export function useInstagramChatData(
           filter: `conversation_id=eq.${selectedConversationId}`,
         },
         (payload) => {
+          // #region agent log
+          console.log('[IG-RT][H1,H2] messages INSERT received →', (payload.new as any)?.ig_message_id, (payload.new as any)?.direction)
+          // #endregion
           const newMsg = payload.new as InstagramChatMessage
           setMessages(prev => {
-            // Deduplicar: ig_message_id real ou prefixo local_ (outbound já adicionado)
             const isDupe = prev.some(m =>
               m.ig_message_id === newMsg.ig_message_id ||
-              // Substituir placeholder local_ pelo registro real quando chegar do banco
               (newMsg.direction === 'outbound' && m.ig_message_id?.startsWith('local_') && m.content === newMsg.content)
             )
             if (isDupe) {
-              // Atualizar o placeholder local pelo registro definitivo do banco
               return prev.map(m =>
                 m.ig_message_id?.startsWith('local_') && m.content === newMsg.content && newMsg.direction === 'outbound'
                   ? { ...m, ...newMsg }
@@ -308,7 +321,11 @@ export function useInstagramChatData(
           })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        // #region agent log
+        console.log('[IG-RT][H3] messages channel status →', status, { selectedConversationId })
+        // #endregion
+      })
 
     return () => { channel.unsubscribe() }
   }, [selectedConversationId])
