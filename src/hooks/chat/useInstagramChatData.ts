@@ -90,8 +90,12 @@ async function postWithAuth<T>(url: string, body: unknown): Promise<T> {
   const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
+    // #region agent log
+    console.log('[postWithAuth][debug] error response body:', JSON.stringify(data))
+    // #endregion
     throw Object.assign(new Error(data.message ?? data.error ?? `HTTP ${res.status}`), {
       errorCode: data.error,
+      debugInfo: (data as any)._debug,
     })
   }
   return data
@@ -245,7 +249,10 @@ export function useInstagramChatData(
             )
           )
         })
-        .catch(() => {
+        .catch((err: any) => {
+          // #region agent log
+          console.log('[enrich-participant][frontend] error:', err?.message, err)
+          // #endregion
           // Não-fatal: o perfil simplesmente não aparece enriquecido
         })
     }
