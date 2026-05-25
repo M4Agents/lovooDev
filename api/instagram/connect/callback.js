@@ -182,13 +182,22 @@ export default async function handler(req, res) {
 
   // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
   let username = igUserId, displayName = '', profilePictureUrl = null;
+  // #region agent log
+  let _meFullResponse = null;
+  // #endregion
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
-    meUrl.searchParams.set('fields',       'id,username,name,profile_picture_url');
+    // #region agent log — campos extras para diagnóstico de ID mismatch
+    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,instagram_business_account');
+    // #endregion
     meUrl.searchParams.set('access_token', longLivedToken);
 
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
+
+    // #region agent log
+    _meFullResponse = meData;
+    // #endregion
 
     if (!meData.error) {
       username          = meData.username            ?? igUserId;
@@ -304,9 +313,10 @@ export default async function handler(req, res) {
     action:        'debug_subscribed_apps',
     performed_by:  userId,
     metadata:      {
-      ig_user_id_stored:        igUserId,
+      ig_user_id_stored:         igUserId,
       ig_user_id_token_exchange: _igUserIdFromTokenExchange,
       ig_user_id_me_endpoint:    _igUserIdFromMe,
+      me_full_response:          _meFullResponse,
       ...subscribeResult,
     },
   }).then(() => {}).catch(() => {});
