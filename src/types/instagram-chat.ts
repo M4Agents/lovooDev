@@ -12,10 +12,22 @@ export interface InstagramConnection {
   instagram_user_id: string
   instagram_username: string
   profile_picture_url: string | null
-  /** active = pronto para uso; qualquer outro valor = inativo/requer ação do usuário */
-  status: 'active' | 'revoked' | 'error' | 'expired' | 'reauth_required'
+  status: InstagramConnectionStatus
+  /** Escopos OAuth concedidos pelo usuário — necessário para detectar scope ausente */
+  scopes: string[] | null
+  token_expires_at: string | null
+  /** Timestamp do último erro registrado pelo cron ou por uma ação de envio */
+  last_error_at: string | null
   created_at: string
 }
+
+export type InstagramConnectionStatus =
+  | 'active'
+  | 'limited'
+  | 'reauth_required'
+  | 'expired'
+  | 'revoked'
+  | 'error'
 
 export interface InstagramChatConversation {
   id: string

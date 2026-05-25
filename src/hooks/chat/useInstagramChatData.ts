@@ -272,6 +272,37 @@ export function useInstagramChatData(
   }, [selectedConversationId, fetchMessages])
 
   // =====================================================
+  // REALTIME — instagram_connections (health status)
+  // =====================================================
+  // Propaga mudanças de status feitas pelo cron (ex: reauth_required) em
+  // tempo real para que a UI exiba banners de alerta imediatamente.
+
+  useEffect(() => {
+    if (!enabled || !companyId) return
+
+    const channel = supabase
+      .channel(`ig_connections_${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'instagram_connections',
+          filter: `company_id=eq.${companyId}`,
+        },
+        (payload) => {
+          const updated = payload.new as InstagramConnection
+          setConnections(prev =>
+            prev.map(c => c.id === updated.id ? { ...c, ...updated } : c)
+          )
+        }
+      )
+      .subscribe()
+
+    return () => { channel.unsubscribe() }
+  }, [enabled, companyId])
+
+  // =====================================================
   // REALTIME — instagram_conversations (sidebar)
   // =====================================================
   // Atualiza a lista de conversas em tempo real quando:

@@ -205,8 +205,23 @@
       "disconnectSuccess": "Conta @{{account}} desconectada com sucesso.",
       "status": {
         "active": "Conectada",
+        "warning": "Atenção",
         "revoked": "Desconectada",
-        "error": "Com erro"
+        "error": "Com erro",
+        "limited": "Limitada",
+        "reauth_required": "Reautenticação necessária",
+        "expired": "Expirada"
+      },
+      "health": {
+        "expiresInDays": "Token expira em {{count}} dias",
+        "tokenExpiredShort": "Token expirado",
+        "lastError": "Último erro: {{date}}",
+        "temporaryError": "Erro temporário — retry automático em andamento. Tente novamente em instantes.",
+        "reauthRequired": "Token inválido. Reconecte a conta para restaurar o funcionamento.",
+        "tokenExpired": "Token expirado. Reconecte a conta.",
+        "revoked": "Conta desconectada. Reconecte para retomar o uso.",
+        "scopeMissing": "Permissões incompletas. Reconecte para conceder os escopos necessários.",
+        "unknownStatus": "Status desconhecido. Verifique a conexão."
       }
     },
     "apiLeads": {

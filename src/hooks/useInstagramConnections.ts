@@ -1,15 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import type { InstagramConnection } from '../types/instagram-chat';
 
-export interface InstagramConnection {
-  id: string;
-  instagram_username: string;
-  profile_picture_url: string | null;
-  status: 'active' | 'revoked' | 'error';
-  token_expires_at: string | null;
-  created_at: string;
-  connected_by: string | null;
-}
+// Re-exporta InstagramConnection para manter compatibilidade com importações existentes
+export type { InstagramConnection };
 
 interface UseInstagramConnectionsReturn {
   connections: InstagramConnection[];
@@ -32,6 +26,7 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
   const [loading, setLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchConnections = useCallback(async () => {
     if (!companyId) return;
@@ -67,6 +62,33 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
 
   useEffect(() => {
     fetchConnections();
+
+    // Polling a cada 30s — pausa quando aba está oculta para economizar recursos
+    const startPolling = () => {
+      pollingRef.current = setInterval(() => {
+        if (!document.hidden) fetchConnections();
+      }, 30_000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      } else {
+        fetchConnections();
+        if (!pollingRef.current) startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, [fetchConnections]);
 
   const connect = useCallback(async (cId: string) => {

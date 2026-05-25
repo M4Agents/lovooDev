@@ -149,6 +149,42 @@
         "tokenExpired": "Token expirado. Reconecte a conta Instagram.",
         "rateLimit": "Limite atingido. Aguarde e tente novamente."
       }
+    },
+    "health": {
+      "reconnect": "Reconectar",
+      "dismiss": "Fechar aviso",
+      "expiresIn": "Token expira em {{days}} dias",
+      "bannerFallbackTitle": "Problema na conta @{{account}}",
+      "scopeWarning": {
+        "title": "Permissões insuficientes",
+        "hint": "Reconecte a conta para conceder os escopos necessários."
+      },
+      "banner": {
+        "temporaryError": {
+          "title": "Instabilidade temporária em @{{account}}",
+          "desc": "Ocorreu um erro temporário. O sistema fará retry automático. Se persistir, reconecte a conta."
+        },
+        "reauthRequired": {
+          "title": "Reautenticação necessária em @{{account}}",
+          "desc": "O token de acesso foi invalidado. Reconecte a conta para restaurar o funcionamento."
+        },
+        "tokenExpired": {
+          "title": "Token expirado em @{{account}}",
+          "desc": "O token de acesso expirou. Reconecte a conta para continuar enviando mensagens."
+        },
+        "revoked": {
+          "title": "Conta @{{account}} desconectada",
+          "desc": "A conta foi desconectada ou as permissões foram revogadas. Reconecte para retomar."
+        },
+        "scopeMissing": {
+          "title": "Permissões incompletas em @{{account}}",
+          "desc": "Reconecte a conta para conceder os escopos necessários (DMs ou Comentários)."
+        },
+        "unknownStatus": {
+          "title": "Problema detectado em @{{account}}",
+          "desc": "Verifique o status da conexão em Configurações → Integrações → Instagram."
+        }
+      }
     }
   },
   "notifications": {

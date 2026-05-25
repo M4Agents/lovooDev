@@ -10,7 +10,7 @@
 //   - Nunca mistura as duas entidades
 // =====================================================
 
-import React, { useCallback } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { InstagramChatArea } from './ChatArea/InstagramChatArea'
@@ -18,9 +18,11 @@ import { CreateInstagramLeadPanel } from './InstagramLeadPanel/CreateInstagramLe
 import { LinkedInstagramLeadCard } from './InstagramLeadPanel/LinkedInstagramLeadCard'
 import { InstagramCommentDetail } from '../InstagramComments/InstagramCommentDetail'
 import { CommentLeadPanel } from '../InstagramComments/CommentLeadPanel'
+import { InstagramReconnectBanner } from '../InstagramHealth/InstagramReconnectBanner'
+import { computeConnectionHealth } from '../../utils/instagram/computeConnectionHealth'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import type { UseInstagramCommentsDataReturn } from '../../hooks/instagram/useInstagramCommentsData'
 import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
-import type { ChatLayoutProps } from '../../types/whatsapp-chat'
 
 interface InstagramAreaRendererProps {
   companyId: string
@@ -60,50 +62,82 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
 }) => {
   const { t }    = useTranslation('chat')
   const navigate = useNavigate()
+  const { canConnectInstagram } = useAccessControl()
+  const [dismissedBanner, setDismissedBanner] = useState<string | null>(null)
 
   const isCommentTab = activeTab === 'comments' || activeTab === 'pending'
+
+  // Encontra a conexão selecionada e calcula o health para o banner
+  const selectedConn = (() => {
+    const selId = igSidebarData.selectedConnectionId
+    if (!selId || selId === 'all') {
+      // Exibe o problema mais crítico entre todas as conexões
+      return igChatDataRaw.connections
+        .map(c => ({ conn: c, health: computeConnectionHealth(c) }))
+        .sort((a, b) => {
+          const order = { error: 0, disconnected: 1, warning: 2, healthy: 3 }
+          return (order[a.health.level] ?? 4) - (order[b.health.level] ?? 4)
+        })[0] ?? null
+    }
+    const found = igChatDataRaw.connections.find(c => c.id === selId)
+    return found ? { conn: found, health: computeConnectionHealth(found) } : null
+  })()
+
+  const showBanner = selectedConn &&
+    selectedConn.health.level !== 'healthy' &&
+    dismissedBanner !== selectedConn.conn.id
 
   if (isCommentTab) {
     // ── Área de Comentários ────────────────────────────────────────────────
     const { selectedComment } = igCommentsData
 
-    if (!selectedComment) {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
-            <div className="mb-6">
-              <div className="mx-auto h-20 w-20 rounded-3xl flex items-center justify-center shadow-lg"
-                style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
-              >
-                <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                </svg>
-              </div>
-            </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-3">
-              {t('instagram.comments.selectComment')}
-            </h3>
-            <p className="text-slate-600 leading-relaxed">
-              {t('instagram.comments.selectCommentHint')}
-            </p>
-          </div>
-        </div>
-      )
-    }
-
-    const handleOpenConversation = (conversationId: string) => {
-      // Mudar para tab 'all' de DMs e selecionar a conversa
-      igSidebarData.onFilterChange({ ...igSidebarData.filter, type: 'all' })
-      igSidebarData.onSelectConversation(conversationId)
-    }
-
     return (
-      <InstagramCommentDetail
-        comment={selectedComment}
-        commentsData={igCommentsData}
-        onOpenConversation={handleOpenConversation}
-      />
+      <div className="flex flex-col h-full">
+        {showBanner && selectedConn && (
+          <InstagramReconnectBanner
+            health={selectedConn.health}
+            username={selectedConn.conn.instagram_username}
+            onReconnect={canConnectInstagram ? () => navigate('/settings/integrations') : undefined}
+            onDismiss={() => setDismissedBanner(selectedConn.conn.id)}
+            compact
+            className="mx-4 mt-3"
+          />
+        )}
+
+        {!selectedComment ? (
+          <div className="flex items-center justify-center flex-1">
+            <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+              <div className="mb-6">
+                <div className="mx-auto h-20 w-20 rounded-3xl flex items-center justify-center shadow-lg"
+                  style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
+                >
+                  <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-slate-800 mb-3">
+                {t('instagram.comments.selectComment')}
+              </h3>
+              <p className="text-slate-600 leading-relaxed">
+                {t('instagram.comments.selectCommentHint')}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-hidden">
+            <InstagramCommentDetail
+              comment={selectedComment}
+              commentsData={igCommentsData}
+              onOpenConversation={(conversationId) => {
+                igSidebarData.onFilterChange({ ...igSidebarData.filter, type: 'all' })
+                igSidebarData.onSelectConversation(conversationId)
+              }}
+            />
+          </div>
+        )}
+      </div>
     )
   }
 
