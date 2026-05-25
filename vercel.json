@@ -13,7 +13,8 @@
     "api/instagram/comments/[commentId]/hide.js": { "maxDuration": 20 },
     "api/instagram/comments/[commentId]/ignore.js": { "maxDuration": 15 },
     "api/instagram/comments/[commentId]/call-direct.js": { "maxDuration": 20 },
-    "api/instagram/comments/[commentId]/create-lead.js": { "maxDuration": 20 }
+    "api/instagram/comments/[commentId]/create-lead.js": { "maxDuration": 20 },
+    "api/cron/refresh-instagram-tokens.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -59,6 +60,10 @@
     {
       "path": "/api/cron/alert-trials",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-instagram-tokens",
+      "schedule": "0 3 * * *"
     }
   ],
   "rewrites": [
