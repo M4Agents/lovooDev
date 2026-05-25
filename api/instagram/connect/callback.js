@@ -187,9 +187,7 @@ export default async function handler(req, res) {
   // #endregion
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
-    // #region agent log — campos extras para diagnóstico de ID mismatch
-    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,instagram_business_account');
-    // #endregion
+    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     const meRes  = await fetch(meUrl.toString());
@@ -307,6 +305,15 @@ export default async function handler(req, res) {
   }
 
   // #region agent log — persistir resultado no audit_log para diagnóstico
+  // Também faz GET /me/subscribed_apps para tentar descobrir o IGBID correto
+  let _getSubsData = null;
+  try {
+    const getSubsRes = await fetch(
+      `https://graph.instagram.com/v21.0/me/subscribed_apps?access_token=${longLivedToken}`
+    );
+    _getSubsData = await getSubsRes.json();
+  } catch (_e) {}
+
   await svc.from('instagram_audit_logs').insert({
     company_id:    companyId,
     connection_id: connection.id,
@@ -317,6 +324,7 @@ export default async function handler(req, res) {
       ig_user_id_token_exchange: _igUserIdFromTokenExchange,
       ig_user_id_me_endpoint:    _igUserIdFromMe,
       me_full_response:          _meFullResponse,
+      get_subscribed_apps:       _getSubsData,
       ...subscribeResult,
     },
   }).then(() => {}).catch(() => {});
