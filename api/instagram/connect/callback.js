@@ -314,6 +314,24 @@ export default async function handler(req, res) {
     _getSubsData = await getSubsRes.json();
   } catch (_e) {}
 
+  // Teste A: user_id field via graph.instagram.com/me
+  let _meWithUserId = null;
+  try {
+    const r = await fetch(
+      `https://graph.instagram.com/v21.0/me?fields=id,user_id,username,account_type&access_token=${longLivedToken}`
+    );
+    _meWithUserId = await r.json();
+  } catch (_e) {}
+
+  // Teste B: instagram_business_account via graph.facebook.com (token Instagram Login pode funcionar)
+  let _fbBusinessAccount = null;
+  try {
+    const r = await fetch(
+      `https://graph.facebook.com/v21.0/me?fields=id,instagram_business_account&access_token=${longLivedToken}`
+    );
+    _fbBusinessAccount = await r.json();
+  } catch (_e) {}
+
   await svc.from('instagram_audit_logs').insert({
     company_id:    companyId,
     connection_id: connection.id,
@@ -325,6 +343,8 @@ export default async function handler(req, res) {
       ig_user_id_me_endpoint:    _igUserIdFromMe,
       me_full_response:          _meFullResponse,
       get_subscribed_apps:       _getSubsData,
+      test_a_me_with_user_id:    _meWithUserId,
+      test_b_fb_business_acct:   _fbBusinessAccount,
       ...subscribeResult,
     },
   }).then(() => {}).catch(() => {});
