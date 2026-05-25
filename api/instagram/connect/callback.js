@@ -249,12 +249,34 @@ export default async function handler(req, res) {
     return redirectError(res, 'connection_save_failed');
   }
 
-  // ── 10. Criar configurações padrão da empresa (idempotente) ───────────────
+  // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
+  // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
+  // o nosso endpoint. Sem esta chamada a conta existe no banco mas a Meta não
+  // entrega webhooks para ela.
+  try {
+    const subscribeUrl =
+      `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps` +
+      `?subscribed_fields=messages,comments,message_reactions` +
+      `&access_token=${longLivedToken}`;
+
+    const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
+    const subscribeData = await subscribeRes.json();
+
+    if (!subscribeRes.ok || !subscribeData.success) {
+      console.warn('[instagram/callback] subscribed_apps falhou igUserId=%s body=%s',
+        igUserId, JSON.stringify(subscribeData));
+    }
+  } catch (err) {
+    // Não bloqueia o OAuth — admin pode reconectar se necessário
+    console.warn('[instagram/callback] subscribed_apps threw:', err?.message);
+  }
+
+  // ── 11. Criar configurações padrão da empresa (idempotente) ───────────────
   await svc
     .from('instagram_company_settings')
     .upsert({ company_id: companyId }, { onConflict: 'company_id', ignoreDuplicates: true });
 
-  // ── 11. Audit log ──────────────────────────────────────────────────────────
+  // ── 12. Audit log ──────────────────────────────────────────────────────────
   await svc.from('instagram_audit_logs').insert({
     company_id:    companyId,
     connection_id: connection.id,
