@@ -9,14 +9,14 @@ import React, { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { useInstagramChatData } from '../../hooks/chat/useInstagramChatData'
+import { useInstagramCommentsData } from '../../hooks/instagram/useInstagramCommentsData'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
-import { InstagramChatArea } from './ChatArea/InstagramChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
-import { CreateInstagramLeadPanel } from './InstagramLeadPanel/CreateInstagramLeadPanel'
-import { LinkedInstagramLeadCard } from './InstagramLeadPanel/LinkedInstagramLeadCard'
+import { InstagramMainArea, InstagramRightPanel } from './InstagramAreaRenderer'
 import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
 import type { ChatChannel } from '../../types/instagram-chat'
+import type { InstagramCommentsFilter } from '../../types/instagram-comments'
 import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
 
 // =====================================================
@@ -45,6 +45,18 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   // Hook Instagram — sempre chamado (regra dos hooks), enabled apenas quando canal = instagram
   const igChatData = useInstagramChatData(companyId, userId, selectedChannel === 'instagram')
+
+  // Hook de Comentários — enabled somente quando instagram + tab de comentários
+  const [commentsFilter, setCommentsFilter] = useState<InstagramCommentsFilter>({ tab: 'comments' })
+  const activeIgTab = igChatData.filter.type
+  const commentsEnabled = selectedChannel === 'instagram' && (activeIgTab === 'comments' || activeIgTab === 'pending')
+
+  const igCommentsData = useInstagramCommentsData(
+    companyId,
+    igChatData.selectedConnectionId,
+    commentsFilter,
+    commentsEnabled,
+  )
 
   // igSidebarData memoizado para evitar re-render do Sidebar a cada render do ChatLayout
   const igSidebarData: InstagramSidebarData = useMemo(() => ({
@@ -141,16 +153,6 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   // LAYOUT PRINCIPAL — Instagram ou WhatsApp
   // =====================================================
 
-  // Conversa Instagram selecionada
-  const selectedIgConversation = igChatData.selectedConversationId
-    ? igChatData.conversations.find(c => c.id === igChatData.selectedConversationId)
-    : undefined
-
-  // Conexão ativa da conversa Instagram selecionada
-  const igConnectionActive = selectedIgConversation
-    ? (igChatData.connections.find(c => c.id === selectedIgConversation.connection_id)?.status === 'active')
-    : true
-
   return (
     <div className="flex h-full bg-gradient-to-br from-slate-50 to-gray-100">
       {/* Sidebar Conversas - 25% */}
@@ -170,6 +172,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             selectedChannel={selectedChannel}
             onChannelChange={handleChannelChange}
             igData={igSidebarData}
+            igCommentsData={igCommentsData}
           />
         </div>
       )}
@@ -177,48 +180,13 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       {/* Área Chat - 50% */}
       <div className={`${hideConversationSidebar ? 'flex-[3]' : 'flex-1'} flex flex-col bg-white/60 backdrop-blur-sm`}>
         {selectedChannel === 'instagram' ? (
-          selectedIgConversation ? (
-            <InstagramChatArea
-              conversation={selectedIgConversation}
-              messages={igChatData.messages}
-              messagesLoading={igChatData.messagesLoading}
-              messagesError={igChatData.messagesError}
-              sendLoading={igChatData.sendLoading}
-              sendMediaLoading={igChatData.sendMediaLoading}
-              sendError={igChatData.sendError}
-              replyingTo={igChatData.replyingTo}
-              onSetReplyingTo={igChatData.setReplyingTo}
-              onSendMessage={(text, replyToIgMessageId) =>
-                igChatData.sendMessage({ text, reply_to_ig_message_id: replyToIgMessageId ?? null })
-              }
-              onSendMedia={igChatData.sendMedia}
-              onReactToMessage={igChatData.reactToMessage}
-              onRetryLoadMessages={() => igChatData.setSelectedConversation(selectedIgConversation.id)}
-              onClearSendError={igChatData.clearSendError}
-              connectionActive={igConnectionActive}
-              companyId={companyId}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
-                <div className="mb-6">
-                  <div className="mx-auto h-20 w-20 rounded-3xl flex items-center justify-center shadow-lg"
-                    style={{ background: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)' }}
-                  >
-                    <svg className="h-10 w-10 text-white" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-                    </svg>
-                  </div>
-                </div>
-                <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                  {t('instagram.noConversationSelected')}
-                </h3>
-                <p className="text-slate-600 leading-relaxed">
-                  {t('instagram.noConversationSelectedHint')}
-                </p>
-              </div>
-            </div>
-          )
+          <InstagramMainArea
+            companyId={companyId}
+            igSidebarData={igSidebarData}
+            igChatDataRaw={igChatData}
+            igCommentsData={igCommentsData}
+            activeTab={activeIgTab}
+          />
         ) : (
           lockedConversation ? (
             <LockedChatPanel contactName={lockedConversation.contact_name} />
@@ -252,46 +220,41 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
       {/* Painel Lead - 25% */}
       <div className={`${hideConversationSidebar ? 'flex-[2] h-full' : 'w-1/4 min-w-[320px]'} bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
-        {selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (
-          <LeadPanel
-            conversationId={chatData.selectedConversation}
+        {selectedChannel === 'instagram' ? (
+          <InstagramRightPanel
             companyId={companyId}
-            userId={userId}
-            onLeadSaved={chatData.refreshConversations}
+            igSidebarData={igSidebarData}
+            igChatDataRaw={igChatData}
+            igCommentsData={igCommentsData}
+            activeTab={activeIgTab}
           />
-        ) : selectedChannel === 'instagram' && selectedIgConversation ? (
-          selectedIgConversation.lead_id ? (
-            <LinkedInstagramLeadCard
-              conversation={selectedIgConversation}
-              leadId={selectedIgConversation.lead_id}
+        ) : (
+          selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (
+            <LeadPanel
+              conversationId={chatData.selectedConversation}
+              companyId={companyId}
+              userId={userId}
+              onLeadSaved={chatData.refreshConversations}
             />
           ) : (
-            <CreateInstagramLeadPanel
-              conversation={selectedIgConversation}
-              onCreateLead={igChatData.createLead}
-              createLeadLoading={igChatData.createLeadLoading}
-              createLeadError={igChatData.createLeadError}
-              onClearError={igChatData.clearCreateLeadError}
-            />
-          )
-        ) : (
-          <div className="flex items-center justify-center h-full p-6">
-            <div className="text-center">
-              <div className="mb-6">
-                <div className="mx-auto h-16 w-16 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="text-center">
+                <div className="mb-6">
+                  <div className="mx-auto h-16 w-16 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
                 </div>
+                <h4 className="text-lg font-semibold text-slate-800 mb-2">
+                  {t('layout.leadPanelTitle')}
+                </h4>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  {t('layout.leadPanelBody')}
+                </p>
               </div>
-              <h4 className="text-lg font-semibold text-slate-800 mb-2">
-                {t('layout.leadPanelTitle')}
-              </h4>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                {t('layout.leadPanelBody')}
-              </p>
             </div>
-          </div>
+          )
         )}
       </div>
     </div>

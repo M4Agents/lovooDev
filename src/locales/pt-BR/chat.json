@@ -105,7 +105,51 @@
     "toastLeadLinked": "Lead existente vinculado",
     "toastAlreadyLinked": "Conversa já vinculada a um lead",
     "toastCreateLeadError": "Erro ao criar lead",
-    "toastPlanLimitExceeded": "Limite de leads do plano atingido."
+    "toastPlanLimitExceeded": "Limite de leads do plano atingido.",
+    "comments": {
+      "tabComments": "Comentários",
+      "tabPending": "Pendentes",
+      "loading": "Carregando comentários...",
+      "retry": "Tentar novamente",
+      "emptyTitle": "Nenhum comentário encontrado",
+      "emptyHint": "Os comentários aparecerão aqui quando você receber interações",
+      "selectComment": "Selecione um comentário",
+      "selectCommentHint": "Escolha um comentário na sidebar para visualizar e gerenciar",
+      "convertLeadHint": "Use o botão abaixo para converter este usuário em um lead",
+      "mediaId": "Post",
+      "repliedWith": "Respondido com",
+      "directSent": "Direct enviado",
+      "callDirectHint": "Uma mensagem privada será enviada a este usuário via Direct. O status do comentário não será alterado.",
+      "callDirectPlaceholder": "Digite a mensagem privada...",
+      "replyPlaceholder": "Digite sua resposta pública...",
+      "cancel": "Cancelar",
+      "confirmHide": "Tem certeza que deseja ocultar este comentário?",
+      "toastReplied": "Comentário respondido com sucesso",
+      "toastHidden": "Comentário ocultado",
+      "toastIgnored": "Comentário ignorado",
+      "toastDirectSent": "Direct enviado com sucesso",
+      "status": {
+        "pending": "Pendente",
+        "replied": "Respondido",
+        "hidden": "Oculto",
+        "ignored": "Ignorado",
+        "convertedToLead": "Lead criado"
+      },
+      "actions": {
+        "reply": "Responder",
+        "callDirect": "Chamar no Direct",
+        "convertLead": "Converter em Lead",
+        "hide": "Ocultar",
+        "ignore": "Ignorar",
+        "openConversation": "Abrir conversa"
+      },
+      "errors": {
+        "generic": "Erro ao processar ação. Tente novamente.",
+        "windowExpired": "Comentário muito antigo para Direct (limite de 7 dias).",
+        "tokenExpired": "Token expirado. Reconecte a conta Instagram.",
+        "rateLimit": "Limite atingido. Aguarde e tente novamente."
+      }
+    }
   },
   "notifications": {
     "disconnectedTitle": "WhatsApp Desconectado",

@@ -71,7 +71,10 @@ export interface InstagramChatMessage {
 // FILTROS
 // =====================================================
 
-export type InstagramFilterType = 'all' | 'unread' | 'assigned' | 'unassigned'
+// 'all' e 'unread' → DMs Instagram
+// 'assigned' e 'unassigned' → DMs (WhatsApp mantém o mesmo; Instagram reusa os slots para DMs)
+// 'comments' e 'pending' → Comentários Instagram (novos — WhatsApp ignora estes valores)
+export type InstagramFilterType = 'all' | 'unread' | 'assigned' | 'unassigned' | 'comments' | 'pending'
 
 export interface InstagramChannelFilter {
   type: InstagramFilterType

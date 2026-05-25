@@ -7,7 +7,13 @@
     "api/leads/import-file.js": { "maxDuration": 60 },
     "api/webhook/uazapi/[company_id].js": { "maxDuration": 60 },
     "api/uazapi-webhook-final.js": { "maxDuration": 60 },
-    "api/instagram/webhook.js": { "maxDuration": 30 }
+    "api/instagram/webhook.js": { "maxDuration": 30 },
+    "api/instagram/comments/index.js": { "maxDuration": 15 },
+    "api/instagram/comments/[commentId]/reply.js": { "maxDuration": 20 },
+    "api/instagram/comments/[commentId]/hide.js": { "maxDuration": 20 },
+    "api/instagram/comments/[commentId]/ignore.js": { "maxDuration": 15 },
+    "api/instagram/comments/[commentId]/call-direct.js": { "maxDuration": 20 },
+    "api/instagram/comments/[commentId]/create-lead.js": { "maxDuration": 20 }
   },
   "crons": [
     {

@@ -76,3 +76,4 @@ backup/
 /p4b_full.json
 .snapshots/*.tsbuildinfo
 *.tsbuildinfo
+.env*
