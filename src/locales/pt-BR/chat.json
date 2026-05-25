@@ -9,9 +9,13 @@
   "layout": {
     "loadingInstances": "Carregando instâncias...",
     "loadingInstancesHint": "Preparando seu ambiente de chat",
+    "loadingChannels": "Verificando canais disponíveis...",
     "noInstancesTitle": "Bem-vindo ao Chat WhatsApp",
     "noInstancesBody": "Para começar a usar o chat, você precisa conectar pelo menos uma instância WhatsApp Business.",
+    "noChannelTitle": "Nenhum canal conectado",
+    "noChannelBody": "Para usar o chat, conecte pelo menos um canal de atendimento.",
     "connectWhatsApp": "Conectar WhatsApp",
+    "connectInstagram": "Conectar Instagram",
     "selectConversationTitle": "Selecione uma conversa",
     "selectConversationBody": "Escolha uma conversa na sidebar para começar a trocar mensagens com seus clientes",
     "leadPanelTitle": "Informações do Lead",

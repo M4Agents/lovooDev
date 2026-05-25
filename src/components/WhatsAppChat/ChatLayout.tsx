@@ -5,8 +5,9 @@
 // Suporta canal WhatsApp (comportamento original) e Instagram.
 // NÃO refatora lógica WhatsApp existente.
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { useInstagramChatData } from '../../hooks/chat/useInstagramChatData'
 import { useInstagramCommentsData } from '../../hooks/instagram/useInstagramCommentsData'
@@ -30,6 +31,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   hideConversationSidebar = false
 }) => {
   const { t } = useTranslation('chat')
+  const navigate = useNavigate()
   const chatData = useChatData(companyId, userId, initialConversationId)
 
   // Canal ativo — persiste entre sessões com fallback seguro
@@ -43,8 +45,20 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     localStorage.setItem(`chat_channel_${userId}`, channel)
   }, [userId])
 
-  // Hook Instagram — sempre chamado (regra dos hooks), enabled apenas quando canal = instagram
-  const igChatData = useInstagramChatData(companyId, userId, selectedChannel === 'instagram')
+  // Derivados estáveis — primitivos booleanos para uso seguro em useEffect (evita arrays nas deps)
+  const hasNoWhatsAppInstances =
+    !chatData.instancesLoading && chatData.instances.length === 0
+
+  // igEnabled: ativa o hook IG quando canal = instagram OU quando WA está vazio
+  // (necessário para verificar conexões IG antes de exibir o gate correto)
+  const igEnabled = selectedChannel === 'instagram' || hasNoWhatsAppInstances
+
+  // Hook Instagram — sempre chamado (regra dos hooks)
+  const igChatData = useInstagramChatData(companyId, userId, igEnabled)
+
+  // Derivado estável — evita passar igChatData.connections (array) no dep array do useEffect
+  const hasActiveInstagramConnection =
+    igChatData.connections.some(c => c.status === 'active')
 
   // Hook de Comentários — enabled somente quando instagram + tab de comentários
   const [commentsFilter, setCommentsFilter] = useState<InstagramCommentsFilter>({ tab: 'comments' })
@@ -95,6 +109,25 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     chatData.setSelectedConversation(conversationId)
   }, [chatData])
 
+  // Auto-switch: se WA não tem instâncias mas IG tem conexão ativa,
+  // redireciona automaticamente para o canal Instagram
+  useEffect(() => {
+    if (
+      selectedChannel === 'whatsapp' &&
+      hasNoWhatsAppInstances &&
+      !igChatData.connectionsLoading &&
+      hasActiveInstagramConnection
+    ) {
+      handleChannelChange('instagram')
+    }
+  }, [
+    selectedChannel,
+    hasNoWhatsAppInstances,
+    igChatData.connectionsLoading,
+    hasActiveInstagramConnection,
+    handleChannelChange,
+  ])
+
   // =====================================================
   // LOADING STATE — apenas para WhatsApp (Instagram não bloqueia o layout)
   // =====================================================
@@ -115,10 +148,41 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   }
 
   // =====================================================
-  // NO INSTANCES STATE — apenas para WhatsApp
+  // NO CHANNEL STATE — verifica WA + IG antes de bloquear
   // =====================================================
 
-  if (selectedChannel === 'whatsapp' && chatData.instances.length === 0) {
+  if (selectedChannel === 'whatsapp' && hasNoWhatsAppInstances) {
+    // IG ainda carregando: aguarda para decidir qual tela mostrar
+    if (igChatData.connectionsLoading) {
+      return (
+        <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
+          <div className="text-center">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-slate-600 mx-auto mb-6"></div>
+              <div className="absolute inset-0 rounded-full h-10 w-10 border-2 border-transparent border-t-blue-500 animate-pulse mx-auto"></div>
+            </div>
+            <p className="text-slate-600 font-medium">{t('layout.loadingChannels')}</p>
+          </div>
+        </div>
+      )
+    }
+
+    // IG ativo: auto-switch em andamento via useEffect — spinner de transição
+    if (hasActiveInstagramConnection) {
+      return (
+        <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
+          <div className="text-center">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-slate-600 mx-auto mb-6"></div>
+              <div className="absolute inset-0 rounded-full h-10 w-10 border-2 border-transparent border-t-blue-500 animate-pulse mx-auto"></div>
+            </div>
+            <p className="text-slate-600 font-medium">{t('layout.loadingChannels')}</p>
+          </div>
+        </div>
+      )
+    }
+
+    // Nenhum canal conectado: tela com opção para conectar WA ou Instagram
     return (
       <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-gray-100">
         <div className="text-center max-w-md p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20">
@@ -130,20 +194,31 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             </div>
           </div>
           <h3 className="text-xl font-semibold text-slate-800 mb-3">
-            {t('layout.noInstancesTitle')}
+            {t('layout.noChannelTitle')}
           </h3>
           <p className="text-slate-600 mb-6 leading-relaxed">
-            {t('layout.noInstancesBody')}
+            {t('layout.noChannelBody')}
           </p>
-          <button
-            onClick={() => window.location.href = '/settings/whatsapp-life'}
-            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            {t('layout.connectWhatsApp')}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => navigate('/settings/whatsapp-life')}
+              className="inline-flex items-center justify-center px-5 py-3 bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              {t('layout.connectWhatsApp')}
+            </button>
+            <button
+              onClick={() => navigate('/settings?tab=integracoes&integration=instagram')}
+              className="inline-flex items-center justify-center px-5 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              {t('layout.connectInstagram')}
+            </button>
+          </div>
         </div>
       </div>
     )
