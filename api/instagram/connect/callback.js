@@ -253,6 +253,9 @@ export default async function handler(req, res) {
   // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
   // o nosso endpoint. Sem esta chamada a conta existe no banco mas a Meta não
   // entrega webhooks para ela.
+  // #region agent log
+  let subscribeResult = { attempted: false, ok: false, status: null, body: null, error: null };
+  // #endregion
   try {
     const subscribeUrl =
       `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps` +
@@ -262,14 +265,37 @@ export default async function handler(req, res) {
     const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
     const subscribeData = await subscribeRes.json();
 
+    // #region agent log
+    subscribeResult = {
+      attempted: true,
+      ok:        subscribeRes.ok && subscribeData.success === true,
+      status:    subscribeRes.status,
+      body:      subscribeData,
+      error:     null,
+    };
+    // #endregion
+
     if (!subscribeRes.ok || !subscribeData.success) {
       console.warn('[instagram/callback] subscribed_apps falhou igUserId=%s body=%s',
         igUserId, JSON.stringify(subscribeData));
     }
   } catch (err) {
+    // #region agent log
+    subscribeResult = { attempted: true, ok: false, status: null, body: null, error: err?.message };
+    // #endregion
     // Não bloqueia o OAuth — admin pode reconectar se necessário
     console.warn('[instagram/callback] subscribed_apps threw:', err?.message);
   }
+
+  // #region agent log — persistir resultado no audit_log para diagnóstico
+  await svc.from('instagram_audit_logs').insert({
+    company_id:    companyId,
+    connection_id: connection.id,
+    action:        'debug_subscribed_apps',
+    performed_by:  userId,
+    metadata:      { ig_user_id: igUserId, ...subscribeResult },
+  }).then(() => {}).catch(() => {});
+  // #endregion
 
   // ── 11. Criar configurações padrão da empresa (idempotente) ───────────────
   await svc
