@@ -105,6 +105,10 @@ export default async function handler(req, res) {
 
   // ── 4. Trocar code → short-lived token ─────────────────────────────────────
   let shortLivedToken, igUserId, grantedScopes;
+  // #region agent log
+  let _igUserIdFromTokenExchange = '';
+  let _igUserIdFromMe = '';
+  // #endregion
   try {
     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
       method:  'POST',
@@ -131,6 +135,9 @@ export default async function handler(req, res) {
     const entry      = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
     shortLivedToken  = entry.access_token;
     igUserId         = String(entry.user_id ?? '');
+    // #region agent log
+    _igUserIdFromTokenExchange = igUserId;
+    // #endregion
 
     const rawPerms = entry.permissions ?? [];
     grantedScopes  = Array.isArray(rawPerms)
@@ -191,6 +198,9 @@ export default async function handler(req, res) {
       // como recipient.id). Tem prioridade sobre o user_id do token exchange,
       // que pode ser um ID scoped diferente dependendo da versão da API.
       if (meData.id) igUserId = String(meData.id);
+      // #region agent log
+      _igUserIdFromMe = meData.id ? String(meData.id) : '';
+      // #endregion
     }
   } catch {
     // Não-fatal: continua com igUserId como fallback de username
@@ -293,7 +303,12 @@ export default async function handler(req, res) {
     connection_id: connection.id,
     action:        'debug_subscribed_apps',
     performed_by:  userId,
-    metadata:      { ig_user_id: igUserId, ...subscribeResult },
+    metadata:      {
+      ig_user_id_stored:        igUserId,
+      ig_user_id_token_exchange: _igUserIdFromTokenExchange,
+      ig_user_id_me_endpoint:    _igUserIdFromMe,
+      ...subscribeResult,
+    },
   }).then(() => {}).catch(() => {});
   // #endregion
 
