@@ -55,6 +55,9 @@ export default async function handler(req, res) {
   if (conn.status !== 'active') {
     return res.status(422).json({ error: 'token_expired', message: 'Token expirado. Reconecte a conta para atualizar a foto.' });
   }
+  if (!conn.access_token_enc) {
+    return res.status(403).json({ error: 'connection_inactive' });
+  }
 
   // ── 3. Descriptografar token ───────────────────────────────────────────────
   let accessToken;

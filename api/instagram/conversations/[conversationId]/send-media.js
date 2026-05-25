@@ -77,6 +77,9 @@ export default async function handler(req, res) {
       message: 'Conta Instagram desconectada ou expirada. Reconecte em Configurações.',
     });
   }
+  if (!connection.access_token_enc) {
+    return res.status(403).json({ error: 'connection_inactive' });
+  }
 
   // ── 4. Descriptografar token ───────────────────────────────────────────────
   let accessToken;

@@ -217,6 +217,9 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 
     if (!conv || conv.participant_name) return;
 
+    // Guard: token pode ter sido nulificado por deauthorize/data_deletion
+    if (!connection.access_token_enc) return;
+
     // Descriptografar token
     let accessToken;
     try {

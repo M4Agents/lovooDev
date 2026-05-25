@@ -92,6 +92,9 @@ export default async function handler(req, res) {
   if (connection.status !== 'active') {
     return res.status(422).json({ error: 'connection_inactive', message: 'Conta Instagram desconectada.' });
   }
+  if (!connection.access_token_enc) {
+    return res.status(403).json({ error: 'connection_inactive' });
+  }
 
   // ── 5. Descriptografar token ────────────────────────────────────────────────
   let accessToken;

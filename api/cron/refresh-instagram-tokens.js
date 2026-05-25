@@ -109,6 +109,7 @@ export default async function handler(req, res) {
     .select('id, company_id, instagram_user_id, instagram_username, access_token_enc, encryption_version, token_expires_at, connection_id:id, status')
     .in('status', ['active', 'limited'])
     .not('token_expires_at', 'is', null)
+    .not('access_token_enc', 'is', null)
     .lte('token_expires_at', windowDate)
     .or(`last_refresh_attempt_at.is.null,last_refresh_attempt_at.lt.${lockCutoff}`)
     .order('token_expires_at', { ascending: true })

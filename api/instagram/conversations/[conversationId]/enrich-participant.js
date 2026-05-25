@@ -75,6 +75,9 @@ export default async function handler(req, res) {
   if (connection.status !== 'active') {
     return res.status(422).json({ error: 'connection_inactive', message: 'Conta Instagram não está ativa' });
   }
+  if (!connection.access_token_enc) {
+    return res.status(403).json({ error: 'connection_inactive' });
+  }
 
   let accessToken;
   try {
