@@ -99,10 +99,12 @@ async function processEntry(entry, svc) {
   if (!igUserId) return;
 
   // Resolver conexão ativa (company_id NUNCA vem do payload)
+  // Tenta ig_webhook_id (IGBID) primeiro — contas novas têm IDs distintos.
+  // Fallback para instagram_user_id para contas antigas onde os IDs coincidem.
   const { data: connection } = await svc
     .from('instagram_connections')
     .select('id, company_id, access_token_enc')
-    .eq('instagram_user_id', igUserId)
+    .or(`ig_webhook_id.eq.${igUserId},instagram_user_id.eq.${igUserId}`)
     .eq('status', 'active')
     .maybeSingle();
 

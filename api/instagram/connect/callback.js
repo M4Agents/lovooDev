@@ -105,10 +105,6 @@ export default async function handler(req, res) {
 
   // ── 4. Trocar code → short-lived token ─────────────────────────────────────
   let shortLivedToken, igUserId, grantedScopes;
-  // #region agent log
-  let _igUserIdFromTokenExchange = '';
-  let _igUserIdFromMe = '';
-  // #endregion
   try {
     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
       method:  'POST',
@@ -135,9 +131,6 @@ export default async function handler(req, res) {
     const entry      = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
     shortLivedToken  = entry.access_token;
     igUserId         = String(entry.user_id ?? '');
-    // #region agent log
-    _igUserIdFromTokenExchange = igUserId;
-    // #endregion
 
     const rawPerms = entry.permissions ?? [];
     grantedScopes  = Array.isArray(rawPerms)
@@ -181,33 +174,25 @@ export default async function handler(req, res) {
   }
 
   // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
+  // user_id retorna o Instagram Business Account ID (IGBID) — é o ID que a Meta
+  // usa nos webhooks (entry.id). Diferente de id (IGUID, usado no OAuth).
   let username = igUserId, displayName = '', profilePictureUrl = null;
-  // #region agent log
-  let _meFullResponse = null;
-  // #endregion
+  let igWebhookId = igUserId; // fallback: mesmo ID caso user_id não venha
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
-    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
+    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
 
-    // #region agent log
-    _meFullResponse = meData;
-    // #endregion
-
     if (!meData.error) {
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
-      // O id retornado pelo /me é o Instagram User ID real (usado pelo webhook
-      // como recipient.id). Tem prioridade sobre o user_id do token exchange,
-      // que pode ser um ID scoped diferente dependendo da versão da API.
       if (meData.id) igUserId = String(meData.id);
-      // #region agent log
-      _igUserIdFromMe = meData.id ? String(meData.id) : '';
-      // #endregion
+      // user_id é o IGBID — usado pelo webhook para identificar a conta receptora
+      if (meData.user_id) igWebhookId = String(meData.user_id);
     }
   } catch {
     // Não-fatal: continua com igUserId como fallback de username
@@ -244,6 +229,7 @@ export default async function handler(req, res) {
     .upsert({
       company_id:         companyId,
       instagram_user_id:  igUserId,
+      ig_webhook_id:      igWebhookId !== igUserId ? igWebhookId : null,
       instagram_username: username,
       profile_picture_url: profilePictureUrl,
       access_token_enc:   accessTokenEnc,
@@ -270,9 +256,7 @@ export default async function handler(req, res) {
   // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
   // o nosso endpoint. Sem esta chamada a conta existe no banco mas a Meta não
   // entrega webhooks para ela.
-  // #region agent log
-  let subscribeResult = { attempted: false, ok: false, status: null, body: null, error: null };
-  // #endregion
+  let subscribeOk = false;
   try {
     const subscribeUrl =
       `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps` +
@@ -281,74 +265,15 @@ export default async function handler(req, res) {
 
     const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
     const subscribeData = await subscribeRes.json();
+    subscribeOk = subscribeRes.ok && subscribeData.success === true;
 
-    // #region agent log
-    subscribeResult = {
-      attempted: true,
-      ok:        subscribeRes.ok && subscribeData.success === true,
-      status:    subscribeRes.status,
-      body:      subscribeData,
-      error:     null,
-    };
-    // #endregion
-
-    if (!subscribeRes.ok || !subscribeData.success) {
+    if (!subscribeOk) {
       console.warn('[instagram/callback] subscribed_apps falhou igUserId=%s body=%s',
         igUserId, JSON.stringify(subscribeData));
     }
   } catch (err) {
-    // #region agent log
-    subscribeResult = { attempted: true, ok: false, status: null, body: null, error: err?.message };
-    // #endregion
-    // Não bloqueia o OAuth — admin pode reconectar se necessário
     console.warn('[instagram/callback] subscribed_apps threw:', err?.message);
   }
-
-  // #region agent log — persistir resultado no audit_log para diagnóstico
-  // Também faz GET /me/subscribed_apps para tentar descobrir o IGBID correto
-  let _getSubsData = null;
-  try {
-    const getSubsRes = await fetch(
-      `https://graph.instagram.com/v21.0/me/subscribed_apps?access_token=${longLivedToken}`
-    );
-    _getSubsData = await getSubsRes.json();
-  } catch (_e) {}
-
-  // Teste A: user_id field via graph.instagram.com/me
-  let _meWithUserId = null;
-  try {
-    const r = await fetch(
-      `https://graph.instagram.com/v21.0/me?fields=id,user_id,username,account_type&access_token=${longLivedToken}`
-    );
-    _meWithUserId = await r.json();
-  } catch (_e) {}
-
-  // Teste B: instagram_business_account via graph.facebook.com (token Instagram Login pode funcionar)
-  let _fbBusinessAccount = null;
-  try {
-    const r = await fetch(
-      `https://graph.facebook.com/v21.0/me?fields=id,instagram_business_account&access_token=${longLivedToken}`
-    );
-    _fbBusinessAccount = await r.json();
-  } catch (_e) {}
-
-  await svc.from('instagram_audit_logs').insert({
-    company_id:    companyId,
-    connection_id: connection.id,
-    action:        'debug_subscribed_apps',
-    performed_by:  userId,
-    metadata:      {
-      ig_user_id_stored:         igUserId,
-      ig_user_id_token_exchange: _igUserIdFromTokenExchange,
-      ig_user_id_me_endpoint:    _igUserIdFromMe,
-      me_full_response:          _meFullResponse,
-      get_subscribed_apps:       _getSubsData,
-      test_a_me_with_user_id:    _meWithUserId,
-      test_b_fb_business_acct:   _fbBusinessAccount,
-      ...subscribeResult,
-    },
-  }).then(() => {}).catch(() => {});
-  // #endregion
 
   // ── 11. Criar configurações padrão da empresa (idempotente) ───────────────
   await svc
@@ -363,9 +288,11 @@ export default async function handler(req, res) {
     performed_by:  userId,
     metadata: {
       instagram_user_id:  igUserId,
+      ig_webhook_id:      igWebhookId,
       instagram_username: username,
       display_name:       displayName || undefined,
       scopes:             grantedScopes,
+      subscribed_apps_ok: subscribeOk,
     },
   });
 
