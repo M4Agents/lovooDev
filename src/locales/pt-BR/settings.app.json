@@ -201,8 +201,11 @@
       "emptyHint": "Conecte uma conta para receber DMs e comentários.",
       "errorGeneric": "Erro ao conectar conta Instagram. Tente novamente.",
       "errorTokenExpired": "Token expirado. Reconecte a conta para atualizar a foto.",
-      "disconnectConfirm": "Tem certeza que deseja desconectar @{{account}}?",
-      "disconnectSuccess": "Conta @{{account}} desconectada com sucesso.",
+    "disconnectConfirm": "Tem certeza que deseja desconectar @{{account}}?",
+    "disconnectSuccess": "Conta @{{account}} desconectada com sucesso.",
+    "delete": "Excluir",
+    "deleteConfirm": "Tem certeza que deseja excluir permanentemente a conexão @{{account}}? Esta ação não pode ser desfeita.",
+    "deleteSuccess": "Conexão @{{account}} excluída com sucesso.",
       "status": {
         "active": "Conectada",
         "warning": "Atenção",

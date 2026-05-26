@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock } from 'lucide-react';
+import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock, Trash2 } from 'lucide-react';
 import { useInstagramConnections } from '../../hooks/useInstagramConnections';
 import type { InstagramConnection } from '../../types/instagram-chat';
 import { useAccessControl } from '../../hooks/useAccessControl';
@@ -63,8 +63,9 @@ export function InstagramConnectionPanel({ companyId }: Props) {
   const ig = (key: string, opts?: Record<string, unknown>) =>
     t(`integrations.instagram.${key}`, opts);
   const { canConnectInstagram } = useAccessControl();
-  const { connections, loading, loadingAction, error, refetch, connect, disconnect, syncPhoto } = useInstagramConnections(companyId);
+  const { connections, loading, loadingAction, error, refetch, connect, disconnect, deleteConnection, syncPhoto } = useInstagramConnections(companyId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncingPhotoId, setSyncingPhotoId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -92,6 +93,23 @@ export function InstagramConnectionPanel({ companyId }: Props) {
 
     if (result.success) {
       setSuccessMsg(ig('disconnectSuccess', { account: conn.instagram_username }));
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } else {
+      setActionError(result.error ?? ig('errorGeneric'));
+    }
+  }
+
+  async function handleDelete(conn: InstagramConnection) {
+    if (!window.confirm(ig('deleteConfirm', { account: conn.instagram_username }))) return;
+    setDeletingId(conn.id);
+    setActionError(null);
+    setSuccessMsg(null);
+
+    const result = await deleteConnection(conn.id);
+    setDeletingId(null);
+
+    if (result.success) {
+      setSuccessMsg(ig('deleteSuccess', { account: conn.instagram_username }));
       setTimeout(() => setSuccessMsg(null), 4000);
     } else {
       setActionError(result.error ?? ig('errorGeneric'));
@@ -276,6 +294,17 @@ export function InstagramConnectionPanel({ companyId }: Props) {
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${loadingAction ? 'animate-spin' : ''}`} />
                         {ig('reconnect')}
+                      </button>
+                    )}
+
+                    {canConnectInstagram && health.level === 'disconnected' && (
+                      <button
+                        onClick={() => handleDelete(conn)}
+                        disabled={loadingAction || deletingId === conn.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {deletingId === conn.id ? 'Excluindo...' : ig('delete')}
                       </button>
                     )}
                   </div>

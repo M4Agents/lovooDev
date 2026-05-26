@@ -13,6 +13,7 @@ interface UseInstagramConnectionsReturn {
   refetch: () => void;
   connect: (companyId: string) => Promise<void>;
   disconnect: (connectionId: string) => Promise<{ success: boolean; error?: string }>;
+  deleteConnection: (connectionId: string) => Promise<{ success: boolean; error?: string }>;
   syncPhoto: (connectionId: string) => Promise<{ success: boolean; photoUrl?: string | null; error?: string }>;
 }
 
@@ -164,6 +165,44 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     }
   }, [fetchConnections]);
 
+  const deleteConnection = useCallback(async (connectionId: string): Promise<{ success: boolean; error?: string }> => {
+    setLoadingAction(true);
+    setError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        return { success: false, error: 'Sessão expirada. Recarregue a página.' };
+      }
+
+      const res = await fetch('/api/instagram/connect/delete', {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ connection_id: connectionId }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        const msg = json.error ?? 'Erro ao excluir conexão Instagram.';
+        setError(msg);
+        return { success: false, error: msg };
+      }
+
+      await fetchConnections();
+      return { success: true };
+    } catch {
+      const msg = 'Erro ao excluir conexão. Tente novamente.';
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setLoadingAction(false);
+    }
+  }, [fetchConnections]);
+
   const syncPhoto = useCallback(async (connectionId: string): Promise<{ success: boolean; photoUrl?: string | null; error?: string }> => {
     setLoadingAction(true);
     setError(null);
@@ -217,6 +256,7 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     refetch: fetchConnections,
     connect,
     disconnect,
+    deleteConnection,
     syncPhoto,
   };
 }
