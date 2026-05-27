@@ -49,10 +49,6 @@ export class S3ClientFactory {
         responseChecksumValidation: 'WHEN_REQUIRED',
       });
 
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f28051'},body:JSON.stringify({sessionId:'f28051',location:'s3Client.ts:new-client',message:'S3Client criado com requestChecksumCalculation WHEN_REQUIRED',data:{companyId,region:credentials.region,checksumFix:'WHEN_REQUIRED'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       // Cache the client
       this.clientCache.set(cacheKey, s3Client);
       console.log('✅ S3 client criado e cacheado para company:', companyId);

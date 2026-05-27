@@ -47,10 +47,6 @@ export class CredentialsManager {
     supabaseClient?: SupabaseClient
   ): Promise<S3OperationResult<AWSCredentials>> {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'credentialsManager.ts:getCredentials-start',message:'Resolvendo client para buscar credenciais AWS',data:{companyId,isServer:typeof window==='undefined',clientProvided:!!supabaseClient,processEnvUrl:!!(process?.env?.VITE_SUPABASE_URL)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       const client = await resolveClient(supabaseClient);
       console.log('🔐 Buscando credenciais AWS para company:', companyId);
 
@@ -58,9 +54,6 @@ export class CredentialsManager {
         .rpc('webhook_resolve_aws_credentials', { p_company_id: companyId });
 
       if (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'credentialsManager.ts:getCredentials-rpc-error',message:'Erro RPC webhook_resolve_aws_credentials',data:{companyId,errorMessage:error.message,errorCode:error.code},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         console.error('❌ Erro ao buscar credenciais AWS:', error);
         return {
           success: false,
@@ -70,9 +63,6 @@ export class CredentialsManager {
       }
 
       if (!data || data.length === 0) {
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'credentialsManager.ts:getCredentials-empty',message:'Nenhuma credencial AWS encontrada',data:{companyId},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         console.error('❌ Nenhuma credencial AWS encontrada para company:', companyId);
         return {
           success: false,
@@ -81,9 +71,6 @@ export class CredentialsManager {
       }
 
       const credentials = data[0] as AWSCredentials;
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'credentialsManager.ts:getCredentials-ok',message:'Credenciais AWS obtidas com sucesso',data:{companyId,bucket:credentials.bucket,region:credentials.region,isServer:typeof window==='undefined'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.log('✅ Credenciais AWS encontradas para company:', companyId);
       return {
         success: true,
@@ -91,9 +78,6 @@ export class CredentialsManager {
       };
 
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'credentialsManager.ts:getCredentials-catch',message:'Exceção inesperada em getCredentials',data:{companyId,errorMessage:(error as any)?.message,errorName:(error as any)?.name},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.error('❌ Erro inesperado ao buscar credenciais:', error);
       return {
         success: false,
