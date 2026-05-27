@@ -1025,7 +1025,7 @@ class FunnelApiService {
     funnelId: string,
     stageId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days'>,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days' | 'tags' | 'tags_mode'>,
     limit = 20,
     offset = 0
   ): Promise<OpportunityFunnelPosition[]> {
@@ -1034,9 +1034,11 @@ class FunnelApiService {
         p_funnel_id:   funnelId,
         p_stage_id:    stageId,
         p_company_id:  companyId,
-        p_search:      filter?.search      ?? null,
-        p_origin:      filter?.origin      ?? null,
-        p_period_days: filter?.period_days ?? null,
+        p_search:      filter?.search                          ?? null,
+        p_origin:      filter?.origin                          ?? null,
+        p_period_days: filter?.period_days                     ?? null,
+        p_tag_ids:     filter?.tags?.length ? filter.tags      : null,
+        p_tag_mode:    filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
         p_limit:       limit,
         p_offset:      offset
       })
@@ -1062,15 +1064,17 @@ class FunnelApiService {
   async getStageCounts(
     funnelId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days'>
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_days' | 'tags' | 'tags_mode'>
   ): Promise<StageCount[]> {
     try {
       const { data, error } = await supabase.rpc('get_funnel_stage_counts', {
         p_funnel_id:   funnelId,
         p_company_id:  companyId,
-        p_search:      filter?.search      ?? null,
-        p_origin:      filter?.origin      ?? null,
-        p_period_days: filter?.period_days ?? null
+        p_search:      filter?.search                          ?? null,
+        p_origin:      filter?.origin                          ?? null,
+        p_period_days: filter?.period_days                     ?? null,
+        p_tag_ids:     filter?.tags?.length ? filter.tags      : null,
+        p_tag_mode:    filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or'
       })
 
       if (error) throw error

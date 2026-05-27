@@ -133,6 +133,8 @@ export default async function handler(req, res) {
     search,
     origin,
     period_days,
+    tag_ids,
+    tag_mode,
   } = req.body ?? {}
 
   if (!company_id)     return res.status(400).json({ error: 'company_id é obrigatório',     field: 'company_id' })
@@ -232,7 +234,7 @@ export default async function handler(req, res) {
   //               retorna todos os IDs da etapa
   // Com filtros → get_stage_opportunity_ids_filtered com os filtros ativos
   //               retorna apenas os IDs que correspondem
-  const hasFilters = !!(search || origin || period_days)
+  const hasFilters = !!(search || origin || period_days || (Array.isArray(tag_ids) && tag_ids.length > 0))
 
   const { data: ids, error: idsErr } = await svc.rpc('get_stage_opportunity_ids_filtered', {
     p_funnel_id:   from_funnel_id,
@@ -241,6 +243,8 @@ export default async function handler(req, res) {
     p_search:      search      ?? null,
     p_origin:      origin      ?? null,
     p_period_days: period_days ?? null,
+    p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
+    p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
   })
 
   if (idsErr) {

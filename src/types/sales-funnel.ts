@@ -554,6 +554,8 @@ export interface LeadPositionFilter {
   origin?: string
   period_days?: number
   tags?: string[]
+  /** Condição aplicada ao filtro de tags: 'or' = qualquer tag, 'and' = todas as tags. */
+  tags_mode?: 'or' | 'and'
   min_value?: number
   max_value?: number
 }

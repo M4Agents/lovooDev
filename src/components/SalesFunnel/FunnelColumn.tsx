@@ -35,7 +35,13 @@ export interface BulkMoveRequest {
   fromStageName:  string
   fromStageType:  'active' | 'won' | 'lost'
   /** Snapshot dos filtros ativos no momento do clique (injetado pelo FunnelBoard). */
-  filters?: { search?: string; origin?: string; period_days?: number }
+  filters?: {
+    search?: string
+    origin?: string
+    period_days?: number
+    tags?: string[]
+    tags_mode?: 'or' | 'and'
+  }
 }
 
 interface FunnelColumnProps {

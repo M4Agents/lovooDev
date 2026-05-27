@@ -36,7 +36,13 @@ interface BulkMoveOpportunitiesModalProps {
    * Snapshot dos filtros ativos no momento em que o usuário abriu o modal.
    * undefined = sem filtros (move todas as oportunidades da etapa).
    */
-  filters?: { search?: string; origin?: string; period_days?: number }
+  filters?: {
+    search?: string
+    origin?: string
+    period_days?: number
+    tags?: string[]
+    tags_mode?: 'or' | 'and'
+  }
 }
 
 const STAGE_TYPE_LABEL: Record<string, string> = {
@@ -75,7 +81,7 @@ export function BulkMoveOpportunitiesModal({
   const [submitError, setSubmitError]       = useState<string | null>(null)
 
   // Derivado do snapshot de filtros — não do estado global atual
-  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_days)
+  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_days || filters?.tags?.length)
 
   // ── Carregar funis da empresa ──────────────────────────────────────────
   useEffect(() => {
@@ -123,6 +129,8 @@ export function BulkMoveOpportunitiesModal({
           search:        filters?.search      ?? null,
           origin:        filters?.origin      ?? null,
           period_days:   filters?.period_days ?? null,
+          tag_ids:       filters?.tags?.length ? filters.tags : null,
+          tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
         }),
       })
       const json = await resp.json()
@@ -180,6 +188,8 @@ export function BulkMoveOpportunitiesModal({
           search:        filters?.search      ?? null,
           origin:        filters?.origin      ?? null,
           period_days:   filters?.period_days ?? null,
+          tag_ids:       filters?.tags?.length ? filters.tags : null,
+          tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
         }),
       })
       const json = await resp.json()

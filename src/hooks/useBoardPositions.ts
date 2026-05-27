@@ -89,7 +89,9 @@ export function useBoardPositions(
           {
             search:      filter.search,
             origin:      filter.origin,
-            period_days: filter.period_days
+            period_days: filter.period_days,
+            tags:        filter.tags,
+            tags_mode:   filter.tags_mode
           },
           pageSize,
           offset

@@ -58,6 +58,8 @@ interface FunnelBoardProps {
   searchTerm?: string
   selectedOrigin?: string
   selectedPeriod?: string
+  selectedTags?: string[]
+  selectedTagsMode?: 'or' | 'and'
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -67,7 +69,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   onLeadClick,
   searchTerm = '',
   selectedOrigin = '',
-  selectedPeriod = ''
+  selectedPeriod = '',
+  selectedTags = [],
+  selectedTagsMode = 'or'
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -100,10 +104,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários
   const filter = useMemo<LeadPositionFilter>(() => ({
     funnel_id:   funnelId,
-    search:      searchTerm    || undefined,
+    search:      searchTerm     || undefined,
     origin:      selectedOrigin || undefined,
-    period_days: periodDays
-  }), [funnelId, searchTerm, selectedOrigin, periodDays])
+    period_days: periodDays,
+    tags:        selectedTags.length ? selectedTags : undefined,
+    tags_mode:   selectedTags.length ? selectedTagsMode : undefined
+  }), [funnelId, searchTerm, selectedOrigin, periodDays, selectedTags, selectedTagsMode])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA
@@ -160,9 +166,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         search:      searchTerm     || undefined,
         origin:      selectedOrigin || undefined,
         period_days: periodDays     || undefined,
+        tags:        selectedTags.length ? selectedTags : undefined,
+        tags_mode:   selectedTags.length ? selectedTagsMode : undefined,
       },
     })
-  }, [searchTerm, selectedOrigin, periodDays])
+  }, [searchTerm, selectedOrigin, periodDays, selectedTags, selectedTagsMode])
 
   const handleBulkMoveSuccess = useCallback((movedCount: number) => {
     setBulkMoveRequest(null)

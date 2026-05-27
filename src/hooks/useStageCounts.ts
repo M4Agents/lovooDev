@@ -42,7 +42,9 @@ export function useStageCounts(
       const data = await funnelApi.getStageCounts(funnelId, companyId, {
         search:      filter.search,
         origin:      filter.origin,
-        period_days: filter.period_days
+        period_days: filter.period_days,
+        tags:        filter.tags,
+        tags_mode:   filter.tags_mode
       })
 
       const map: Record<string, StageCount> = {}

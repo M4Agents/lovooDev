@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Filter, Download, Plus, Sliders, MoreVertical, Edit2 } from 'lucide-react'
+import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelWizard } from '../components/SalesFunnel/CreateFunnelWizard'
@@ -17,6 +17,7 @@ import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer
 import ChatModalSimple from '../components/SalesFunnel/ChatModalSimple'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
+import { useAvailableTags } from '../hooks/useAvailableTags'
 import { funnelApi } from '../services/funnelApi'
 import type { CreateFunnelForm, FunnelStage } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
@@ -53,9 +54,14 @@ export default function SalesFunnel() {
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null)
   const [visibleFields, setVisibleFields] = useState<string[]>([...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS])
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedTag, setSelectedTag] = useState('')
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [selectedTagsMode, setSelectedTagsMode] = useState<'or' | 'and'>('or')
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState('')
+
+  const tagDropdownRef = useRef<HTMLDivElement>(null)
+  const { tags: availableTags } = useAvailableTags(companyId)
 
   // Debounce na busca textual: evita requisições a cada tecla (300ms)
   const debouncedSearch = useDebounce(searchTerm, 300)
@@ -75,6 +81,30 @@ export default function SalesFunnel() {
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showOptionsMenu])
+
+  // Fechar dropdown de tags ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target as Node)) {
+        setTagDropdownOpen(false)
+      }
+    }
+    if (tagDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [tagDropdownOpen])
+
+  const addTag = (tagId: string) => {
+    if (!selectedTags.includes(tagId)) {
+      setSelectedTags(prev => [...prev, tagId])
+    }
+    setTagDropdownOpen(false)
+  }
+
+  const removeTag = (tagId: string) => {
+    setSelectedTags(prev => prev.filter(id => id !== tagId))
+  }
 
   // Carregar preferências salvas ao montar componente e ao trocar funil
   useEffect(() => {
@@ -389,18 +419,87 @@ export default function SalesFunnel() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('filters.tagsLabel')}
-                  <span className="ml-1.5 text-xs font-normal text-gray-400">{t('filters.tagsComingSoon')}</span>
-                </label>
-                <select
-                  value={selectedTag}
-                  disabled
-                  title={t('filters.tagsDisabledTitle')}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
-                >
-                  <option value="">{t('filters.tagsAll')}</option>
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    {t('filters.tagsLabel')}
+                  </label>
+                  {selectedTags.length > 1 && (
+                    <div className="flex rounded border border-gray-300 overflow-hidden text-xs">
+                      <button
+                        onClick={() => setSelectedTagsMode('or')}
+                        className={`px-2 py-0.5 transition-colors ${selectedTagsMode === 'or' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        title="Qualquer tag selecionada"
+                      >
+                        Qualquer
+                      </button>
+                      <button
+                        onClick={() => setSelectedTagsMode('and')}
+                        className={`px-2 py-0.5 border-l border-gray-300 transition-colors ${selectedTagsMode === 'and' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        title="Todas as tags selecionadas"
+                      >
+                        Todas
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chips das tags selecionadas */}
+                <div className="flex flex-wrap items-center gap-1 min-h-[38px] px-2 py-1.5 border border-gray-300 rounded-lg bg-white">
+                  {selectedTags.map(tagId => {
+                    const tag = availableTags.find(t => t.id === tagId)
+                    if (!tag) return null
+                    return (
+                      <span
+                        key={tagId}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: `${tag.color}22`, color: tag.color, border: `1px solid ${tag.color}66` }}
+                      >
+                        {tag.name}
+                        <button
+                          onClick={() => removeTag(tagId)}
+                          className="hover:opacity-70 transition-opacity"
+                          title={`Remover ${tag.name}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+
+                  {/* Botão para abrir dropdown de seleção */}
+                  {availableTags.some(t => !selectedTags.includes(t.id)) && (
+                    <div className="relative" ref={tagDropdownRef}>
+                      <button
+                        onClick={() => setTagDropdownOpen(prev => !prev)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs border border-dashed border-gray-300 rounded-full text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                      >
+                        <TagIcon className="w-3 h-3" />
+                        {selectedTags.length === 0 ? 'Filtrar por tag' : 'Adicionar'}
+                      </button>
+
+                      {tagDropdownOpen && (
+                        <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] max-h-48 overflow-y-auto">
+                          {availableTags
+                            .filter(t => !selectedTags.includes(t.id))
+                            .map(tag => (
+                              <button
+                                key={tag.id}
+                                onClick={() => addTag(tag.id)}
+                                className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                              >
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: tag.color }} />
+                                <span className="truncate">{tag.name}</span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedTags.length === 0 && availableTags.length === 0 && (
+                    <span className="text-xs text-gray-400">Nenhuma tag cadastrada</span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -444,11 +543,14 @@ export default function SalesFunnel() {
         {selectedFunnel ? (
           <FunnelBoard
             funnelId={selectedFunnel.id}
+            funnelName={selectedFunnel.name}
             onLeadClick={handleLeadClick}
             visibleFields={visibleFields}
             searchTerm={debouncedSearch}
             selectedOrigin={selectedOrigin}
             selectedPeriod={selectedPeriod}
+            selectedTags={selectedTags}
+            selectedTagsMode={selectedTagsMode}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
