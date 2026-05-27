@@ -1409,58 +1409,116 @@ async function processMessage(payload) {
 // FUNÇÃO ROBUSTA PARA PROCESSAMENTO DE MÍDIA
 // =====================================================
 // Adaptada do webhook company_id para webhook-final
-// Implementa: Download + Upload para Supabase Storage + URLs permanentes
+// Implementa: Download + Descriptografia + Upload para Supabase Storage
 async function processMediaMessageRobust(message, supabase, originalUrl, rawMediaType) {
   try {
     console.log('🎥 PROCESSAMENTO ROBUSTO DE MÍDIA:', rawMediaType, originalUrl.substring(0, 80) + '...');
-    
-    // Download da mídia externa (WhatsApp CDN descriptografada)
-    const response = await fetch(originalUrl);
+
+    // Download com os mesmos headers do caminho S3 para evitar corrupção
+    const response = await fetch(originalUrl, {
+      headers: {
+        'User-Agent': 'WhatsApp/2.0',
+        'Accept': '*/*',
+        'Accept-Encoding': 'identity',
+        'Cache-Control': 'no-cache'
+      }
+    });
     if (!response.ok) {
       console.error('❌ Falha ao baixar mídia:', response.status, response.statusText);
-      return originalUrl; // Fallback para URL original
+      return originalUrl;
     }
-    
-    const mediaBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(mediaBuffer);
-    console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
-    
-    // Detectar formato via magic bytes (mais preciso que rawMediaType)
+
+    const encryptedBuffer = Buffer.from(await response.arrayBuffer());
+    console.log('📦 Mídia baixada, tamanho:', encryptedBuffer.length, 'bytes');
+
+    // ── Descriptografia WhatsApp (AES-256-CBC) ────────────────────────────────
+    // O CDN do WhatsApp serve mídia criptografada. Sem descriptografia os bytes
+    // são aleatórios e nenhum player consegue reproduzir o arquivo.
+    let finalBuffer = encryptedBuffer;
+    const mediaKey = message.content?.mediaKey;
+
+    if (mediaKey) {
+      console.log('🔓 mediaKey encontrada — descriptografando...');
+      try {
+        const crypto = await import('crypto');
+
+        function asBuffer(x) {
+          if (Buffer.isBuffer(x)) return x;
+          if (x instanceof Uint8Array) return Buffer.from(x);
+          if (x instanceof ArrayBuffer) return Buffer.from(new Uint8Array(x));
+          return Buffer.from(x);
+        }
+
+        const infoByType = {
+          image:    'WhatsApp Image Keys',
+          video:    'WhatsApp Video Keys',
+          audio:    'WhatsApp Audio Keys',
+          ptt:      'WhatsApp Audio Keys',
+          document: 'WhatsApp Document Keys',
+        };
+        const info = infoByType[rawMediaType] || 'WhatsApp Media Keys';
+
+        const mediaKeyBuf = Buffer.from(mediaKey, 'base64');
+        const salt        = Buffer.alloc(32, 0);
+        const expanded    = asBuffer(
+          crypto.default.hkdfSync('sha256', mediaKeyBuf, salt, Buffer.from(info, 'utf8'), 112)
+        );
+
+        const iv        = expanded.subarray(0, 16);
+        const cipherKey = expanded.subarray(16, 48);
+        // Remover MAC de 10 bytes do final antes de decifrar
+        const cipherData = encryptedBuffer.length > 10
+          ? encryptedBuffer.subarray(0, encryptedBuffer.length - 10)
+          : encryptedBuffer;
+
+        const decipher  = crypto.default.createDecipheriv('aes-256-cbc', cipherKey, iv);
+        const decrypted = Buffer.concat([decipher.update(cipherData), decipher.final()]);
+
+        console.log('✅ Descriptografia concluída, tamanho:', decrypted.length, 'bytes');
+        finalBuffer = decrypted;
+      } catch (decryptErr) {
+        console.error('❌ Descriptografia falhou — usando buffer original:', decryptErr.message);
+      }
+    } else {
+      console.log('⚠️ mediaKey ausente — buffer pode estar criptografado');
+    }
+
+    // Detectar formato via magic bytes do buffer final (após descriptografia)
+    const bytes = new Uint8Array(finalBuffer);
     const detectedFormat = detectFormatByMagicBytes(bytes, response.headers.get('content-type'), rawMediaType);
-    const extension = detectedFormat.extension;
+    const extension   = detectedFormat.extension;
     const contentType = detectedFormat.contentType;
-    
-    console.log('🔬 FORMATO DETECTADO:', { extension, contentType, rawMediaType });
-    
+
+    console.log('🔬 FORMATO DETECTADO:', {
+      extension,
+      contentType,
+      rawMediaType,
+      firstBytes: Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).padStart(2, '0'))
+    });
+
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'uazapi-webhook-final.js:processMediaMessageRobust',message:'formato detectado para upload',data:{rawMediaType,extension,contentType,firstBytes:Array.from(bytes.slice(0,4)).map(b=>'0x'+b.toString(16).padStart(2,'0'))},hypothesisId:'OGG_FIX',timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'uazapi-webhook-final.js:processMediaMessageRobust',message:'formato detectado para upload',data:{rawMediaType,extension,contentType,mediaKeyPresente:!!mediaKey,firstBytes:Array.from(bytes.slice(0,4)).map(b=>'0x'+b.toString(16).padStart(2,'0'))},hypothesisId:'DECRYPT_FIX',timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    
-    // Nome do arquivo com formato correto
+
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
-    
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
-    
-    // Upload para Supabase Storage
-    const { data, error } = await supabase.storage
+
+    const { error } = await supabase.storage
       .from('chat-media')
-      .upload(fileName, mediaBuffer, {
-        contentType: contentType
-      });
-    
+      .upload(fileName, finalBuffer, { contentType });
+
     if (error) {
       console.error('❌ Erro no upload para Supabase:', error);
-      return originalUrl; // Fallback para URL original
+      return originalUrl;
     }
-    
-    // Retornar path do proxy autenticado (bucket privado — nunca usar getPublicUrl)
+
     const proxyPath = `/api/chat-media/${fileName}`;
     console.log('✅ PROCESSAMENTO CONCLUÍDO - PATH DO PROXY:', proxyPath);
     return proxyPath;
-    
+
   } catch (error) {
     console.error('❌ EXCEPTION no processamento de mídia:', error);
-    return originalUrl; // Fallback para URL original
+    return originalUrl;
   }
 }
 
