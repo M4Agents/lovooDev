@@ -1708,6 +1708,16 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
     }
   }, [resolvedSrc])
 
+  // Força o <audio> a recarregar quando resolvedSrc é definido.
+  // React atualiza o atributo src, mas não chama load() automaticamente
+  // quando o elemento estava em NETWORK_NO_SOURCE — sem isso play() falha.
+  useEffect(() => {
+    if (resolvedSrc && audioRef.current) {
+      audioRef.current.load()
+      console.log('[AudioPlayer] audio.load() chamado para resolvedSrc:', resolvedSrc.slice(0, 60))
+    }
+  }, [resolvedSrc])
+
   // Waveform visual - barras com alturas diferentes
   const waveformBars = [3, 6, 4, 8, 5, 7, 3, 6, 4, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 2]
 
