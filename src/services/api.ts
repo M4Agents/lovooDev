@@ -892,6 +892,18 @@ export const api = {
               field_label,
               field_type
             )
+          ),
+          lead_tag_assignments (
+            tag_id,
+            lead_tags (
+              id,
+              name,
+              color,
+              description,
+              is_active,
+              created_at,
+              updated_at
+            )
           )
         `)
         .eq('company_id', companyId)
@@ -980,9 +992,14 @@ export const api = {
       if (error) throw error;
 
       const leads = (data || []).map((lead: any) => {
-        if (!lead.is_over_plan) return lead;
+        const tags = (lead.lead_tag_assignments || [])
+          .map((a: any) => a.lead_tags)
+          .filter(Boolean);
+
+        if (!lead.is_over_plan) return { ...lead, tags };
         return {
           ...lead,
+          tags,
           phone: null,
           email: null,
           company_cnpj: null,

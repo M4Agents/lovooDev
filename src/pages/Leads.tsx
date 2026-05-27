@@ -40,6 +40,8 @@ import {
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
+import { TagBadge } from '../components/TagBadge';
+import type { Tag as LeadTag } from '../types/tags';
 
 interface Lead {
   id: number;
@@ -54,6 +56,7 @@ interface Lead {
   record_type?: string;
   created_at: string;
   updated_at: string;
+  tags?: LeadTag[];
   /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
   is_over_plan?: boolean;
   lead_custom_values?: Array<{
@@ -821,6 +824,9 @@ export const Leads: React.FC = () => {
                   Responsável
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tags
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Data
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -888,6 +894,25 @@ export const Leads: React.FC = () => {
                       const responsibleUser = companyUsers.find(u => u.id === lead.responsible_user_id);
                       return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
                     })()}
+                  </td>
+                  <td className="px-6 py-4">
+                    {lead.tags && lead.tags.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {lead.tags.slice(0, 3).map(tag => (
+                          <TagBadge key={tag.id} tag={tag} size="sm" />
+                        ))}
+                        {lead.tags.length > 3 && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+                            title={lead.tags.slice(3).map(t => t.name).join(', ')}
+                          >
+                            +{lead.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {formatDate(lead.created_at)}
