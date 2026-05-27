@@ -1644,8 +1644,18 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
   const [srcLoading, setSrcLoading] = useState(false)
 
   useEffect(() => {
-    const url = message.media_url
+    let url = message.media_url
     if (!url) { setResolvedSrc(null); return }
+
+    // Normaliza URLs antigas do bucket público para o proxy autenticado.
+    // Não altera banco, não faz backfill — apenas redireciona no frontend.
+    const SUPABASE_PUBLIC_CHAT_MEDIA = /\/storage\/v1\/object\/public\/chat-media\/(.+)/
+    const legacyMatch = url.match(SUPABASE_PUBLIC_CHAT_MEDIA)
+    if (legacyMatch) {
+      const filename = legacyMatch[1]
+      console.log('[AudioPlayer] URL legada detectada → redirecionando para proxy:', filename)
+      url = `/api/chat-media/${filename}`
+    }
 
     if (!url.startsWith('/api/chat-media/')) {
       console.log('[AudioPlayer] URL direta (não proxy):', url)
