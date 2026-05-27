@@ -1675,10 +1675,19 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
         headers: { Authorization: `Bearer ${session.access_token}` },
         redirect: 'follow',
       })
-        .then(res => {
-          console.log('[AudioPlayer] fetch resultado:', res.status, 'ok:', res.ok, 'url:', res.url)
-          if (res.ok) setResolvedSrc(res.url)
-          else console.error('[AudioPlayer] fetch falhou com status:', res.status)
+        .then(async res => {
+          console.log('[AudioPlayer] fetch resultado:', res.status, 'ok:', res.ok)
+          if (res.ok) {
+            // Criar Blob URL com MIME type correto para contornar Content-Type
+            // incorreto no storage (arquivos antigos gravados como image/jpeg).
+            const blob = await res.blob()
+            const audioBlob = new Blob([blob], { type: 'audio/ogg; codecs=opus' })
+            const blobUrl = URL.createObjectURL(audioBlob)
+            console.log('[AudioPlayer] Blob URL criada, tamanho:', blob.size)
+            setResolvedSrc(blobUrl)
+          } else {
+            console.error('[AudioPlayer] fetch falhou com status:', res.status)
+          }
         })
         .catch(err => {
           console.error('[AudioPlayer] fetch ERRO:', err)
@@ -1689,6 +1698,15 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
       setSrcLoading(false)
     })
   }, [message.media_url])
+
+  // Libera o Blob URL da memória ao desmontar ou quando resolvedSrc mudar.
+  useEffect(() => {
+    return () => {
+      if (resolvedSrc?.startsWith('blob:')) {
+        URL.revokeObjectURL(resolvedSrc)
+      }
+    }
+  }, [resolvedSrc])
 
   // Waveform visual - barras com alturas diferentes
   const waveformBars = [3, 6, 4, 8, 5, 7, 3, 6, 4, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 2]
