@@ -1426,11 +1426,15 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
     console.log('📦 Mídia baixada, tamanho:', mediaBuffer.byteLength, 'bytes');
     
     // Detectar formato via magic bytes (mais preciso que rawMediaType)
-    const detectedFormat = detectFormatByMagicBytes(bytes, response.headers.get('content-type'));
+    const detectedFormat = detectFormatByMagicBytes(bytes, response.headers.get('content-type'), rawMediaType);
     const extension = detectedFormat.extension;
     const contentType = detectedFormat.contentType;
     
     console.log('🔬 FORMATO DETECTADO:', { extension, contentType, rawMediaType });
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'uazapi-webhook-final.js:processMediaMessageRobust',message:'formato detectado para upload',data:{rawMediaType,extension,contentType,firstBytes:Array.from(bytes.slice(0,4)).map(b=>'0x'+b.toString(16).padStart(2,'0'))},hypothesisId:'OGG_FIX',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     
     // Nome do arquivo com formato correto
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
@@ -1464,15 +1468,23 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
 }
 
 // Função para detectar formato via magic bytes (mais precisa)
-function detectFormatByMagicBytes(bytes, responseContentType) {
+// rawMediaType é usado como desempate quando os bytes não identificam o formato
+function detectFormatByMagicBytes(bytes, responseContentType, rawMediaType) {
   console.log('🔬 DETECTANDO FORMATO VIA MAGIC BYTES:', {
     bufferLength: bytes.length,
     firstEightBytes: Array.from(bytes.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')),
-    responseContentType
+    responseContentType,
+    rawMediaType
   });
 
   // Magic bytes para diferentes formatos
-  if (bytes.length >= 8) {
+  if (bytes.length >= 4) {
+    // OGG/Opus: 4F 67 67 53 ("OggS")
+    if (bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+      console.log('✅ OGG/OPUS DETECTADO POR MAGIC BYTES!');
+      return { extension: 'ogg', contentType: 'audio/ogg' };
+    }
+
     // PNG: 89 50 4E 47 0D 0A 1A 0A
     if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
       console.log('✅ PNG DETECTADO POR MAGIC BYTES!');
@@ -1486,7 +1498,8 @@ function detectFormatByMagicBytes(bytes, responseContentType) {
     }
     
     // WebP: RIFF ... WEBP
-    if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    if (bytes.length >= 12 &&
+        bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
         bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
       console.log('✅ WEBP DETECTADO POR MAGIC BYTES!');
       return { extension: 'webp', contentType: 'image/webp' };
@@ -1529,7 +1542,19 @@ function detectFormatByMagicBytes(bytes, responseContentType) {
     }
   }
   
-  // Fallback final baseado no tipo bruto
-  console.log('⚠️ USANDO FALLBACK FINAL - NENHUM FORMATO DETECTADO');
-  return { extension: 'jpg', contentType: 'image/jpeg' };
+  // Fallback por rawMediaType — evita salvar áudio como imagem
+  const rawTypeMap = {
+    'ptt':   { extension: 'ogg', contentType: 'audio/ogg' },
+    'audio': { extension: 'ogg', contentType: 'audio/ogg' },
+    'video': { extension: 'mp4', contentType: 'video/mp4' },
+    'image': { extension: 'jpg', contentType: 'image/jpeg' },
+  };
+  if (rawMediaType && rawTypeMap[rawMediaType]) {
+    console.log('✅ FORMATO INFERIDO POR rawMediaType:', rawMediaType);
+    return rawTypeMap[rawMediaType];
+  }
+
+  // Último recurso: octet-stream (não image/jpeg para evitar confundir players)
+  console.log('⚠️ FORMATO DESCONHECIDO — usando application/octet-stream');
+  return { extension: 'bin', contentType: 'application/octet-stream' };
 }
