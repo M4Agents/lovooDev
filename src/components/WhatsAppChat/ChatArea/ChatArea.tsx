@@ -1640,14 +1640,35 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
   // Waveform visual - barras com alturas diferentes
   const waveformBars = [3, 6, 4, 8, 5, 7, 3, 6, 4, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 2]
 
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:AudioWhatsAppPlayer:mount',message:'player montado',data:{messageId:message.id,mediaUrl:message.media_url,messageType:message.message_type,hasSrc:!!message.media_url,srcEndsWithOgg:/\.ogg$/i.test(message.media_url||''),audioEl_src:audioRef.current?.src??'ref-not-ready'},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+  }, []);
+  // #endregion
+
   const handlePlayPause = () => {
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause()
+        setIsPlaying(false)
       } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:beforePlay',message:'play() chamado',data:{messageId:message.id,src:audioRef.current.src,networkState:audioRef.current.networkState,readyState:audioRef.current.readyState,error:audioRef.current.error?.message??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         audioRef.current.play()
+          .then(() => {
+            setIsPlaying(true)
+            // #region agent log
+            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playSuccess',message:'play() resolvido com sucesso',data:{messageId:message.id,src:audioRef.current?.src},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          })
+          .catch((err: Error) => {
+            setIsPlaying(false)
+            // #region agent log
+            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playError',message:'play() REJEITADO',data:{messageId:message.id,src:audioRef.current?.src,errorName:err.name,errorMessage:err.message,networkState:audioRef.current?.networkState,readyState:audioRef.current?.readyState,mediaError:audioRef.current?.error?.code??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          })
       }
-      setIsPlaying(!isPlaying)
     }
   }
 
