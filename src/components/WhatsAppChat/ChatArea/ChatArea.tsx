@@ -1637,6 +1637,34 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
   const [duration, setDuration] = useState(0)
   const audioRef = useRef<HTMLAudioElement>(null)
 
+  // Resolve /api/chat-media/ paths para signed URLs antes de setar o src.
+  // O <audio src> não envia headers de auth, então fazemos fetch autenticado
+  // aqui, seguimos o redirect 302 e usamos response.url (a signed URL) como src.
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
+  const [srcLoading, setSrcLoading] = useState(false)
+
+  useEffect(() => {
+    const url = message.media_url
+    if (!url) { setResolvedSrc(null); return }
+
+    if (!url.startsWith('/api/chat-media/')) {
+      setResolvedSrc(url)
+      return
+    }
+
+    setSrcLoading(true)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { setSrcLoading(false); return }
+      fetch(url, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        redirect: 'follow',
+      })
+        .then(res => { if (res.ok) setResolvedSrc(res.url) })
+        .catch(() => {})
+        .finally(() => setSrcLoading(false))
+    })
+  }, [message.media_url])
+
   // Waveform visual - barras com alturas diferentes
   const waveformBars = [3, 6, 4, 8, 5, 7, 3, 6, 4, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 2]
 
@@ -1653,7 +1681,7 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
         setIsPlaying(false)
       } else {
         // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:beforePlay',message:'play() chamado',data:{messageId:message.id,src:audioRef.current.src,networkState:audioRef.current.networkState,readyState:audioRef.current.readyState,error:audioRef.current.error?.message??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:beforePlay',message:'play() chamado',data:{messageId:message.id,src:audioRef.current.src,resolvedSrc,networkState:audioRef.current.networkState,readyState:audioRef.current.readyState,error:audioRef.current.error?.message??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         audioRef.current.play()
           .then(() => {
@@ -1665,7 +1693,7 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
           .catch((err: Error) => {
             setIsPlaying(false)
             // #region agent log
-            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playError',message:'play() REJEITADO',data:{messageId:message.id,src:audioRef.current?.src,errorName:err.name,errorMessage:err.message,networkState:audioRef.current?.networkState,readyState:audioRef.current?.readyState,mediaError:audioRef.current?.error?.code??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playError',message:'play() REJEITADO',data:{messageId:message.id,src:audioRef.current?.src,resolvedSrc,errorName:err.name,errorMessage:err.message,networkState:audioRef.current?.networkState,readyState:audioRef.current?.readyState,mediaError:audioRef.current?.error?.code??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
             // #endregion
           })
       }
@@ -1713,11 +1741,17 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
             <button 
               type="button"
               onClick={handlePlayPause}
+              disabled={srcLoading || !resolvedSrc}
               aria-label={isPlaying ? t('message.actions.pause') : t('message.actions.play')}
               title={isPlaying ? t('message.actions.pause') : t('message.actions.play')}
-              className="w-8 h-8 bg-[#34b7f1] hover:bg-[#2da5e0] rounded-full flex items-center justify-center transition-colors"
+              className="w-8 h-8 bg-[#34b7f1] hover:bg-[#2da5e0] rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isPlaying ? (
+              {srcLoading ? (
+                <svg className="w-3 h-3 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                </svg>
+              ) : isPlaying ? (
                 <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M5.5 3.5A1.5 1.5 0 017 2h6a1.5 1.5 0 011.5 1.5v13a1.5 1.5 0 01-1.5 1.5H7A1.5 1.5 0 015.5 16.5v-13z"/>
                 </svg>
@@ -1775,7 +1809,7 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
       {/* Audio element oculto */}
       <audio
         ref={audioRef}
-        src={message.media_url}
+        src={resolvedSrc ?? undefined}
         aria-label={t('message.labels.audio')}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}

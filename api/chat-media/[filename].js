@@ -1,118 +1,93 @@
-import { createClient } from '@supabase/supabase-js'
-import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs'
+// =====================================================
+// GET /api/chat-media/[filename]
+//
+// Proxy autenticado para arquivos do bucket privado chat-media.
+// Valida Bearer token, verifica membership do usuário na empresa
+// dona da mensagem (Trilha 1), gera signed URL temporária e redireciona.
+//
+// Segurança:
+//   - service_role apenas para queries admin e storage
+//   - Nunca expor signed URL sem validar membership
+//   - Bucket permanece privado
+// =====================================================
+
+import { createClient }    from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 
 export default async function handler(req, res) {
-  console.log('🔍 ENDPOINT CHAT-MEDIA CHAMADO:', {
-    method: req.method,
-    filename: req.query.filename,
-    userAgent: req.headers['user-agent'],
-    timestamp: new Date().toISOString()
-  })
-
   if (req.method !== 'GET') {
-    console.log('❌ MÉTODO NÃO PERMITIDO:', req.method)
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res.status(405).json({ error: 'Método não permitido' })
   }
 
   const { filename } = req.query
-
   if (!filename) {
-    console.log('❌ FILENAME AUSENTE')
-    return res.status(400).json({ error: 'Filename is required' })
+    return res.status(400).json({ error: 'Filename é obrigatório' })
   }
 
-  try {
-    console.log('🔐 TENTANDO AUTENTICAÇÃO VIA COOKIES...')
-    
-    // Criar cliente Supabase com autenticação via cookies
-    const supabase = createServerSupabaseClient({ req, res })
-    
-    // Verificar autenticação do usuário
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    console.log('👤 RESULTADO AUTENTICAÇÃO:', {
-      hasUser: !!user,
-      userId: user?.id,
-      authError: authError?.message
-    })
-    
-    if (authError || !user) {
-      console.log('❌ FALHA NA AUTENTICAÇÃO')
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    console.log('🏢 BUSCANDO COMPANY_ID DO USUÁRIO...')
-    
-    // Buscar company_id do usuário
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('company_id')
-      .eq('id', user.id)
-      .single()
-
-    console.log('🏢 RESULTADO COMPANY_ID:', {
-      hasUserData: !!userData,
-      companyId: userData?.company_id,
-      userError: userError?.message
-    })
-
-    if (userError || !userData) {
-      console.log('❌ USUÁRIO NÃO ENCONTRADO')
-      return res.status(403).json({ error: 'User not found' })
-    }
-
-    const companyId = userData.company_id
-
-    console.log('📁 VERIFICANDO PERMISSÃO DO ARQUIVO:', filename)
-    
-    // Verificar se o arquivo pertence à empresa do usuário
-    const { data: messageData, error: messageError } = await supabase
-      .from('chat_messages')
-      .select('company_id')
-      .eq('media_url', filename)
-      .eq('company_id', companyId)
-      .single()
-
-    console.log('📁 RESULTADO VERIFICAÇÃO:', {
-      hasMessageData: !!messageData,
-      messageError: messageError?.message
-    })
-
-    if (messageError || !messageData) {
-      console.log('❌ ARQUIVO NÃO ENCONTRADO OU SEM PERMISSÃO')
-      return res.status(403).json({ error: 'File not found or access denied' })
-    }
-
-    console.log('🔗 GERANDO SIGNED URL...')
-    
-    // Criar cliente com service role para storage operations
-    const storageClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
-
-    // Gerar signed URL (válida por 2 horas)
-    const { data: signedUrlData, error: signedUrlError } = await storageClient.storage
-      .from('chat-media')
-      .createSignedUrl(filename, 7200) // 2 horas = 7200 segundos
-
-    console.log('🔗 RESULTADO SIGNED URL:', {
-      hasSignedUrl: !!signedUrlData?.signedUrl,
-      signedUrlError: signedUrlError?.message
-    })
-
-    if (signedUrlError || !signedUrlData) {
-      console.log('❌ FALHA AO GERAR SIGNED URL')
-      return res.status(500).json({ error: 'Failed to generate signed URL' })
-    }
-
-    console.log('✅ REDIRECIONANDO PARA SIGNED URL')
-    
-    // Redirecionar para a URL assinada
-    res.redirect(302, signedUrlData.signedUrl)
-
-  } catch (error) {
-    console.error('Error in chat-media endpoint:', error)
-    return res.status(500).json({ error: 'Internal server error' })
+  // ── 1. Extrair e validar Bearer token ──────────────────────────────────────
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token não fornecido' })
   }
+  const token = authHeader.slice(7).trim()
+  if (!token) {
+    return res.status(401).json({ error: 'Token inválido' })
+  }
+
+  const supabaseUrl  = process.env.VITE_SUPABASE_URL       ?? ''
+  const supabaseAnon = process.env.VITE_SUPABASE_ANON_KEY  ?? ''
+  if (!supabaseUrl || !supabaseAnon) {
+    return res.status(500).json({ error: 'Configuração de servidor incompleta' })
+  }
+
+  const caller = createClient(supabaseUrl, supabaseAnon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth:   { persistSession: false, autoRefreshToken: false },
+  })
+
+  const { data: { user }, error: authError } = await caller.auth.getUser()
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Token inválido ou expirado' })
+  }
+
+  const svc = getSupabaseAdmin()
+
+  // ── 2. Localizar mensagem e obter company_id ────────────────────────────────
+  const mediaUrlKey = `/api/chat-media/${filename}`
+
+  const { data: message, error: msgError } = await svc
+    .from('chat_messages')
+    .select('company_id')
+    .eq('media_url', mediaUrlKey)
+    .maybeSingle()
+
+  if (msgError || !message) {
+    return res.status(403).json({ error: 'Arquivo não encontrado ou sem permissão' })
+  }
+
+  // ── 3. Validar membership ativo (Trilha 1) ──────────────────────────────────
+  const { data: member } = await svc
+    .from('company_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('company_id', message.company_id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (!member) {
+    return res.status(403).json({ error: 'Acesso negado' })
+  }
+
+  // ── 4. Gerar signed URL via service_role (válida por 1 hora) ───────────────
+  const { data: signedUrlData, error: signedUrlError } = await svc.storage
+    .from('chat-media')
+    .createSignedUrl(filename, 3600)
+
+  if (signedUrlError || !signedUrlData?.signedUrl) {
+    console.error('[chat-media] Falha ao gerar signed URL:', signedUrlError?.message)
+    return res.status(500).json({ error: 'Falha ao gerar URL de acesso' })
+  }
+
+  // ── 5. Redirecionar para a signed URL ──────────────────────────────────────
+  return res.redirect(302, signedUrlData.signedUrl)
 }

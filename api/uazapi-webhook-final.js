@@ -1453,13 +1453,10 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
       return originalUrl; // Fallback para URL original
     }
     
-    // Retornar URL pública estável
-    const { data: publicUrl } = supabase.storage
-      .from('chat-media')
-      .getPublicUrl(fileName);
-    
-    console.log('✅ PROCESSAMENTO CONCLUÍDO - URL PERMANENTE:', publicUrl.publicUrl.substring(0, 80) + '...');
-    return publicUrl.publicUrl;
+    // Retornar path do proxy autenticado (bucket privado — nunca usar getPublicUrl)
+    const proxyPath = `/api/chat-media/${fileName}`;
+    console.log('✅ PROCESSAMENTO CONCLUÍDO - PATH DO PROXY:', proxyPath);
+    return proxyPath;
     
   } catch (error) {
     console.error('❌ EXCEPTION no processamento de mídia:', error);
