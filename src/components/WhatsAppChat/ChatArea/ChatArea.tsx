@@ -1678,12 +1678,27 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
         .then(async res => {
           console.log('[AudioPlayer] fetch resultado:', res.status, 'ok:', res.ok)
           if (res.ok) {
-            // Criar Blob URL com MIME type correto para contornar Content-Type
-            // incorreto no storage (arquivos antigos gravados como image/jpeg).
-            const blob = await res.blob()
-            const audioBlob = new Blob([blob], { type: 'audio/ogg; codecs=opus' })
+            // Detecta o formato real pelos magic bytes para usar o MIME type correto.
+            // Forçar audio/ogg sem verificar os bytes faz o browser rejeitar
+            // arquivos que não são OGG válido (ex: salvos com extensão errada).
+            const arrayBuffer = await res.arrayBuffer()
+            const bytes = new Uint8Array(arrayBuffer.slice(0, 4))
+            const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+
+            let mimeType = 'audio/ogg'
+            if (bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+              mimeType = 'audio/ogg'                   // OGG: "OggS"
+            } else if (bytes[0] === 0x1A && bytes[1] === 0x45 && bytes[2] === 0xDF && bytes[3] === 0xA3) {
+              mimeType = 'audio/webm'                  // WebM/MKV
+            } else if (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) {
+              mimeType = 'audio/mpeg'                  // MP3 frame sync
+            } else if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+              mimeType = 'audio/mpeg'                  // MP3 com header ID3
+            }
+
+            console.log('[AudioPlayer] magic bytes:', hex, '→ mimeType:', mimeType, 'tamanho:', arrayBuffer.byteLength)
+            const audioBlob = new Blob([arrayBuffer], { type: mimeType })
             const blobUrl = URL.createObjectURL(audioBlob)
-            console.log('[AudioPlayer] Blob URL criada, tamanho:', blob.size)
             setResolvedSrc(blobUrl)
           } else {
             console.error('[AudioPlayer] fetch falhou com status:', res.status)
