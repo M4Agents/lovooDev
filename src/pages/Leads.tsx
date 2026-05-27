@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -14,6 +14,7 @@ import { ImportLeadsModal } from '../components/ImportLeadsModal';
 import { DuplicateNotifications } from '../components/DuplicateNotifications';
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import { TagsManagementModal } from '../components/TagsManagementModal';
+import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
 import {
   Users,
@@ -34,7 +35,8 @@ import {
   FileText,
   FileSpreadsheet,
   Tag,
-  ArrowDownUp
+  ArrowDownUp,
+  X
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
@@ -116,6 +118,12 @@ export const Leads: React.FC = () => {
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
 
+  // Filtro de tags (AND)
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const { tags: availableTags } = useAvailableTags(company?.id);
+
 
   useEffect(() => {
     if (company?.id) {
@@ -158,6 +166,18 @@ export const Leads: React.FC = () => {
     
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showExportDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target as Node)) {
+        setTagDropdownOpen(false);
+      }
+    };
+    if (tagDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [tagDropdownOpen]);
 
   const getDateRange = (filter: string, start: string, end: string) => {
     const now = new Date();
@@ -222,12 +242,13 @@ export const Leads: React.FC = () => {
     return labels[filter] ?? 'Período selecionado';
   };
 
-  const loadData = async () => {
+  const loadData = async (overrides?: { tagIds?: string[] }) => {
     if (!company?.id) return;
     
     try {
       setLoading(true);
       const dateRange = getDateRange(dateFilter, startDate, endDate) ?? undefined;
+      const effectiveTagIds = overrides?.tagIds ?? tagFilter;
 
       const [leadsData, statsData] = await Promise.all([
         api.getLeads(company.id, {
@@ -236,6 +257,7 @@ export const Leads: React.FC = () => {
           origin: originFilter || undefined,
           responsible_user_id: responsibleFilter || undefined,
           dateRange,
+          tag_ids: effectiveTagIds.length > 0 ? effectiveTagIds : undefined,
           limit: 100
         }),
         api.getLeadStats(company.id, dateRange)
@@ -287,10 +309,24 @@ export const Leads: React.FC = () => {
     setStatusFilter('');
     setOriginFilter('');
     setResponsibleFilter('');
+    setTagFilter([]);
     setDateFilter('all');
     setStartDate('');
     setEndDate('');
-    loadData();
+    loadData({ tagIds: [] });
+  };
+
+  const addTagFilter = (tagId: string) => {
+    const newFilter = [...tagFilter, tagId];
+    setTagFilter(newFilter);
+    setTagDropdownOpen(false);
+    loadData({ tagIds: newFilter });
+  };
+
+  const removeTagFilter = (tagId: string) => {
+    const newFilter = tagFilter.filter(id => id !== tagId);
+    setTagFilter(newFilter);
+    loadData({ tagIds: newFilter });
   };
 
   const handleCreateLead = () => {
@@ -699,6 +735,68 @@ export const Leads: React.FC = () => {
             Filtrar
           </button>
         </div>
+
+        {/* Filtro por Tags (AND) */}
+        {availableTags.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500 whitespace-nowrap flex items-center gap-1">
+              <Tag className="w-3.5 h-3.5" />
+              Tags:
+            </span>
+
+            {tagFilter.map(tagId => {
+              const tag = availableTags.find(t => t.id === tagId);
+              if (!tag) return null;
+              return (
+                <span
+                  key={tagId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                  style={{ backgroundColor: `${tag.color}22`, color: tag.color, border: `1px solid ${tag.color}66` }}
+                >
+                  {tag.name}
+                  <button onClick={() => removeTagFilter(tagId)} className="ml-0.5 hover:opacity-70 transition-opacity">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {availableTags.some(t => !tagFilter.includes(t.id)) && (
+              <div className="relative" ref={tagDropdownRef}>
+                <button
+                  onClick={() => setTagDropdownOpen(prev => !prev)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs border border-dashed border-gray-300 rounded-full text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  {tagFilter.length === 0 ? 'Filtrar por tag' : 'Adicionar tag'}
+                </button>
+
+                {tagDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] max-h-48 overflow-y-auto">
+                    {availableTags
+                      .filter(t => !tagFilter.includes(t.id))
+                      .map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => addTagFilter(tag.id)}
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: tag.color }} />
+                          <span className="truncate">{tag.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tagFilter.length > 1 && (
+              <span className="text-xs text-gray-400 italic">
+                (mostrando leads com todas as {tagFilter.length} tags)
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Leads Table */}

@@ -873,6 +873,7 @@ export const api = {
     email?: string;
     responsible_user_id?: string;
     dateRange?: { start: string; end: string };
+    tag_ids?: string[];
     limit?: number;
     offset?: number;
   }) {
@@ -936,6 +937,34 @@ export const api = {
         query = query
           .gte('created_at', filters.dateRange.start)
           .lte('created_at', filters.dateRange.end);
+      }
+
+      // FILTRO POR TAGS (AND: lead deve ter TODAS as tags selecionadas)
+      if (filters?.tag_ids && filters.tag_ids.length > 0) {
+        const tagIds = filters.tag_ids;
+
+        const { data: assignments, error: tagError } = await supabase
+          .from('lead_tag_assignments')
+          .select('lead_id, tag_id')
+          .in('tag_id', tagIds);
+
+        if (tagError) throw tagError;
+
+        if (!assignments || assignments.length === 0) return [];
+
+        const leadTagMap = new Map<number, Set<string>>();
+        for (const a of assignments) {
+          if (!leadTagMap.has(a.lead_id)) leadTagMap.set(a.lead_id, new Set());
+          leadTagMap.get(a.lead_id)!.add(a.tag_id);
+        }
+
+        const qualifyingIds = Array.from(leadTagMap.entries())
+          .filter(([, tagSet]) => tagIds.every(tid => tagSet.has(tid)))
+          .map(([leadId]) => leadId);
+
+        if (qualifyingIds.length === 0) return [];
+
+        query = query.in('id', qualifyingIds);
       }
 
       if (filters?.limit) {
