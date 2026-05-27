@@ -1648,20 +1648,35 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
     if (!url) { setResolvedSrc(null); return }
 
     if (!url.startsWith('/api/chat-media/')) {
+      console.log('[AudioPlayer] URL direta (não proxy):', url)
       setResolvedSrc(url)
       return
     }
 
+    console.log('[AudioPlayer] Resolvendo proxy URL:', url)
     setSrcLoading(true)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { setSrcLoading(false); return }
+      if (!session) {
+        console.warn('[AudioPlayer] Sem sessão ativa — resolvedSrc ficará null')
+        setSrcLoading(false)
+        return
+      }
       fetch(url, {
         headers: { Authorization: `Bearer ${session.access_token}` },
         redirect: 'follow',
       })
-        .then(res => { if (res.ok) setResolvedSrc(res.url) })
-        .catch(() => {})
+        .then(res => {
+          console.log('[AudioPlayer] fetch resultado:', res.status, 'ok:', res.ok, 'url:', res.url)
+          if (res.ok) setResolvedSrc(res.url)
+          else console.error('[AudioPlayer] fetch falhou com status:', res.status)
+        })
+        .catch(err => {
+          console.error('[AudioPlayer] fetch ERRO:', err)
+        })
         .finally(() => setSrcLoading(false))
+    }).catch(err => {
+      console.error('[AudioPlayer] getSession ERRO:', err)
+      setSrcLoading(false)
     })
   }, [message.media_url])
 
@@ -1670,30 +1685,33 @@ const AudioWhatsAppPlayer: React.FC<AudioWhatsAppPlayerProps> = ({
 
   // #region agent log
   useEffect(() => {
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:AudioWhatsAppPlayer:mount',message:'player montado',data:{messageId:message.id,mediaUrl:message.media_url,messageType:message.message_type,hasSrc:!!message.media_url,srcEndsWithOgg:/\.ogg$/i.test(message.media_url||''),audioEl_src:audioRef.current?.src??'ref-not-ready'},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+    console.log('[AudioPlayer] montado — mediaUrl:', message.media_url, 'type:', message.message_type)
   }, []);
   // #endregion
 
   const handlePlayPause = () => {
+    // #region agent log
+    console.log('[AudioPlayer] handlePlayPause — resolvedSrc:', resolvedSrc, 'srcLoading:', srcLoading, 'audioRef:', !!audioRef.current)
+    // #endregion
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause()
         setIsPlaying(false)
       } else {
         // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:beforePlay',message:'play() chamado',data:{messageId:message.id,src:audioRef.current.src,resolvedSrc,networkState:audioRef.current.networkState,readyState:audioRef.current.readyState,error:audioRef.current.error?.message??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+        console.log('[AudioPlayer] play() chamado — src:', audioRef.current.src, 'networkState:', audioRef.current.networkState, 'readyState:', audioRef.current.readyState)
         // #endregion
         audioRef.current.play()
           .then(() => {
             setIsPlaying(true)
             // #region agent log
-            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playSuccess',message:'play() resolvido com sucesso',data:{messageId:message.id,src:audioRef.current?.src},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+            console.log('[AudioPlayer] play() OK')
             // #endregion
           })
           .catch((err: Error) => {
             setIsPlaying(false)
             // #region agent log
-            fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'ChatArea.tsx:handlePlayPause:playError',message:'play() REJEITADO',data:{messageId:message.id,src:audioRef.current?.src,resolvedSrc,errorName:err.name,errorMessage:err.message,networkState:audioRef.current?.networkState,readyState:audioRef.current?.readyState,mediaError:audioRef.current?.error?.code??null},hypothesisId:'AUDIO_SRC',timestamp:Date.now()})}).catch(()=>{});
+            console.error('[AudioPlayer] play() REJEITADO:', err.name, err.message, 'networkState:', audioRef.current?.networkState, 'readyState:', audioRef.current?.readyState, 'mediaError:', audioRef.current?.error?.code)
             // #endregion
           })
       }
