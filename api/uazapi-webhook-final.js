@@ -626,7 +626,7 @@ async function processMessage(payload) {
             const detectedContentType = S3Storage.detectContentType(finalBuffer, 'media');
             const contentType = payloadMimetype || detectedContentType;
             
-            const extension = contentType.split('/')[1] || 'bin';
+            const extension = (contentType.split('/')[1] || 'bin').split(';')[0].trim();
             const fileName = `whatsapp_${Date.now()}_${message.id.substring(0, 8)}.${extension}`;
             
             console.error('🎯 CORREÇÃO FORMATO:', { 
