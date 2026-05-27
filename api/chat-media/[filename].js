@@ -24,6 +24,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Filename é obrigatório' })
   }
 
+  // Bloqueia path traversal e caracteres inválidos
+  if (!/^[\w\-.]+$/.test(filename)) {
+    return res.status(400).json({ error: 'Filename inválido' })
+  }
+
   // ── 1. Extrair e validar Bearer token ──────────────────────────────────────
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -52,13 +57,12 @@ export default async function handler(req, res) {
 
   const svc = getSupabaseAdmin()
 
-  // ── 2. Localizar mensagem e obter company_id ────────────────────────────────
-  const mediaUrlKey = `/api/chat-media/${filename}`
-
+  // Aceita tanto o formato novo (/api/chat-media/FILE) quanto o legado
+  // (https://...supabase.co/storage/v1/object/public/chat-media/FILE).
   const { data: message, error: msgError } = await svc
     .from('chat_messages')
     .select('company_id')
-    .eq('media_url', mediaUrlKey)
+    .like('media_url', `%/chat-media/${filename}`)
     .maybeSingle()
 
   if (msgError || !message) {
