@@ -45,6 +45,7 @@ interface ParsedLead {
   company_email?: string;
   company_site?: string;
   tags?: string;
+  responsible_user_email?: string;
   [key: string]: any;
 }
 
@@ -322,6 +323,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.company_site = value;
           } else if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
             lead.name = value;
+          } else if (lowerHeader === 'responsible_user_email' ||
+                     lowerHeader === 'responsavel_email' ||
+                     lowerHeader === 'responsável_email' ||
+                     lowerHeader === 'email_responsavel' ||
+                     lowerHeader === 'email_responsável') {
+            lead.responsible_user_email = value;
           } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
             lead.email = value;
           } else if (lowerHeader.includes('telefone') || lowerHeader.includes('phone') || lowerHeader.includes('celular')) {
@@ -438,7 +445,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
              lowerHeader.includes('telefone') || lowerHeader.includes('phone') || lowerHeader.includes('celular') ||
              lowerHeader.includes('origem') || lowerHeader.includes('origin') ||
              lowerHeader.includes('status') ||
-             lowerHeader.includes('interesse') || lowerHeader.includes('interest');
+             lowerHeader.includes('interesse') || lowerHeader.includes('interest') ||
+             lowerHeader === 'responsible_user_email' ||
+             lowerHeader === 'responsavel_email' ||
+             lowerHeader === 'responsável_email' ||
+             lowerHeader === 'email_responsavel' ||
+             lowerHeader === 'email_responsável';
     };
     
     const isNumericId = (header: string) => /^\d+$/.test(header);
@@ -502,6 +514,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.company_site = value;
         } else if (lowerHeader === 'nome' || lowerHeader === 'name') {
           lead.name = value;
+        } else if (lowerHeader === 'responsible_user_email' ||
+                   lowerHeader === 'responsavel_email' ||
+                   lowerHeader === 'responsável_email' ||
+                   lowerHeader === 'email_responsavel' ||
+                   lowerHeader === 'email_responsável') {
+          lead.responsible_user_email = value;
         } else if (lowerHeader.includes('email') || lowerHeader.includes('e-mail')) {
           lead.email = value;
         } else if (lowerHeader.includes('telefone') || lowerHeader.includes('phone') || lowerHeader.includes('celular')) {
@@ -568,6 +586,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           company_telefone:      lead.company_telefone      || undefined,
           company_email:         lead.company_email         || undefined,
           company_site:          lead.company_site          || undefined,
+          responsible_user_email: lead.responsible_user_email || undefined,
         };
 
         // Campos personalizados mapeados via UI (custom_<uuid>)
@@ -616,11 +635,11 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
 
   const downloadTemplate = () => {
     // Template usa vírgula (,) mas sistema aceita ponto e vírgula (;) automaticamente
-    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,1,2,3\n' +
-                      'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
-                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
-                      'Pedro Costa,pedro@email.com,5511987654321,indicacao,novo,Consultoria,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo",,,';
-
+    // responsible_user_email é opcional: preencher com o email do responsável cadastrado na plataforma
+    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,responsible_user_email,1,2,3\n' +
+                      'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",responsavel@empresa.com,Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
+                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
+                      'Pedro Costa,pedro@email.com,5511987654321,indicacao,novo,Consultoria,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo",vendedor@empresa.com,,,';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
