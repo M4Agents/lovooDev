@@ -263,7 +263,7 @@ export const Leads: React.FC = () => {
           tag_ids: effectiveTagIds.length > 0 ? effectiveTagIds : undefined,
           limit: 100
         }),
-        api.getLeadStats(company.id, dateRange)
+        api.getLeadStats(company.id, dateRange, effectiveTagIds.length > 0 ? effectiveTagIds : undefined)
       ]);
       
       setLeads(leadsData);

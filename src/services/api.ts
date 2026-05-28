@@ -1360,13 +1360,15 @@ export const api = {
 
   async getLeadStats(
     companyId: string,
-    dateRange?: { start: string; end: string }
+    dateRange?: { start: string; end: string },
+    tagIds?: string[]
   ): Promise<{ totalLeads: number; totalEntries: number }> {
     try {
       const { data, error } = await supabase.rpc('get_lead_dashboard_stats', {
         p_company_id: companyId,
         p_start_date: dateRange?.start ?? null,
-        p_end_date: dateRange?.end ?? null,
+        p_end_date:   dateRange?.end   ?? null,
+        p_tag_ids:    tagIds?.length   ? tagIds : null,
       });
 
       if (error) throw error;
