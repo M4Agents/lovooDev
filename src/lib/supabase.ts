@@ -35,6 +35,8 @@ export type Company = {
   country_code?: string | null;
   /** Escopo de dispensa de alertas do dashboard: 'company' = compartilhada, 'user' = individual */
   alert_dismissal_scope?: 'company' | 'user';
+  /** Quando true, usuários sem view_all_leads só veem leads atribuídos a eles (enforcement via RLS) */
+  restrict_leads_to_owner?: boolean;
   created_at: string;
   updated_at: string;
   

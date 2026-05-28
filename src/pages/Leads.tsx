@@ -78,7 +78,7 @@ interface LeadStats {
 
 export const Leads: React.FC = () => {
   const { company } = useAuth();
-  const { canViewLead, canEditLead, canDeleteLead } = useLeadPermissions();
+  const { canViewLead, canEditLead, canDeleteLead, isRestrictedToOwnLeads } = useLeadPermissions();
   const { canImportLeads } = useAccessControl();
   const { leadStats } = usePlanLeadStats(company?.id);
 
@@ -716,6 +716,8 @@ export const Leads: React.FC = () => {
             <option value="webhook_ultra_simples">Webhook</option>
           </select>
 
+          {/* Dropdown de responsável: oculto para usuários restritos aos próprios leads */}
+          {!isRestrictedToOwnLeads() && (
           <select
             value={responsibleFilter}
             onChange={(e) => setResponsibleFilter(e.target.value)}
@@ -729,6 +731,7 @@ export const Leads: React.FC = () => {
               </option>
             ))}
           </select>
+          )}
 
           <button
             onClick={handleSearch}
@@ -738,6 +741,14 @@ export const Leads: React.FC = () => {
             Filtrar
           </button>
         </div>
+
+        {/* Indicador visual: restrição de leads por responsável ativa */}
+        {isRestrictedToOwnLeads() && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 w-fit">
+            <Filter className="w-3.5 h-3.5 shrink-0" />
+            Visualizando apenas leads atribuídos a você
+          </div>
+        )}
 
         {/* Filtro por Tags (AND) */}
         {availableTags.length > 0 && (

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Clock, Save, Coins, Globe2, Bell, ShoppingBag } from 'lucide-react'
+import { Clock, Save, Coins, Globe2, Bell, ShoppingBag, Users } from 'lucide-react'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { TimezoneSelector } from './TimezoneSelector'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
@@ -57,6 +57,11 @@ export const SystemSettings: React.FC = () => {
   )
   const [catalogItemsPlanOk, setCatalogItemsPlanOk] = useState(false)
 
+  // Restrição de leads por responsável
+  const [restrictLeadsToOwner, setRestrictLeadsToOwner] = useState(
+    company?.restrict_leads_to_owner ?? false
+  )
+
   const commonTimezones = useMemo(
     () =>
       COMMON_TIMEZONE_DEFS.map((def) => ({
@@ -74,6 +79,7 @@ export const SystemSettings: React.FC = () => {
     setCountryCode((company.country_code ?? '').trim())
     setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
     setUseCatalogItems(company.opportunity_items_enabled ?? false)
+    setRestrictLeadsToOwner(company.restrict_leads_to_owner ?? false)
   }, [company])
 
   // Verifica suporte do plano para composição por itens (uma vez por empresa)
@@ -114,6 +120,7 @@ export const SystemSettings: React.FC = () => {
           default_currency: defaultCurrency,
           country_code: normalizedCountry,
           opportunity_items_enabled: useCatalogItems,
+          restrict_leads_to_owner: restrictLeadsToOwner,
           updated_at: new Date().toISOString(),
         })
         .eq('id', company.id)
@@ -161,6 +168,7 @@ export const SystemSettings: React.FC = () => {
     defaultCurrency !== (company?.default_currency ?? 'BRL') ||
     (normalizedCountry ?? '') !== (companyCountryNorm ?? '') ||
     useCatalogItems !== (company?.opportunity_items_enabled ?? false) ||
+    restrictLeadsToOwner !== (company?.restrict_leads_to_owner ?? false) ||
     (isMaster && alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company'))
 
   const groupedCommonTimezones = commonTimezones.reduce((groups, tz) => {
@@ -396,6 +404,40 @@ export const SystemSettings: React.FC = () => {
 
       </div>
 
+      {/* Restrição de leads por responsável */}
+      <div className="border-t pt-6">
+        <div className="flex items-center gap-3 mb-2">
+          <Users className="w-6 h-6 text-indigo-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Acesso a Leads</h3>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Controle de visibilidade de leads por usuário responsável.
+        </p>
+        <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-900">Restringir leads por responsável</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Quando ativado, usuários sem permissão <span className="font-mono bg-gray-100 px-1 rounded">view_all_leads</span> visualizam apenas os leads atribuídos a eles.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRestrictLeadsToOwner(v => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+              restrictLeadsToOwner ? 'bg-indigo-600' : 'bg-gray-200'
+            }`}
+            role="switch"
+            aria-checked={restrictLeadsToOwner}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                restrictLeadsToOwner ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
       {/* Botão Salvar */}
       <div className="flex gap-3">
         <button
@@ -415,6 +457,7 @@ export const SystemSettings: React.FC = () => {
               setCountryCode((company?.country_code ?? '').trim())
               setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
               setUseCatalogItems(company?.opportunity_items_enabled ?? false)
+              setRestrictLeadsToOwner(company?.restrict_leads_to_owner ?? false)
             }}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
