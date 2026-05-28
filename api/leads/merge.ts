@@ -13,7 +13,9 @@
 //   • JWT validado via getUserFromToken (anon key + Authorization header)
 //   • Membership validado via assertMembership (Trilha 1 + Trilha 2 parent admin)
 //   • company_id resolvido a partir do lead (não confiado do payload)
-//   • RBAC: admin / system_admin / super_admin apenas
+//   • RBAC: admin/system_admin/super_admin podem mesclar qualquer lead da empresa
+//   • Roles não-admin (ex: seller): pode mesclar apenas se AMBOS os leads estão
+//     atribuídos ao próprio usuário (responsible_user_id = user.id)
 //   • service_role para chamar a RPC (bypass de RLS necessário para SECURITY DEFINER)
 // =====================================================
 
@@ -55,21 +57,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return jsonError(res, 400, 'Estratégia inválida')
   }
 
-  // ── 3. Resolver company_id a partir do lead (não confiar no payload) ───────
+  // ── 3. Resolver company_id e responsible_user_id a partir dos leads ─────────
   const svc = getSupabaseAdmin()
 
-  const { data: sourceLead, error: leadError } = await svc
-    .from('leads')
-    .select('id, company_id')
-    .eq('id', sourceId)
-    .is('deleted_at', null)
-    .maybeSingle()
+  const [sourceResult, targetResult] = await Promise.all([
+    svc
+      .from('leads')
+      .select('id, company_id, responsible_user_id')
+      .eq('id', sourceId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+    svc
+      .from('leads')
+      .select('id, company_id, responsible_user_id')
+      .eq('id', targetId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+  ])
 
-  if (leadError || !sourceLead) {
+  if (sourceResult.error || !sourceResult.data) {
     return jsonError(res, 404, 'Lead de origem não encontrado')
   }
+  if (targetResult.error || !targetResult.data) {
+    return jsonError(res, 404, 'Lead de destino não encontrado')
+  }
 
-  const companyId = sourceLead.company_id as string
+  const sourceLead = sourceResult.data as { id: number; company_id: string; responsible_user_id: string | null }
+  const targetLead = targetResult.data as { id: number; company_id: string; responsible_user_id: string | null }
+  const companyId = sourceLead.company_id
 
   // ── 4. Autorização: membership + RBAC ─────────────────────────────────────
   const { data: member } = await svc
@@ -107,7 +122,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!memberRole) return jsonError(res, 403, 'Acesso negado a esta empresa')
-  if (!ADMIN_ROLES.has(memberRole)) return jsonError(res, 403, 'Permissão insuficiente para mesclar leads')
+
+  // Roles não-admin: só podem mesclar se AMBOS os leads estão atribuídos a eles
+  if (!ADMIN_ROLES.has(memberRole)) {
+    const bothAssigned =
+      sourceLead.responsible_user_id === user.id &&
+      targetLead.responsible_user_id === user.id
+
+    if (!bothAssigned) {
+      return jsonError(res, 403, 'Você só pode mesclar leads atribuídos a você')
+    }
+  }
 
   // ── 5. Executar RPC ────────────────────────────────────────────────────────
   try {
@@ -122,9 +147,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (rpcError) {
       console.error('[merge] RPC error:', rpcError)
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'merge.ts:rpcError',message:'RPC merge_leads_webhook falhou',data:{message:rpcError.message,code:(rpcError as {code?:string}).code,details:(rpcError as {details?:string}).details,hint:(rpcError as {hint?:string}).hint,sourceId:Number(sourceId),targetId:Number(targetId),strategy,notificationId:notificationId??null,userId:user.id,companyId},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return res.status(500).json({ ok: false, error: 'Erro ao executar mesclagem', details: rpcError.message })
     }
 

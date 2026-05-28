@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { AlertTriangle, Users, Phone, Mail, X, Check, Merge } from 'lucide-react';
 
 interface DuplicateNotification {
@@ -41,9 +42,16 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
       setLoading(true);
       setError(null);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('Sessão inválida');
+        return;
+      }
+
       const response = await fetch(`/api/leads/duplicate-notifications?company_id=${company.id}`, {
         headers: {
-          'x-company-id': company.id
+          'x-company-id': company.id,
+          'Authorization': `Bearer ${session.access_token}`,
         }
       });
 
@@ -65,11 +73,15 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
     if (!company) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
       const response = await fetch('/api/leads/duplicate-notifications', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-company-id': company.id
+          'x-company-id': company.id,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           notification_id: notificationId,
