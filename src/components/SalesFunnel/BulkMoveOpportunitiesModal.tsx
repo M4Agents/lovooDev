@@ -39,7 +39,8 @@ interface BulkMoveOpportunitiesModalProps {
   filters?: {
     search?: string
     origin?: string
-    period_days?: number
+    period_start?: string
+    period_end?: string
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }
@@ -81,7 +82,7 @@ export function BulkMoveOpportunitiesModal({
   const [submitError, setSubmitError]       = useState<string | null>(null)
 
   // Derivado do snapshot de filtros — não do estado global atual
-  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_days || filters?.tags?.length)
+  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_start || filters?.period_end || filters?.tags?.length)
 
   // ── Carregar funis da empresa ──────────────────────────────────────────
   useEffect(() => {
@@ -126,9 +127,10 @@ export function BulkMoveOpportunitiesModal({
           company_id:    companyId,
           from_funnel_id: fromFunnelId,
           from_stage_id:  fromStageId,
-          search:        filters?.search      ?? null,
-          origin:        filters?.origin      ?? null,
-          period_days:   filters?.period_days ?? null,
+          search:        filters?.search       ?? null,
+          origin:        filters?.origin       ?? null,
+          period_start:  filters?.period_start ?? null,
+          period_end:    filters?.period_end   ?? null,
           tag_ids:       filters?.tags?.length ? filters.tags : null,
           tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
         }),
@@ -185,9 +187,10 @@ export function BulkMoveOpportunitiesModal({
           from_stage_id:  fromStageId,
           to_funnel_id:   selectedFunnelId,
           to_stage_id:    selectedStageId,
-          search:        filters?.search      ?? null,
-          origin:        filters?.origin      ?? null,
-          period_days:   filters?.period_days ?? null,
+          search:        filters?.search       ?? null,
+          origin:        filters?.origin       ?? null,
+          period_start:  filters?.period_start ?? null,
+          period_end:    filters?.period_end   ?? null,
           tag_ids:       filters?.tags?.length ? filters.tags : null,
           tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
         }),

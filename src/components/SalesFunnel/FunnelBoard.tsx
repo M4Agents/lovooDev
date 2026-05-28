@@ -39,6 +39,7 @@ import type {
   ReopenOpportunityParams,
   Opportunity
 } from '../../types/sales-funnel'
+import type { PeriodFilter as PeriodFilterType } from '../../types/analytics'
 import type { BulkMoveRequest } from './FunnelColumn'
 import type { CompanyUser } from '../../types/user'
 
@@ -57,7 +58,7 @@ interface FunnelBoardProps {
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
   selectedOrigin?: string
-  selectedPeriod?: string
+  selectedPeriod?: PeriodFilterType | null
   selectedTags?: string[]
   selectedTagsMode?: 'or' | 'and'
 }
@@ -69,7 +70,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   onLeadClick,
   searchTerm = '',
   selectedOrigin = '',
-  selectedPeriod = '',
+  selectedPeriod = null,
   selectedTags = [],
   selectedTagsMode = 'or'
 }) => {
@@ -93,23 +94,16 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     refreshStages
   } = useFunnelStages(funnelId)
 
-  // Converte selectedPeriod (string da UI) para period_days (int para a RPC)
-  const periodDays = useMemo<number | undefined>(() => {
-    if (selectedPeriod === 'today') return 1
-    if (selectedPeriod === 'week')  return 7
-    if (selectedPeriod === 'month') return 30
-    return undefined
-  }, [selectedPeriod])
-
   // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários
   const filter = useMemo<LeadPositionFilter>(() => ({
-    funnel_id:   funnelId,
-    search:      searchTerm     || undefined,
-    origin:      selectedOrigin || undefined,
-    period_days: periodDays,
-    tags:        selectedTags.length ? selectedTags : undefined,
-    tags_mode:   selectedTags.length ? selectedTagsMode : undefined
-  }), [funnelId, searchTerm, selectedOrigin, periodDays, selectedTags, selectedTagsMode])
+    funnel_id:    funnelId,
+    search:       searchTerm     || undefined,
+    origin:       selectedOrigin || undefined,
+    period_start: selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
+    period_end:   selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
+    tags:         selectedTags.length ? selectedTags : undefined,
+    tags_mode:    selectedTags.length ? selectedTagsMode : undefined
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA
@@ -160,17 +154,20 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const handleBulkMoveRequest = useCallback((request: BulkMoveRequest) => {
     // Injeta snapshot dos filtros ativos no momento do clique.
     // O modal usará esses valores para calcular elegíveis no backend.
+    const periodStart = selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined
+    const periodEnd   = selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined
     setBulkMoveRequest({
       ...request,
       filters: {
-        search:      searchTerm     || undefined,
-        origin:      selectedOrigin || undefined,
-        period_days: periodDays     || undefined,
-        tags:        selectedTags.length ? selectedTags : undefined,
-        tags_mode:   selectedTags.length ? selectedTagsMode : undefined,
+        search:       searchTerm     || undefined,
+        origin:       selectedOrigin || undefined,
+        period_start: periodStart,
+        period_end:   periodEnd,
+        tags:         selectedTags.length ? selectedTags : undefined,
+        tags_mode:    selectedTags.length ? selectedTagsMode : undefined,
       },
     })
-  }, [searchTerm, selectedOrigin, periodDays, selectedTags, selectedTagsMode])
+  }, [searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode])
 
   const handleBulkMoveSuccess = useCallback((movedCount: number) => {
     setBulkMoveRequest(null)

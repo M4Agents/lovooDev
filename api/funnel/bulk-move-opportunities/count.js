@@ -5,7 +5,7 @@
 // o bulk move ANTES de executar a operação.
 //
 // Critério de elegibilidade: mesmos filtros usados pelo board
-// (search, origin, period_days) — sem depender de IDs do frontend.
+// (search, origin, period_start, period_end) — sem depender de IDs do frontend.
 //
 // Retorna:
 //   eligible_count — total de oportunidades que serão movidas
@@ -55,7 +55,8 @@ export default async function handler(req, res) {
     from_stage_id,
     search,
     origin,
-    period_days,
+    period_start,
+    period_end,
     tag_ids,
     tag_mode,
   } = req.body ?? {}
@@ -134,9 +135,11 @@ export default async function handler(req, res) {
   const { data: stageCounts, error: countErr } = await svc.rpc('get_funnel_stage_counts', {
     p_funnel_id:   from_funnel_id,
     p_company_id:  company_id,
-    p_search:      search      ?? null,
-    p_origin:      origin      ?? null,
-    p_period_days: period_days ?? null,
+    p_search:      search        ?? null,
+    p_origin:      origin        ?? null,
+    p_period_days: null,
+    p_start_date:  period_start  ?? null,
+    p_end_date:    period_end    ?? null,
     p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
     p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
   })

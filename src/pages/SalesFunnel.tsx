@@ -8,19 +8,22 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon } from 'lucide-react'
+import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon, Calendar, ChevronDown } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelWizard } from '../components/SalesFunnel/CreateFunnelWizard'
 import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
 import { LeadCardCustomizer } from '../components/SalesFunnel/LeadCardCustomizer'
 import ChatModalSimple from '../components/SalesFunnel/ChatModalSimple'
+import { PeriodFilter } from '../components/PeriodFilter'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { useAvailableTags } from '../hooks/useAvailableTags'
 import { funnelApi } from '../services/funnelApi'
 import type { CreateFunnelForm, FunnelStage } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
+import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
+import { PREDEFINED_PERIODS } from '../types/analytics'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -58,7 +61,7 @@ export default function SalesFunnel() {
   const [selectedTagsMode, setSelectedTagsMode] = useState<'or' | 'and'>('or')
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
   const [selectedOrigin, setSelectedOrigin] = useState('')
-  const [selectedPeriod, setSelectedPeriod] = useState('')
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType | null>(null)
 
   const tagDropdownRef = useRef<HTMLDivElement>(null)
   const { tags: availableTags } = useAvailableTags(companyId)
@@ -522,16 +525,35 @@ export default function SalesFunnel() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('filters.periodLabel')}
                 </label>
-                <select 
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">{t('filters.periodAll')}</option>
-                  <option value="today">{t('filters.periodToday')}</option>
-                  <option value="week">{t('filters.periodWeek')}</option>
-                  <option value="month">{t('filters.periodMonth')}</option>
-                </select>
+                <div className="flex items-center gap-2">
+                  {selectedPeriod === null ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPeriod({ ...PREDEFINED_PERIODS['30days'], startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), endDate: new Date(new Date().setHours(23, 59, 59, 999)) })}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
+                    >
+                      <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-700">{t('filters.periodAll')}</span>
+                      <ChevronDown className="w-4 h-4 text-gray-500 ml-auto" />
+                    </button>
+                  ) : (
+                    <>
+                      <PeriodFilter
+                        selectedPeriod={selectedPeriod}
+                        onPeriodChange={setSelectedPeriod}
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPeriod(null)}
+                        className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                        title={t('filters.periodAll')}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>

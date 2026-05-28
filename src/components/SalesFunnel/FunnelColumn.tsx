@@ -38,7 +38,8 @@ export interface BulkMoveRequest {
   filters?: {
     search?: string
     origin?: string
-    period_days?: number
+    period_start?: string
+    period_end?: string
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }

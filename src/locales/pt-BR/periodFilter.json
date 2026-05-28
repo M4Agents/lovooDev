@@ -5,6 +5,7 @@
     "longTerm": "Longo prazo"
   },
   "periods": {
+    "all": "Todo período",
     "today": "Hoje",
     "yesterday": "Ontem",
     "7days": "Últimos 7 dias",

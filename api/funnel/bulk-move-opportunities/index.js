@@ -17,7 +17,7 @@
 // RESOLUÇÃO DE IDs (único caminho, com ou sem filtros):
 //   Sempre chama get_stage_opportunity_ids_filtered antes da RPC.
 //   Sem filtros → todos os params NULL → retorna todos os IDs da etapa
-//   Com filtros → aplica search/origin/period_days → retorna IDs filtrados
+//   Com filtros → aplica search/origin/period_start/period_end → retorna IDs filtrados
 //   Limite de 200 aplicado sobre o array resolvido — p_opportunity_ids NUNCA é NULL.
 //
 // ORDEM DE EXECUÇÃO:
@@ -132,7 +132,8 @@ export default async function handler(req, res) {
     to_stage_id,
     search,
     origin,
-    period_days,
+    period_start,
+    period_end,
     tag_ids,
     tag_mode,
   } = req.body ?? {}
@@ -234,15 +235,17 @@ export default async function handler(req, res) {
   //               retorna todos os IDs da etapa
   // Com filtros → get_stage_opportunity_ids_filtered com os filtros ativos
   //               retorna apenas os IDs que correspondem
-  const hasFilters = !!(search || origin || period_days || (Array.isArray(tag_ids) && tag_ids.length > 0))
+  const hasFilters = !!(search || origin || period_start || period_end || (Array.isArray(tag_ids) && tag_ids.length > 0))
 
   const { data: ids, error: idsErr } = await svc.rpc('get_stage_opportunity_ids_filtered', {
     p_funnel_id:   from_funnel_id,
     p_stage_id:    from_stage_id,
     p_company_id:  company_id,
-    p_search:      search      ?? null,
-    p_origin:      origin      ?? null,
-    p_period_days: period_days ?? null,
+    p_search:      search       ?? null,
+    p_origin:      origin       ?? null,
+    p_period_days: null,
+    p_start_date:  period_start ?? null,
+    p_end_date:    period_end   ?? null,
     p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
     p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
   })

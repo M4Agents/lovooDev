@@ -87,11 +87,12 @@ export function useBoardPositions(
           stageId,
           companyId,
           {
-            search:      filter.search,
-            origin:      filter.origin,
-            period_days: filter.period_days,
-            tags:        filter.tags,
-            tags_mode:   filter.tags_mode
+            search:       filter.search,
+            origin:       filter.origin,
+            period_start: filter.period_start,
+            period_end:   filter.period_end,
+            tags:         filter.tags,
+            tags_mode:    filter.tags_mode
           },
           pageSize,
           offset

@@ -552,7 +552,10 @@ export interface LeadPositionFilter {
   stage_id?: string
   search?: string
   origin?: string
+  /** @deprecated Use period_start / period_end para intervalos de data reais. */
   period_days?: number
+  period_start?: string
+  period_end?: string
   tags?: string[]
   /** Condição aplicada ao filtro de tags: 'or' = qualquer tag, 'and' = todas as tags. */
   tags_mode?: 'or' | 'and'

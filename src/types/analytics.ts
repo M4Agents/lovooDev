@@ -1,4 +1,5 @@
 export type PeriodType =
+  | 'all'
   | 'today' | 'yesterday'
   | '7days' | '15days' | '30days'
   | 'this_month' | 'last_month'
@@ -49,6 +50,10 @@ export interface AnalyticsFilters {
 
 // Predefined periods
 export const PREDEFINED_PERIODS: Record<PeriodType, Omit<PeriodFilter, 'startDate' | 'endDate'>> = {
+  all: {
+    type: 'all',
+    label: 'Todo período'
+  },
   today: {
     type: 'today',
     label: 'Hoje'
