@@ -726,7 +726,7 @@ export const Leads: React.FC = () => {
             <option value="">Todos os Responsáveis</option>
             <option value="unassigned">Sem responsável</option>
             {companyUsers.map(user => (
-              <option key={user.id} value={user.id}>
+              <option key={user.id} value={user.user_id ?? user.id}>
                 {user.display_name || user.email}
               </option>
             ))}
@@ -902,10 +902,7 @@ export const Leads: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {(() => {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b812bc'},body:JSON.stringify({sessionId:'b812bc',location:'Leads.tsx:905',message:'responsible lookup',data:{responsible_user_id:lead.responsible_user_id,first_user_id:companyUsers[0]?.user_id,first_id:companyUsers[0]?.id,users_count:companyUsers.length},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-                      // #endregion
-                      const responsibleUser = companyUsers.find(u => (u.user_id ?? u.id) === lead.responsible_user_id);
+                      const responsibleUser = companyUsers.find(u => u.user_id === lead.responsible_user_id);
                       return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
                     })()}
                   </td>

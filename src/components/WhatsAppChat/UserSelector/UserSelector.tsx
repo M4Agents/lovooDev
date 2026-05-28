@@ -10,6 +10,7 @@ import { ChevronDown, Check, User } from 'lucide-react'
 
 interface CompanyUser {
   id: string
+  user_id?: string
   display_name?: string
   email: string
   avatar_url?: string
@@ -48,15 +49,15 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Obter usuário selecionado
+  // Obter usuário selecionado — compara por auth.users.id (user_id) com fallback para company_users.id
   const getSelectedUser = () => {
     if (!selectedUser) return null
-    return users.find(u => u.id === selectedUser)
+    return users.find(u => (u.user_id ?? u.id) === selectedUser)
   }
 
   const selectedUserData = getSelectedUser()
 
-  // Handler de seleção
+  // Handler de seleção — emite auth.users.id (user_id) com fallback para company_users.id
   const handleSelect = (userId: string) => {
     onSelectUser(userId)
     setIsOpen(false)
@@ -164,26 +165,29 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
               Nenhum usuário disponível
             </div>
           ) : (
-            users.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => handleSelect(user.id)}
-                className={`
-                  w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
-                  ${selectedUser === user.id ? 'bg-blue-50' : ''}
-                `}
-              >
-                <UserAvatar user={user} size="sm" />
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="font-medium text-gray-900 truncate">
-                    {user.display_name || user.email}
-                  </p>
-                </div>
-                {selectedUser === user.id && (
-                  <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                )}
-              </button>
-            ))
+            users.map((user) => {
+              const authUserId = user.user_id ?? user.id
+              return (
+                <button
+                  key={user.id}
+                  onClick={() => handleSelect(authUserId)}
+                  className={`
+                    w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
+                    ${selectedUser === authUserId ? 'bg-blue-50' : ''}
+                  `}
+                >
+                  <UserAvatar user={user} size="sm" />
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-medium text-gray-900 truncate">
+                      {user.display_name || user.email}
+                    </p>
+                  </div>
+                  {selectedUser === authUserId && (
+                    <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  )}
+                </button>
+              )
+            })
           )}
         </div>
       )}

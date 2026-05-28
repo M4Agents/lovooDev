@@ -260,11 +260,8 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   const status  = getStatusConfig(lead.status);
   const origin  = getOriginConfig(lead.origin);
   const responsible = companyUsers.find(
-    u => (u.user_id ?? u.id) === lead.responsible_user_id
+    u => u.user_id === lead.responsible_user_id
   );
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b812bc'},body:JSON.stringify({sessionId:'b812bc',location:'LeadViewModal.tsx:263',message:'responsible resolve',data:{responsible_user_id:lead.responsible_user_id,found:!!responsible,found_name:responsible?.display_name,found_email:responsible?.email,users_count:companyUsers.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
 
   // section visibility flags
   const hasCompany = !!(
