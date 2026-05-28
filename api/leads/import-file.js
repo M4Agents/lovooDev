@@ -9,6 +9,9 @@
 // MULTI-TENANT : company_id via query param, validado contra company_users do JWT
 // PLANO        : bloqueia TODA a importação se requested > remaining (sem truncamento)
 // CRIAÇÃO      : reutiliza create_lead_from_company (advisory lock + dedup atômica)
+// RESPONSÁVEL  : coluna opcional responsible_user_email — resolve email → user_id via
+//               RPC resolve_responsible_users_by_email (SECURITY DEFINER); nunca
+//               bloqueia o lote em caso de email inválido ou não encontrado.
 // AUDITORIA    : 1 evento agregado em lead_import_events por sessão de importação
 // =============================================================================
 
@@ -132,6 +135,43 @@ async function loadValidUuidFields(svc, companyId, leads) {
     .in('id', [...uuids]);
 
   return new Map((fields ?? []).map(f => [f.id, true]));
+}
+
+// ── Pré-carregamento de responsible_user_id por email ────────────────────────
+//
+// Extrai os emails únicos do CSV, chama a RPC SECURITY DEFINER
+// resolve_responsible_users_by_email (que faz JOIN em auth.users) e retorna
+// um Map<emailNormalizado, user_id> para uso dentro do loop principal.
+//
+// Design:
+//   - Falha silenciosa: erros na RPC retornam Map vazio (lote não é bloqueado).
+//   - Emails normalizados (lower + trim) para comparação consistente.
+//   - Filtra apenas emails não-vazios presentes no CSV (sem query desnecessária).
+
+async function buildResponsibleUserMap(svc, companyId, leads) {
+  const emailSet = new Set();
+  for (const lead of leads) {
+    const raw = lead.responsible_user_email;
+    if (raw && typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized) emailSet.add(normalized);
+    }
+  }
+
+  if (emailSet.size === 0) return new Map();
+
+  const { data, error } = await svc.rpc('resolve_responsible_users_by_email', {
+    p_company_id: companyId,
+    p_emails:     Array.from(emailSet),
+  });
+
+  if (error) {
+    console.error('[import-file] resolve_responsible_users_by_email error:', error.message);
+    return new Map();
+  }
+
+  // email (já normalizado pela RPC) → user_id
+  return new Map((data ?? []).map(row => [row.email, row.user_id]));
 }
 
 // ── Extração dos campos padrão (whitelist + bloqueio de sensíveis) ────────────
@@ -355,12 +395,19 @@ export default async function handler(req, res) {
   // ── 9. Pré-carregar campos personalizados UUID válidos para a empresa ──────
   const validUuidFields = await loadValidUuidFields(svc, companyId, leads);
 
+  // ── 9b. Pré-carregar mapa email→user_id para responsáveis (opcional) ───────
+  // Se nenhum lead tiver responsible_user_email, retorna Map vazio sem queries.
+  const responsibleUserMap = await buildResponsibleUserMap(svc, companyId, leads);
+
   // ── 10. Processar leads (best-effort — erros por linha não param o lote) ──
-  let successCount          = 0;
-  let duplicateCount        = 0;
-  let duplicateReentryCount = 0;
-  let errorCount            = 0;
-  let planLimitHit          = false;
+  let successCount               = 0;
+  let duplicateCount             = 0;
+  let duplicateReentryCount      = 0;
+  let errorCount                 = 0;
+  let planLimitHit               = false;
+  let responsibleAssignedCount   = 0;
+  let responsibleNotFoundCount   = 0;
+  let responsibleUpdateErrorCount = 0;
 
   for (const rawLead of leads) {
     if (planLimitHit) { errorCount++; continue; }
@@ -422,6 +469,33 @@ export default async function handler(req, res) {
         }
 
         if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
+
+        // Atribuição de responsável para lead existente (update independente)
+        try {
+          const responsibleEmail = rawLead.responsible_user_email?.toString().trim().toLowerCase();
+          if (responsibleEmail) {
+            const responsibleUserId = responsibleUserMap.get(responsibleEmail);
+            if (responsibleUserId) {
+              const { error: respErr } = await svc
+                .from('leads')
+                .update({ responsible_user_id: responsibleUserId })
+                .eq('id', leadId)
+                .eq('company_id', companyId);
+              if (respErr) {
+                console.error('[import-file] responsible_user update error (duplicate):', respErr.message);
+                responsibleUpdateErrorCount++;
+              } else {
+                responsibleAssignedCount++;
+              }
+            } else {
+              responsibleNotFoundCount++;
+            }
+          }
+        } catch (respErr) {
+          console.error('[import-file] responsible_user assignment error (duplicate):', respErr?.message);
+          responsibleUpdateErrorCount++;
+        }
+
         continue;
       }
 
@@ -444,6 +518,32 @@ export default async function handler(req, res) {
       // Posicionamento no funil
       if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
 
+      // Atribuição de responsável para lead novo
+      try {
+        const responsibleEmail = rawLead.responsible_user_email?.toString().trim().toLowerCase();
+        if (responsibleEmail) {
+          const responsibleUserId = responsibleUserMap.get(responsibleEmail);
+          if (responsibleUserId) {
+            const { error: respErr } = await svc
+              .from('leads')
+              .update({ responsible_user_id: responsibleUserId })
+              .eq('id', leadId)
+              .eq('company_id', companyId);
+            if (respErr) {
+              console.error('[import-file] responsible_user update error (new):', respErr.message);
+              responsibleUpdateErrorCount++;
+            } else {
+              responsibleAssignedCount++;
+            }
+          } else {
+            responsibleNotFoundCount++;
+          }
+        }
+      } catch (respErr) {
+        console.error('[import-file] responsible_user assignment error (new):', respErr?.message);
+        responsibleUpdateErrorCount++;
+      }
+
       // Automações (fire-and-forget — nunca bloqueia a importação)
       dispatchLeadCreatedTrigger(
         { companyId, leadId, source: 'file_import' },
@@ -462,12 +562,15 @@ export default async function handler(req, res) {
       p_company_id:      companyId,
       p_status:          logStatus,
       p_payload_summary: {
-        source:              'file_import',
-        total:               leads.length,
-        success:             successCount,
-        duplicate:           duplicateCount,
-        duplicate_reentries: duplicateReentryCount,
-        error:               errorCount,
+        source:                  'file_import',
+        total:                   leads.length,
+        success:                 successCount,
+        duplicate:               duplicateCount,
+        duplicate_reentries:     duplicateReentryCount,
+        error:                   errorCount,
+        responsible_assigned:    responsibleAssignedCount,
+        responsible_not_found:   responsibleNotFoundCount,
+        responsible_update_error: responsibleUpdateErrorCount,
       },
     });
   } catch (logErr) {
@@ -477,10 +580,13 @@ export default async function handler(req, res) {
   // ── 12. Resposta ──────────────────────────────────────────────────────────
   return res.status(200).json({
     summary: {
-      total_submitted: leads.length,
-      success:         successCount,
-      duplicate:       duplicateCount,
-      error:           errorCount,
+      total_submitted:          leads.length,
+      success:                  successCount,
+      duplicate:                duplicateCount,
+      error:                    errorCount,
+      responsible_assigned:     responsibleAssignedCount,
+      responsible_not_found:    responsibleNotFoundCount,
+      responsible_update_error: responsibleUpdateErrorCount,
     },
   });
 }
