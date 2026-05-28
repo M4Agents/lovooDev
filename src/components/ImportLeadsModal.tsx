@@ -94,6 +94,13 @@ const LeadPreviewCard = ({ lead, index, total, mappedCustomFields }: LeadPreview
           <div><span className="text-gray-500">Origem:</span> <span className="font-medium text-gray-900">{lead.origin || 'import'}</span></div>
           <div><span className="text-gray-500">Status:</span> <span className="font-medium text-gray-900">{lead.status || 'novo'}</span></div>
           <div><span className="text-gray-500">Interesse:</span> <span className="font-medium text-gray-900">{lead.interest || '-'}</span></div>
+          {lead.responsible_user_email && (
+            <div className="col-span-2 flex items-center gap-2 mt-1 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <User className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-gray-500 shrink-0">Responsável:</span>
+              <span className="font-medium text-blue-700 truncate">{lead.responsible_user_email}</span>
+            </div>
+          )}
         </div>
       </div>
 
