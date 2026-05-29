@@ -137,6 +137,36 @@ async function loadValidUuidFields(svc, companyId, leads) {
   return new Map((fields ?? []).map(f => [f.id, true]));
 }
 
+// ── Pré-carregamento de campos numéricos legados ──────────────────────────────
+//
+// Elimina a query `get_custom_field_by_id` por lead×campo que antes ocorria
+// dentro de insertCustomFields para cada coluna de ID numérico no CSV.
+// Resultado: Map<numericId (string), uuid> resolvido uma única vez.
+
+async function loadNumericFieldMap(svc, companyId, leads) {
+  const numericIds = new Set();
+  for (const lead of leads) {
+    for (const key of Object.keys(lead)) {
+      if (/^\d+$/.test(key)) numericIds.add(key);
+    }
+  }
+  if (numericIds.size === 0) return new Map();
+
+  const results = await Promise.all(
+    [...numericIds].map(async (numericId) => {
+      const { data: field } = await svc
+        .rpc('get_custom_field_by_id', {
+          p_company_id: companyId,
+          p_numeric_id: parseInt(numericId, 10),
+        })
+        .maybeSingle();
+      return field?.id ? [numericId, field.id] : null;
+    })
+  );
+
+  return new Map(results.filter(Boolean));
+}
+
 // ── Pré-carregamento de responsible_user_id por email ────────────────────────
 //
 // Extrai os emails únicos do CSV, chama a RPC SECURITY DEFINER
@@ -190,7 +220,7 @@ function buildLeadPayload(raw) {
 
 // ── Inserção de campos personalizados (UUID e numérico) ───────────────────────
 
-async function insertCustomFields(svc, companyId, leadId, raw, validUuidFields) {
+async function insertCustomFields(svc, companyId, leadId, raw, validUuidFields, numericFieldMap) {
   const values = [];
 
   for (const [key, val] of Object.entries(raw)) {
@@ -205,16 +235,11 @@ async function insertCustomFields(svc, companyId, leadId, raw, validUuidFields) 
       continue;
     }
 
-    // Formato numérico: ID legado no cabeçalho do CSV
+    // Formato numérico: usa mapa pré-carregado (sem query por lead)
     if (/^\d+$/.test(key)) {
-      const { data: field } = await svc
-        .rpc('get_custom_field_by_id', {
-          p_company_id: companyId,
-          p_numeric_id: parseInt(key, 10),
-        })
-        .maybeSingle();
-      if (field?.id) {
-        values.push({ field_id: field.id, value: String(val).slice(0, 500) });
+      const fieldId = numericFieldMap.get(key);
+      if (fieldId) {
+        values.push({ field_id: fieldId, value: String(val).slice(0, 500) });
       }
     }
   }
@@ -338,7 +363,7 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
 // planLimitHit é passado por valor (imutável dentro do lote); o caller decide
 // se interrompe os lotes seguintes com base no retorno.
 
-async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId, validUuidFields, responsibleUserMap, existingTags }) {
+async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId, validUuidFields, numericFieldMap, responsibleUserMap, existingTags }) {
   const zero = { success: 0, duplicate: 0, duplicateReentry: 0, error: 0, planLimitHit: false, responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 0 };
 
   try {
@@ -351,7 +376,7 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
       .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
     // #region agent log
     const _rpcMs = Date.now() - _rpcStart;
-    if (_rpcMs > 2000) fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:RPC_SLOW',message:'slow create_lead_from_company',data:{rpcMs:_rpcMs,name:rawLead.name,phone:rawLead.phone,email:rawLead.email},timestamp:Date.now(),hypothesisId:'B-C'})}).catch(()=>{});
+    if (_rpcMs > 2000) console.error(`[import-perf] SLOW_RPC rpcMs=${_rpcMs} phone=${rawLead.phone} email=${rawLead.email}`);
     // #endregion
 
     if (rpcErr) {
@@ -411,7 +436,7 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
     }
 
     // Lead novo
-    try { await insertCustomFields(svc, companyId, leadId, rawLead, validUuidFields); }
+    try { await insertCustomFields(svc, companyId, leadId, rawLead, validUuidFields, numericFieldMap); }
     catch (cfErr) { console.error('[import-file] custom fields error:', cfErr?.message); }
 
     try { if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags, existingTags); }
@@ -513,31 +538,33 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 9. Pré-carregar campos personalizados UUID válidos para a empresa ──────
-  const validUuidFields = await loadValidUuidFields(svc, companyId, leads);
-
-  // ── 9b. Pré-carregar mapa email→user_id para responsáveis (opcional) ───────
-  // Se nenhum lead tiver responsible_user_email, retorna Map vazio sem queries.
-  const responsibleUserMap = await buildResponsibleUserMap(svc, companyId, leads);
-
-  // ── 9c. Pré-carregar tags existentes e etapa-alvo do funil ────────────────
-  // Elimina 1 query por lead para tags e 1 query por lead para funnel_stages.
-  // 1000 leads: 2 queries de pré-carga em vez de 2000 queries individuais.
-  const [existingTags, targetStageId] = await Promise.all([
+  // ── 9. Pré-carregar todos os mapas antes do loop ─────────────────────────
+  //
+  // Todas as pré-cargas rodam em paralelo para reduzir latência total.
+  // - validUuidFields: campos custom_<uuid> válidos para a empresa
+  // - numericFieldMap: campos numéricos legados (eliminam query por lead×campo)
+  // - responsibleUserMap: email→user_id (sem query por lead)
+  // - existingTags: tags ativas da empresa (sem query por lead)
+  // - targetStageId: etapa-alvo do funil (sem query por lead)
+  const [validUuidFields, numericFieldMap, responsibleUserMap, existingTags, targetStageId] = await Promise.all([
+    loadValidUuidFields(svc, companyId, leads),
+    loadNumericFieldMap(svc, companyId, leads),
+    buildResponsibleUserMap(svc, companyId, leads),
     preloadExistingTags(svc, companyId, leads),
     resolveTargetStage(svc, funnelId, stageId),
   ]);
 
-  // ── 10. Processar leads em lotes paralelos (100 por vez) ─────────────────
+  // ── 10. Processar leads em lotes paralelos ────────────────────────────────
   //
-  // Cada lote usa Promise.allSettled — falhas individuais não travam os demais.
-  // Se algum lead retornar planLimitHit=true, os lotes seguintes são pulados.
-  // BATCH_SIZE=100: 1000 leads → 10 lotes × ~500ms ≈ 5s (dentro do limite de 60s).
-  const BATCH_SIZE = 100;
+  // BATCH_SIZE=50: empiricamente validado para 798 leads dentro do maxDuration
+  // de 60s. Batches maiores podem saturar o pool de conexões do Supabase e
+  // causar FUNCTION_INVOCATION_TIMEOUT.
+  // 1000 leads → 20 lotes × ~1.5s ≈ 30s (com margem de 2× sobre o limite).
+  const BATCH_SIZE = 50;
 
   // #region agent log
   const _importStart = Date.now();
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:HANDLER_START',message:'import started',data:{BATCH_SIZE,totalLeads:leads.length,funnelId,stageId,targetStageId,existingTagsCount:existingTags.length,responsibleMapSize:responsibleUserMap.size},timestamp:Date.now(),hypothesisId:'A-D'})}).catch(()=>{});
+  console.error(`[import-perf] START batchSize=${BATCH_SIZE} totalLeads=${leads.length} numericFields=${numericFieldMap.size} existingTags=${existingTags.length} funnelId=${funnelId}`);
   // #endregion
 
   let successCount               = 0;
@@ -549,7 +576,7 @@ export default async function handler(req, res) {
   let responsibleNotFoundCount   = 0;
   let responsibleUpdateErrorCount = 0;
 
-  const ctx = { svc, companyId, funnelId, targetStageId, validUuidFields, responsibleUserMap, existingTags };
+  const ctx = { svc, companyId, funnelId, targetStageId, validUuidFields, numericFieldMap, responsibleUserMap, existingTags };
 
   for (let i = 0; i < leads.length; i += BATCH_SIZE) {
     if (planLimitHit) {
@@ -563,7 +590,7 @@ export default async function handler(req, res) {
     // #endregion
     const settled = await Promise.allSettled(batch.map(rawLead => processOneLead(rawLead, ctx)));
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:BATCH_DONE',message:'batch completed',data:{batchIndex:Math.floor(i/BATCH_SIZE),batchSize:batch.length,elapsedMs:Date.now()-_batchStart,totalElapsedMs:Date.now()-_importStart},timestamp:Date.now(),hypothesisId:'A-B-C'})}).catch(()=>{});
+    console.error(`[import-perf] BATCH batchIndex=${Math.floor(i/BATCH_SIZE)} batchSize=${batch.length} batchMs=${Date.now()-_batchStart} totalMs=${Date.now()-_importStart}`);
     // #endregion
 
     for (const r of settled) {
