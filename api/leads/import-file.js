@@ -228,26 +228,61 @@ async function insertCustomFields(svc, companyId, leadId, raw, validUuidFields) 
   if (error) console.error('[import-file] insert custom fields error:', error.message);
 }
 
-// ── Atribuição de tags ─────────────────────────────────────────────────────────
+// ── Pré-carregamento de tags existentes da empresa ────────────────────────────
+//
+// Carregada uma única vez antes do loop para evitar N queries idênticas
+// (uma por lead). Tags criadas durante a importação não aparecem nesta lista,
+// mas a criação de novas tags dentro de assignTags trata isso corretamente.
 
-async function assignTags(svc, companyId, leadId, rawTags) {
-  const names = typeof rawTags === 'string'
-    ? rawTags.split(',').map(t => t.trim()).filter(Boolean)
-    : [];
-  if (names.length === 0) return;
+async function preloadExistingTags(svc, companyId, leads) {
+  const hasAnyTag = leads.some(l => l.tags);
+  if (!hasAnyTag) return [];
 
-  const { data: existing } = await svc
+  const { data } = await svc
     .from('lead_tags')
     .select('id, name')
     .eq('company_id', companyId)
     .eq('is_active', true);
 
+  return data ?? [];
+}
+
+// ── Pré-carregamento da etapa-alvo do funil ───────────────────────────────────
+//
+// Carregada uma única vez antes do loop; a mesma etapa é usada para todos
+// os leads — elimina N queries à tabela funnel_stages.
+
+async function resolveTargetStage(svc, funnelId, stageId) {
+  if (!funnelId) return null;
+  if (stageId) return stageId;
+
+  const { data: first } = await svc
+    .from('funnel_stages')
+    .select('id')
+    .eq('funnel_id', funnelId)
+    .eq('stage_type', 'active')
+    .order('position', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return first?.id ?? null;
+}
+
+// ── Atribuição de tags (usa lista pré-carregada para evitar query por lead) ───
+
+async function assignTags(svc, companyId, leadId, rawTags, existingTags) {
+  const names = typeof rawTags === 'string'
+    ? rawTags.split(',').map(t => t.trim()).filter(Boolean)
+    : [];
+  if (names.length === 0) return;
+
   const ids = [];
   for (const name of names) {
-    const found = (existing ?? []).find(t => t.name.toLowerCase() === name.toLowerCase());
+    const found = existingTags.find(t => t.name.toLowerCase() === name.toLowerCase());
     if (found) {
       ids.push(found.id);
     } else {
+      // Tag nova: tenta criar (23505 = já criada em paralelo por outro lead → ignora)
       const { data: created } = await svc
         .from('lead_tags')
         .insert({ company_id: companyId, name, color: '#6B7280', is_active: true })
@@ -267,25 +302,11 @@ async function assignTags(svc, companyId, leadId, rawTags) {
   }
 }
 
-// ── Posicionamento no funil (non-blocking) ────────────────────────────────────
+// ── Posicionamento no funil (etapa já resolvida pelo pré-carregamento) ─────────
 
-async function positionInFunnel(svc, leadId, funnelId, stageId) {
-  if (!funnelId) return;
+async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
+  if (!funnelId || !targetStageId) return;
   try {
-    let targetStage = stageId;
-    if (!targetStage) {
-      const { data: first } = await svc
-        .from('funnel_stages')
-        .select('id')
-        .eq('funnel_id', funnelId)
-        .eq('stage_type', 'active')
-        .order('position', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (first) targetStage = first.id;
-    }
-    if (!targetStage) return;
-
     const { data: opp } = await svc
       .from('opportunities')
       .select('id')
@@ -299,7 +320,7 @@ async function positionInFunnel(svc, leadId, funnelId, stageId) {
         .from('opportunity_funnel_positions')
         .update({
           funnel_id:        funnelId,
-          stage_id:         targetStage,
+          stage_id:         targetStageId,
           entered_stage_at: new Date().toISOString(),
           updated_at:       new Date().toISOString(),
         })
@@ -317,7 +338,7 @@ async function positionInFunnel(svc, leadId, funnelId, stageId) {
 // planLimitHit é passado por valor (imutável dentro do lote); o caller decide
 // se interrompe os lotes seguintes com base no retorno.
 
-async function processOneLead(rawLead, { svc, companyId, funnelId, stageId, validUuidFields, responsibleUserMap }) {
+async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId, validUuidFields, responsibleUserMap, existingTags }) {
   const zero = { success: 0, duplicate: 0, duplicateReentry: 0, error: 0, planLimitHit: false, responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 0 };
 
   try {
@@ -376,7 +397,7 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, stageId, vali
         console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
       }
 
-      if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
+      if (funnelId) await positionInFunnel(svc, leadId, funnelId, targetStageId);
       const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
 
       return { ...zero, duplicate: 1, duplicateReentry, ...resp };
@@ -386,10 +407,10 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, stageId, vali
     try { await insertCustomFields(svc, companyId, leadId, rawLead, validUuidFields); }
     catch (cfErr) { console.error('[import-file] custom fields error:', cfErr?.message); }
 
-    try { if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags); }
+    try { if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags, existingTags); }
     catch (tagErr) { console.error('[import-file] tags error:', tagErr?.message); }
 
-    if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
+    if (funnelId) await positionInFunnel(svc, leadId, funnelId, targetStageId);
     const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
 
     dispatchLeadCreatedTrigger({ companyId, leadId, source: 'file_import' })
@@ -492,11 +513,20 @@ export default async function handler(req, res) {
   // Se nenhum lead tiver responsible_user_email, retorna Map vazio sem queries.
   const responsibleUserMap = await buildResponsibleUserMap(svc, companyId, leads);
 
-  // ── 10. Processar leads em lotes paralelos (15 por vez) ──────────────────
+  // ── 9c. Pré-carregar tags existentes e etapa-alvo do funil ────────────────
+  // Elimina 1 query por lead para tags e 1 query por lead para funnel_stages.
+  // 1000 leads: 2 queries de pré-carga em vez de 2000 queries individuais.
+  const [existingTags, targetStageId] = await Promise.all([
+    preloadExistingTags(svc, companyId, leads),
+    resolveTargetStage(svc, funnelId, stageId),
+  ]);
+
+  // ── 10. Processar leads em lotes paralelos (100 por vez) ─────────────────
   //
   // Cada lote usa Promise.allSettled — falhas individuais não travam os demais.
   // Se algum lead retornar planLimitHit=true, os lotes seguintes são pulados.
-  const BATCH_SIZE = 15;
+  // BATCH_SIZE=100: 1000 leads → 10 lotes × ~500ms ≈ 5s (dentro do limite de 60s).
+  const BATCH_SIZE = 100;
 
   let successCount               = 0;
   let duplicateCount             = 0;
@@ -507,7 +537,7 @@ export default async function handler(req, res) {
   let responsibleNotFoundCount   = 0;
   let responsibleUpdateErrorCount = 0;
 
-  const ctx = { svc, companyId, funnelId, stageId, validUuidFields, responsibleUserMap };
+  const ctx = { svc, companyId, funnelId, targetStageId, validUuidFields, responsibleUserMap, existingTags };
 
   for (let i = 0; i < leads.length; i += BATCH_SIZE) {
     if (planLimitHit) {
