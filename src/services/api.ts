@@ -1342,7 +1342,14 @@ export const api = {
       }),
     });
 
-    const data = await response.json();
+    const rawBody = await response.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      throw new Error(`Erro inesperado do servidor (HTTP ${response.status}): ${rawBody.slice(0, 200)}`);
+    }
 
     if (!response.ok) {
       throw new Error(data.message || data.error || 'Erro na importação de leads');
