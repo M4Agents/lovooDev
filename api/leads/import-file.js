@@ -344,8 +344,15 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
   try {
     const leadPayload = buildLeadPayload(rawLead);
 
+    // #region agent log
+    const _rpcStart = Date.now();
+    // #endregion
     const { data: result, error: rpcErr } = await svc
       .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
+    // #region agent log
+    const _rpcMs = Date.now() - _rpcStart;
+    if (_rpcMs > 2000) fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:RPC_SLOW',message:'slow create_lead_from_company',data:{rpcMs:_rpcMs,name:rawLead.name,phone:rawLead.phone,email:rawLead.email},timestamp:Date.now(),hypothesisId:'B-C'})}).catch(()=>{});
+    // #endregion
 
     if (rpcErr) {
       console.error('[import-file] create_lead_from_company rpc error:', rpcErr.message);
@@ -528,6 +535,11 @@ export default async function handler(req, res) {
   // BATCH_SIZE=100: 1000 leads → 10 lotes × ~500ms ≈ 5s (dentro do limite de 60s).
   const BATCH_SIZE = 100;
 
+  // #region agent log
+  const _importStart = Date.now();
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:HANDLER_START',message:'import started',data:{BATCH_SIZE,totalLeads:leads.length,funnelId,stageId,targetStageId,existingTagsCount:existingTags.length,responsibleMapSize:responsibleUserMap.size},timestamp:Date.now(),hypothesisId:'A-D'})}).catch(()=>{});
+  // #endregion
+
   let successCount               = 0;
   let duplicateCount             = 0;
   let duplicateReentryCount      = 0;
@@ -546,7 +558,13 @@ export default async function handler(req, res) {
     }
 
     const batch = leads.slice(i, i + BATCH_SIZE);
+    // #region agent log
+    const _batchStart = Date.now();
+    // #endregion
     const settled = await Promise.allSettled(batch.map(rawLead => processOneLead(rawLead, ctx)));
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a3f1'},body:JSON.stringify({sessionId:'95a3f1',location:'import-file.js:BATCH_DONE',message:'batch completed',data:{batchIndex:Math.floor(i/BATCH_SIZE),batchSize:batch.length,elapsedMs:Date.now()-_batchStart,totalElapsedMs:Date.now()-_importStart},timestamp:Date.now(),hypothesisId:'A-B-C'})}).catch(()=>{});
+    // #endregion
 
     for (const r of settled) {
       if (r.status === 'rejected') { errorCount++; continue; }
