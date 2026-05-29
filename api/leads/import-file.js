@@ -310,6 +310,99 @@ async function positionInFunnel(svc, leadId, funnelId, stageId) {
   }
 }
 
+// ── Processar um único lead (usado em paralelo via Promise.allSettled) ────────
+//
+// Retorna um objeto de contadores para agregação pelo caller.
+// Nunca lança exceção — falhas são capturadas e refletidas em { error: 1 }.
+// planLimitHit é passado por valor (imutável dentro do lote); o caller decide
+// se interrompe os lotes seguintes com base no retorno.
+
+async function processOneLead(rawLead, { svc, companyId, funnelId, stageId, validUuidFields, responsibleUserMap }) {
+  const zero = { success: 0, duplicate: 0, duplicateReentry: 0, error: 0, planLimitHit: false, responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 0 };
+
+  try {
+    const leadPayload = buildLeadPayload(rawLead);
+
+    const { data: result, error: rpcErr } = await svc
+      .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
+
+    if (rpcErr) {
+      console.error('[import-file] create_lead_from_company rpc error:', rpcErr.message);
+      return { ...zero, error: 1 };
+    }
+
+    if (!result?.success) {
+      if (result?.error === 'plan_limit_exceeded') return { ...zero, error: 1, planLimitHit: true };
+      return { ...zero, error: 1 };
+    }
+
+    const leadId      = result.lead_id;
+    const isDuplicate = result.is_duplicate === true;
+
+    // Helper de atribuição de responsável (compartilhado entre novo e duplicado)
+    const assignResponsible = async () => {
+      const email = rawLead.responsible_user_email?.toString().trim().toLowerCase();
+      if (!email) return { responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 0 };
+      const userId = responsibleUserMap.get(email);
+      if (!userId) return { responsibleAssigned: 0, responsibleNotFound: 1, responsibleUpdateError: 0 };
+      const { error: respErr } = await svc
+        .from('leads')
+        .update({ responsible_user_id: userId })
+        .eq('id', leadId)
+        .eq('company_id', companyId);
+      if (respErr) {
+        console.error('[import-file] responsible_user update error:', respErr.message);
+        return { responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 };
+      }
+      return { responsibleAssigned: 1, responsibleNotFound: 0, responsibleUpdateError: 0 };
+    };
+
+    if (isDuplicate) {
+      const existingLeadId = result.duplicate_of_lead_id || leadId;
+      let duplicateReentry = 0;
+      try {
+        await handleLeadReentry({
+          newLeadId:       leadId,
+          existingLeadId,
+          companyId,
+          source:          'file_import',
+          externalEventId: null,
+          originChannel:   rawLead.utm_source || rawLead.origin || null,
+          metadata:        { payload_hash: hashPayload({ name: rawLead.name || null, email: rawLead.email || null, phone: rawLead.phone || null }) },
+          supabase:        svc,
+        });
+        duplicateReentry = 1;
+      } catch (err) {
+        console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
+      }
+
+      if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
+      const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
+
+      return { ...zero, duplicate: 1, duplicateReentry, ...resp };
+    }
+
+    // Lead novo
+    try { await insertCustomFields(svc, companyId, leadId, rawLead, validUuidFields); }
+    catch (cfErr) { console.error('[import-file] custom fields error:', cfErr?.message); }
+
+    try { if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags); }
+    catch (tagErr) { console.error('[import-file] tags error:', tagErr?.message); }
+
+    if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
+    const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
+
+    dispatchLeadCreatedTrigger({ companyId, leadId, source: 'file_import' })
+      .catch(err => console.error('[import-file] automation dispatch error:', err?.message));
+
+    return { ...zero, success: 1, ...resp };
+
+  } catch (err) {
+    console.error('[import-file] lead processing error:', err?.message);
+    return { ...zero, error: 1 };
+  }
+}
+
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -399,7 +492,12 @@ export default async function handler(req, res) {
   // Se nenhum lead tiver responsible_user_email, retorna Map vazio sem queries.
   const responsibleUserMap = await buildResponsibleUserMap(svc, companyId, leads);
 
-  // ── 10. Processar leads (best-effort — erros por linha não param o lote) ──
+  // ── 10. Processar leads em lotes paralelos (15 por vez) ──────────────────
+  //
+  // Cada lote usa Promise.allSettled — falhas individuais não travam os demais.
+  // Se algum lead retornar planLimitHit=true, os lotes seguintes são pulados.
+  const BATCH_SIZE = 15;
+
   let successCount               = 0;
   let duplicateCount             = 0;
   let duplicateReentryCount      = 0;
@@ -409,149 +507,28 @@ export default async function handler(req, res) {
   let responsibleNotFoundCount   = 0;
   let responsibleUpdateErrorCount = 0;
 
-  for (const rawLead of leads) {
-    if (planLimitHit) { errorCount++; continue; }
+  const ctx = { svc, companyId, funnelId, stageId, validUuidFields, responsibleUserMap };
 
-    try {
-      const leadPayload = buildLeadPayload(rawLead);
+  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+    if (planLimitHit) {
+      errorCount += leads.length - i;
+      break;
+    }
 
-      const { data: result, error: rpcErr } = await svc
-        .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
+    const batch = leads.slice(i, i + BATCH_SIZE);
+    const settled = await Promise.allSettled(batch.map(rawLead => processOneLead(rawLead, ctx)));
 
-      if (rpcErr) {
-        console.error('[import-file] create_lead_from_company rpc error:', rpcErr.message);
-        errorCount++;
-        continue;
-      }
-
-      if (!result?.success) {
-        if (result?.error === 'plan_limit_exceeded') {
-          planLimitHit = true;
-          errorCount++;
-          continue;
-        }
-        errorCount++;
-        continue;
-      }
-
-      const leadId      = result.lead_id;
-      const isDuplicate = result.is_duplicate === true;
-
-      if (isDuplicate) {
-        duplicateCount++;
-
-        // Registrar reentrada no lead existente — espelha o comportamento do webhook.
-        // newLeadId === existingLeadId (ambos apontam para o mesmo lead) → handleLeadReentry
-        // entra no caminho de reentrada direta, sem gravar new_lead_id no metadata.
-        const existingLeadId = result.duplicate_of_lead_id || leadId;
-        const payloadRef = {
-          name:  rawLead.name  || null,
-          email: rawLead.email || null,
-          phone: rawLead.phone || null,
-        };
-        try {
-          await handleLeadReentry({
-            newLeadId:       leadId,         // === existingLeadId → reentrada direta
-            existingLeadId,
-            companyId,
-            source:          'file_import',
-            externalEventId: null,
-            originChannel:   rawLead.utm_source || rawLead.origin || null,
-            metadata:        { payload_hash: hashPayload(payloadRef) },
-            supabase:        svc,
-          });
-          duplicateReentryCount++;
-        } catch (err) {
-          console.error('[import-file] lead reentry error:', {
-            message: err?.message,
-            leadId:  existingLeadId,
-          });
-        }
-
-        if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
-
-        // Atribuição de responsável para lead existente (update independente)
-        try {
-          const responsibleEmail = rawLead.responsible_user_email?.toString().trim().toLowerCase();
-          if (responsibleEmail) {
-            const responsibleUserId = responsibleUserMap.get(responsibleEmail);
-            if (responsibleUserId) {
-              const { error: respErr } = await svc
-                .from('leads')
-                .update({ responsible_user_id: responsibleUserId })
-                .eq('id', leadId)
-                .eq('company_id', companyId);
-              if (respErr) {
-                console.error('[import-file] responsible_user update error (duplicate):', respErr.message);
-                responsibleUpdateErrorCount++;
-              } else {
-                responsibleAssignedCount++;
-              }
-            } else {
-              responsibleNotFoundCount++;
-            }
-          }
-        } catch (respErr) {
-          console.error('[import-file] responsible_user assignment error (duplicate):', respErr?.message);
-          responsibleUpdateErrorCount++;
-        }
-
-        continue;
-      }
-
-      successCount++;
-
-      // Campos personalizados
-      try {
-        await insertCustomFields(svc, companyId, leadId, rawLead, validUuidFields);
-      } catch (cfErr) {
-        console.error('[import-file] custom fields error:', cfErr?.message);
-      }
-
-      // Tags
-      try {
-        if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags);
-      } catch (tagErr) {
-        console.error('[import-file] tags error:', tagErr?.message);
-      }
-
-      // Posicionamento no funil
-      if (funnelId) await positionInFunnel(svc, leadId, funnelId, stageId);
-
-      // Atribuição de responsável para lead novo
-      try {
-        const responsibleEmail = rawLead.responsible_user_email?.toString().trim().toLowerCase();
-        if (responsibleEmail) {
-          const responsibleUserId = responsibleUserMap.get(responsibleEmail);
-          if (responsibleUserId) {
-            const { error: respErr } = await svc
-              .from('leads')
-              .update({ responsible_user_id: responsibleUserId })
-              .eq('id', leadId)
-              .eq('company_id', companyId);
-            if (respErr) {
-              console.error('[import-file] responsible_user update error (new):', respErr.message);
-              responsibleUpdateErrorCount++;
-            } else {
-              responsibleAssignedCount++;
-            }
-          } else {
-            responsibleNotFoundCount++;
-          }
-        }
-      } catch (respErr) {
-        console.error('[import-file] responsible_user assignment error (new):', respErr?.message);
-        responsibleUpdateErrorCount++;
-      }
-
-      // Automações (fire-and-forget — nunca bloqueia a importação)
-      dispatchLeadCreatedTrigger(
-        { companyId, leadId, source: 'file_import' },
-      ).catch(err => console.error('[import-file] automation dispatch error:', err?.message));
-
-    } catch (err) {
-      console.error('[import-file] lead processing error:', err?.message);
-      errorCount++;
+    for (const r of settled) {
+      if (r.status === 'rejected') { errorCount++; continue; }
+      const v = r.value;
+      successCount               += v.success;
+      duplicateCount             += v.duplicate;
+      duplicateReentryCount      += v.duplicateReentry;
+      errorCount                 += v.error;
+      responsibleAssignedCount   += v.responsibleAssigned;
+      responsibleNotFoundCount   += v.responsibleNotFound;
+      responsibleUpdateErrorCount += v.responsibleUpdateError;
+      if (v.planLimitHit) planLimitHit = true;
     }
   }
 
