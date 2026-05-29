@@ -369,15 +369,8 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
   try {
     const leadPayload = buildLeadPayload(rawLead);
 
-    // #region agent log
-    const _rpcStart = Date.now();
-    // #endregion
     const { data: result, error: rpcErr } = await svc
       .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
-    // #region agent log
-    const _rpcMs = Date.now() - _rpcStart;
-    if (_rpcMs > 2000) console.error(`[import-perf] SLOW_RPC rpcMs=${_rpcMs} phone=${rawLead.phone} email=${rawLead.email}`);
-    // #endregion
 
     if (rpcErr) {
       console.error('[import-file] create_lead_from_company rpc error:', rpcErr.message);
@@ -562,11 +555,6 @@ export default async function handler(req, res) {
   // 1000 leads → 20 lotes × ~1.5s ≈ 30s (com margem de 2× sobre o limite).
   const BATCH_SIZE = 50;
 
-  // #region agent log
-  const _importStart = Date.now();
-  console.error(`[import-perf] START batchSize=${BATCH_SIZE} totalLeads=${leads.length} numericFields=${numericFieldMap.size} existingTags=${existingTags.length} funnelId=${funnelId}`);
-  // #endregion
-
   let successCount               = 0;
   let duplicateCount             = 0;
   let duplicateReentryCount      = 0;
@@ -585,13 +573,7 @@ export default async function handler(req, res) {
     }
 
     const batch = leads.slice(i, i + BATCH_SIZE);
-    // #region agent log
-    const _batchStart = Date.now();
-    // #endregion
     const settled = await Promise.allSettled(batch.map(rawLead => processOneLead(rawLead, ctx)));
-    // #region agent log
-    console.error(`[import-perf] BATCH batchIndex=${Math.floor(i/BATCH_SIZE)} batchSize=${batch.length} batchMs=${Date.now()-_batchStart} totalMs=${Date.now()-_importStart}`);
-    // #endregion
 
     for (const r of settled) {
       if (r.status === 'rejected') { errorCount++; continue; }
