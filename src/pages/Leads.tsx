@@ -819,53 +819,53 @@ export const Leads: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Lead
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contato
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Origem
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Responsável
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tags
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Data
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-100">
               {leads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-2 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
+                      <div className="flex-shrink-0 h-7 w-7">
                         <Avatar
                           src={lead.phone ? leadPhotos[lead.phone.replace(/\D/g, '')] : undefined}
                           alt={lead.name}
-                          size="md"
+                          size="sm"
                         />
                       </div>
-                      <div className="ml-4">
+                      <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900">{lead.name}</div>
                         {lead.interest && (
-                          <div className="text-sm text-gray-500">{lead.interest}</div>
+                          <div className="text-xs text-gray-400">{lead.interest}</div>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-2 whitespace-nowrap">
                     {lead.is_over_plan ? (
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
@@ -874,39 +874,39 @@ export const Leads: React.FC = () => {
                         <span className="text-xs text-gray-400 italic">Dados ocultos</span>
                       </div>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         {lead.email && (
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Mail className="w-4 h-4 mr-2 text-gray-400" />
+                          <div className="flex items-center text-xs text-gray-700">
+                            <Mail className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
                             {lead.email}
                           </div>
                         )}
                         {lead.phone && (
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Phone className="w-4 h-4 mr-2 text-gray-400" />
+                          <div className="flex items-center text-xs text-gray-700">
+                            <Phone className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
                             {lead.phone}
                           </div>
                         )}
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
                       {lead.status.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
                       {getOriginLabel(lead.origin)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
                     {(() => {
                       const responsibleUser = companyUsers.find(u => u.user_id === lead.responsible_user_id);
                       return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
                     })()}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-2">
                     {lead.tags && lead.tags.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-1">
                         {lead.tags.slice(0, 3).map(tag => (
@@ -925,11 +925,11 @@ export const Leads: React.FC = () => {
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
                     {formatDate(lead.created_at)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleViewLead(lead)}
                         className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
