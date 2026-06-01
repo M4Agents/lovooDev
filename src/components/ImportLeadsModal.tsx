@@ -17,7 +17,9 @@ import {
   Settings,
   Link,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  BookOpen,
+  ChevronRight
 } from 'lucide-react';
 
 interface ImportLeadsModalProps {
@@ -193,6 +195,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const [selectedFunnelId, setSelectedFunnelId] = useState<string>('');
   const [selectedStageId, setSelectedStageId] = useState<string>('');
   const [availableFunnels, setAvailableFunnels] = useState<any[]>([]);
+  const [showDocsModal, setShowDocsModal] = useState(false);
   const [availableStages, setAvailableStages] = useState<any[]>([]);
   const [loadingFunnels, setLoadingFunnels] = useState(false);
 
@@ -701,6 +704,223 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
 
   if (!isOpen) return null;
 
+  /* ── Modal de documentação de importação ──────────────────────────────── */
+  if (showDocsModal) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Guia de Importação de Leads</h2>
+                <p className="text-xs text-gray-500">Como preparar seu arquivo para importação</p>
+              </div>
+            </div>
+            <button onClick={() => setShowDocsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-8">
+
+            {/* Formatos aceitos */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                Formatos aceitos
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { icon: '📄', label: 'CSV / TXT', desc: 'Separador vírgula ou ponto e vírgula — detectado automaticamente' },
+                  { icon: '📊', label: 'Excel', desc: 'Arquivos .xlsx ou .xls — a primeira aba é importada' },
+                  { icon: '🔗', label: 'Google Sheets', desc: 'Cole o link de uma planilha compartilhada como CSV público' },
+                ].map(f => (
+                  <div key={f.label} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="text-2xl mb-1">{f.icon}</div>
+                    <div className="text-sm font-semibold text-gray-800">{f.label}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{f.desc}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Limite máximo: <strong>1.000 leads</strong> por importação.</p>
+            </section>
+
+            {/* Campos do arquivo */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                Colunas do arquivo
+              </h3>
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Coluna</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Obrigatória</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Descrição</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {[
+                      { col: 'Nome', req: true, desc: 'Nome completo do lead' },
+                      { col: 'Telefone', req: false, desc: 'Telefone com DDD e código do país. Ex: 5511999999999' },
+                      { col: 'Email', req: false, desc: 'Endereço de e-mail do lead' },
+                      { col: 'Origem', req: false, desc: 'website, whatsapp, indicacao, instagram, facebook, file_import…' },
+                      { col: 'Status', req: false, desc: 'novo, em_qualificacao, qualificado, perdido, ganho' },
+                      { col: 'Interesse', req: false, desc: 'Produto ou serviço de interesse' },
+                      { col: 'tags', req: false, desc: 'Tags separadas por vírgula. Ex: "VIP,Quente"' },
+                      { col: 'responsible_user_email', req: false, desc: 'E-mail do usuário responsável cadastrado na plataforma' },
+                      { col: 'company_name', req: false, desc: 'Nome da empresa do lead' },
+                      { col: 'company_cnpj', req: false, desc: 'CNPJ da empresa' },
+                      { col: 'company_cidade', req: false, desc: 'Cidade da empresa' },
+                      { col: 'company_estado', req: false, desc: 'Estado (UF) da empresa' },
+                    ].map(row => (
+                      <tr key={row.col} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 font-mono text-xs text-gray-800">{row.col}</td>
+                        <td className="px-4 py-2">
+                          {row.req
+                            ? <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Obrigatória</span>
+                            : <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">Opcional</span>
+                          }
+                        </td>
+                        <td className="px-4 py-2 text-xs text-gray-600">{row.desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* Funil e etapa por lead — destaque */}
+            <section className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <ChevronRight className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-blue-900">Posicionamento no Funil por Lead</h3>
+                  <p className="text-xs text-blue-700 mt-0.5">Recurso avançado — cada lead pode ir para uma etapa diferente no mesmo arquivo</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white rounded-lg border border-blue-200 p-3">
+                  <div className="font-mono text-xs font-bold text-blue-800 mb-1">funnel_name</div>
+                  <div className="text-xs text-gray-600">Nome exato do funil de vendas, conforme cadastrado no sistema. Ex: <span className="font-medium">Funil de Vendas</span></div>
+                </div>
+                <div className="bg-white rounded-lg border border-blue-200 p-3">
+                  <div className="font-mono text-xs font-bold text-blue-800 mb-1">stage_name</div>
+                  <div className="text-xs text-gray-600">Nome exato da etapa dentro do funil. Ex: <span className="font-medium">Aguardando Atendimento</span></div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-blue-200 mb-3">
+                <table className="w-full text-xs">
+                  <thead className="bg-blue-100">
+                    <tr>
+                      <th className="px-3 py-1.5 text-left font-semibold text-blue-800">Nome</th>
+                      <th className="px-3 py-1.5 text-left font-semibold text-blue-800">Telefone</th>
+                      <th className="px-3 py-1.5 text-left font-semibold text-blue-800">funnel_name</th>
+                      <th className="px-3 py-1.5 text-left font-semibold text-blue-800">stage_name</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-blue-100 bg-white">
+                    <tr><td className="px-3 py-1.5">João Silva</td><td className="px-3 py-1.5">5511999999999</td><td className="px-3 py-1.5">Funil de Vendas</td><td className="px-3 py-1.5">Em Negociação</td></tr>
+                    <tr><td className="px-3 py-1.5">Maria Santos</td><td className="px-3 py-1.5">5521988888888</td><td className="px-3 py-1.5">Funil de Vendas</td><td className="px-3 py-1.5">Aguardando Atendimento</td></tr>
+                    <tr><td className="px-3 py-1.5">Carlos Costa</td><td className="px-3 py-1.5">5511977777777</td><td className="px-3 py-1.5">Atendimento IA</td><td className="px-3 py-1.5">Em Atendimento IA</td></tr>
+                    <tr><td className="px-3 py-1.5 text-gray-400">Ana Lima</td><td className="px-3 py-1.5 text-gray-400">5511966666666</td><td className="px-3 py-1.5 text-gray-400 italic">(em branco)</td><td className="px-3 py-1.5 text-gray-400 italic">(em branco)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <ul className="space-y-1 text-xs text-blue-800">
+                <li className="flex items-start gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /><span><strong>João, Maria e Carlos</strong> vão para as etapas exatas informadas, em funnéis diferentes.</span></li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /><span><strong>Ana</strong> vai para o funil/etapa selecionado na tela (ou padrão da empresa).</span></li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /><span>Os nomes de funil e etapa são <strong>insensíveis a maiúsculas</strong>.</span></li>
+                <li className="flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" /><span>Funnel e etapa devem vir <strong>juntos</strong>. Um sem o outro é ignorado.</span></li>
+                <li className="flex items-start gap-1.5"><AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" /><span>Nome inválido? O lead é criado normalmente, <strong>sem erro</strong>, usando o padrão.</span></li>
+              </ul>
+            </section>
+
+            {/* Atualizar leads existentes */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                Atualizar leads já cadastrados
+              </h3>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                <p className="text-sm text-amber-900 font-medium">O sistema identifica duplicatas por telefone ou e-mail.</p>
+                <ul className="space-y-1 text-xs text-amber-800">
+                  <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Se o telefone ou e-mail já existir, o lead <strong>não é recriado</strong>.</span></li>
+                  <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Os dados cadastrais (nome, e-mail, interesse…) <strong>não são sobrescritos</strong>.</span></li>
+                  <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>A posição no funil <strong>é atualizada</strong> conforme funnel_name + stage_name.</span></li>
+                  <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Para atualizar apenas o funil de leads existentes: inclua <strong>Nome + Telefone + funnel_name + stage_name</strong>.</span></li>
+                </ul>
+              </div>
+            </section>
+
+            {/* Campos personalizados */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                Campos personalizados
+              </h3>
+              <div className="space-y-3">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="font-mono text-xs font-bold text-gray-800 mb-1">custom_&lt;uuid&gt;</div>
+                  <div className="text-xs text-gray-600">Use o ID UUID do campo personalizado como nome da coluna. Ex: <span className="font-mono">custom_a1b2c3d4-...</span></div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="font-mono text-xs font-bold text-gray-800 mb-1">1, 2, 3… (ID numérico)</div>
+                  <div className="text-xs text-gray-600">Use o ID numérico legado do campo como nome da coluna. O mapeamento é automático.</div>
+                </div>
+                <p className="text-xs text-gray-500">Colunas não reconhecidas aparecerão no passo de <strong>mapeamento</strong>, onde você associa cada coluna a um campo personalizado manualmente.</p>
+              </div>
+            </section>
+
+            {/* Dicas finais */}
+            <section className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-green-900 mb-2 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                Dicas para uma importação sem erros
+              </h3>
+              <ul className="space-y-1 text-xs text-green-800">
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Baixe o template CSV como ponto de partida.</span></li>
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>A coluna <strong>Nome</strong> é obrigatória — linhas sem nome são ignoradas.</span></li>
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Tags múltiplas: separe por vírgula entre aspas. Ex: <span className="font-mono">"VIP,Quente"</span></span></li>
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>O separador do CSV (vírgula ou ponto e vírgula) é detectado automaticamente.</span></li>
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Telefone com código do país: ex. <span className="font-mono">5511999999999</span>.</span></li>
+                <li className="flex items-start gap-1.5"><ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /><span>Limite: <strong>1.000 leads</strong> por importação. Arquivos maiores devem ser divididos.</span></li>
+              </ul>
+            </section>
+
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-between items-center p-6 border-t border-gray-200 sticky bottom-0 bg-white">
+            <button
+              onClick={downloadTemplate}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Baixar Template CSV
+            </button>
+            <button
+              onClick={() => setShowDocsModal(false)}
+              className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Entendi, voltar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -743,13 +963,22 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                     <p className="text-sm text-blue-700 mb-3">
                       Use nosso template para garantir que seus dados sejam importados corretamente.
                     </p>
-                    <button
-                      onClick={downloadTemplate}
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4" />
-                      Baixar Template CSV
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={downloadTemplate}
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        Baixar Template CSV
+                      </button>
+                      <button
+                        onClick={() => setShowDocsModal(true)}
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-white text-blue-700 text-sm rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        Como funciona?
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
