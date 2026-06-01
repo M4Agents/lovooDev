@@ -327,6 +327,63 @@ async function assignTags(svc, companyId, leadId, rawTags, existingTags) {
   }
 }
 
+// ── Pré-carregamento do mapa funil/etapa por nome ────────────────────────────
+//
+// Lê os valores únicos de funnel_name e stage_name presentes no CSV e constrói
+// um mapa "funnel_name_lower|stage_name_lower" → { funnel_id, stage_id }.
+// Permite que cada lead especifique sua própria etapa sem queries por lead.
+
+async function preloadFunnelStageMap(svc, companyId, leads) {
+  const funnelNames = new Set(
+    leads
+      .map(l => l.funnel_name?.toString().trim())
+      .filter(Boolean)
+  );
+  if (funnelNames.size === 0) return new Map();
+
+  const { data: funnels } = await svc
+    .from('sales_funnels')
+    .select('id, name')
+    .eq('company_id', companyId)
+    .in('name', [...funnelNames]);
+
+  if (!funnels?.length) return new Map();
+
+  const funnelIds = funnels.map(f => f.id);
+  const { data: stages } = await svc
+    .from('funnel_stages')
+    .select('id, name, funnel_id')
+    .in('funnel_id', funnelIds);
+
+  const map = new Map();
+  for (const funnel of funnels) {
+    const funnelKey = funnel.name.toLowerCase();
+    for (const stage of (stages ?? [])) {
+      if (stage.funnel_id === funnel.id) {
+        const key = `${funnelKey}|${stage.name.toLowerCase()}`;
+        map.set(key, { funnel_id: funnel.id, stage_id: stage.id });
+      }
+    }
+  }
+  return map;
+}
+
+// ── Resolver funil/etapa para um lead individual ──────────────────────────────
+//
+// Se o lead tiver funnel_name + stage_name, usa o mapa pré-carregado.
+// Se não encontrar no mapa (nome inválido), cai no global como fallback seguro.
+
+function resolveFunnelStageForLead(rawLead, funnelStageMap, globalFunnelId, globalTargetStageId) {
+  const fn = rawLead.funnel_name?.toString().trim();
+  const sn = rawLead.stage_name?.toString().trim();
+  if (fn && sn) {
+    const key = `${fn.toLowerCase()}|${sn.toLowerCase()}`;
+    const found = funnelStageMap.get(key);
+    if (found) return { funnelId: found.funnel_id, stageId: found.stage_id };
+  }
+  return { funnelId: globalFunnelId, stageId: globalTargetStageId };
+}
+
 // ── Posicionamento no funil (etapa já resolvida pelo pré-carregamento) ─────────
 
 async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
@@ -363,11 +420,15 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
 // planLimitHit é passado por valor (imutável dentro do lote); o caller decide
 // se interrompe os lotes seguintes com base no retorno.
 
-async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId, validUuidFields, numericFieldMap, responsibleUserMap, existingTags }) {
+async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId, funnelStageMap, validUuidFields, numericFieldMap, responsibleUserMap, existingTags }) {
   const zero = { success: 0, duplicate: 0, duplicateReentry: 0, error: 0, planLimitHit: false, responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 0 };
 
   try {
     const leadPayload = buildLeadPayload(rawLead);
+
+    // Resolver funil/etapa: por lead (funnel_name + stage_name no CSV) ou global
+    const { funnelId: leadFunnelId, stageId: leadStageId } =
+      resolveFunnelStageForLead(rawLead, funnelStageMap, funnelId, targetStageId);
 
     const { data: result, error: rpcErr } = await svc
       .rpc('create_lead_from_company', { p_company_id: companyId, lead_data: leadPayload });
@@ -422,7 +483,7 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
         console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
       }
 
-      if (funnelId) await positionInFunnel(svc, leadId, funnelId, targetStageId);
+      if (leadFunnelId) await positionInFunnel(svc, leadId, leadFunnelId, leadStageId);
       const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
 
       return { ...zero, duplicate: 1, duplicateReentry, ...resp };
@@ -435,7 +496,7 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
     try { if (rawLead.tags) await assignTags(svc, companyId, leadId, rawLead.tags, existingTags); }
     catch (tagErr) { console.error('[import-file] tags error:', tagErr?.message); }
 
-    if (funnelId) await positionInFunnel(svc, leadId, funnelId, targetStageId);
+    if (leadFunnelId) await positionInFunnel(svc, leadId, leadFunnelId, leadStageId);
     const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
 
     dispatchLeadCreatedTrigger({ companyId, leadId, source: 'file_import' })
@@ -539,12 +600,13 @@ export default async function handler(req, res) {
   // - responsibleUserMap: email→user_id (sem query por lead)
   // - existingTags: tags ativas da empresa (sem query por lead)
   // - targetStageId: etapa-alvo do funil (sem query por lead)
-  const [validUuidFields, numericFieldMap, responsibleUserMap, existingTags, targetStageId] = await Promise.all([
+  const [validUuidFields, numericFieldMap, responsibleUserMap, existingTags, targetStageId, funnelStageMap] = await Promise.all([
     loadValidUuidFields(svc, companyId, leads),
     loadNumericFieldMap(svc, companyId, leads),
     buildResponsibleUserMap(svc, companyId, leads),
     preloadExistingTags(svc, companyId, leads),
     resolveTargetStage(svc, funnelId, stageId),
+    preloadFunnelStageMap(svc, companyId, leads),
   ]);
 
   // ── 10. Processar leads em lotes paralelos ────────────────────────────────
@@ -564,7 +626,7 @@ export default async function handler(req, res) {
   let responsibleNotFoundCount   = 0;
   let responsibleUpdateErrorCount = 0;
 
-  const ctx = { svc, companyId, funnelId, targetStageId, validUuidFields, numericFieldMap, responsibleUserMap, existingTags };
+  const ctx = { svc, companyId, funnelId, targetStageId, funnelStageMap, validUuidFields, numericFieldMap, responsibleUserMap, existingTags };
 
   for (let i = 0; i < leads.length; i += BATCH_SIZE) {
     if (planLimitHit) {

@@ -46,6 +46,8 @@ interface ParsedLead {
   company_site?: string;
   tags?: string;
   responsible_user_email?: string;
+  funnel_name?: string;
+  stage_name?: string;
   [key: string]: any;
 }
 
@@ -348,6 +350,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.interest = value;
           } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
             lead.tags = value;
+          } else if (lowerHeader === 'funnel_name' || lowerHeader === 'funil' || lowerHeader === 'funil_name') {
+            lead.funnel_name = value;
+          } else if (lowerHeader === 'stage_name' || lowerHeader === 'etapa' || lowerHeader === 'etapa_funil') {
+            lead.stage_name = value;
           } else {
             lead[header] = value;
           }
@@ -453,11 +459,15 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
              lowerHeader.includes('origem') || lowerHeader.includes('origin') ||
              lowerHeader.includes('status') ||
              lowerHeader.includes('interesse') || lowerHeader.includes('interest') ||
+             lowerHeader.includes('tag') || lowerHeader.includes('etiqueta') ||
              lowerHeader === 'responsible_user_email' ||
              lowerHeader === 'responsavel_email' ||
              lowerHeader === 'responsável_email' ||
              lowerHeader === 'email_responsavel' ||
-             lowerHeader === 'email_responsável';
+             lowerHeader === 'email_responsável' ||
+             lowerHeader === 'funnel_name' || lowerHeader === 'funil' || lowerHeader === 'funil_name' ||
+             lowerHeader === 'stage_name' || lowerHeader === 'etapa' || lowerHeader === 'etapa_funil' ||
+             lowerHeader.startsWith('company_') || lowerHeader.includes('cnpj') || lowerHeader.includes('empresa');
     };
     
     const isNumericId = (header: string) => /^\d+$/.test(header);
@@ -539,6 +549,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.interest = value;
         } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
           lead.tags = value;
+        } else if (lowerHeader === 'funnel_name' || lowerHeader === 'funil' || lowerHeader === 'funil_name') {
+          lead.funnel_name = value;
+        } else if (lowerHeader === 'stage_name' || lowerHeader === 'etapa' || lowerHeader === 'etapa_funil') {
+          lead.stage_name = value;
         } else {
           lead[header] = value;
         }
@@ -594,6 +608,8 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           company_email:         lead.company_email         || undefined,
           company_site:          lead.company_site          || undefined,
           responsible_user_email: lead.responsible_user_email || undefined,
+          funnel_name:            lead.funnel_name            || undefined,
+          stage_name:             lead.stage_name             || undefined,
         };
 
         // Campos personalizados mapeados via UI (custom_<uuid>)
@@ -643,10 +659,13 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
   const downloadTemplate = () => {
     // Template usa vírgula (,) mas sistema aceita ponto e vírgula (;) automaticamente
     // responsible_user_email é opcional: preencher com o email do responsável cadastrado na plataforma
-    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,responsible_user_email,1,2,3\n' +
-                      'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",responsavel@empresa.com,Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
-                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
-                      'Pedro Costa,pedro@email.com,5511987654321,indicacao,novo,Consultoria,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo",vendedor@empresa.com,,,';
+    // funnel_name e stage_name são opcionais: quando presentes, posicionam cada lead
+    // em uma etapa específica de funil (substitui a seleção global do preview).
+    // Os nomes devem corresponder exatamente aos nomes de funil e etapa cadastrados no sistema.
+    const csvContent = 'Nome,Email,Telefone,Origem,Status,Interesse,company_name,company_cnpj,company_cidade,company_estado,tags,responsible_user_email,funnel_name,stage_name,1,2,3\n' +
+                      'João Silva,joao@email.com,5511999999999,website,novo,Desenvolvimento de site,Empresa ABC Ltda,12345678000190,São Paulo,SP,"VIP,Quente",responsavel@empresa.com,Funil de Vendas,Em Negociação,Valor Campo 1,Valor Campo 2,Valor Campo 3\n' +
+                      'Maria Santos,maria@email.com,5521988888888,whatsapp,em_qualificacao,Marketing digital,Tech Solutions,98765432000110,Rio de Janeiro,RJ,Cliente,,Funil de Vendas,Aguardando Atendimento,Outro Valor 1,Outro Valor 2,Outro Valor 3\n' +
+                      'Pedro Costa,pedro@email.com,5511987654321,indicacao,novo,Consultoria,Inovação LTDA,11223344000155,São Paulo,SP,"Prioridade,Ativo",vendedor@empresa.com,,,,,';
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -946,6 +965,21 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
                   <p className="text-sm text-gray-600">
                     ℹ️ Os demais <strong>{parsedData.length - 3} leads</strong> seguem o mesmo formato e serão importados
                   </p>
+                </div>
+              )}
+
+              {/* Aviso quando o CSV já traz funil/etapa por lead */}
+              {parsedData.some(l => l.funnel_name && l.stage_name) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+                  <span className="text-blue-500 text-lg leading-none">ℹ️</span>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800">Funil/Etapa por lead detectado</p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      Seu arquivo contém as colunas <strong>funnel_name</strong> e <strong>stage_name</strong>.
+                      Cada lead será posicionado na etapa informada na linha, respeitando exatamente o nome do funil e da etapa.
+                      A seleção global abaixo será usada apenas para leads sem essas colunas preenchidas.
+                    </p>
+                  </div>
                 </div>
               )}
 
