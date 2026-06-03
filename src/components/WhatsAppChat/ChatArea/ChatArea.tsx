@@ -2345,6 +2345,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const shouldSendRef = useRef(true)
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
+  const [isSecondaryMenuOpen, setIsSecondaryMenuOpen] = useState(false)
 
   // Preenche o textarea com sugestão selecionada e ajusta altura — sem enviar automaticamente
   useEffect(() => {
@@ -2400,6 +2401,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     setMessage('')
     setPendingMedia(null)
     setIsEmojiOpen(false)
+    setIsSecondaryMenuOpen(false)
 
     if (textareaRef.current) {
       textareaRef.current.style.height = '40px'
@@ -2591,14 +2593,110 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }, [isEmojiOpen])
 
   return (
-    <form 
-      onSubmit={handleSubmit} 
-      className="flex items-end space-x-1 relative"
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-end gap-1 relative"
     >
+      {/* ── Mobile: botão "+" abre menu de ações secundárias ─────────────── */}
+      {!isRecording && (
+        <div className="sm:hidden relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSecondaryMenuOpen(prev => !prev)}
+            disabled={disabled}
+            aria-label="Mais ações"
+            title="Mais ações"
+            className="relative p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {/* Dot indicator quando IA ativa */}
+            {isSuggestionActive && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-purple-500" aria-hidden />
+            )}
+          </button>
+
+          {/* Menu de ações secundárias (mobile) */}
+          {isSecondaryMenuOpen && (
+            <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-lg z-50 flex items-center gap-0.5 p-1.5">
+              {/* Emoji */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (disabled) return
+                  setIsSecondaryMenuOpen(false)
+                  setIsEmojiOpen(prev => !prev)
+                }}
+                className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                aria-label={t('input.actions.emoji')}
+                title={t('input.actions.emoji')}
+              >
+                <span role="img" aria-hidden className="text-xl">😊</span>
+              </button>
+
+              {/* Microfone */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSecondaryMenuOpen(false)
+                  handleToggleRecord()
+                }}
+                disabled={disabled}
+                aria-label={t('input.actions.record')}
+                title={t('input.actions.record')}
+                className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 2a2 2 0 00-2 2v5a2 2 0 104 0V4a2 2 0 00-2-2z" />
+                  <path d="M5 9a5 5 0 0010 0h-1.5a3.5 3.5 0 01-7 0H5z" />
+                  <path d="M8.5 14h3v2h-3z" />
+                </svg>
+              </button>
+
+              {/* Anexo */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSecondaryMenuOpen(false)
+                  handleAttachClick()
+                }}
+                className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                aria-label={t('input.actions.attach')}
+                title={t('input.actions.attach')}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+
+              {/* IA */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSecondaryMenuOpen(false)
+                  onToggleSuggestion?.()
+                }}
+                disabled={disabled}
+                aria-label="Sugerir resposta com IA"
+                title="Sugerir resposta"
+                className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
+                  isSuggestionActive
+                    ? 'text-purple-800 bg-purple-50'
+                    : 'text-purple-600 hover:text-purple-800 hover:bg-gray-100'
+                }`}
+              >
+                <Sparkles className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Campo de texto + elementos contextuais ───────────────────────── */}
       <div className="flex-1">
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
-            {/* Botão cancelar gravação */}
             <button
               type="button"
               onClick={() => {
@@ -2636,6 +2734,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             </div>
           </div>
         )}
+
         {showTemplatePicker && !disabled && (
           <div className="mb-1">
             <MessageTemplatePicker
@@ -2648,7 +2747,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 })
                 setMessage(resolved)
 
-                // Salvar apenas path + type — URL gerada no handleSubmit
                 if (payload.media_path && payload.media_type) {
                   setPendingMedia({
                     path: payload.media_path,
@@ -2698,6 +2796,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           value={message}
           onChange={handleAutoResize}
           onKeyPress={handleKeyPress}
+          onFocus={() => setIsSecondaryMenuOpen(false)}
           placeholder={resolvedPlaceholder}
           disabled={disabled}
           rows={1}
@@ -2720,51 +2819,68 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </div>
         )}
       </div>
-      {/* Botão de microfone */}
-      <button
-        type="button"
-        onClick={() => !disabled && setIsEmojiOpen((prev) => !prev)}
-        className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-        disabled={disabled}
-        aria-label={t('input.actions.emoji')}
-        title={t('input.actions.emoji')}
-      >
-        <span role="img" aria-hidden className="text-xl">
-          😊
-        </span>
-      </button>
 
-      <button
-        type="button"
-        onClick={handleToggleRecord}
-        disabled={disabled}
-        aria-label={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
-        title={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
-        className={`p-2 rounded-lg ${
-          isRecording
-            ? 'text-red-600 bg-red-50'
-            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-        }`}
-      >
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M10 2a2 2 0 00-2 2v5a2 2 0 104 0V4a2 2 0 00-2-2z" />
-          <path d="M5 9a5 5 0 0010 0h-1.5a3.5 3.5 0 01-7 0H5z" />
-          <path d="M8.5 14h3v2h-3z" />
-        </svg>
-      </button>
+      {/* ── Desktop: botões secundários visíveis normalmente (≥ 640px) ───── */}
+      <div className="hidden sm:flex items-end">
+        <button
+          type="button"
+          onClick={() => !disabled && setIsEmojiOpen((prev) => !prev)}
+          className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          disabled={disabled}
+          aria-label={t('input.actions.emoji')}
+          title={t('input.actions.emoji')}
+        >
+          <span role="img" aria-hidden className="text-xl">😊</span>
+        </button>
 
-      <button
-        type="button"
-        onClick={handleAttachClick}
-        className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-        aria-label={t('input.actions.attach')}
-        title={t('input.actions.attach')}
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-        </svg>
-      </button>
+        <button
+          type="button"
+          onClick={handleToggleRecord}
+          disabled={disabled}
+          aria-label={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
+          title={isRecording ? t('input.states.releaseToSend') : t('input.actions.record')}
+          className={`p-2 rounded-lg ${
+            isRecording
+              ? 'text-red-600 bg-red-50'
+              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a2 2 0 00-2 2v5a2 2 0 104 0V4a2 2 0 00-2-2z" />
+            <path d="M5 9a5 5 0 0010 0h-1.5a3.5 3.5 0 01-7 0H5z" />
+            <path d="M8.5 14h3v2h-3z" />
+          </svg>
+        </button>
 
+        <button
+          type="button"
+          onClick={handleAttachClick}
+          className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          aria-label={t('input.actions.attach')}
+          title={t('input.actions.attach')}
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleSuggestion}
+          disabled={disabled}
+          aria-label="Sugerir resposta com IA"
+          title="Sugerir resposta"
+          className={`p-2 rounded-lg transition-colors ${
+            isSuggestionActive
+              ? 'text-purple-800 bg-purple-50'
+              : 'text-purple-600 hover:text-purple-800 hover:bg-gray-100'
+          }`}
+        >
+          <Sparkles className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* input file — sempre oculto, acessado via ref */}
       <input
         ref={fileInputRef}
         type="file"
@@ -2772,27 +2888,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onChange={handleFileChange}
       />
 
-      <button
-        type="button"
-        onClick={onToggleSuggestion}
-        disabled={disabled}
-        aria-label="Sugerir resposta com IA"
-        title="Sugerir resposta"
-        className={`p-2 rounded-lg transition-colors ${
-          isSuggestionActive
-            ? 'text-purple-800 bg-purple-50'
-            : 'text-purple-600 hover:text-purple-800 hover:bg-gray-100'
-        }`}
-      >
-        <Sparkles className="w-5 h-5" />
-      </button>
-
+      {/* ── Botão enviar — sempre visível ────────────────────────────────── */}
       <button
         type="submit"
         disabled={(!message.trim() && !pendingMedia) || disabled || sendingWithMedia}
         aria-label={t('input.actions.send')}
         title={t('input.actions.send')}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
       >
         <svg className="w-5 h-5" aria-hidden fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
