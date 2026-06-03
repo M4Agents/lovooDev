@@ -2626,7 +2626,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             disabled={disabled}
             aria-label="Mais ações"
             title="Mais ações"
-            className="relative p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+            className="relative p-2 min-h-[40px] min-w-[40px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
