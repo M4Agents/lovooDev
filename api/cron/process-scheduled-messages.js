@@ -254,6 +254,21 @@ async function sendMessageViaUAZAPI(message) {
     // #endregion
 
     if (!response.ok) {
+      // Detectar e registrar restrição WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)
+      if (message.instance_id && message.company_id) {
+        try {
+          const { isRestrictionError, recordRestriction } = await import('../lib/uazapi/restrictions.js')
+          if (isRestrictionError(result)) {
+            await recordRestriction(supabase, {
+              companyId:    message.company_id,
+              instanceId:   message.instance_id,
+              errorPayload: result,
+            })
+          }
+        } catch (restrictionErr) {
+          console.error('[CRON-SCHED] Erro ao registrar restrição (non-fatal):', restrictionErr.message)
+        }
+      }
       return { success: false, error: result.error || result.message || `HTTP ${response.status}` }
     }
 

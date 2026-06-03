@@ -204,7 +204,7 @@ async function createDbMessage(conversationId, companyId, content, messageType, 
   return data.message_id
 }
 
-async function sendViaUazapi(messageId, phone, providerToken, content, messageType, mediaUrl, supabase) {
+async function sendViaUazapi(messageId, phone, providerToken, content, messageType, mediaUrl, supabase, instanceId, companyId) {
   const isMedia = messageType !== 'text'
   const endpoint = isMedia
     ? `${UAZAPI_BASE}/send/media`
@@ -235,6 +235,20 @@ async function sendViaUazapi(messageId, phone, providerToken, content, messageTy
       .from('chat_messages')
       .update({ status: 'failed', updated_at: new Date().toISOString() })
       .eq('id', messageId)
+
+    // Detectar e registrar restrição WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)
+    // Envolvido em try/catch para não impedir o throw original em caso de falha no helper
+    if (instanceId && companyId) {
+      try {
+        const { isRestrictionError, recordRestriction } = await import('../uazapi/restrictions.js')
+        if (isRestrictionError(result)) {
+          await recordRestriction(supabase, { companyId, instanceId, errorPayload: result })
+        }
+      } catch (restrictionErr) {
+        console.error('[whatsappSender] Erro ao registrar restrição (non-fatal):', restrictionErr.message)
+      }
+    }
+
     throw new Error(result.error || `Uazapi HTTP ${response.status}: falha no envio`)
   }
 }
@@ -330,7 +344,9 @@ export async function sendMessageNode(node, context, supabase) {
     message,
     apiType,
     mediaUrl,
-    supabase
+    supabase,
+    instance.id,
+    context.companyId
   )
 
   return {

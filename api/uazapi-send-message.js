@@ -6,6 +6,7 @@
 // Mantém 100% de integridade do sistema existente
 
 import { createClient } from '@supabase/supabase-js';
+import { isRestrictionError, recordRestriction } from './lib/uazapi/restrictions.js';
 
 // =====================================================
 // CONFIGURAÇÕES SUPABASE
@@ -170,6 +171,20 @@ export default async function handler(req, res) {
 
       if (updateError) {
         console.error('⚠️ Erro ao atualizar status (falha):', updateError);
+      }
+
+      // Detectar e registrar restrição WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)
+      // Envolvido em try/catch para não impedir a resposta de erro original
+      try {
+        if (isRestrictionError(uazapiData)) {
+          await recordRestriction(supabase, {
+            companyId:    company_id,
+            instanceId:   messageData.instance_id,
+            errorPayload: uazapiData,
+          });
+        }
+      } catch (restrictionErr) {
+        console.error('⚠️ Erro ao registrar restrição (non-fatal):', restrictionErr.message);
       }
 
       res.status(500).json({
