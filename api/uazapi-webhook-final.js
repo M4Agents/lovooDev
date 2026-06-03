@@ -1106,19 +1106,12 @@ async function processMessage(payload) {
     //      baixar e salvar permanentemente no Storage imediatamente.
     //   2. Fallback assíncrono: syncContactPhoto (Uazapi API + throttle 24h).
     // Nunca sobrescreve URL permanente já salva no Storage.
-    // #region agent log
-    console.error('[photoSync:diag] BLOCO INICIADO | contactId=' + contactId + ' | hasImagePreview=' + !!(payload.chat?.imagePreview));
-    // #endregion
     try {
       const { data: contactData, error: contactError } = await supabase
         .from('chat_contacts')
         .select('id, phone_number, profile_picture_url, photo_updated_at, company_id')
         .eq('id', contactId)
         .single();
-
-      // #region agent log
-      console.error('[photoSync:diag] contactData=' + (contactData ? 'ENCONTRADO' : 'NULL') + ' | contactError=' + (contactError?.message || 'none') + ' | currentUrl=' + (contactData?.profile_picture_url ? contactData.profile_picture_url.substring(0, 60) : 'null'));
-      // #endregion
 
       if (contactError || !contactData) {
         console.log('[photoSync:webhook] contato não encontrado, pulando sync de foto');
@@ -1134,21 +1127,11 @@ async function processMessage(payload) {
         const currentIsCdn  = !currentUrl || isWhatsAppCdnPhoto(currentUrl);
         const previewIsCdn  = imagePreview && isWhatsAppCdnPhoto(imagePreview);
 
-        // #region agent log
-        console.error('[photoSync:diag] imagePreview=' + (imagePreview ? imagePreview.substring(0, 60) : 'null') + ' | currentIsCdn=' + currentIsCdn + ' | previewIsCdn=' + previewIsCdn + ' | api_key=' + (company?.api_key ? 'PRESENTE' : 'NULL'));
-        // #endregion
-
         if (previewIsCdn && currentIsCdn) {
           // Caminho direto: imagePreview é fresco (recém-chegado do WhatsApp) e a
           // foto atual ainda é temporária ou está vazia → download imediato.
-          // #region agent log
-          console.error('[photoSync:diag] CAMINHO: downloadAndStorePhoto INICIADO (fire-and-forget)');
-          // #endregion
           downloadAndStorePhoto(supabase, imagePreview, contactData.company_id, contactData.phone_number)
             .then(async (permanentUrl) => {
-              // #region agent log
-              console.error('[photoSync:diag] downloadAndStorePhoto CONCLUÍDO | permanentUrl=' + permanentUrl.substring(0, 60));
-              // #endregion
               const { error: updErr } = await supabase
                 .from('chat_contacts')
                 .update({
@@ -1160,28 +1143,18 @@ async function processMessage(payload) {
               if (updErr) {
                 console.error('[photoSync:webhook] erro ao atualizar contato:', updErr.message);
               } else {
-                console.error('[photoSync:diag] DB ATUALIZADO com URL permanente, contato:', contactData.id);
                 console.log('[photoSync:webhook] foto salva permanentemente, contato:', contactData.id);
               }
             })
             .catch((err) => {
               // Download direto falhou (URL expirada ou erro de rede) → fallback
               console.error('[photoSync:webhook] download direto falhou, usando syncContactPhoto:', err.message);
-              // #region agent log
-              console.error('[photoSync:diag] FALLBACK syncContactPhoto após falha no download');
-              // #endregion
               syncContactPhoto(supabase, contactData, instance, company).catch(() => {});
             });
         } else {
           // Sem imagePreview fresco ou foto já é permanente → fallback com throttle 24h
-          // #region agent log
-          console.error('[photoSync:diag] CAMINHO: syncContactPhoto (sem imagePreview ou URL já permanente)');
-          // #endregion
           syncContactPhoto(supabase, contactData, instance, company)
             .then(result => {
-              // #region agent log
-              console.error('[photoSync:diag] syncContactPhoto resultado: updated=' + result.updated + ' reason=' + (result.reason || 'n/a'));
-              // #endregion
               if (result.updated) {
                 console.log('[photoSync:webhook] sincronizado via Uazapi, contato:', contactData.id);
               } else {
@@ -1195,9 +1168,6 @@ async function processMessage(payload) {
       }
     } catch (photoSyncError) {
       console.error('[photoSync:webhook] exception no bloco de foto:', photoSyncError.message);
-      // #region agent log
-      console.error('[photoSync:diag] EXCEPTION:', photoSyncError.stack);
-      // #endregion
       // Não falhar o webhook por causa do sync de foto
     }
 
