@@ -1,0 +1,214 @@
+-- Migration: 20260604100000_protect_stable_photo_url_in_webhook.sql
+--
+-- Objetivo: Atualizar process_webhook_message_safe para proteger URLs permanentes de foto.
+--
+-- Problema: O campo profile_picture_url em chat_contacts estava sendo sobrescrito
+--   por URLs temporárias do CDN do WhatsApp (pps.whatsapp.net, mmg.whatsapp.net)
+--   a cada novo webhook, destruindo URLs permanentes já salvas no Supabase Storage.
+--
+-- Solução: Na atualização do contato existente, só atualiza profile_picture_url
+--   se a URL atual for CDN (temporária) ou nula. URLs permanentes (Storage) são preservadas.
+--
+-- Rollback: Ver bloco ao final deste arquivo.
+
+CREATE OR REPLACE FUNCTION public.process_webhook_message_safe(
+  p_company_id               uuid,
+  p_instance_id              uuid,
+  p_phone_number             text,
+  p_sender_name              text,
+  p_content                  text,
+  p_message_type             text,
+  p_direction                text,
+  p_uazapi_message_id        text    DEFAULT NULL,
+  p_profile_picture_url      text    DEFAULT NULL,
+  p_media_url                text    DEFAULT NULL,
+  p_reply_to_uazapi_message_id text  DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_contact_id        uuid;
+  v_conversation_id   uuid;
+  v_message_id        uuid;
+  v_lead_id           INTEGER;
+  v_lead_created      BOOLEAN := false;
+  v_reply_message_id  uuid    := NULL;
+  v_phone_normalized  text;
+  v_result            jsonb;
+  v_current_photo_url text;
+  v_is_cdn_photo      boolean;
+BEGIN
+  RAISE LOG 'process_webhook_message_safe: Iniciando processamento para empresa % telefone %', p_company_id, p_phone_number;
+
+  -- Deduplicação por uazapi_message_id
+  IF p_uazapi_message_id IS NOT NULL THEN
+    SELECT cm.id, cc.id, cc.lead_id
+    INTO v_message_id, v_conversation_id, v_lead_id
+    FROM chat_messages cm
+    JOIN chat_conversations cc ON cc.id = cm.conversation_id
+    WHERE cm.uazapi_message_id = p_uazapi_message_id
+      AND cm.company_id        = p_company_id
+    LIMIT 1;
+
+    IF v_message_id IS NOT NULL THEN
+      RAISE LOG 'process_webhook_message_safe: Mensagem duplicata detectada (uazapi_message_id=%) — retornando existente %', p_uazapi_message_id, v_message_id;
+
+      UPDATE chat_conversations
+      SET last_message_at = NOW(), updated_at = NOW()
+      WHERE id = v_conversation_id;
+
+      RETURN jsonb_build_object(
+        'success',         true,
+        'message',         'Mensagem já registrada (deduplicada)',
+        'contact_id',      NULL,
+        'conversation_id', v_conversation_id,
+        'message_id',      v_message_id,
+        'lead_id',         v_lead_id,
+        'lead_created',    false,
+        'media_url',       p_media_url,
+        'deduplicated',    true
+      );
+    END IF;
+  END IF;
+
+  -- Resolver reply_to
+  IF p_reply_to_uazapi_message_id IS NOT NULL THEN
+    SELECT id INTO v_reply_message_id
+    FROM chat_messages
+    WHERE uazapi_message_id = p_reply_to_uazapi_message_id
+      AND company_id        = p_company_id
+    LIMIT 1;
+    RAISE LOG 'process_webhook_message_safe: reply_to resolvido: % → %', p_reply_to_uazapi_message_id, v_reply_message_id;
+  END IF;
+
+  -- Buscar ou criar contato
+  SELECT id, profile_picture_url
+  INTO v_contact_id, v_current_photo_url
+  FROM chat_contacts
+  WHERE phone_number = p_phone_number
+    AND company_id   = p_company_id;
+
+  IF v_contact_id IS NULL THEN
+    INSERT INTO chat_contacts (
+      company_id, phone_number, name, profile_picture_url,
+      total_messages, tags, custom_fields, created_at, updated_at
+    ) VALUES (
+      p_company_id, p_phone_number, p_sender_name, p_profile_picture_url,
+      0, '{}', '{}', NOW(), NOW()
+    ) RETURNING id INTO v_contact_id;
+    RAISE LOG 'process_webhook_message_safe: Contato criado com ID %', v_contact_id;
+  ELSE
+    -- Proteger URL permanente: só sobrescrever se a URL atual for CDN/temporária ou nula.
+    -- URLs permanentes (Supabase Storage) não contêm domínios do WhatsApp CDN.
+    v_is_cdn_photo := (
+      v_current_photo_url IS NULL
+      OR v_current_photo_url LIKE '%pps.whatsapp.net%'
+      OR v_current_photo_url LIKE '%mmg.whatsapp.net%'
+    );
+
+    UPDATE chat_contacts
+    SET
+      name                = COALESCE(NULLIF(p_sender_name, ''), name),
+      profile_picture_url = CASE
+                              WHEN v_is_cdn_photo THEN COALESCE(p_profile_picture_url, profile_picture_url)
+                              ELSE profile_picture_url  -- URL permanente: proteger
+                            END,
+      updated_at          = NOW()
+    WHERE id = v_contact_id;
+    RAISE LOG 'process_webhook_message_safe: Contato atualizado com ID % (photo_protected=%)', v_contact_id, (NOT v_is_cdn_photo);
+  END IF;
+
+  v_phone_normalized := REGEXP_REPLACE(p_phone_number, '[^0-9]', '', 'g');
+
+  SELECT id INTO v_lead_id
+  FROM leads
+  WHERE company_id = p_company_id
+    AND deleted_at IS NULL
+    AND (
+      REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = v_phone_normalized
+      OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 11) = RIGHT(v_phone_normalized, 11)
+    )
+  LIMIT 1;
+
+  RAISE LOG 'process_webhook_message_safe: Lead encontrado para telefone % → id=%', p_phone_number, COALESCE(v_lead_id::text, 'NULL');
+
+  -- Buscar ou criar conversa
+  SELECT id INTO v_conversation_id
+  FROM chat_conversations
+  WHERE company_id   = p_company_id
+    AND instance_id  = p_instance_id
+    AND contact_phone = p_phone_number;
+
+  IF v_conversation_id IS NULL THEN
+    INSERT INTO chat_conversations (
+      company_id, instance_id, contact_phone, contact_name, lead_id,
+      last_message_at, unread_count, status, created_at, updated_at
+    ) VALUES (
+      p_company_id, p_instance_id, p_phone_number, p_sender_name, v_lead_id,
+      NOW(), CASE WHEN p_direction = 'inbound' THEN 1 ELSE 0 END,
+      'active', NOW(), NOW()
+    ) RETURNING id INTO v_conversation_id;
+    RAISE LOG 'process_webhook_message_safe: Conversa criada com ID % e lead_id %', v_conversation_id, COALESCE(v_lead_id::text, 'NULL');
+  ELSE
+    UPDATE chat_conversations
+    SET
+      contact_name    = COALESCE(NULLIF(p_sender_name, ''), contact_name),
+      lead_id         = COALESCE(lead_id, v_lead_id),
+      last_message_at = NOW(),
+      unread_count    = CASE
+        WHEN p_direction = 'inbound' THEN unread_count + 1
+        ELSE unread_count
+      END,
+      updated_at = NOW()
+    WHERE id = v_conversation_id;
+    RAISE LOG 'process_webhook_message_safe: Conversa atualizada com ID % e lead_id %', v_conversation_id, COALESCE(v_lead_id::text, 'NULL');
+  END IF;
+
+  INSERT INTO chat_messages (
+    conversation_id, company_id, instance_id, message_type, content, media_url,
+    direction, status, uazapi_message_id, reply_to_message_id, timestamp, created_at, updated_at
+  ) VALUES (
+    v_conversation_id, p_company_id, p_instance_id, p_message_type, p_content, p_media_url,
+    p_direction, 'sent', p_uazapi_message_id, v_reply_message_id, NOW(), NOW(), NOW()
+  ) RETURNING id INTO v_message_id;
+
+  RAISE LOG 'process_webhook_message_safe: Mensagem criada com ID % reply_to=%', v_message_id, COALESCE(v_reply_message_id::text, 'NULL');
+
+  v_result := jsonb_build_object(
+    'success',         true,
+    'message',         'Mensagem processada com sucesso via webhook seguro',
+    'contact_id',      v_contact_id,
+    'conversation_id', v_conversation_id,
+    'message_id',      v_message_id,
+    'lead_id',         v_lead_id,
+    'lead_created',    v_lead_created,
+    'media_url',       p_media_url
+  );
+
+  RETURN v_result;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE LOG 'process_webhook_message_safe: ERRO - %', SQLERRM;
+    RETURN jsonb_build_object(
+      'success', false,
+      'error',   SQLERRM,
+      'message', 'Erro ao processar mensagem via webhook seguro'
+    );
+END;
+$function$;
+
+-- =============================================================================
+-- ROLLBACK (reverter proteção de URL — restaura comportamento anterior):
+-- =============================================================================
+-- Execute o bloco abaixo APENAS se precisar reverter esta migration:
+--
+-- UPDATE chat_contacts SET ... (não necessário — os dados não foram alterados)
+--
+-- Para reverter a função, reaplicar a versão anterior:
+-- (restaurar a linha original no UPDATE chat_contacts)
+--   profile_picture_url = COALESCE(p_profile_picture_url, profile_picture_url),
+-- =============================================================================
