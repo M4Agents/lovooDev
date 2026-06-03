@@ -742,7 +742,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     const newInstance = availableInstances.find(i => i.id === newInstanceId)
     if (!newInstance) return
     
-    // Confirmar mudança
+    // Confirmar mudança inicial
     const confirmed = window.confirm(
       t('leadPanel.contact.confirmChangeInstance', { name: newInstance.instance_name })
     )
@@ -754,7 +754,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     try {
       setChangingInstance(true)
       
-      // Chamar função SQL para atualizar
+      // Primeira chamada — sem resolução de conflito (comportamento padrão)
       const { data, error } = await chatApi.supabase.rpc('change_conversation_instance', {
         p_conversation_id: conversation.id,
         p_new_instance_id: newInstanceId,
@@ -765,10 +765,43 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       
       if (data?.success) {
         setSelectedInstanceId(newInstanceId)
-        alert(t('leadPanel.contact.instanceChangedSuccess'))
-        
-        // Recarregar dados
+        if (data?.archived_conversation_id) {
+          alert('Instância alterada com sucesso. A conversa anterior com esta instância foi arquivada.')
+        } else {
+          alert(t('leadPanel.contact.instanceChangedSuccess'))
+        }
         await onUpdate()
+      } else if (data?.conflict_conversation_id) {
+        // Conflito detectado — solicitar confirmação explícita antes de arquivar
+        const resolveConfirmed = window.confirm(
+          'Já existe uma conversa com este contato nesta instância. Deseja arquivar a conversa existente e mover esta conversa para a instância selecionada?'
+        )
+        
+        if (!resolveConfirmed) {
+          // Usuário cancelou — reverter seleção sem alterar dados
+          if (conversation?.instance_id) {
+            setSelectedInstanceId(conversation.instance_id)
+          }
+          return
+        }
+        
+        // Segunda chamada — com resolução explícita de conflito
+        const { data: resolveData, error: resolveError } = await chatApi.supabase.rpc('change_conversation_instance', {
+          p_conversation_id: conversation.id,
+          p_new_instance_id: newInstanceId,
+          p_company_id: companyId,
+          p_resolve_conflict: true
+        })
+        
+        if (resolveError) throw resolveError
+        
+        if (resolveData?.success) {
+          setSelectedInstanceId(newInstanceId)
+          alert('Instância alterada com sucesso. A conversa anterior com esta instância foi arquivada.')
+          await onUpdate()
+        } else {
+          throw new Error(resolveData?.error || t('leadPanel.contact.instanceChangeFailedShort'))
+        }
       } else {
         throw new Error(data?.error || t('leadPanel.contact.instanceChangeFailedShort'))
       }
