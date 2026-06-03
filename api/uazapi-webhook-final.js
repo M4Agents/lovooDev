@@ -1127,7 +1127,7 @@ async function processMessage(payload) {
           isWhatsAppCdnPhoto,
           downloadAndStorePhoto,
           syncContactPhoto,
-        } = require('../lib/photoSync.cjs');
+        } = await import('../lib/photoSync.cjs');
 
         const imagePreview  = payload.chat?.imagePreview || null;
         const currentUrl    = contactData.profile_picture_url;
