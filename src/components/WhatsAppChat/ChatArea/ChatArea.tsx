@@ -2534,6 +2534,26 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   }
 
+  // Cancelar gravação — descarta o áudio sem enviar
+  const handleCancelRecording = () => {
+    shouldSendRef.current = false
+    try {
+      mediaRecorderRef.current?.stop()
+    } catch (error) {
+      console.error('Erro ao cancelar gravação:', error)
+    }
+  }
+
+  // Finalizar gravação — para e envia o áudio
+  const handleSendRecording = () => {
+    // shouldSendRef.current já é true por padrão (definido em handleToggleRecord)
+    try {
+      mediaRecorderRef.current?.stop()
+    } catch (error) {
+      console.error('Erro ao finalizar gravação:', error)
+    }
+  }
+
   // Função para auto-resize do textarea
   const applyResize = (el: HTMLTextAreaElement) => {
     const minH = 40
@@ -2693,30 +2713,76 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
+      {/* ── Mobile: overlay de gravação com Cancelar e Enviar (sm:hidden) ── */}
+      {isRecording && (
+        <div className="sm:hidden flex items-center gap-2 w-full">
+          {/* Cancelar */}
+          <button
+            type="button"
+            onClick={handleCancelRecording}
+            aria-label={t('input.a11y.cancelRecording')}
+            title={t('input.a11y.cancelRecording')}
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center flex-shrink-0 rounded-full border-2 border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M6 18L18 6" />
+            </svg>
+          </button>
+
+          {/* Info central: indicador + texto + timer + waveform */}
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl overflow-hidden min-h-[40px]">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" aria-hidden />
+            <span className="text-xs font-medium text-gray-700 flex-shrink-0">
+              {t('input.states.recording')}
+            </span>
+            <span className="text-xs font-medium text-gray-700 tabular-nums flex-shrink-0 min-w-[2.5rem]">
+              {`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60).toString().padStart(2, '0')}`}
+            </span>
+            <div className="flex-1 flex items-end gap-0.5 h-5 overflow-hidden">
+              {[2,4,1,5,3,6,2,4,5,3,4,2,5,1,3].map((h, i) => (
+                <span
+                  key={i}
+                  className="w-0.5 bg-gray-400 rounded-sm animate-pulse flex-shrink-0"
+                  style={{ height: `${4 + h * 2}px` }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Enviar áudio */}
+          <button
+            type="button"
+            onClick={handleSendRecording}
+            aria-label="Enviar áudio"
+            title="Enviar áudio"
+            className="min-h-[40px] px-4 flex items-center justify-center gap-1.5 flex-shrink-0 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium text-sm transition-colors"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            <span>Enviar</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Campo de texto + elementos contextuais ───────────────────────── */}
-      <div className="flex-1">
+      <div className={`flex-1 ${isRecording ? 'hidden sm:block' : ''}`}>
         {isRecording && (
-          <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 flex items-center space-x-3">
+          <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 hidden sm:flex items-center space-x-3">
+            {/* Desktop: banner com botão X e waveform */}
             <button
               type="button"
-              onClick={() => {
-                shouldSendRef.current = false
-                try {
-                  mediaRecorderRef.current?.stop()
-                } catch (error) {
-                  console.error('Erro ao cancelar gravação:', error)
-                }
-              }}
+              onClick={handleCancelRecording}
               aria-label={t('input.a11y.cancelRecording')}
               title={t('input.a11y.cancelRecording')}
-              className="p-1 rounded-full border border-gray-400 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-400"
+              className="p-1.5 rounded-full border border-gray-400 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-400 flex-shrink-0"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M6 18L18 6" />
               </svg>
             </button>
 
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" aria-hidden />
             <span className="text-xs font-medium text-gray-700">{t('input.states.recording')}</span>
             <span className="text-xs font-medium text-gray-700 min-w-[2.5rem] tabular-nums">
               {`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60)
@@ -2801,7 +2867,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           disabled={disabled}
           rows={1}
           ref={textareaRef}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50"
+          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:opacity-50 ${isRecording ? 'hidden sm:block' : ''}`}
           style={{ minHeight: '40px', maxHeight: '120px', height: '40px', overflowY: 'hidden' }}
         />
 
@@ -2888,13 +2954,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onChange={handleFileChange}
       />
 
-      {/* ── Botão enviar — sempre visível ────────────────────────────────── */}
+      {/* ── Botão enviar texto — oculto no mobile durante gravação ──────── */}
       <button
         type="submit"
         disabled={(!message.trim() && !pendingMedia) || disabled || sendingWithMedia}
         aria-label={t('input.actions.send')}
         title={t('input.actions.send')}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isRecording ? 'hidden sm:flex sm:items-center' : ''}`}
       >
         <svg className="w-5 h-5" aria-hidden fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
