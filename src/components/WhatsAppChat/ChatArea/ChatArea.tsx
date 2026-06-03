@@ -2766,7 +2766,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       )}
 
       {/* ── Campo de texto + elementos contextuais ───────────────────────── */}
-      <div className={`flex-1 ${isRecording ? 'hidden sm:block' : ''}`}>
+      <div className={`flex-1 flex flex-col ${isRecording ? 'hidden sm:block' : ''}`}>
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 hidden sm:flex items-center space-x-3">
             {/* Desktop: banner com botão X e waveform */}
