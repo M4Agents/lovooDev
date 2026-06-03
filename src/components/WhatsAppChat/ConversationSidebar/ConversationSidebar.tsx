@@ -149,49 +149,51 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-6 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shadow-sm ${
+      {/* Header compacto */}
+      <div className="p-3 border-b border-slate-200/60 bg-gradient-to-r from-white to-slate-50">
+
+        {/* Linha única: ícone + título | pills canal + refresh */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`h-7 w-7 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0 ${
               isInstagram ? 'bg-gradient-to-br from-pink-500 to-purple-600' : 'bg-[#00a884]'
             }`}>
               {isInstagram ? (
-                <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
                 </svg>
               ) : (
-                <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
                 </svg>
               )}
             </div>
-            <h2 className="text-xl font-bold text-slate-800">{t('sidebar.title')}</h2>
+            <span className="text-sm font-semibold text-slate-800">{t('sidebar.title')}</span>
           </div>
-          <button
-            onClick={isInstagram ? igData?.onRefresh : onRefresh}
-            disabled={activeLoading}
-            className="p-2.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-white/60 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow-md"
-          >
-            <svg className={`w-5 h-5 ${activeLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+
+          <div className="flex items-center gap-1.5">
+            {/* Pills de canal — compacto */}
+            <ChannelSelector
+              compact
+              selectedChannel={selectedChannel}
+              onChannelChange={onChannelChange}
+            />
+            {/* Refresh */}
+            <button
+              onClick={isInstagram ? igData?.onRefresh : onRefresh}
+              disabled={activeLoading}
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white/60 disabled:opacity-50 transition-all duration-200"
+            >
+              <svg className={`w-4 h-4 ${activeLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Seletor de Canal */}
-        <ChannelSelector
-          selectedChannel={selectedChannel}
-          onChannelChange={onChannelChange}
-        />
-
-        {/* Seletor de Instância (WhatsApp) ou Conta (Instagram) */}
+        {/* Seletor de Instância (WhatsApp) */}
         {!isInstagram && instances.length > 0 && (
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2 mb-2">
-              <img src="/images/emails/wpp.png" alt="WhatsApp" className="w-4 h-4" />
-              {t('sidebar.instanceLabel')}
-            </label>
+          <div className="mb-2">
             <InstanceSelector
               instances={instances}
               selectedInstance={selectedInstance || 'all'}
@@ -202,11 +204,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           </div>
         )}
 
+        {/* Seletor de Conta (Instagram) */}
         {isInstagram && (
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-              {t('instagram.accountSelectorLabel')}
-            </label>
+          <div className="mb-2">
             <InstagramAccountSelector
               connections={igData?.connections ?? []}
               selectedConnectionId={igData?.selectedConnectionId ?? 'all'}
@@ -228,30 +228,22 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                 igData?.onFilterChange({ ...(igData.filter), search: e.target.value })
               }
             }}
-            className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-slate-400"
+            className="w-full pl-10 pr-4 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-slate-400 text-sm"
           />
-          <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
         </div>
       </div>
 
-      {/* Filtros Compactos */}
-      <div className="px-4 py-3 border-b border-slate-200/40 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/60 backdrop-blur-sm">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Filtros — chips horizontais com scroll */}
+      <div className="px-3 py-2 border-b border-slate-200/40 bg-slate-50/60">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           {filterOptions.map(option => {
             const activeKey = isInstagram ? igData?.filter.type : filter.type
             const isActive = activeKey === option.key
-
-            const getCardStyles = () => {
-              if (!isActive) {
-                return 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-white/80 hover:shadow-sm border border-slate-100/50 hover:border-slate-200/50 transition-all duration-200 ease-out'
-              }
-              const color = isInstagram ? 'from-pink-500 to-pink-600 shadow-pink-600/20 border-pink-500/30' : 'from-[#009E7E] to-[#009E7E] shadow-green-600/20 border-green-600/30'
-              return `bg-gradient-to-br ${color} text-white shadow-sm hover:opacity-90 border transition-all duration-200 ease-out`
-            }
 
             const handleClick = () => {
               if (isInstagram) {
@@ -265,24 +257,20 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               <button
                 key={option.key}
                 onClick={handleClick}
-                className={`group relative overflow-hidden rounded-lg p-2.5 text-center transform hover:scale-[1.005] ${getCardStyles()}`}
+                className={`flex-shrink-0 flex items-center gap-1.5 min-h-[36px] px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                  isActive
+                    ? isInstagram
+                      ? 'bg-pink-500 text-white shadow-sm'
+                      : 'bg-[#009E7E] text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                }`}
               >
-                <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 transition-transform duration-700 ${
-                  isActive ? 'translate-x-full' : 'group-hover:translate-x-full -translate-x-full'
-                }`} />
-                <div className="relative z-10">
-                  <div className={`text-xs font-medium mb-1 leading-tight ${isActive ? 'text-white' : 'text-slate-700'}`}>
-                    {option.label}
-                  </div>
-                  <div className={`text-lg font-semibold ${isActive ? 'text-white' : 'text-slate-700'}`}>
-                    {option.count}
-                  </div>
-                  {option.count > 0 && option.key === 'unread' && (
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                  )}
-                </div>
-                {isActive && !(option.count > 0 && option.key === 'unread') && (
-                  <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse bg-white" />
+                <span className="leading-none">{option.label}</span>
+                <span className={`leading-none font-bold ${isActive ? 'text-white/90' : 'text-slate-500'}`}>
+                  {option.count}
+                </span>
+                {option.count > 0 && option.key === 'unread' && !isActive && (
+                  <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse flex-shrink-0" />
                 )}
               </button>
             )

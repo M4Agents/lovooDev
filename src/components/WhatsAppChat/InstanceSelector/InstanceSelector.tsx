@@ -72,7 +72,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
       {/* Botão Principal */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between"
+        className="w-full px-3 py-1 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between"
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {selectedInstance === 'all' ? (

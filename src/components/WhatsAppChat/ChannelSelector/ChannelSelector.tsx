@@ -12,6 +12,8 @@ import type { ChatChannel } from '../../../types/instagram-chat'
 interface ChannelSelectorProps {
   selectedChannel: ChatChannel
   onChannelChange: (channel: ChatChannel) => void
+  /** Quando true, renderiza versão compacta inline (para uso na linha do título) */
+  compact?: boolean
 }
 
 const InstagramIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -29,9 +31,41 @@ const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' 
 export const ChannelSelector: React.FC<ChannelSelectorProps> = ({
   selectedChannel,
   onChannelChange,
+  compact = false,
 }) => {
   const { t } = useTranslation('chat')
 
+  // Versão compacta: pills inline para usar na linha do título
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+        <button
+          onClick={() => onChannelChange('whatsapp')}
+          className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all duration-200 ${
+            selectedChannel === 'whatsapp'
+              ? 'bg-white shadow-sm text-[#00a884]'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <WhatsAppIcon className="w-3.5 h-3.5" />
+          <span>WA</span>
+        </button>
+        <button
+          onClick={() => onChannelChange('instagram')}
+          className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all duration-200 ${
+            selectedChannel === 'instagram'
+              ? 'bg-white shadow-sm text-pink-600'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <InstagramIcon className="w-3.5 h-3.5" />
+          <span>IG</span>
+        </button>
+      </div>
+    )
+  }
+
+  // Versão padrão (sem compact)
   return (
     <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl mb-4">
       <button
