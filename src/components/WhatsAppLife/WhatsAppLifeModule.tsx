@@ -641,6 +641,24 @@ export const WhatsAppLifeModule: React.FC = () => {
                           {instance.status === 'connected' ? 'Conectado' :
                            instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
                         </span>
+
+                        {/* Badge de restrição WhatsApp — separado do status de conexão */}
+                        {(instance as any).restriction_key && (
+                          <div className="mt-1.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                              Restrição temporária de envio
+                            </span>
+                            {(instance as any).restriction_since && (
+                              <p className="text-xs text-orange-600 mt-0.5">
+                                Desde {new Date((instance as any).restriction_since).toLocaleString('pt-BR', {
+                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                })}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {instance.connected_at && (
                           <p className="text-xs text-gray-500 mt-1">
                             Conectado em {(() => {

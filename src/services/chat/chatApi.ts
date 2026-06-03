@@ -542,7 +542,30 @@ export class ChatApi {
               updated_at: new Date().toISOString()
             })
             .eq('id', messageId);
-          
+
+          // Reportar restrição ao backend (sem gravar diretamente no Supabase pelo frontend)
+          if (result?.error_key === 'WHATSAPP_REACHOUT_TIMELOCK' && instanceId) {
+            try {
+              const { data: { session } } = await supabase.auth.getSession()
+              if (session?.access_token) {
+                fetch('/api/uazapi-report-restriction', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({
+                    company_id:   companyId,
+                    instance_id:  instanceId,
+                    error_payload: result,
+                  }),
+                }).catch(err => console.error('❌ Falha ao reportar restrição ao backend:', err.message))
+              }
+            } catch (reportErr: any) {
+              console.error('❌ Erro ao obter sessão para reportar restrição:', reportErr?.message)
+            }
+          }
+
           throw new Error(result.error || 'Falha no envio');
         }
         

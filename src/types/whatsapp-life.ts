@@ -32,6 +32,13 @@ export interface WhatsAppLifeInstance {
   last_activity_at?: string;
   created_at: string;
   updated_at: string;
+
+  // Restrição de envio WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)
+  // null = sem restrição ativa
+  restriction_key?: string | null;
+  restriction_since?: string | null;
+  restriction_checked_at?: string | null;
+  restriction_payload?: Record<string, unknown> | null;
 }
 
 export type WhatsAppInstanceStatus = 
