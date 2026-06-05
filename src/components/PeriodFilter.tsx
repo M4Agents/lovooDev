@@ -6,6 +6,7 @@ import { PeriodFilter as PeriodFilterType, PeriodType, PREDEFINED_PERIODS } from
 interface PeriodFilterProps {
   selectedPeriod: PeriodFilterType
   onPeriodChange: (period: PeriodFilterType) => void
+  showAll?: boolean
   autoRefresh?: boolean
   onAutoRefreshToggle?: (enabled: boolean) => void
   className?: string
@@ -14,6 +15,7 @@ interface PeriodFilterProps {
 export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   selectedPeriod,
   onPeriodChange,
+  showAll = false,
   autoRefresh = false,
   onAutoRefreshToggle,
   className = '',
@@ -63,6 +65,12 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   }, [])
 
   const handlePredefinedPeriodSelect = (periodType: PeriodType) => {
+    if (periodType === 'all') {
+      onPeriodChange({ type: 'all', label: periodLabel('all') })
+      setIsOpen(false)
+      return
+    }
+
     const now = new Date()
     let startDate: Date
     let endDate: Date = now
@@ -182,6 +190,21 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
           <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
             <div className="p-2">
               <div className="space-y-3">
+                {showAll && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handlePredefinedPeriodSelect('all')}
+                      className={`w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${
+                        selectedPeriod.type === 'all'
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {periodLabel('all')}
+                    </button>
+                  </div>
+                )}
                 {groupedPeriods.map((group) => (
                   <div key={group.id}>
                     <p className="px-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">

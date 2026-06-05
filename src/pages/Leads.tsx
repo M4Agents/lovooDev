@@ -7,6 +7,8 @@ import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { usePlanLeadStats } from '../hooks/usePlanLeadStats';
 import { PlanLeadLimitBanner } from '../components/PlanLeadLimitBanner';
+import { PeriodFilter } from '../components/PeriodFilter';
+import type { PeriodFilter as PeriodFilterType } from '../types/analytics';
 import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
@@ -112,10 +114,8 @@ export const Leads: React.FC = () => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
-  // Filtro de período (controle principal)
-  const [dateFilter, setDateFilter] = useState('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Filtro de período
+  const [period, setPeriod] = useState<PeriodFilterType>({ type: 'all', label: 'Todo período' });
 
   // Filtro de responsável
   const [responsibleFilter, setResponsibleFilter] = useState('');
@@ -133,7 +133,7 @@ export const Leads: React.FC = () => {
       loadData();
       loadCompanyUsers();
     }
-  }, [company?.id]);
+  }, [company?.id, period]);
 
   // Carregar usuários da empresa
   const loadCompanyUsers = async () => {
@@ -182,75 +182,17 @@ export const Leads: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [tagDropdownOpen]);
 
-  const getDateRange = (filter: string, start: string, end: string) => {
-    const now = new Date();
-    switch (filter) {
-      case 'hoje': {
-        const today = new Date();
-        return {
-          start: new Date(today.setHours(0, 0, 0, 0)).toISOString(),
-          end: new Date(today.setHours(23, 59, 59, 999)).toISOString(),
-        };
-      }
-      case 'ontem': {
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        return {
-          start: new Date(yesterday.setHours(0, 0, 0, 0)).toISOString(),
-          end: new Date(yesterday.setHours(23, 59, 59, 999)).toISOString(),
-        };
-      }
-      case '7dias': {
-        const d = new Date(now);
-        d.setDate(d.getDate() - 7);
-        return { start: d.toISOString(), end: new Date().toISOString() };
-      }
-      case '30dias': {
-        const d = new Date(now);
-        d.setDate(d.getDate() - 30);
-        return { start: d.toISOString(), end: new Date().toISOString() };
-      }
-      case 'estemes': {
-        const d = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { start: d.toISOString(), end: new Date().toISOString() };
-      }
-      case 'mesanterior': {
-        const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const last = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        return { start: first.toISOString(), end: last.toISOString() };
-      }
-      case 'personalizado':
-        return start && end
-          ? {
-              start: new Date(start + 'T00:00:00').toISOString(),
-              end: new Date(end + 'T23:59:59').toISOString(),
-            }
-          : null;
-      default:
-        return null;
-    }
-  };
-
-  const getPeriodLabel = (filter: string) => {
-    const labels: Record<string, string> = {
-      all: 'Todo o histórico',
-      hoje: 'Hoje',
-      ontem: 'Ontem',
-      '7dias': 'Últimos 7 dias',
-      '30dias': 'Últimos 30 dias',
-      estemes: 'Este mês',
-      mesanterior: 'Mês anterior',
-      personalizado: 'Período personalizado',
-    };
-    return labels[filter] ?? 'Período selecionado';
-  };
+  const periodToDateRange = (p: PeriodFilterType) =>
+    p.startDate && p.endDate
+      ? { start: p.startDate.toISOString(), end: p.endDate.toISOString() }
+      : undefined;
 
   const loadData = async (overrides?: { tagIds?: string[] }) => {
     if (!company?.id) return;
     
     try {
       setLoading(true);
-      const dateRange = getDateRange(dateFilter, startDate, endDate) ?? undefined;
+      const dateRange = periodToDateRange(period);
       const effectiveTagIds = overrides?.tagIds ?? tagFilter;
 
       const [leadsData, statsData] = await Promise.all([
@@ -313,9 +255,7 @@ export const Leads: React.FC = () => {
     setOriginFilter('');
     setResponsibleFilter('');
     setTagFilter([]);
-    setDateFilter('all');
-    setStartDate('');
-    setEndDate('');
+    setPeriod({ type: 'all', label: 'Todo período' });
     loadData({ tagIds: [] });
   };
 
@@ -597,61 +537,12 @@ export const Leads: React.FC = () => {
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-medium text-gray-600">Entradas de Leads</p>
-                {/* Seletor de período integrado ao card */}
-                <select
-                  value={dateFilter}
-                  onChange={(e) => {
-                    setDateFilter(e.target.value);
-                    if (e.target.value !== 'personalizado') {
-                      setStartDate('');
-                      setEndDate('');
-                    }
-                  }}
-                  className="text-xs px-2 py-1 border border-gray-200 rounded-md text-gray-600 bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">Todo o histórico</option>
-                  <option value="hoje">Hoje</option>
-                  <option value="ontem">Ontem</option>
-                  <option value="7dias">Últimos 7 dias</option>
-                  <option value="30dias">Últimos 30 dias</option>
-                  <option value="estemes">Este mês</option>
-                  <option value="mesanterior">Mês anterior</option>
-                  <option value="personalizado">Personalizado</option>
-                </select>
-              </div>
-
-              {/* Inputs de data para período personalizado */}
-              {dateFilter === 'personalizado' && (
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-                  />
-                  <span className="text-gray-400 text-xs">→</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={loadData}
-                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    Aplicar
-                  </button>
-                </div>
-              )}
-
+              <p className="text-sm font-medium text-gray-600">Entradas de Leads</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
                 {stats ? stats.totalEntries : '—'}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {getPeriodLabel(dateFilter)} · Inclui novos leads e reentradas
+                {period.label} · Inclui novos leads e reentradas
               </p>
             </div>
             <ArrowDownUp className="w-10 h-10 text-green-600 opacity-80 flex-shrink-0 ml-4" />
@@ -689,8 +580,14 @@ export const Leads: React.FC = () => {
           </div>
         </div>
 
-        {/* Status · Origem · Responsável · Filtrar */}
-        <div className="flex flex-wrap gap-3">
+        {/* Status · Origem · Responsável · Período · Filtrar */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <PeriodFilter
+            selectedPeriod={period}
+            onPeriodChange={setPeriod}
+            showAll
+          />
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
