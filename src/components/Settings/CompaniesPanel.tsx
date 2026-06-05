@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Building2, Globe, Clock, CalendarClock,
-  Edit2, Trash2, LogIn, Copy, Check, X,
+  Edit2, Trash2, LogIn, Copy, Check, X, Gift,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAccessControl } from '../../hooks/useAccessControl'
@@ -65,6 +65,15 @@ const EXTEND_ERROR_MSGS: Record<string, string> = {
   company_not_found:      'Empresa não encontrada.',
 }
 
+const FREE_PLAN_ERROR_MSGS: Record<string, string> = {
+  forbidden:               'Você não tem permissão para executar esta ação.',
+  company_not_found:       'Empresa não encontrada.',
+  not_a_client_company:   'Esta operação só é permitida para empresas clientes.',
+  subscription_not_found:  'Empresa não possui assinatura registrada.',
+  has_stripe_subscription: 'Esta empresa já possui uma assinatura Stripe ativa. Não é possível aplicar o plano gratuito.',
+  growth_plan_not_found:   'Plano Growth não encontrado. Contate o suporte.',
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export const CompaniesPanel: React.FC = () => {
@@ -106,6 +115,14 @@ export const CompaniesPanel: React.FC = () => {
   const [extendError,    setExtendError]    = useState<string | null>(null)
   const [extendSuccess,  setExtendSuccess]  = useState(false)
 
+  // ── Modal de plano gratuito ───────────────────────────────────────────────
+  // freePlanMap: cache local do estado is_free de cada empresa
+  const [freePlanCompany,  setFreePlanCompany]  = useState<ClientCompany | null>(null)
+  const [freePlanLoading,  setFreePlanLoading]  = useState(false)
+  const [freePlanError,    setFreePlanError]    = useState<string | null>(null)
+  const [freePlanSuccess,  setFreePlanSuccess]  = useState(false)
+  const [freePlanMap,      setFreePlanMap]      = useState<Record<string, boolean>>({})
+
   // ── Copiar invite link ────────────────────────────────────────────────────
   const [copiedLink, setCopiedLink] = useState(false)
 
@@ -122,6 +139,20 @@ export const CompaniesPanel: React.FC = () => {
       )
       setCompanies(clients)
       clients.forEach(c => fetchTrialInfo(c.id))
+
+      // Carregar is_free de todas as empresas client de uma vez
+      if (clients.length > 0) {
+        const ids = clients.map(c => c.id)
+        const { data: subs } = await supabase
+          .from('company_subscriptions')
+          .select('company_id, is_free')
+          .in('company_id', ids)
+        if (subs) {
+          const map: Record<string, boolean> = {}
+          subs.forEach((s: any) => { map[s.company_id] = s.is_free ?? false })
+          setFreePlanMap(map)
+        }
+      }
     } catch (err) {
       console.error('[CompaniesPanel] Erro ao carregar empresas:', err)
     } finally {
@@ -326,6 +357,48 @@ export const CompaniesPanel: React.FC = () => {
     }
   }
 
+  // ── Plano gratuito ────────────────────────────────────────────────────────
+
+  const handleFreePlan = async () => {
+    if (!isSaaSAdmin || !freePlanCompany) return
+
+    const targetIsFree = !freePlanMap[freePlanCompany.id]
+
+    setFreePlanLoading(true)
+    setFreePlanError(null)
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Sessão inválida')
+
+      const res = await fetch('/api/admin/companies/free-plan', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ company_id: freePlanCompany.id, is_free: targetIsFree }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        const msg = FREE_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao processar operação.'
+        setFreePlanError(msg)
+        return
+      }
+
+      setFreePlanMap(prev => ({ ...prev, [freePlanCompany.id]: targetIsFree }))
+      setFreePlanSuccess(true)
+      setTimeout(() => {
+        setFreePlanCompany(null)
+        setFreePlanSuccess(false)
+        setFreePlanError(null)
+      }, 2200)
+    } catch {
+      setFreePlanError('Erro interno ao processar operação.')
+    } finally {
+      setFreePlanLoading(false)
+    }
+  }
+
   // ── Impersonar ────────────────────────────────────────────────────────────
 
   const handleImpersonate = async (comp: ClientCompany) => {
@@ -380,9 +453,10 @@ export const CompaniesPanel: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {companies.map(comp => {
-            const trial = trialInfoMap[comp.id]
-            const days  = trial ? daysUntil(trial.trial_end) : null
+            const trial    = trialInfoMap[comp.id]
+            const days     = trial ? daysUntil(trial.trial_end) : null
             const isLoadingTrial = trialLoadingIds.includes(comp.id)
+            const isFree   = freePlanMap[comp.id] ?? false
 
             return (
               <div
@@ -404,9 +478,16 @@ export const CompaniesPanel: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${statusColor(comp.status)}`}>
-                    {statusLabel(comp.status)}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isFree && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Gift className="w-3 h-3" /> Gratuito
+                      </span>
+                    )}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(comp.status)}`}>
+                      {statusLabel(comp.status)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Plano */}
@@ -414,8 +495,8 @@ export const CompaniesPanel: React.FC = () => {
                   <p className="text-xs text-slate-500">Plano: <span className="font-medium">{(comp as any).plans.name}</span></p>
                 )}
 
-                {/* Trial badge */}
-                {isLoadingTrial ? (
+                {/* Trial badge — oculto quando empresa é gratuita */}
+                {!isFree && (isLoadingTrial ? (
                   <div className="h-5 w-24 bg-slate-100 rounded animate-pulse" />
                 ) : trial?.is_internal_trial ? (
                   <div className="flex items-center gap-1.5 text-xs">
@@ -431,7 +512,7 @@ export const CompaniesPanel: React.FC = () => {
                       <span className="ml-1 text-slate-400">(estendido)</span>
                     )}
                   </div>
-                ) : null}
+                ) : null)}
 
                 {/* Ações */}
                 <div className="flex items-center gap-1 pt-1 flex-wrap">
@@ -442,13 +523,27 @@ export const CompaniesPanel: React.FC = () => {
                   >
                     <Edit2 className="w-3 h-3" /> Editar
                   </button>
-                  {trial?.can_extend && (
+                  {trial?.can_extend && !isFree && (
                     <button
                       onClick={() => { setExtendCompany(comp); setExtendError(null); setExtendSuccess(false) }}
                       className="flex items-center gap-1 text-xs text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
                       title="Estender trial"
                     >
                       <Clock className="w-3 h-3" /> +14 dias
+                    </button>
+                  )}
+                  {isSaaSAdmin && (
+                    <button
+                      onClick={() => { setFreePlanCompany(comp); setFreePlanError(null); setFreePlanSuccess(false) }}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                        isFree
+                          ? 'text-emerald-700 hover:bg-emerald-50'
+                          : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                      title={isFree ? 'Revogar plano gratuito' : 'Marcar como gratuito'}
+                    >
+                      <Gift className="w-3 h-3" />
+                      {isFree ? 'Gratuito ✓' : 'Gratuito'}
                     </button>
                   )}
                   {(isSaaSAdmin || isSystemAdmin) && (
@@ -743,6 +838,76 @@ export const CompaniesPanel: React.FC = () => {
                 {deleteLoading ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal de Plano Gratuito ────────────────────────────────────────── */}
+      {freePlanCompany && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-emerald-100 rounded-lg shrink-0">
+                <Gift className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                {freePlanMap[freePlanCompany.id] ? (
+                  <>
+                    <h3 className="font-semibold text-slate-900">Revogar plano gratuito</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Remover o plano gratuito de <strong>{freePlanCompany.name}</strong>.
+                      A empresa continuará operacional com o estado atual até que um administrador tome outra ação.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-semibold text-slate-900">Conceder plano gratuito</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Marcar <strong>{freePlanCompany.name}</strong> como gratuita.
+                      A empresa manterá o plano Growth, status ativo e não será afetada pela expiração de trial.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {freePlanSuccess && (
+              <p className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2 font-medium">
+                {freePlanMap[freePlanCompany.id]
+                  ? 'Plano gratuito concedido com sucesso!'
+                  : 'Plano gratuito revogado com sucesso!'}
+              </p>
+            )}
+
+            {freePlanError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{freePlanError}</p>
+            )}
+
+            {!freePlanSuccess && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setFreePlanCompany(null); setFreePlanError(null) }}
+                  className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleFreePlan}
+                  disabled={freePlanLoading}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 ${
+                    freePlanMap[freePlanCompany.id]
+                      ? 'bg-slate-600 hover:bg-slate-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {freePlanLoading
+                    ? 'Processando...'
+                    : freePlanMap[freePlanCompany.id]
+                    ? 'Revogar gratuito'
+                    : 'Conceder gratuito'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

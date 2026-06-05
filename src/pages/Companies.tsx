@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { api } from '../services/api';
 import { Company, supabase } from '../lib/supabase';
-import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Link, Clock, CalendarClock } from 'lucide-react';
+import { Plus, Building2, Users, TrendingUp, Trash2, Edit2, UserCog, LogIn, Key, Mail, Link, Clock, CalendarClock, Gift } from 'lucide-react';
 import { openDirectEditCompanyModal } from './companies/openDirectEditCompanyModal';
 import { PartnerAssignmentModal } from '../components/PartnerAssignmentModal';
 
@@ -48,6 +48,9 @@ export const Companies: React.FC = () => {
   const [extending, setExtending] = useState(false);
   const [extendError, setExtendError] = useState<string | null>(null);
   const [extendSuccess, setExtendSuccess] = useState(false);
+
+  // ── Free plan state (badge de leitura) ───────────────────────────────────
+  const [freePlanMap, setFreePlanMap] = useState<Record<string, boolean>>({});
   const [userFormData, setUserFormData] = useState({
     email: '',
     newPassword: ''
@@ -78,6 +81,20 @@ export const Companies: React.FC = () => {
       // Buscar trial info para empresas cliente (não bloqueia o render)
       const clients = (data as any[]).filter(c => c.company_type === 'client');
       clients.forEach(c => fetchTrialInfo(c.id));
+
+      // Carregar is_free de todas as empresas client
+      if (clients.length > 0) {
+        const ids = clients.map((c: any) => c.id);
+        const { data: subs } = await supabase
+          .from('company_subscriptions')
+          .select('company_id, is_free')
+          .in('company_id', ids);
+        if (subs) {
+          const map: Record<string, boolean> = {};
+          (subs as any[]).forEach(s => { map[s.company_id] = s.is_free ?? false; });
+          setFreePlanMap(map);
+        }
+      }
     } catch (error) {
       console.error('Error loading companies:', error);
     } finally {
@@ -302,7 +319,9 @@ export const Companies: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {companies.map((comp) => (
+        {companies.map((comp) => {
+          const isFree = freePlanMap[comp.id] ?? false;
+          return (
           <div key={comp.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -314,9 +333,16 @@ export const Companies: React.FC = () => {
                   <p className="text-sm text-slate-600">{comp.domain}</p>
                 </div>
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(comp.status)}`}>
-                {statusLabel(comp.status)}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {isFree && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                    <Gift className="w-3 h-3" /> Gratuito
+                  </span>
+                )}
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(comp.status)}`}>
+                  {statusLabel(comp.status)}
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2 mb-4">
@@ -446,7 +472,8 @@ export const Companies: React.FC = () => {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modal de criação/edição de empresa */}
