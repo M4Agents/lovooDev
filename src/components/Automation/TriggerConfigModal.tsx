@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, Info } from 'lucide-react'
 import type { TriggerConfig } from '../../types/automation'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
@@ -27,6 +27,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
   const [config, setConfig] = useState<Record<string, any>>(trigger?.config || {})
   const [selectedFunnelId, setSelectedFunnelId] = useState<string>(config.funnelId || '')
   const { stages, loading: loadingStages } = useFunnelStages(selectedFunnelId)
+  const [showKeywordHelp, setShowKeywordHelp] = useState(false)
 
   useEffect(() => {
     if (isOpen && trigger) {
@@ -260,9 +261,57 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
             {/* 3. PALAVRA-CHAVE / EXPRESSÃO REGULAR — oculto em modo link_origin */}
             {config.comparisonType !== 'link_origin' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavra-chave'}
-                </label>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    {config.comparisonType === 'regex' ? 'Expressão regular' : 'Palavra-chave'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowKeywordHelp(v => !v)}
+                    className="text-blue-500 hover:text-blue-700 transition-colors"
+                    title="Como usar"
+                  >
+                    <Info size={15} />
+                  </button>
+                </div>
+
+                {/* Painel de ajuda — exibido ao clicar no ícone */}
+                {showKeywordHelp && (
+                  <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800 space-y-2">
+                    {config.comparisonType === 'regex' ? (
+                      <>
+                        <p className="font-semibold">Como usar Regex:</p>
+                        <ul className="space-y-1 list-none">
+                          <li><code className="bg-blue-100 px-1 rounded">(?i)confirmar</code> — qualquer capitalização ("Confirmar", "CONFIRMAR")</li>
+                          <li><code className="bg-blue-100 px-1 rounded">(?i)^confirmar$</code> — somente a palavra exata, qualquer caixa</li>
+                          <li><code className="bg-blue-100 px-1 rounded">(?i)^(sim|confirmar|quero)$</code> — múltiplas opções</li>
+                          <li><code className="bg-blue-100 px-1 rounded">(?i)^(oi|olá|ola|hey)$</code> — saudações com ou sem acento</li>
+                        </ul>
+                        <p className="text-blue-600">Use <strong>(?i)</strong> no início para ignorar maiúsculas/minúsculas. Use <strong>|</strong> para múltiplas opções.</p>
+                      </>
+                    ) : config.comparisonType === 'equals' ? (
+                      <>
+                        <p className="font-semibold">Como usar Igual:</p>
+                        <ul className="space-y-1 list-none">
+                          <li>A mensagem do usuário deve ser <strong>exatamente igual</strong> à palavra configurada.</li>
+                          <li>Não diferencia maiúsculas/minúsculas: "SIM" e "sim" são equivalentes.</li>
+                          <li>Para múltiplas opções, use o tipo <strong>Regex</strong> com <code className="bg-blue-100 px-1 rounded">(?i)^(sim|não)$</code></li>
+                        </ul>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-semibold">Como usar Contém:</p>
+                        <ul className="space-y-1 list-none">
+                          <li>A mensagem do usuário deve <strong>conter</strong> a palavra configurada em qualquer posição.</li>
+                          <li>Não diferencia maiúsculas/minúsculas: "CONFIRMAR" e "confirmar" são equivalentes.</li>
+                          <li>Digite <strong>apenas uma palavra</strong> por gatilho. Para múltiplas opções, use o tipo <strong>Regex</strong>.</li>
+                          <li>Ex: <code className="bg-blue-100 px-1 rounded">confirmar</code> captura mensagens como "Quero confirmar minha compra"</li>
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <input
                   type="text"
                   value={config.keyword || ''}
@@ -278,16 +327,18 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder={
                     config.comparisonType === 'regex'
-                      ? 'Ex: (?i)^(oi|olá|menu)$'
-                      : 'Ex: oi, olá, menu'
+                      ? 'Ex: (?i)^(confirmar|sim|quero)$'
+                      : config.comparisonType === 'equals'
+                      ? 'Ex: confirmar'
+                      : 'Ex: confirmar'
                   }
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   {config.comparisonType === 'regex'
-                    ? 'Expressão regular JavaScript. Use (?i) no início para ignorar maiúsculas/minúsculas.'
+                    ? 'Expressão regular JavaScript. Use (?i) para ignorar maiúsculas/minúsculas e | para múltiplas opções.'
                     : config.comparisonType === 'equals'
-                    ? 'A mensagem deve ser exatamente igual à palavra-chave'
-                    : 'A mensagem deve conter a palavra-chave'}
+                    ? 'A mensagem deve ser exatamente igual (não diferencia maiúsculas/minúsculas).'
+                    : 'A mensagem deve conter a palavra-chave (não diferencia maiúsculas/minúsculas).'}
                 </p>
               </div>
             )}
