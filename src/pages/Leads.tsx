@@ -38,7 +38,9 @@ import {
   FileSpreadsheet,
   Tag,
   ArrowDownUp,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
@@ -77,6 +79,21 @@ interface LeadStats {
   totalLeads: number;
   totalEntries: number;
 }
+
+const LEADS_PER_PAGE = 100;
+
+const getPageNumbers = (current: number, total: number): (number | '...')[] => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total]);
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.add(i);
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const result: (number | '...')[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push('...');
+    result.push(sorted[i]);
+  }
+  return result;
+};
 
 export const Leads: React.FC = () => {
   const { company } = useAuth();
@@ -117,6 +134,10 @@ export const Leads: React.FC = () => {
   // Filtro de período
   const [period, setPeriod] = useState<PeriodFilterType>({ type: 'all', label: 'Todo período' });
 
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalLeads, setTotalLeads] = useState(0);
+
   // Filtro de responsável
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
@@ -130,7 +151,8 @@ export const Leads: React.FC = () => {
 
   useEffect(() => {
     if (company?.id) {
-      loadData();
+      setCurrentPage(1);
+      loadData({ page: 1 });
       loadCompanyUsers();
     }
   }, [company?.id, period]);
@@ -187,15 +209,17 @@ export const Leads: React.FC = () => {
       ? { start: p.startDate.toISOString(), end: p.endDate.toISOString() }
       : undefined;
 
-  const loadData = async (overrides?: { tagIds?: string[] }) => {
+  const loadData = async (overrides?: { tagIds?: string[], page?: number }) => {
     if (!company?.id) return;
     
     try {
       setLoading(true);
       const dateRange = periodToDateRange(period);
       const effectiveTagIds = overrides?.tagIds ?? tagFilter;
+      const page = overrides?.page ?? currentPage;
+      const offset = (page - 1) * LEADS_PER_PAGE;
 
-      const [leadsData, statsData] = await Promise.all([
+      const [leadsResult, statsData] = await Promise.all([
         api.getLeads(company.id, {
           search: searchTerm,
           status: statusFilter || undefined,
@@ -203,12 +227,14 @@ export const Leads: React.FC = () => {
           responsible_user_id: responsibleFilter || undefined,
           dateRange,
           tag_ids: effectiveTagIds.length > 0 ? effectiveTagIds : undefined,
-          limit: 100
+          limit: LEADS_PER_PAGE,
+          offset: offset > 0 ? offset : undefined,
         }),
         api.getLeadStats(company.id, dateRange, effectiveTagIds.length > 0 ? effectiveTagIds : undefined)
       ]);
       
-      setLeads(leadsData);
+      setLeads(leadsResult.data);
+      setTotalLeads(leadsResult.total);
       setStats(statsData);
 
       // Carregar fotos dos leads a partir do telefone (se houver)
@@ -246,7 +272,8 @@ export const Leads: React.FC = () => {
   };
 
   const handleSearch = () => {
-    loadData();
+    setCurrentPage(1);
+    loadData({ page: 1 });
   };
 
   const clearAllFilters = () => {
@@ -256,20 +283,23 @@ export const Leads: React.FC = () => {
     setResponsibleFilter('');
     setTagFilter([]);
     setPeriod({ type: 'all', label: 'Todo período' });
-    loadData({ tagIds: [] });
+    setCurrentPage(1);
+    loadData({ tagIds: [], page: 1 });
   };
 
   const addTagFilter = (tagId: string) => {
     const newFilter = [...tagFilter, tagId];
     setTagFilter(newFilter);
     setTagDropdownOpen(false);
-    loadData({ tagIds: newFilter });
+    setCurrentPage(1);
+    loadData({ tagIds: newFilter, page: 1 });
   };
 
   const removeTagFilter = (tagId: string) => {
     const newFilter = tagFilter.filter(id => id !== tagId);
     setTagFilter(newFilter);
-    loadData({ tagIds: newFilter });
+    setCurrentPage(1);
+    loadData({ tagIds: newFilter, page: 1 });
   };
 
   const handleCreateLead = () => {
@@ -878,6 +908,60 @@ export const Leads: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Paginação */}
+        {totalLeads > LEADS_PER_PAGE && (() => {
+          const totalPages = Math.ceil(totalLeads / LEADS_PER_PAGE);
+          const startRecord = (currentPage - 1) * LEADS_PER_PAGE + 1;
+          const endRecord = Math.min(currentPage * LEADS_PER_PAGE, totalLeads);
+          const handlePageChange = (page: number) => {
+            setCurrentPage(page);
+            loadData({ page });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+          return (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Mostrando <span className="font-medium">{startRecord}</span>–<span className="font-medium">{endRecord}</span> de <span className="font-medium">{totalLeads}</span> leads
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {getPageNumbers(currentPage, totalPages).map((page, idx) =>
+                  page === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 py-1 text-sm text-gray-400 select-none">…</span>
+                  ) : (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page as number)}
+                      className={`min-w-[32px] px-2 py-1 rounded-md text-sm transition-colors ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white font-medium'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Próxima página"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modais Funcionais */}

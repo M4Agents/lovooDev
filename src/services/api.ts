@@ -876,10 +876,33 @@ export const api = {
     tag_ids?: string[];
     limit?: number;
     offset?: number;
-  }) {
+  }): Promise<{ data: any[]; total: number }> {
     console.log('API: getLeads called for company:', companyId);
-    
+
     try {
+      // Step 1: Resolve qualifying IDs for tag filter (AND logic)
+      let qualifyingIds: number[] | null = null;
+      if (filters?.tag_ids && filters.tag_ids.length > 0) {
+        const tagIds = filters.tag_ids;
+        const { data: assignments, error: tagError } = await supabase
+          .from('lead_tag_assignments')
+          .select('lead_id, tag_id')
+          .in('tag_id', tagIds);
+        if (tagError) throw tagError;
+        if (!assignments || assignments.length === 0) return { data: [], total: 0 };
+
+        const leadTagMap = new Map<number, Set<string>>();
+        for (const a of assignments) {
+          if (!leadTagMap.has(a.lead_id)) leadTagMap.set(a.lead_id, new Set());
+          leadTagMap.get(a.lead_id)!.add(a.tag_id);
+        }
+        qualifyingIds = Array.from(leadTagMap.entries())
+          .filter(([, tagSet]) => tagIds.every(tid => tagSet.has(tid)))
+          .map(([leadId]) => leadId);
+        if (qualifyingIds.length === 0) return { data: [], total: 0 };
+      }
+
+      // Step 2: Build data query
       let query = supabase
         .from('leads')
         .select(`
@@ -910,84 +933,66 @@ export const api = {
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
+      // Step 3: Build count query (same filters, no pagination)
+      let countQuery = supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .is('deleted_at', null);
+
+      // Step 4: Apply shared filters to both queries
       if (filters?.status) {
         query = query.eq('status', filters.status);
+        countQuery = countQuery.eq('status', filters.status);
       }
-
       if (filters?.origin) {
         query = query.eq('origin', filters.origin);
+        countQuery = countQuery.eq('origin', filters.origin);
       }
-
       if (filters?.search) {
-        query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%`);
+        const searchExpr = `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%`;
+        query = query.or(searchExpr);
+        countQuery = countQuery.or(searchExpr);
       }
-
-      // NOVOS FILTROS ESPECÍFICOS
       if (filters?.name) {
         query = query.ilike('name', `%${filters.name}%`);
+        countQuery = countQuery.ilike('name', `%${filters.name}%`);
       }
-
       if (filters?.phone) {
         query = query.ilike('phone', `%${filters.phone}%`);
+        countQuery = countQuery.ilike('phone', `%${filters.phone}%`);
       }
-
       if (filters?.email) {
         query = query.ilike('email', `%${filters.email}%`);
+        countQuery = countQuery.ilike('email', `%${filters.email}%`);
       }
-
-      // FILTRO POR RESPONSÁVEL
       if (filters?.responsible_user_id) {
         if (filters.responsible_user_id === 'unassigned') {
           query = query.is('responsible_user_id', null);
+          countQuery = countQuery.is('responsible_user_id', null);
         } else {
           query = query.eq('responsible_user_id', filters.responsible_user_id);
+          countQuery = countQuery.eq('responsible_user_id', filters.responsible_user_id);
         }
       }
-
-      // FILTRO POR PERÍODO
       if (filters?.dateRange) {
-        query = query
-          .gte('created_at', filters.dateRange.start)
-          .lte('created_at', filters.dateRange.end);
+        query = query.gte('created_at', filters.dateRange.start).lte('created_at', filters.dateRange.end);
+        countQuery = countQuery.gte('created_at', filters.dateRange.start).lte('created_at', filters.dateRange.end);
       }
-
-      // FILTRO POR TAGS (AND: lead deve ter TODAS as tags selecionadas)
-      if (filters?.tag_ids && filters.tag_ids.length > 0) {
-        const tagIds = filters.tag_ids;
-
-        const { data: assignments, error: tagError } = await supabase
-          .from('lead_tag_assignments')
-          .select('lead_id, tag_id')
-          .in('tag_id', tagIds);
-
-        if (tagError) throw tagError;
-
-        if (!assignments || assignments.length === 0) return [];
-
-        const leadTagMap = new Map<number, Set<string>>();
-        for (const a of assignments) {
-          if (!leadTagMap.has(a.lead_id)) leadTagMap.set(a.lead_id, new Set());
-          leadTagMap.get(a.lead_id)!.add(a.tag_id);
-        }
-
-        const qualifyingIds = Array.from(leadTagMap.entries())
-          .filter(([, tagSet]) => tagIds.every(tid => tagSet.has(tid)))
-          .map(([leadId]) => leadId);
-
-        if (qualifyingIds.length === 0) return [];
-
+      if (qualifyingIds !== null) {
         query = query.in('id', qualifyingIds);
+        countQuery = countQuery.in('id', qualifyingIds);
       }
 
-      if (filters?.limit) {
+      // Step 5: Apply pagination only to data query
+      if (filters?.offset !== undefined && filters.offset > 0 && filters?.limit) {
+        query = query.range(filters.offset, filters.offset + filters.limit - 1);
+      } else if (filters?.limit) {
         query = query.limit(filters.limit);
       }
 
-      if (filters?.offset) {
-        query = query.range(filters.offset, filters.offset + (filters.limit || 50) - 1);
-      }
-
-      const { data, error } = await query;
+      // Step 6: Execute both in parallel
+      const [{ data, error }, { count }] = await Promise.all([query, countQuery]);
 
       if (error) throw error;
 
@@ -995,7 +1000,6 @@ export const api = {
         const tags = (lead.lead_tag_assignments || [])
           .map((a: any) => a.lead_tags)
           .filter(Boolean);
-
         if (!lead.is_over_plan) return { ...lead, tags };
         return {
           ...lead,
@@ -1008,8 +1012,8 @@ export const api = {
         };
       });
 
-      console.log('API: Leads retrieved successfully:', leads.length);
-      return leads;
+      console.log('API: Leads retrieved successfully:', leads.length, 'of', count);
+      return { data: leads, total: count ?? 0 };
     } catch (error) {
       console.error('Error in getLeads:', error);
       throw error;
