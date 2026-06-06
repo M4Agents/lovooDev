@@ -148,20 +148,10 @@ async function createLeadFromWebhook(params) {
     const leadId = rpcResult.lead_id;
     console.log('✅ LEAD CRIADO VIA RPC COM SUCESSO:', leadId);
 
-    // #region agent log [DBG-95a3f1] H1/H2/H3
-    console.error(`[DBG-95a3f1][H1] PRE-DISPATCH companyId=${company?.id} leadId=${leadId} isDuplicate=${rpcResult.is_duplicate} typeof_leadId=${typeof leadId}`)
-    // #endregion
-
     // Disparar automação backend — await garante execução completa antes da resposta
     try {
       await dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'webhook' });
-      // #region agent log [DBG-95a3f1] H1
-      console.error(`[DBG-95a3f1][H1] POST-DISPATCH completed without throw companyId=${company?.id} leadId=${leadId}`)
-      // #endregion
     } catch (err) {
-      // #region agent log [DBG-95a3f1] H1
-      console.error(`[DBG-95a3f1][H1] DISPATCH-EXCEPTION: ${err?.message}`)
-      // #endregion
       console.error('[webhook/lead/[api_key]] automation trigger failed:', err);
     }
 

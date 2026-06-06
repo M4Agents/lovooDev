@@ -951,10 +951,6 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
 async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields }) {
   const companyId = lead.company_id;
 
-  // #region agent log [DBG-95a3f1] H6
-  console.error(`[DBG-95a3f1][H6] ASYNC-PIPELINE-START leadId=${lead.lead_id} isDuplicate=${lead.is_duplicate} companyId=${companyId}`)
-  // #endregion
-
   // 1. Visitor connection
   try {
     if (canonical.visitor_id) {
@@ -965,10 +961,6 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
   } catch (err) {
     console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
   }
-
-  // #region agent log [DBG-95a3f1] H6
-  console.error(`[DBG-95a3f1][H6] STEP1-VISITOR-DONE leadId=${lead.lead_id}`)
-  // #endregion
 
   // 2. Webhooks avançados — usa customFieldsProcessed já disponível
   try {
@@ -983,30 +975,13 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
     console.error('[webhook-lead] Advanced webhooks error', { message: err?.message });
   }
 
-  // #region agent log [DBG-95a3f1] H6
-  console.error(`[DBG-95a3f1][H6] STEP2-WEBHOOKS-DONE leadId=${lead.lead_id}`)
-  // #endregion
-
   // 3. Automação — somente leads novos
-  // #region agent log [DBG-95a3f1] H6
-  console.error(`[DBG-95a3f1][H6] STEP3-PRE-DISPATCH leadId=${lead.lead_id} isDuplicate=${lead.is_duplicate}`)
-  // #endregion
   if (!lead.is_duplicate) {
     try {
       await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
-      // #region agent log [DBG-95a3f1] H6
-      console.error(`[DBG-95a3f1][H6] STEP3-DISPATCH-DONE leadId=${lead.lead_id}`)
-      // #endregion
     } catch (err) {
-      // #region agent log [DBG-95a3f1] H6
-      console.error(`[DBG-95a3f1][H6] STEP3-DISPATCH-ERROR: ${err?.message}`)
-      // #endregion
       console.error('[webhook-lead] Automation trigger failed', { message: err?.message });
     }
-  } else {
-    // #region agent log [DBG-95a3f1] H6
-    console.error(`[DBG-95a3f1][H6] STEP3-SKIPPED-DUPLICATE leadId=${lead.lead_id}`)
-    // #endregion
   }
 
   // Reentrada movida para executeLeadCriticalPostCreate (bloco síncrono antes
