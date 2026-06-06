@@ -876,9 +876,9 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
 // executeLeadCriticalPostCreate — etapas essenciais para visualização imediata
 //
 // Executada com await no handler, ANTES do HTTP 200.
-// Garante que custom fields, tags e reentrada estejam gravados quando o lead
-// for aberto. A reentrada é crítica pois o Vercel encerra a Lambda após
-// res.json(), impedindo execução fire-and-forget confiável.
+// Garante que custom fields, tags, reentrada e automação estejam executados
+// antes da resposta HTTP. O dispatch de automação é crítico pois o Vercel
+// encerra a Lambda após res.json(), impedindo fire-and-forget confiável.
 // Retorna customFieldsProcessed para reuso no pipeline assíncrono.
 // ---------------------------------------------------------------------------
 async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, svcClient) {
@@ -939,6 +939,23 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
     }
   }
 
+  // 4. Automação — somente leads novos (executada antes do HTTP 200 pelo mesmo
+  //    motivo da reentrada: o Vercel encerra a Lambda após res.json(), impedindo
+  //    fire-and-forget confiável — o createExecution nunca completava)
+  if (!lead.is_duplicate) {
+    try {
+      await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
+      // #region agent log
+      console.error(`[DBG-95a3f1][fix] DISPATCH-SYNC-DONE leadId=${lead.lead_id}`)
+      // #endregion
+    } catch (err) {
+      // #region agent log
+      console.error(`[DBG-95a3f1][fix] DISPATCH-SYNC-ERROR leadId=${lead.lead_id} err=${err?.message}`)
+      // #endregion
+      console.error('[webhook-lead] Automation dispatch failed (sync)', { message: err?.message });
+    }
+  }
+
   return customFieldsProcessed;
 }
 
@@ -988,25 +1005,8 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
   // #endregion
 
   // 3. Automação — somente leads novos
-  // #region agent log
-  console.error(`[DBG-95a3f1][H1] PRE-DISPATCH leadId=${lead.lead_id} isDuplicate=${lead.is_duplicate}`)
-  // #endregion
-  if (!lead.is_duplicate) {
-    try {
-      await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
-      // #region agent log
-      console.error(`[DBG-95a3f1][H1] DISPATCH-DONE leadId=${lead.lead_id}`)
-      // #endregion
-    } catch (err) {
-      // #region agent log
-      console.error(`[DBG-95a3f1][H1] DISPATCH-ERROR leadId=${lead.lead_id} err=${err?.message}`)
-      // #endregion
-      console.error('[webhook-lead] Automation trigger failed', { message: err?.message });
-    }
-  }
-
-  // Reentrada movida para executeLeadCriticalPostCreate (bloco síncrono antes
-  // do HTTP 200) pois o Vercel encerra a Lambda após res.json().
+  // Automação e reentrada movidas para executeLeadCriticalPostCreate (bloco
+  // síncrono antes do HTTP 200) pois o Vercel encerra a Lambda após res.json().
 }
 
 // detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST
