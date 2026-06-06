@@ -30,10 +30,6 @@ const DEDUP_WINDOW_MS = 60 * 1000  // 60 segundos — mesma janela do trigger-ev
 export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = 'api' }, supabaseOverride) {
   const tag = `[dispatchLeadCreatedTrigger][company:${companyId}][lead:${leadId}][source:${source}]`
 
-  // #region agent log
-  console.error(`[DBG-3620d6][H2-dispatcher] ENTRY tag=${tag}`)
-  // #endregion
-
   if (!companyId || !leadId) {
     console.warn(`${tag} parâmetros inválidos — companyId e leadId são obrigatórios`)
     return
@@ -48,10 +44,6 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
       .select('id, name, nodes, edges, trigger_operator, is_over_plan')
       .eq('company_id', companyId)
       .eq('is_active', true)
-
-    // #region agent log
-    console.error(`[DBG-3620d6][H2-dispatcher] flows query concluída flowsCount=${flows?.length ?? 0} err=${flowsErr?.message ?? null}`)
-    // #endregion
 
     if (flowsErr) {
       console.error(`${tag} erro ao buscar flows:`, flowsErr.message)
@@ -70,10 +62,6 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
     }
 
     const matchedFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
-
-    // #region agent log
-    console.error(`[DBG-3620d6][H2-dispatcher] matchedFlows=${matchedFlows.length} de ${flows.length} flows avaliados source=${source}`)
-    // #endregion
 
     if (matchedFlows.length === 0) {
       console.log(`${tag} nenhum flow corresponde ao evento — total avaliados: ${flows.length}`)

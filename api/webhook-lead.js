@@ -945,13 +945,7 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
   if (!lead.is_duplicate) {
     try {
       await dispatchLeadCreatedTrigger({ companyId, leadId: lead.lead_id, source: 'webhook' });
-      // #region agent log
-      console.error(`[DBG-95a3f1][fix] DISPATCH-SYNC-DONE leadId=${lead.lead_id}`)
-      // #endregion
     } catch (err) {
-      // #region agent log
-      console.error(`[DBG-95a3f1][fix] DISPATCH-SYNC-ERROR leadId=${lead.lead_id} err=${err?.message}`)
-      // #endregion
       console.error('[webhook-lead] Automation dispatch failed (sync)', { message: err?.message });
     }
   }
@@ -968,10 +962,6 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
 async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields }) {
   const companyId = lead.company_id;
 
-  // #region agent log
-  console.error(`[DBG-95a3f1][H1] PIPELINE-START leadId=${lead.lead_id} companyId=${companyId} isDuplicate=${lead.is_duplicate}`)
-  // #endregion
-
   // 1. Visitor connection
   try {
     if (canonical.visitor_id) {
@@ -982,10 +972,6 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
   } catch (err) {
     console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
   }
-
-  // #region agent log
-  console.error(`[DBG-95a3f1][H1] VISITOR-DONE leadId=${lead.lead_id}`)
-  // #endregion
 
   // 2. Webhooks avançados — usa customFieldsProcessed já disponível
   try {
@@ -999,10 +985,6 @@ async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, 
   } catch (err) {
     console.error('[webhook-lead] Advanced webhooks error', { message: err?.message });
   }
-
-  // #region agent log
-  console.error(`[DBG-95a3f1][H1] WEBHOOKS-DONE leadId=${lead.lead_id}`)
-  // #endregion
 
   // 3. Automação — somente leads novos
   // Automação e reentrada movidas para executeLeadCriticalPostCreate (bloco

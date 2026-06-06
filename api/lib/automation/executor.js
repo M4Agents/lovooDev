@@ -608,16 +608,7 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
 // ---------------------------------------------------------------------------
 
 export async function processFlowAsync(flow, execution, supabase) {
-  // #region agent log
-  console.error(`[DBG-95a3f1][pfa] ENTRY executionId=${execution.id} leadId=${execution.lead_id}`)
-  // #endregion
-
   const lock = await acquireLock(execution.id, supabase)
-
-  // #region agent log
-  console.error(`[DBG-95a3f1][pfa] LOCK acquired=${lock.acquired} reason=${lock.reason ?? 'ok'}`)
-  // #endregion
-
   if (!lock.acquired) {
     console.warn(`[executor] processFlowAsync: execução ${execution.id} ignorada — ${lock.reason}`)
     return
@@ -643,24 +634,12 @@ export async function processFlowAsync(flow, execution, supabase) {
                       ?? null,
     }
 
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] CTX leadId=${context.leadId} opportunityId=${context.opportunityId} instanceId=${context.instanceId}`)
-    // #endregion
-
     if (!assertContext(context)) {
       await completeExecution(execution.id, 'failed', 'context inválido — campo obrigatório ausente', supabase)
       return
     }
 
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] PRE-PROCESSNODE executionId=${execution.id}`)
-    // #endregion
-
     await processNode(triggerNode, flow.nodes, flow.edges || [], context, supabase)
-
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] POST-PROCESSNODE executionId=${execution.id}`)
-    // #endregion
 
     const { data: current } = await supabase
       .from('automation_executions')
@@ -674,20 +653,11 @@ export async function processFlowAsync(flow, execution, supabase) {
     }
 
     await completeExecution(execution.id, 'completed', null, supabase)
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] COMPLETED executionId=${execution.id}`)
-    // #endregion
     console.log(`[executor] flow concluído: ${flow.id}`)
   } catch (err) {
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] CATCH err=${err?.message} executionId=${execution.id}`)
-    // #endregion
     console.error(`[executor] erro no flow ${flow.id}:`, err?.message)
     await completeExecution(execution.id, 'failed', err?.message, supabase)
   } finally {
-    // #region agent log
-    console.error(`[DBG-95a3f1][pfa] FINALLY executionId=${execution.id}`)
-    // #endregion
     await releaseLock(execution.id, lock.lockId, supabase)
   }
 }
