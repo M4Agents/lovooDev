@@ -153,7 +153,16 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
 
         // Criar execução com contexto enriquecido (opportunity_id carregado do banco)
         const triggerData = { lead_id: leadId, source, opportunity_id: opp?.id ?? null, variables: customVariables }
+
+        // #region agent log [DBG-95a3f1] H4/H5
+        console.error(`[DBG-95a3f1][H4] PRE-createExecution flow=${flow.id} leadId=${leadId} source=${source} companyId=${companyId}`)
+        // #endregion
+
         const execution = await createExecution(flow, triggerData, companyId, supabase)
+
+        // #region agent log [DBG-95a3f1] H5
+        console.error(`[DBG-95a3f1][H5] POST-createExecution flow=${flow.id} executionId=${execution?.id ?? 'NULL'}`)
+        // #endregion
 
         if (!execution) {
           console.error(`${tag} flow=${flow.id} — createExecution retornou null`)
