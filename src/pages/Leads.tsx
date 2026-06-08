@@ -19,6 +19,8 @@ import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import { TagsManagementModal } from '../components/TagsManagementModal';
 import { BulkAssignModal } from '../components/BulkAssignModal';
 import { BulkMergeModal } from '../components/BulkMergeModal';
+import { LeadTableColumnCustomizer } from '../components/LeadTableColumnCustomizer';
+import { useLeadTablePreferences } from '../hooks/useLeadTablePreferences';
 import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
 import {
@@ -44,7 +46,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Clock
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
@@ -64,6 +67,7 @@ interface Lead {
   record_type?: string;
   created_at: string;
   updated_at: string;
+  last_contact_at?: string;
   tags?: LeadTag[];
   /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
   is_over_plan?: boolean;
@@ -99,8 +103,18 @@ const getPageNumbers = (current: number, total: number): (number | '...')[] => {
   return result;
 };
 
+// =====================================================
+// Helper: valor de campo personalizado para um lead
+// =====================================================
+function getCustomFieldValue(
+  lead: Lead,
+  fieldId: string
+): string | null {
+  return lead.lead_custom_values?.find((v) => v.field_id === fieldId)?.value ?? null
+}
+
 export const Leads: React.FC = () => {
-  const { company } = useAuth();
+  const { company, user } = useAuth();
   const { canViewLead, canEditLead, canDeleteLead, isRestrictedToOwnLeads } = useLeadPermissions();
   const { canImportLeads, canEditAllLeads } = useAccessControl();
   const { leadStats } = usePlanLeadStats(company?.id);
@@ -156,6 +170,17 @@ export const Leads: React.FC = () => {
   const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
   const [notificationsKey, setNotificationsKey] = useState(0);
 
+  // Campos personalizados (para customizador de colunas)
+  const [customFields, setCustomFields] = useState<any[]>([]);
+
+  // Preferências de colunas visíveis
+  const { allColumns, visibleColumns, toggleColumn, resetToDefault, isAtLimit } =
+    useLeadTablePreferences({
+      companyId: company?.id,
+      userId: user?.id,
+      customFields,
+    });
+
   // Filtro de tags (AND)
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
@@ -170,6 +195,14 @@ export const Leads: React.FC = () => {
       loadCompanyUsers();
     }
   }, [company?.id, period]);
+
+  // Carregar campos personalizados (independente do carregamento dos leads)
+  useEffect(() => {
+    if (!company?.id) return;
+    api.getCustomFields(company.id)
+      .then((fields) => setCustomFields(fields))
+      .catch(() => setCustomFields([]));
+  }, [company?.id]);
 
   // Carregar usuários da empresa
   const loadCompanyUsers = async () => {
@@ -813,6 +846,16 @@ export const Leads: React.FC = () => {
 
       {/* Leads Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {/* Cabeçalho da tabela com customizador de colunas */}
+        <div className="flex items-center justify-end px-4 py-2 border-b border-gray-100 bg-gray-50">
+          <LeadTableColumnCustomizer
+            visibleColumns={visibleColumns}
+            allColumns={allColumns}
+            onToggle={toggleColumn}
+            onReset={resetToDefault}
+            isAtLimit={isAtLimit}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -837,24 +880,55 @@ export const Leads: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Lead
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contato
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Origem
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Responsável
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tags
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Data
-                </th>
+                {visibleColumns.includes('contato') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Contato
+                  </th>
+                )}
+                {visibleColumns.includes('status') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                )}
+                {visibleColumns.includes('origem') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Origem
+                  </th>
+                )}
+                {visibleColumns.includes('responsavel') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Responsável
+                  </th>
+                )}
+                {visibleColumns.includes('tags') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tags
+                  </th>
+                )}
+                {visibleColumns.includes('data') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Data
+                  </th>
+                )}
+                {visibleColumns.includes('interesse') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Interesse
+                  </th>
+                )}
+                {visibleColumns.includes('ultimo_contato') && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Último Contato
+                  </th>
+                )}
+                {/* Colunas de campos personalizados */}
+                {allColumns
+                  .filter((col) => col.isCustom && visibleColumns.includes(col.id))
+                  .map((col) => (
+                    <th key={col.id} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {col.label}
+                    </th>
+                  ))
+                }
                 <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
@@ -900,69 +974,113 @@ export const Leads: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    {lead.is_over_plan ? (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
-                          Restrito
-                        </span>
-                        <span className="text-xs text-gray-400 italic">Dados ocultos</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {lead.email && (
-                          <div className="flex items-center text-xs text-gray-700">
-                            <Mail className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
-                            {lead.email}
-                          </div>
-                        )}
-                        {lead.phone && (
-                          <div className="flex items-center text-xs text-gray-700">
-                            <Phone className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
-                            {lead.phone}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
-                      {lead.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
-                      {getOriginLabel(lead.origin)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                    {(() => {
-                      const responsibleUser = companyUsers.find(u => u.user_id === lead.responsible_user_id);
-                      return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
-                    })()}
-                  </td>
-                  <td className="px-4 py-2">
-                    {lead.tags && lead.tags.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-1">
-                        {lead.tags.slice(0, 3).map(tag => (
-                          <TagBadge key={tag.id} tag={tag} size="sm" />
-                        ))}
-                        {lead.tags.length > 3 && (
-                          <span
-                            className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
-                            title={lead.tags.slice(3).map(t => t.name).join(', ')}
-                          >
-                            +{lead.tags.length - 3}
+                  {visibleColumns.includes('contato') && (
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {lead.is_over_plan ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">
+                            Restrito
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
-                    {formatDate(lead.created_at)}
-                  </td>
+                          <span className="text-xs text-gray-400 italic">Dados ocultos</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {lead.email && (
+                            <div className="flex items-center text-xs text-gray-700">
+                              <Mail className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
+                              {lead.email}
+                            </div>
+                          )}
+                          {lead.phone && (
+                            <div className="flex items-center text-xs text-gray-700">
+                              <Phone className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0" />
+                              {lead.phone}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
+                  {visibleColumns.includes('status') && (
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
+                        {lead.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                  )}
+                  {visibleColumns.includes('origem') && (
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
+                        {getOriginLabel(lead.origin)}
+                      </span>
+                    </td>
+                  )}
+                  {visibleColumns.includes('responsavel') && (
+                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500 max-w-[140px] truncate">
+                      {(() => {
+                        const responsibleUser = companyUsers.find(u => u.user_id === lead.responsible_user_id);
+                        return responsibleUser ? (responsibleUser.display_name || responsibleUser.email) : '-';
+                      })()}
+                    </td>
+                  )}
+                  {visibleColumns.includes('tags') && (
+                    <td className="px-4 py-2">
+                      {lead.tags && lead.tags.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {lead.tags.slice(0, 3).map(tag => (
+                            <TagBadge key={tag.id} tag={tag} size="sm" />
+                          ))}
+                          {lead.tags.length > 3 && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+                              title={lead.tags.slice(3).map(t => t.name).join(', ')}
+                            >
+                              +{lead.tags.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                  )}
+                  {visibleColumns.includes('data') && (
+                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
+                      {formatDate(lead.created_at)}
+                    </td>
+                  )}
+                  {visibleColumns.includes('interesse') && (
+                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600 max-w-[140px] truncate">
+                      {lead.interest || <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
+                  {visibleColumns.includes('ultimo_contato') && (
+                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">
+                      {lead.last_contact_at ? (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                          {formatDate(lead.last_contact_at)}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                  )}
+                  {/* Células de campos personalizados */}
+                  {allColumns
+                    .filter((col) => col.isCustom && visibleColumns.includes(col.id))
+                    .map((col) => {
+                      const value = getCustomFieldValue(lead, col.fieldId!)
+                      return (
+                        <td key={col.id} className="px-4 py-2 whitespace-nowrap">
+                          {value
+                            ? <span className="text-xs text-gray-700 block max-w-[120px] truncate" title={value}>{value}</span>
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                      )
+                    })
+                  }
                   <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-1">
                       <button
