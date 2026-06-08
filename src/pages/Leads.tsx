@@ -791,7 +791,7 @@ export const Leads: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                {canEditAllLeads() && (
+                {canEditAllLeads && (
                   <th className="pl-4 pr-2 py-2 w-8">
                     <input
                       type="checkbox"
@@ -840,7 +840,7 @@ export const Leads: React.FC = () => {
                   key={lead.id}
                   className={`hover:bg-gray-50 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50' : ''}`}
                 >
-                  {canEditAllLeads() && (
+                  {canEditAllLeads && (
                     <td className="pl-4 pr-2 py-2 w-8 align-middle">
                       <input
                         type="checkbox"
@@ -992,7 +992,7 @@ export const Leads: React.FC = () => {
         </div>
 
         {/* Barra flutuante de seleção em lote */}
-        {selectedLeadIds.size > 0 && canEditAllLeads() && (
+        {selectedLeadIds.size > 0 && canEditAllLeads && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-xl shadow-2xl ring-1 ring-white/10">
             <span className="text-sm font-medium">
               {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''} selecionado{selectedLeadIds.size !== 1 ? 's' : ''}
