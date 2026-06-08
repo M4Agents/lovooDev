@@ -102,19 +102,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // #region agent log
-    console.error('[delete-stage] PRE-DELETE stage_id:', stage_id, 'positionCount:', positionCount);
-    // #endregion
-
     // Deletar etapa
     const { error: deleteError } = await supabase
       .from('funnel_stages')
       .delete()
       .eq('id', stage_id);
-
-    // #region agent log
-    console.error('[delete-stage] POST-DELETE deleteError:', deleteError ? { code: deleteError.code, message: deleteError.message, details: deleteError.details, hint: deleteError.hint } : null);
-    // #endregion
 
     if (deleteError) {
       throw deleteError;
@@ -145,24 +137,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    // #region agent log
-    console.error('[delete-stage] CATCH:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      stack: error?.stack?.split('\n').slice(0, 4).join(' | ')
-    });
-    // #endregion
+    console.error('Error in delete stage API:', error);
     return res.status(500).json({ 
       error: 'Erro ao deletar etapa',
-      message: error.message,
-      _debug: {
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
-        message: error?.message
-      }
+      message: error.message
     });
   }
 }

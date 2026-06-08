@@ -256,9 +256,6 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
         const contentType = response.headers.get('content-type')
         if (contentType && contentType.includes('application/json')) {
           const data = await response.json()
-          // #region agent log
-          console.error('[delete-stage] HTTP', response.status, 'resposta completa:', JSON.stringify(data, null, 2))
-          // #endregion
           if (data.lead_count > 0 && !moveToStageId) {
             setError(data.message)
             return
