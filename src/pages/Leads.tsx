@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
@@ -16,6 +17,7 @@ import { ImportLeadsModal } from '../components/ImportLeadsModal';
 import { DuplicateNotifications } from '../components/DuplicateNotifications';
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import { TagsManagementModal } from '../components/TagsManagementModal';
+import { BulkAssignModal } from '../components/BulkAssignModal';
 import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
 import {
@@ -40,7 +42,8 @@ import {
   ArrowDownUp,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UserCheck
 } from 'lucide-react';
 import { exportToCSV, exportToExcel, prepareLeadsForExport, generateExportFilename } from '../utils/export';
 import { Avatar } from '../components/Avatar';
@@ -98,7 +101,7 @@ const getPageNumbers = (current: number, total: number): (number | '...')[] => {
 export const Leads: React.FC = () => {
   const { company } = useAuth();
   const { canViewLead, canEditLead, canDeleteLead, isRestrictedToOwnLeads } = useLeadPermissions();
-  const { canImportLeads } = useAccessControl();
+  const { canImportLeads, canEditAllLeads } = useAccessControl();
   const { leadStats } = usePlanLeadStats(company?.id);
 
   // Deep-link do Dashboard: /leads?lead_id=xxx
@@ -141,6 +144,11 @@ export const Leads: React.FC = () => {
   // Filtro de responsável
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
+
+  // Seleção em lote
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
 
   // Filtro de tags (AND)
   const [tagFilter, setTagFilter] = useState<string[]>([]);
@@ -214,6 +222,7 @@ export const Leads: React.FC = () => {
     
     try {
       setLoading(true);
+      setSelectedLeadIds(new Set());
       const dateRange = periodToDateRange(period);
       const effectiveTagIds = overrides?.tagIds ?? tagFilter;
       const page = overrides?.page ?? currentPage;
@@ -326,6 +335,42 @@ export const Leads: React.FC = () => {
     } catch (error) {
       console.error('Error deleting lead:', error);
       alert('Erro ao excluir lead');
+    }
+  };
+
+  const handleBulkAssign = async (responsibleUserId: string | null) => {
+    if (!company?.id) return;
+
+    // Validação: se não for null, o usuário deve existir em companyUsers
+    if (responsibleUserId !== null) {
+      const exists = companyUsers.some((u) => u.user_id === responsibleUserId);
+      if (!exists) {
+        toast.error('Usuário selecionado não encontrado na empresa.');
+        return;
+      }
+    }
+
+    setBulkAssignLoading(true);
+    try {
+      const ids = Array.from(selectedLeadIds);
+      const result = await api.bulkAssignLeads(ids, responsibleUserId, company.id);
+
+      if (result.updated === result.requested) {
+        toast.success(`${result.updated} lead${result.updated !== 1 ? 's' : ''} atualizado${result.updated !== 1 ? 's' : ''} com sucesso.`);
+      } else if (result.updated > 0) {
+        toast(`${result.updated} de ${result.requested} leads atualizados. Alguns leads podem não ter sido alterados por restrições de acesso.`, {
+          icon: '⚠️',
+        });
+      } else {
+        toast.error('Nenhum lead foi atualizado. Verifique suas permissões.');
+      }
+
+      setShowBulkAssignModal(false);
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.message ?? 'Erro ao atribuir responsável. Tente novamente.');
+    } finally {
+      setBulkAssignLoading(false);
     }
   };
 
@@ -746,6 +791,23 @@ export const Leads: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
+                {canEditAllLeads() && (
+                  <th className="pl-4 pr-2 py-2 w-8">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      checked={leads.length > 0 && leads.every((l) => selectedLeadIds.has(l.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLeadIds(new Set(leads.map((l) => l.id)));
+                        } else {
+                          setSelectedLeadIds(new Set());
+                        }
+                      }}
+                      title={leads.length > 0 && leads.every((l) => selectedLeadIds.has(l.id)) ? 'Desmarcar todos' : 'Selecionar todos'}
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Lead
                 </th>
@@ -774,7 +836,27 @@ export const Leads: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {leads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-gray-50">
+                <tr
+                  key={lead.id}
+                  className={`hover:bg-gray-50 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50' : ''}`}
+                >
+                  {canEditAllLeads() && (
+                    <td className="pl-4 pr-2 py-2 w-8 align-middle">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        checked={selectedLeadIds.has(lead.id)}
+                        onChange={(e) => {
+                          setSelectedLeadIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(lead.id);
+                            else next.delete(lead.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-7 w-7">
@@ -909,6 +991,30 @@ export const Leads: React.FC = () => {
           )}
         </div>
 
+        {/* Barra flutuante de seleção em lote */}
+        {selectedLeadIds.size > 0 && canEditAllLeads() && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-xl shadow-2xl ring-1 ring-white/10">
+            <span className="text-sm font-medium">
+              {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''} selecionado{selectedLeadIds.size !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={() => setShowBulkAssignModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
+            >
+              <UserCheck className="w-4 h-4" />
+              Atribuir responsável
+            </button>
+            <button
+              onClick={() => setSelectedLeadIds(new Set())}
+              className="flex items-center gap-1 px-2 py-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors"
+              title="Limpar seleção"
+            >
+              <X className="w-4 h-4" />
+              Limpar
+            </button>
+          </div>
+        )}
+
         {/* Paginação */}
         {totalLeads > LEADS_PER_PAGE && (() => {
           const totalPages = Math.ceil(totalLeads / LEADS_PER_PAGE);
@@ -1019,6 +1125,16 @@ export const Leads: React.FC = () => {
           onMergeComplete={handleMergeComplete}
         />
       )}
+
+      {/* Modal de Atribuição em Lote */}
+      <BulkAssignModal
+        isOpen={showBulkAssignModal}
+        onClose={() => setShowBulkAssignModal(false)}
+        onConfirm={handleBulkAssign}
+        selectedCount={selectedLeadIds.size}
+        companyUsers={companyUsers}
+        loading={bulkAssignLoading}
+      />
     </div>
   );
 };

@@ -1890,5 +1890,26 @@ export const api = {
       professional: '#EF4444'
     };
     return colors[plan] || '#6B7280';
-  }
+  },
+
+  async bulkAssignLeads(
+    leadIds: number[],
+    responsibleUserId: string | null,
+    companyId: string
+  ): Promise<{ updated: number; requested: number }> {
+    const MAX_BULK_ASSIGN = 200;
+    if (leadIds.length === 0) return { updated: 0, requested: 0 };
+    const deduped = Array.from(new Set(leadIds));
+    if (deduped.length > MAX_BULK_ASSIGN) {
+      throw new Error(`Máximo de ${MAX_BULK_ASSIGN} leads por operação.`);
+    }
+    const { data, error } = await supabase
+      .from('leads')
+      .update({ responsible_user_id: responsibleUserId })
+      .in('id', deduped)
+      .eq('company_id', companyId)
+      .select('id');
+    if (error) throw error;
+    return { updated: (data ?? []).length, requested: deduped.length };
+  },
 };
