@@ -109,6 +109,9 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
     }
   };
 
+  const MAX_BULK_MERGE = 20;
+  const atLimit = selectedIds.size >= MAX_BULK_MERGE;
+
   const handleBulkMergeClick = () => {
     if (!onBulkMergeRequest || selectedIds.size === 0) return;
     const selected = notifications.filter((n) => selectedIds.has(n.notification_id));
@@ -116,21 +119,28 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
     onBulkMergeRequest(selected);
   };
 
-  const allSelected = notifications.length > 0 && notifications.every((n) => selectedIds.has(n.notification_id));
+  // "Selecionar todos" respeita o limite: marca no máximo os primeiros MAX_BULK_MERGE
+  const selectableIds = notifications.slice(0, MAX_BULK_MERGE).map((n) => n.notification_id);
+  const allSelectableSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
   const toggleSelectAll = () => {
-    if (allSelected) {
+    if (allSelectableSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(notifications.map((n) => n.notification_id)));
+      setSelectedIds(new Set(selectableIds));
     }
   };
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < MAX_BULK_MERGE) {
+        next.add(id);
+      }
+      // Ignora silenciosamente se já atingiu o limite
       return next;
     });
   };
@@ -195,9 +205,15 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
               <input
                 type="checkbox"
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                checked={allSelected}
+                checked={allSelectableSelected}
                 onChange={toggleSelectAll}
-                title={allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                title={
+                  allSelectableSelected
+                    ? 'Desmarcar todos'
+                    : notifications.length > MAX_BULK_MERGE
+                    ? `Selecionar os primeiros ${MAX_BULK_MERGE}`
+                    : 'Selecionar todos'
+                }
               />
             )}
             <AlertTriangle className="w-6 h-6 text-orange-500" />
@@ -214,8 +230,13 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
           {/* Barra de ação em lote — visível quando há itens selecionados */}
           {onBulkMergeRequest && selectedIds.size > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">
-                {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+              <span className={`text-sm font-medium ${atLimit ? 'text-orange-600' : 'text-gray-600'}`}>
+                {selectedIds.size} / {MAX_BULK_MERGE}
+                {atLimit && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
+                    limite
+                  </span>
+                )}
               </span>
               <button
                 onClick={handleBulkMergeClick}
@@ -247,9 +268,19 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
                 <div className="mr-4 mt-1 flex-shrink-0">
                   <input
                     type="checkbox"
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                      atLimit && !selectedIds.has(notification.notification_id)
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'cursor-pointer'
+                    }`}
                     checked={selectedIds.has(notification.notification_id)}
+                    disabled={atLimit && !selectedIds.has(notification.notification_id)}
                     onChange={() => toggleSelect(notification.notification_id)}
+                    title={
+                      atLimit && !selectedIds.has(notification.notification_id)
+                        ? `Limite de ${MAX_BULK_MERGE} pares atingido`
+                        : undefined
+                    }
                   />
                 </div>
               )}
