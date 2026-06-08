@@ -239,7 +239,7 @@ export const Leads: React.FC = () => {
 
       // Carregar fotos dos leads a partir do telefone (se houver)
       const phones = Array.from(new Set(
-        leadsData
+        leadsResult.data
           .map((lead) => lead.phone)
           .filter((phone): phone is string => !!phone)
       ));
