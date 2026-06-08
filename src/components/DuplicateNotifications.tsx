@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { AlertTriangle, Users, Phone, Mail, X, Check, Merge } from 'lucide-react';
 
-interface DuplicateNotification {
+export interface DuplicateNotification {
   notification_id: number;
   lead_id: number;
   lead_name: string;
@@ -21,13 +21,18 @@ interface DuplicateNotification {
 
 interface DuplicateNotificationsProps {
   onMergeRequest?: (notification: DuplicateNotification) => void;
+  onBulkMergeRequest?: (notifications: DuplicateNotification[]) => void;
 }
 
-export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ onMergeRequest }) => {
+export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({
+  onMergeRequest,
+  onBulkMergeRequest,
+}) => {
   const { company } = useAuth();
   const [notifications, setNotifications] = useState<DuplicateNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (company) {
@@ -104,6 +109,42 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
     }
   };
 
+  const MAX_BULK_MERGE = 20;
+  const atLimit = selectedIds.size >= MAX_BULK_MERGE;
+
+  const handleBulkMergeClick = () => {
+    if (!onBulkMergeRequest || selectedIds.size === 0) return;
+    const selected = notifications.filter((n) => selectedIds.has(n.notification_id));
+    setSelectedIds(new Set());
+    onBulkMergeRequest(selected);
+  };
+
+  // "Selecionar todos" respeita o limite: marca no máximo os primeiros MAX_BULK_MERGE
+  const selectableIds = notifications.slice(0, MAX_BULK_MERGE).map((n) => n.notification_id);
+  const allSelectableSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableIds));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < MAX_BULK_MERGE) {
+        next.add(id);
+      }
+      // Ignora silenciosamente se já atingiu o limite
+      return next;
+    });
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -159,8 +200,23 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
     <div className="bg-white rounded-lg shadow">
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <AlertTriangle className="w-6 h-6 text-orange-500 mr-3" />
+          <div className="flex items-center gap-3">
+            {onBulkMergeRequest && (
+              <input
+                type="checkbox"
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                checked={allSelectableSelected}
+                onChange={toggleSelectAll}
+                title={
+                  allSelectableSelected
+                    ? 'Desmarcar todos'
+                    : notifications.length > MAX_BULK_MERGE
+                    ? `Selecionar os primeiros ${MAX_BULK_MERGE}`
+                    : 'Selecionar todos'
+                }
+              />
+            )}
+            <AlertTriangle className="w-6 h-6 text-orange-500" />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
                 Duplicatas Detectadas
@@ -170,13 +226,64 @@ export const DuplicateNotifications: React.FC<DuplicateNotificationsProps> = ({ 
               </p>
             </div>
           </div>
+
+          {/* Barra de ação em lote — visível quando há itens selecionados */}
+          {onBulkMergeRequest && selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-medium ${atLimit ? 'text-orange-600' : 'text-gray-600'}`}>
+                {selectedIds.size} / {MAX_BULK_MERGE}
+                {atLimit && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
+                    limite
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={handleBulkMergeClick}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                <Merge className="w-4 h-4" />
+                Mesclar Selecionados
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Limpar seleção"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="divide-y divide-gray-200">
         {notifications.map((notification) => (
-          <div key={notification.notification_id} className="p-6 hover:bg-gray-50 transition-colors">
+          <div
+            key={notification.notification_id}
+            className={`p-6 hover:bg-gray-50 transition-colors ${selectedIds.has(notification.notification_id) ? 'bg-blue-50' : ''}`}
+          >
             <div className="flex items-start justify-between">
+              {onBulkMergeRequest && (
+                <div className="mr-4 mt-1 flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                      atLimit && !selectedIds.has(notification.notification_id)
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'cursor-pointer'
+                    }`}
+                    checked={selectedIds.has(notification.notification_id)}
+                    disabled={atLimit && !selectedIds.has(notification.notification_id)}
+                    onChange={() => toggleSelect(notification.notification_id)}
+                    title={
+                      atLimit && !selectedIds.has(notification.notification_id)
+                        ? `Limite de ${MAX_BULK_MERGE} pares atingido`
+                        : undefined
+                    }
+                  />
+                </div>
+              )}
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center">
