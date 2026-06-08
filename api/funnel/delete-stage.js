@@ -48,25 +48,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Verificar quantos leads estão nesta etapa
-    const { data: leadsInStage, error: leadsError } = await supabase
-      .from('lead_funnel_positions')
-      .select('id, lead_id')
+    // Verificar quantos oportunidades estão nesta etapa
+    const { data: positionsInStage, error: positionsError } = await supabase
+      .from('opportunity_funnel_positions')
+      .select('id, opportunity_id')
       .eq('stage_id', stage_id);
 
-    if (leadsError) {
-      throw leadsError;
+    if (positionsError) {
+      throw positionsError;
     }
 
-    const leadCount = leadsInStage?.length || 0;
+    const positionCount = positionsInStage?.length || 0;
 
-    // Se houver leads, precisa informar para onde mover
-    if (leadCount > 0 && !move_to_stage_id) {
+    // Se houver oportunidades, precisa informar para onde mover
+    if (positionCount > 0 && !move_to_stage_id) {
       return res.status(400).json({ 
         error: 'Esta etapa possui leads',
-        message: `Existem ${leadCount} lead(s) nesta etapa. Informe para qual etapa deseja movê-los.`,
+        message: `Existem ${positionCount} lead(s) nesta etapa. Informe para qual etapa deseja movê-los.`,
         field: 'move_to_stage_id',
-        lead_count: leadCount
+        lead_count: positionCount
       });
     }
 
@@ -86,10 +86,10 @@ export default async function handler(req, res) {
         });
       }
 
-      // Mover leads para nova etapa
-      if (leadCount > 0) {
+      // Mover oportunidades para nova etapa
+      if (positionCount > 0) {
         const { error: moveError } = await supabase
-          .from('lead_funnel_positions')
+          .from('opportunity_funnel_positions')
           .update({ 
             stage_id: move_to_stage_id,
             updated_at: new Date().toISOString()
@@ -99,25 +99,11 @@ export default async function handler(req, res) {
         if (moveError) {
           throw moveError;
         }
-
-        // Registrar movimentação no histórico
-        const historyRecords = leadsInStage.map(pos => ({
-          lead_id: pos.lead_id,
-          funnel_id: stage.funnel_id,
-          from_stage_id: stage_id,
-          to_stage_id: move_to_stage_id,
-          moved_by: 'system',
-          notes: `Etapa "${stage.name}" foi deletada`
-        }));
-
-        await supabase
-          .from('lead_stage_history')
-          .insert(historyRecords);
       }
     }
 
     // #region agent log
-    console.error('[delete-stage] PRE-DELETE stage_id:', stage_id, 'leadCount:', leadCount);
+    console.error('[delete-stage] PRE-DELETE stage_id:', stage_id, 'positionCount:', positionCount);
     // #endregion
 
     // Deletar etapa
@@ -154,7 +140,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       message: 'Etapa deletada com sucesso',
-      leads_moved: leadCount,
+      leads_moved: positionCount,
       moved_to_stage_id: move_to_stage_id || null
     });
 
