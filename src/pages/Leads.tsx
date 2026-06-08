@@ -14,10 +14,11 @@ import { LeadModal } from '../components/LeadModal';
 import { LeadViewModal } from '../components/LeadViewModal';
 import { CustomFieldsModal } from '../components/CustomFieldsModal';
 import { ImportLeadsModal } from '../components/ImportLeadsModal';
-import { DuplicateNotifications } from '../components/DuplicateNotifications';
+import { DuplicateNotifications, DuplicateNotification } from '../components/DuplicateNotifications';
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import { TagsManagementModal } from '../components/TagsManagementModal';
 import { BulkAssignModal } from '../components/BulkAssignModal';
+import { BulkMergeModal } from '../components/BulkMergeModal';
 import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
 import {
@@ -145,10 +146,15 @@ export const Leads: React.FC = () => {
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
 
-  // Seleção em lote
+  // Seleção em lote (atribuição)
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
+
+  // Mesclagem em lote (duplicatas)
+  const [bulkMergeNotifications, setBulkMergeNotifications] = useState<DuplicateNotification[]>([]);
+  const [showBulkMergeModal, setShowBulkMergeModal] = useState(false);
+  const [notificationsKey, setNotificationsKey] = useState(0);
 
   // Filtro de tags (AND)
   const [tagFilter, setTagFilter] = useState<string[]>([]);
@@ -468,13 +474,29 @@ export const Leads: React.FC = () => {
   const handleMergeComplete = () => {
     setShowMergeModal(false);
     setSelectedDuplicateNotification(null);
-    // Recarregar dados para refletir mudanças
+    // Incrementa notificationsKey para forçar remount e reload do painel de duplicatas
+    setNotificationsKey((k) => k + 1);
     loadData();
   };
 
   const handleCloseMergeModal = () => {
     setShowMergeModal(false);
     setSelectedDuplicateNotification(null);
+  };
+
+  // Handlers para mesclagem em lote
+  const handleBulkMergeRequest = (notifications: DuplicateNotification[]) => {
+    if (notifications.length === 0) return;
+    setBulkMergeNotifications(notifications);
+    setShowBulkMergeModal(true);
+  };
+
+  const handleBulkMergeComplete = () => {
+    setShowBulkMergeModal(false);
+    setBulkMergeNotifications([]);
+    // Incrementa notificationsKey para forçar remount e reload do painel de duplicatas
+    setNotificationsKey((k) => k + 1);
+    loadData();
   };
 
   if (loading) {
@@ -626,7 +648,11 @@ export const Leads: React.FC = () => {
       </div>
 
       {/* Notificações de Duplicatas */}
-      <DuplicateNotifications onMergeRequest={handleMergeRequest} />
+      <DuplicateNotifications
+        key={notificationsKey}
+        onMergeRequest={handleMergeRequest}
+        onBulkMergeRequest={handleBulkMergeRequest}
+      />
 
       {/* Filtros */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -1134,6 +1160,14 @@ export const Leads: React.FC = () => {
         selectedCount={selectedLeadIds.size}
         companyUsers={companyUsers}
         loading={bulkAssignLoading}
+      />
+
+      {/* Modal de Mesclagem em Lote */}
+      <BulkMergeModal
+        isOpen={showBulkMergeModal}
+        onClose={() => setShowBulkMergeModal(false)}
+        onMergeComplete={handleBulkMergeComplete}
+        notifications={bulkMergeNotifications}
       />
     </div>
   );
