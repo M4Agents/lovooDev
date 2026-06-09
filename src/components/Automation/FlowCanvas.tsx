@@ -34,6 +34,7 @@ import DelayNode from './nodes/DelayNode'
 import EndNode from './nodes/EndNode'
 import DistributionNode from './nodes/DistributionNode'
 import ExecuteAgentNode from './nodes/ExecuteAgentNode'
+import KeywordRouterNode from './nodes/KeywordRouterNode'
 
 // Custom Edge Component
 import CustomEdge from './edges/CustomEdge'
@@ -80,7 +81,8 @@ const nodeTypes: NodeTypes = {
   delay: DelayNode,
   end: EndNode,
   distribution: DistributionNode,
-  execute_agent: ExecuteAgentNode
+  execute_agent: ExecuteAgentNode,
+  keyword_router: KeywordRouterNode,
 }
 
 const edgeTypes: EdgeTypes = {
@@ -292,6 +294,11 @@ function FlowCanvasInner({
         const buttonIndex = parseInt(params.sourceHandle.replace('button-', ''))
         label = `Opção ${buttonIndex + 1}`
         color = '#9333ea' // purple-600
+      } else if (params.sourceHandle === 'default') {
+        label = 'Padrão'
+        color = '#9ca3af' // gray-400
+      } else if (params.sourceHandle?.startsWith('route-')) {
+        color = '#7c3aed' // purple-700
       }
       
       const newEdge = {
@@ -313,7 +320,9 @@ function FlowCanvasInner({
         params.handleId === 'trigger-output' ||
         params.handleId === 'next' ||
         params.handleId === 'true' ||
-        params.handleId === 'false'
+        params.handleId === 'false' ||
+        params.handleId === 'default' ||
+        params.handleId?.startsWith('route-')
       ) {
         setConnectingFromNode({
           nodeId: params.nodeId,
@@ -529,6 +538,22 @@ function FlowCanvasInner({
       actionDefaultConfig.duration = 1
       actionDefaultConfig.unit = 'minutes'
     }
+    if (actionType === 'keyword_router') {
+      actionDefaultConfig.comparisonType = 'contains'
+      actionDefaultConfig.caseSensitive = false
+      actionDefaultConfig.rules = []
+    }
+
+    const nodeLabel: Record<string, string> = {
+      message: 'Mensagem',
+      action: 'Ação',
+      condition: 'Condição',
+      delay: 'Espera',
+      distribution: 'Distribuir Lead',
+      execute_agent: 'Executar Agente IA',
+      keyword_router: 'Roteador de Palavras-Chave',
+      end: 'Fim',
+    }
 
     const newNode: Node = {
       id: `${actionType}-${Date.now()}`,
@@ -538,10 +563,7 @@ function FlowCanvasInner({
         y: sourceNode.position.y 
       },
       data: {
-        label: actionType === 'message' ? 'Mensagem' : 
-               actionType === 'action' ? 'Ação' :
-               actionType === 'condition' ? 'Condição' :
-               actionType === 'delay' ? 'Espera' : 'Ação',
+        label: nodeLabel[actionType] ?? 'Ação',
         config: actionDefaultConfig
       }
     }

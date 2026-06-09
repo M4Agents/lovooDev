@@ -6,6 +6,7 @@
 import { TriggerAutomationForm } from './TriggerAutomationForm'
 import { NotificationForm } from './NotificationForm'
 import { ConditionForm } from './ConditionForm'
+import KeywordRouterForm from './KeywordRouterForm'
 import { DistributionForm } from './DistributionForm'
 import ExecuteAgentForm from './forms/ExecuteAgentForm'
 import NodeExecutionStatus from './NodeExecutionStatus'
@@ -947,6 +948,9 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
 
       case 'condition':
         return <ConditionForm config={config} setConfig={setConfig} />
+
+      case 'keyword_router':
+        return <KeywordRouterForm config={config as any} setConfig={setConfig} />
 
       case 'delay':
         return (

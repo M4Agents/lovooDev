@@ -5,7 +5,7 @@
 // =====================================================
 
 import React from 'react'
-import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Bot, FileCode, Flag } from 'lucide-react'
+import { MessageCircle, Zap, GitBranch, Clock, Shuffle, Code, Wrench, Bot, FileCode, Flag, Filter } from 'lucide-react'
 import { useMemo } from 'react'
 
 interface ActionMenuProps {
@@ -42,6 +42,12 @@ const ACTIONS: ActionMenuItem[] = [
     label: 'Condições',
     icon: GitBranch,
     description: 'Adicionar condição lógica'
+  },
+  {
+    type: 'keyword_router',
+    label: 'Roteador de Palavras-Chave',
+    icon: Filter,
+    description: 'Rotear fluxo por palavras-chave da mensagem recebida'
   },
   {
     type: 'delay',

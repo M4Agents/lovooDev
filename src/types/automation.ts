@@ -66,9 +66,23 @@ export interface AutomationFlow {
   updated_at: string
 }
 
+// Tipagem dedicada ao nó keyword_router
+export interface KeywordRouterRule {
+  id: string
+  handle: string       // sempre "route-{id}" — estável durante toda a vida da regra
+  label: string
+  keywords: string[]
+}
+
+export interface KeywordRouterConfig {
+  comparisonType: 'contains' | 'equals'
+  caseSensitive: boolean
+  rules: KeywordRouterRule[]
+}
+
 export interface FlowNode {
   id: string
-  type: 'trigger' | 'action' | 'condition' | 'message' | 'delay' | 'end' | 'distribution'
+  type: 'trigger' | 'action' | 'condition' | 'message' | 'delay' | 'end' | 'distribution' | 'keyword_router'
   position: { x: number; y: number }
   data: {
     label: string
@@ -650,7 +664,8 @@ export const AUTOMATION_CONSTANTS = {
     MESSAGE: 'message',
     DELAY: 'delay',
     END: 'end',
-    DISTRIBUTION: 'distribution'
+    DISTRIBUTION: 'distribution',
+    KEYWORD_ROUTER: 'keyword_router',
   } as const,
   
   EXECUTION_STATUS: {
@@ -667,13 +682,14 @@ export const AUTOMATION_CONSTANTS = {
   } as const,
   
   NODE_COLORS: {
-    trigger: '#10B981',    // Verde
-    action: '#3B82F6',     // Azul
-    condition: '#F59E0B',  // Amarelo
-    message: '#8B5CF6',    // Roxo
-    delay: '#F97316',      // Laranja
-    end: '#EF4444',        // Vermelho
-    distribution: '#06B6D4' // Ciano
+    trigger: '#10B981',       // Verde
+    action: '#3B82F6',        // Azul
+    condition: '#F59E0B',     // Amarelo
+    message: '#8B5CF6',       // Roxo
+    delay: '#F97316',         // Laranja
+    end: '#EF4444',           // Vermelho
+    distribution: '#06B6D4',  // Ciano
+    keyword_router: '#7C3AED' // Violeta
   } as const
 } as const
 
@@ -693,7 +709,8 @@ export const getNodeIcon = (type: FlowNode['type']): string => {
     message: '💬',
     delay: '⏱️',
     end: '🏁',
-    distribution: '🔄'
+    distribution: '🔄',
+    keyword_router: '🔀'
   }
   return icons[type] || '📦'
 }

@@ -225,6 +225,31 @@ function getNextNodes(currentNode, allNodes, allEdges, result) {
     return next ? [next] : []
   }
 
+  // Roteador de palavras-chave: segue todos os handles que deram match.
+  // Usa filter (não find) para suportar múltiplas edges por handle.
+  // Deduplica destinos por node.id para evitar execução dupla.
+  if (currentNode.type === 'keyword_router') {
+    const matchedHandles = Array.isArray(result?.matchedHandles)
+      ? result.matchedHandles
+      : ['default']
+
+    const seen = new Set()
+    const nextNodes = []
+
+    for (const handle of matchedHandles) {
+      const edges = outgoing.filter(e => e.sourceHandle === handle)
+      for (const edge of edges) {
+        const next = allNodes.find(n => n.id === edge.target)
+        if (next && !seen.has(next.id)) {
+          seen.add(next.id)
+          nextNodes.push(next)
+        }
+      }
+    }
+
+    return nextNodes
+  }
+
   // Demais tipos: ordenar por posição Y e retornar todos
   return outgoing
     .sort((a, b) => {
@@ -391,6 +416,11 @@ async function executeNodeAction(node, context, supabase) {
     case 'execute_agent': {
       const { executeAgentNode } = await import('./agentNodeHandler.js')
       return await executeAgentNode(node, context, supabase)
+    }
+
+    case 'keyword_router': {
+      const { executeKeywordRouter } = await import('./keywordRouter.js')
+      return await executeKeywordRouter(node, context)
     }
 
     default:
