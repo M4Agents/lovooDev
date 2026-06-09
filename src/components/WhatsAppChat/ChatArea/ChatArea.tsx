@@ -455,10 +455,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         reply_to_message_id: currentReply?.id,
       }
 
+      // Capturar antes do await para evitar qualquer risco de mutação posterior
+      const sentContent = formWithReply.content
+      const sentAt = tempMessage.timestamp
+
       // 2. Enviar para o banco
       const messageId = await chatApi.sendMessage(conversationId, companyId, formWithReply, userId)
       // Mensagem enviada com sucesso
-      
+
+      // Reordenação otimista imediata da lista — sem aguardar o ciclo Realtime/banco
+      ChatEventBus.emitConversationMessageSent(companyId, conversationId, sentContent, sentAt)
+
       // 3. Atualizar mensagem local com ID real (manter status 'sending')
       setMessages(prev => {
         const updated = prev.map(msg => 

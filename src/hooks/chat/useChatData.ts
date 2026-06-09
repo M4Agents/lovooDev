@@ -188,6 +188,25 @@ export const useChatData = (
     }
   }, [companyId])
 
+  // Reordenação otimista: mensagem outbound enviada com sucesso pelo usuário.
+  // Atualiza last_message_at/content/direction antes que o Realtime propague o evento do banco.
+  // O Realtime sobrescreverá posteriormente com o timestamp oficial — comportamento seguro e esperado.
+  useChatEvent('chat:conversation:message:sent', (payload: any) => {
+    if (payload.companyId !== companyId) return
+    setConversations(prev =>
+      prev.map(conv =>
+        conv.id === payload.conversationId
+          ? {
+              ...conv,
+              last_message_at: payload.timestamp,
+              last_message_content: payload.content,
+              last_message_direction: 'outbound' as const,
+            }
+          : conv
+      )
+    )
+  }, [companyId])
+
   // Listener para conversas deletadas
   useChatEvent('chat:conversation:deleted', (payload: any) => {
     if (payload.company_id === companyId) {

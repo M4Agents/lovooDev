@@ -127,6 +127,23 @@ export class ChatEventBus {
     this.emit(`chat:conversation:${conversationId}:updated`, payload)
   }
 
+  // Emite atualização otimista imediata após envio bem-sucedido de mensagem outbound.
+  // Permite que useChatData reordene a lista antes que o Realtime propague o evento do banco.
+  static emitConversationMessageSent(
+    companyId: string,
+    conversationId: string,
+    content: string,
+    timestamp: Date
+  ) {
+    this.emit('chat:conversation:message:sent', {
+      companyId,
+      conversationId,
+      content,
+      timestamp,
+      direction: 'outbound' as const,
+    })
+  }
+
   // =====================================================
   // UTILITÁRIOS
   // =====================================================
