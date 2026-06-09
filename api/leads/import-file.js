@@ -397,8 +397,11 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
       .limit(1)
       .maybeSingle();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'836198'},body:JSON.stringify({sessionId:'836198',location:'import-file.js:positionInFunnel:opp-check',message:'H-2: opportunity query result',data:{leadId,funnelId,targetStageId,oppFound:!!opp,oppId:opp?.id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (opp) {
-      await svc
+      const { error: updateErr } = await svc
         .from('opportunity_funnel_positions')
         .update({
           funnel_id:        funnelId,
@@ -407,9 +410,15 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
           updated_at:       new Date().toISOString(),
         })
         .eq('opportunity_id', opp.id);
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'836198'},body:JSON.stringify({sessionId:'836198',location:'import-file.js:positionInFunnel:update-result',message:'H-3: update result',data:{oppId:opp.id,updateError:updateErr?.message||null,updateCode:updateErr?.code||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     }
   } catch (err) {
     console.error('[import-file] funnel positioning error:', err?.message);
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'836198'},body:JSON.stringify({sessionId:'836198',location:'import-file.js:positionInFunnel:catch',message:'H-3: positionInFunnel exception',data:{error:err?.message},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }
 }
 
@@ -482,6 +491,10 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
       } catch (err) {
         console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'836198'},body:JSON.stringify({sessionId:'836198',location:'import-file.js:duplicate-positionInFunnel-guard',message:'H-1: leadFunnelId guard check',data:{leadFunnelId,leadStageId,existingLeadId,rawLeadFunnelName:rawLead.funnel_name,rawLeadStageName:rawLead.stage_name},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (leadFunnelId) await positionInFunnel(svc, existingLeadId, leadFunnelId, leadStageId);
 
