@@ -28,6 +28,8 @@ import { InstanceAlert } from '../InstanceAlert/InstanceAlert'
 import { resolvePhotoUrl } from '../../../utils/imageUtils'
 import { supabase } from '../../../lib/supabase'
 import toast from 'react-hot-toast'
+import { useAudioRecorder } from '../../../hooks/useAudioRecorder'
+import { AudioPreviewBar } from './AudioPreviewBar'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -2337,12 +2339,19 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [sendingWithMedia, setSendingWithMedia] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const [isRecording, setIsRecording] = useState(false)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recordedChunksRef = useRef<Blob[]>([])
-  const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const recordingTimerRef = useRef<number | null>(null)
-  const shouldSendRef = useRef(true)
+  const {
+    isRecording,
+    recordingSeconds,
+    previewDurationSeconds,
+    audioBlobPreview,
+    audioPreviewUrl,
+    audioMimeType,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    clearPreview,
+  } = useAudioRecorder()
+  const [isSendingAudioPreview, setIsSendingAudioPreview] = useState(false)
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
   const [isSecondaryMenuOpen, setIsSecondaryMenuOpen] = useState(false)
@@ -2460,97 +2469,44 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleToggleRecord = async () => {
     if (disabled) return
-
-    // Iniciar gravação
     if (!isRecording) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const recorder = new MediaRecorder(stream)
-
-        recordedChunksRef.current = []
-        shouldSendRef.current = true
-
-        recorder.ondataavailable = (event: BlobEvent) => {
-          if (event.data.size > 0) {
-            recordedChunksRef.current.push(event.data)
-          }
-        }
-
-        recorder.onstop = async () => {
-          try {
-            if (!shouldSendRef.current) {
-              // Cancelado: apenas descartar
-              return
-            }
-
-            if (recordedChunksRef.current.length === 0) return
-
-            const blob = new Blob(recordedChunksRef.current, { type: 'audio/ogg' })
-            const file = new File([blob], `gravacao-${Date.now()}.ogg`, { type: 'audio/ogg' })
-
-            const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
-
-            onSendMessage({
-              content: '[áudio]',
-              message_type: 'audio',
-              media_url: mediaUrl
-            })
-          } catch (error) {
-            console.error('Erro ao processar gravação de áudio:', error)
-          } finally {
-            // Encerrar uso do microfone
-            stream.getTracks().forEach(track => track.stop())
-            if (recordingTimerRef.current) {
-              window.clearInterval(recordingTimerRef.current)
-              recordingTimerRef.current = null
-            }
-            setIsRecording(false)
-          }
-        }
-
-        mediaRecorderRef.current = recorder
-        recorder.start()
-        setIsRecording(true)
-
-        // Iniciar timer de gravação
-        setRecordingSeconds(0)
-        if (recordingTimerRef.current) {
-          window.clearInterval(recordingTimerRef.current)
-        }
-        recordingTimerRef.current = window.setInterval(() => {
-          setRecordingSeconds((prev) => prev + 1)
-        }, 1000)
-      } catch (error) {
-        console.error('Erro ao acessar microfone:', error)
-        setIsRecording(false)
-      }
+      await startRecording()
     } else {
-      // Parar gravação manualmente (enviar)
-      try {
-        mediaRecorderRef.current?.stop()
-      } catch (error) {
-        console.error('Erro ao parar gravação:', error)
-      }
+      // Para e gera prévia — não envia diretamente
+      stopRecording()
     }
   }
 
-  // Cancelar gravação — descarta o áudio sem enviar
-  const handleCancelRecording = () => {
-    shouldSendRef.current = false
-    try {
-      mediaRecorderRef.current?.stop()
-    } catch (error) {
-      console.error('Erro ao cancelar gravação:', error)
-    }
-  }
+  // Enviar áudio após confirmação na prévia
+  const handleSendAudioPreview = async () => {
+    if (!audioBlobPreview) return
 
-  // Finalizar gravação — para e envia o áudio
-  const handleSendRecording = () => {
-    // shouldSendRef.current já é true por padrão (definido em handleToggleRecord)
+    const extension =
+      audioMimeType?.includes('webm') ? 'webm' :
+      audioMimeType?.includes('ogg')  ? 'ogg'  : 'webm'
+
+    const file = new File(
+      [audioBlobPreview],
+      `gravacao-${Date.now()}.${extension}`,
+      { type: audioMimeType || audioBlobPreview.type || 'audio/webm' }
+    )
+
+    setIsSendingAudioPreview(true)
     try {
-      mediaRecorderRef.current?.stop()
+      const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
+      onSendMessage({
+        content: '[áudio]',
+        message_type: 'audio',
+        media_url: mediaUrl,
+      })
+      // Limpa a prévia apenas após sucesso — preserva em caso de erro
+      clearPreview()
     } catch (error) {
-      console.error('Erro ao finalizar gravação:', error)
+      console.error('[chat] Erro ao enviar áudio:', error)
+      toast.error('Erro ao enviar áudio. Tente novamente.')
+      // Prévia permanece disponível para nova tentativa
+    } finally {
+      setIsSendingAudioPreview(false)
     }
   }
 
@@ -2618,7 +2574,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       className="flex items-end gap-1 relative"
     >
       {/* ── Mobile: botão "+" abre menu de ações secundárias ─────────────── */}
-      {!isRecording && (
+      {!isRecording && !audioBlobPreview && (
         <div className="sm:hidden relative flex-shrink-0">
           <button
             type="button"
@@ -2713,13 +2669,24 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
+      {/* ── Prévia de áudio — exibida após parar gravação, antes do envio ── */}
+      {audioBlobPreview && audioPreviewUrl && (
+        <AudioPreviewBar
+          audioUrl={audioPreviewUrl}
+          durationSeconds={previewDurationSeconds}
+          isSending={isSendingAudioPreview}
+          onCancel={clearPreview}
+          onSend={handleSendAudioPreview}
+        />
+      )}
+
       {/* ── Mobile: overlay de gravação com Cancelar e Enviar (sm:hidden) ── */}
       {isRecording && (
         <div className="sm:hidden flex items-center gap-2 w-full">
           {/* Cancelar */}
           <button
             type="button"
-            onClick={handleCancelRecording}
+            onClick={cancelRecording}
             aria-label={t('input.a11y.cancelRecording')}
             title={t('input.a11y.cancelRecording')}
             className="min-h-[40px] min-w-[40px] flex items-center justify-center flex-shrink-0 rounded-full border-2 border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 transition-colors"
@@ -2749,12 +2716,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
             </div>
           </div>
 
-          {/* Enviar áudio */}
+          {/* Parar gravação — abre prévia antes de enviar */}
           <button
             type="button"
-            onClick={handleSendRecording}
-            aria-label="Enviar áudio"
-            title="Enviar áudio"
+            onClick={stopRecording}
+            aria-label="Parar gravação"
+            title="Parar e visualizar áudio"
             className="min-h-[40px] px-4 flex items-center justify-center gap-1.5 flex-shrink-0 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium text-sm transition-colors"
           >
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2766,13 +2733,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
       )}
 
       {/* ── Campo de texto + elementos contextuais ───────────────────────── */}
-      <div className={`flex-1 flex flex-col ${isRecording ? 'hidden sm:block' : ''}`}>
+      <div className={`flex-1 flex flex-col ${(isRecording || !!audioBlobPreview) ? 'hidden' : ''}`}>
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 hidden sm:flex items-center space-x-3">
             {/* Desktop: banner com botão X e waveform */}
             <button
               type="button"
-              onClick={handleCancelRecording}
+              onClick={cancelRecording}
               aria-label={t('input.a11y.cancelRecording')}
               title={t('input.a11y.cancelRecording')}
               className="p-1.5 rounded-full border border-gray-400 text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-400 flex-shrink-0"
@@ -2887,7 +2854,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       </div>
 
       {/* ── Desktop: botões secundários visíveis normalmente (≥ 640px) ───── */}
-      <div className="hidden sm:flex items-end">
+      <div className={`hidden ${audioBlobPreview ? '' : 'sm:flex'} items-end`}>
         <button
           type="button"
           onClick={() => !disabled && setIsEmojiOpen((prev) => !prev)}
@@ -2954,13 +2921,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onChange={handleFileChange}
       />
 
-      {/* ── Botão enviar texto — oculto no mobile durante gravação ──────── */}
+      {/* ── Botão enviar texto — oculto no mobile durante gravação ou prévia ── */}
       <button
         type="submit"
         disabled={(!message.trim() && !pendingMedia) || disabled || sendingWithMedia}
         aria-label={t('input.actions.send')}
         title={t('input.actions.send')}
-        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${isRecording ? 'hidden sm:flex sm:items-center' : ''}`}
+        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${(isRecording || audioBlobPreview) ? 'hidden' : 'flex items-center'}`}
       >
         <svg className="w-5 h-5" aria-hidden fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
