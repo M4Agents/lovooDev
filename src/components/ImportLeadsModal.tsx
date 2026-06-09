@@ -333,7 +333,7 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.company_email = value;
           } else if (lowerHeader === 'company_site') {
             lead.company_site = value;
-          } else if (lowerHeader.includes('nome') || lowerHeader.includes('name')) {
+          } else if (lowerHeader === 'nome' || lowerHeader === 'name') {
             lead.name = value;
           } else if (lowerHeader === 'responsible_user_email' ||
                      lowerHeader === 'responsavel_email' ||
