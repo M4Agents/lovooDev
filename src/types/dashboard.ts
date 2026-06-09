@@ -765,7 +765,7 @@ export interface SnapshotDiffResult {
 /** Delta por vendedor para WoW/MoM — retornado por /api/dashboard/snapshot-seller-deltas */
 export interface SellerSnapshotDelta {
   user_id:               string
-  display_name:          string | null
+  display_name?:         string | null
   /** Δ% de attendance_rate (STATE) — null = dados insuficientes */
   attendance_rate_pct:   number | null
   /** Δ% de avg_response_min (STATE) — null = dados insuficientes */

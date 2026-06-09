@@ -133,7 +133,7 @@ export default async function handler(req: any, res: any): Promise<void> {
           // Query filtrada por effectiveUserId em individual view (otimização)
           let query = svc
             .from('dashboard_seller_snapshots')
-            .select('user_id, display_name, period_start, attendance_rate, avg_response_min, won_value')
+            .select('user_id, period_start, attendance_rate, avg_response_min, won_value')
             .eq('company_id', companyId)
             .gte('period_start', periods.previousFrom)
             .lte('period_start', periods.currentTo)
@@ -177,16 +177,16 @@ export default async function handler(req: any, res: any): Promise<void> {
       const rows = deltasResult.value
 
       // Agrupar por user_id
-      const grouped = new Map<string, { display_name: string | null; rows: any[] }>()
+      const grouped = new Map<string, { rows: any[] }>()
       for (const row of rows) {
         if (!grouped.has(row.user_id)) {
-          grouped.set(row.user_id, { display_name: row.display_name, rows: [] })
+          grouped.set(row.user_id, { rows: [] })
         }
         grouped.get(row.user_id)!.rows.push(row)
       }
 
       const sellers: any[] = []
-      for (const [userId, { display_name, rows: sellerRows }] of grouped.entries()) {
+      for (const [userId, { rows: sellerRows }] of grouped.entries()) {
         const currRows = sellerRows.filter((r: any) =>
           r.period_start >= periods.currentFrom && r.period_start <= periods.currentTo,
         )
@@ -215,7 +215,6 @@ export default async function handler(req: any, res: any): Promise<void> {
 
         sellers.push({
           user_id:              userId,
-          display_name,
           attendance_rate_pct:  attendRatePct,
           avg_response_min_pct: avgRespPct,
           won_value_series:     wonValueSeries,
