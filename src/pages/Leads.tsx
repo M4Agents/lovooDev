@@ -181,6 +181,7 @@ export const Leads: React.FC = () => {
       customFields,
     });
 
+
   // Filtro de tags (AND)
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
