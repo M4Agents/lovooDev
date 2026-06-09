@@ -46,7 +46,7 @@ export function LeadOriginsSection({ data, meta, loading, error, onRetry }: Prop
           <h3 className="text-sm font-semibold text-gray-800">Origem dos Leads</h3>
           {meta && (
             <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {meta.total_origins} canal{meta.total_origins !== 1 ? 'is' : ''}
+              {meta.total_origins} canal{meta.total_origins !== 1 ? 'ais' : ''}
             </span>
           )}
         </div>

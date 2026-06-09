@@ -74,3 +74,106 @@ export function logDashboardError(
   const company  = context?.companyId ? ` company=${safeCompanyId(context.companyId)}` : ''
   console.error(`[DASH-ERR] ${label}${endpoint}${company}${period} — ${msg}`)
 }
+
+// ---------------------------------------------------------------------------
+// logHistoricalFallback
+//
+// Registra fallbacks históricos dos endpoints v2 em dashboard_snapshot_fallback_logs.
+// Fire-and-forget — nunca lança erro, nunca bloqueia o request.
+// Chamado pelo backend quando historical: null é determinado.
+//
+// Não chamar para tenants insufficient_history:
+//   o frontend nunca chama endpoints v2 quando canUseSnapshots=false,
+//   portanto qualquer fallback registrado aqui é genuinamente operacional.
+// ---------------------------------------------------------------------------
+
+export type HistoricalFallbackEndpoint =
+  | 'executive-summary-v2'
+  | 'seller-ranking-v2'
+  | 'sla-alerts-v2'
+  | 'forecast-v2'
+  | 'funnel-executive-v2'
+
+export type HistoricalFallbackReason =
+  | 'aggregate_failed'
+  | 'cache_empty'
+  | 'no_snapshot_data'
+
+export interface HistoricalFallbackParams {
+  companyId:      string
+  endpoint:       HistoricalFallbackEndpoint
+  reason:         HistoricalFallbackReason
+  comparisonMode: 'wow' | 'mom' | null
+}
+
+export function logHistoricalFallback(
+  svc:    any,
+  params: HistoricalFallbackParams,
+): void {
+  void svc
+    .from('dashboard_snapshot_fallback_logs')
+    .insert({
+      company_id:  params.companyId,
+      endpoint:    params.endpoint,
+      reason:      params.reason,
+      mode:        params.comparisonMode,
+      occurred_at: new Date().toISOString(),
+    })
+    .then(({ error }: { error: any }) => {
+      if (error) {
+        console.warn('[logHistoricalFallback] insert silenced:', error.message)
+      }
+    })
+    .catch((e: any) => {
+      console.warn('[logHistoricalFallback] catch silenced:', e?.message)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// logEndpointCall
+//
+// Registra chamadas aos endpoints híbridos v2 em dashboard_endpoint_usage_logs.
+// Fire-and-forget — nunca lança erro, nunca bloqueia o request.
+//
+// status:
+//   'ok'       → HTTP 200 com historical != null
+//   'fallback' → HTTP 200 com historical = null (fallback silencioso)
+//   'error'    → HTTP 500 (realtime rejeitado)
+//
+// Chamar imediatamente antes do return res.status(200|500).
+// Capturar duration_ms = Date.now() - _startedAt (primeira linha do handler).
+// ---------------------------------------------------------------------------
+
+export type EndpointCallStatus = 'ok' | 'fallback' | 'error'
+
+export interface EndpointCallParams {
+  companyId:   string
+  endpoint:    HistoricalFallbackEndpoint
+  status:      EndpointCallStatus
+  mode:        'wow' | 'mom' | null
+  durationMs?: number
+}
+
+export function logEndpointCall(
+  svc:    any,
+  params: EndpointCallParams,
+): void {
+  void svc
+    .from('dashboard_endpoint_usage_logs')
+    .insert({
+      company_id:  params.companyId,
+      endpoint:    params.endpoint,
+      status:      params.status,
+      mode:        params.mode,
+      duration_ms: params.durationMs ?? null,
+      occurred_at: new Date().toISOString(),
+    })
+    .then(({ error }: { error: any }) => {
+      if (error) {
+        console.warn('[logEndpointCall] insert silenced:', error.message)
+      }
+    })
+    .catch((e: any) => {
+      console.warn('[logEndpointCall] catch silenced:', e?.message)
+    })
+}

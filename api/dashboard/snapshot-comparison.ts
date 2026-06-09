@@ -26,16 +26,8 @@ import {
   assertMembership,
   jsonError,
 }                           from '../lib/dashboard/auth.js'
-import { withTiming }       from '../lib/dashboard/observability.js'
-
-function calcDelta(current: number, previous: number) {
-  const abs = current - previous
-  const pct =
-    previous === 0
-      ? current === 0 ? 0 : 100
-      : Math.round((abs / Math.abs(previous)) * 1000) / 10
-  return { abs: Math.round(abs * 100) / 100, pct }
-}
+import { withTiming }  from '../lib/dashboard/observability.js'
+import { calcDelta }  from '../lib/dashboard/deltaUtils.js'
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')

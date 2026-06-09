@@ -4,6 +4,8 @@
 // Cron diário de geração de snapshots executivos históricos.
 // FASE 4.1.5: adicionados cron_runs header, drift check automático e
 //             pruning das tabelas de log operacionais.
+// Sprint 0.5: guard de idempotência (Vercel at-least-once delivery) e
+//             outer try/catch para garantir cleanup do cron_run em falhas.
 //
 // SEGURANÇA:
 //   Authorization: Bearer <CRON_SECRET>
@@ -15,10 +17,11 @@
 //   Processa em batches de 10 empresas com delay entre batches.
 //
 // OBSERVABILIDADE (FASE 4.1.5):
-//   1. Cria registro em dashboard_snapshot_cron_runs (header global)
-//   2. Após geração, executa drift check em amostra de MIN(total, 10) empresas
-//   3. Grava resultados em dashboard_snapshot_drift_logs
-//   4. Faz pruning das tabelas de log operacionais ao início
+//   1. Guard de idempotência: ignora invocação duplicada para o mesmo run_date
+//   2. Cria registro em dashboard_snapshot_cron_runs (header global)
+//   3. Após geração, executa drift check em amostra de MIN(total, 10) empresas
+//   4. Grava resultados em dashboard_snapshot_drift_logs
+//   5. Faz pruning das tabelas de log operacionais ao início
 //
 // TABELAS HISTÓRICAS (NÃO alteradas / sem pruning automático):
 //   dashboard_snapshots, dashboard_seller_snapshots,
@@ -50,10 +53,11 @@ const DRIFT_WARN_PCT    = 2.0   // % para status 'warning'
 const DRIFT_CRIT_PCT    = 5.0   // % para status 'critical'
 
 // Retenção das tabelas de LOG (em dias)
-const RETENTION_CRON_RUNS    = 365
-const RETENTION_DRIFT_LOGS   = 180
+const RETENTION_CRON_RUNS     = 365
+const RETENTION_DRIFT_LOGS    = 180
 const RETENTION_FALLBACK_LOGS = 30
 const RETENTION_SNAPSHOT_JOBS = 90
+const RETENTION_USAGE_LOGS    = 90
 
 // Métricas comparadas no drift check (usando get_dashboard_forecast)
 const DRIFT_METRICS = [
@@ -219,10 +223,11 @@ async function runDriftCheckForCompany(svc, companyId, targetDate) {
 async function pruneOperationalTables(svc, jobDate) {
   const now    = new Date(jobDate + 'T00:00:00Z')
   const cutoffs = {
-    cron_runs:     new Date(now.getTime() - RETENTION_CRON_RUNS    * 86_400_000).toISOString(),
-    drift_logs:    new Date(now.getTime() - RETENTION_DRIFT_LOGS   * 86_400_000).toISOString(),
+    cron_runs:     new Date(now.getTime() - RETENTION_CRON_RUNS     * 86_400_000).toISOString(),
+    drift_logs:    new Date(now.getTime() - RETENTION_DRIFT_LOGS    * 86_400_000).toISOString(),
     fallback_logs: new Date(now.getTime() - RETENTION_FALLBACK_LOGS * 86_400_000).toISOString(),
     snapshot_jobs: new Date(now.getTime() - RETENTION_SNAPSHOT_JOBS * 86_400_000).toISOString(),
+    usage_logs:    new Date(now.getTime() - RETENTION_USAGE_LOGS    * 86_400_000).toISOString(),
   }
 
   const pruneOps = [
@@ -230,6 +235,7 @@ async function pruneOperationalTables(svc, jobDate) {
     svc.from('dashboard_snapshot_drift_logs').delete().lt('checked_at', cutoffs.drift_logs),
     svc.from('dashboard_snapshot_fallback_logs').delete().lt('occurred_at', cutoffs.fallback_logs),
     svc.from('dashboard_snapshot_jobs').delete().lt('created_at', cutoffs.snapshot_jobs),
+    svc.from('dashboard_endpoint_usage_logs').delete().lt('occurred_at', cutoffs.usage_logs),
   ]
 
   const results = await Promise.allSettled(pruneOps)
@@ -243,6 +249,7 @@ async function pruneOperationalTables(svc, jobDate) {
       drift_logs:    cutoffs.drift_logs.slice(0, 10),
       fallback_logs: cutoffs.fallback_logs.slice(0, 10),
       snapshot_jobs: cutoffs.snapshot_jobs.slice(0, 10),
+      usage_logs:    cutoffs.usage_logs.slice(0, 10),
     })
   }
 }
@@ -250,45 +257,19 @@ async function pruneOperationalTables(svc, jobDate) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  // #region agent log — diagnóstico Sprint 0
-  console.log('[DIAG:ENTRY] method:', req.method,
-    '| hasAuth:', !!req.headers.authorization,
-    '| CRON_SECRET_SET:', !!process.env.CRON_SECRET,
-    '| CRON_SECRET_LEN:', process.env.CRON_SECRET?.length ?? 0,
-    '| SUPABASE_URL_SET:', !!process.env.VITE_SUPABASE_URL,
-    '| SERVICE_ROLE_SET:', !!process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
-  // #endregion
-
   // Aceita GET (Vercel Cron trigger automático) e POST (chamadas manuais / testes)
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }
 
-  // #region agent log — diagnóstico Sprint 0
-  const _cronSecretSet  = !!process.env.CRON_SECRET
-  const _cronSecretLen  = process.env.CRON_SECRET?.length ?? 0
-  const _authHeader     = req.headers.authorization ?? ''
-  const _authMatch      = _authHeader === `Bearer ${process.env.CRON_SECRET ?? ''}`
-  console.log('[DIAG:AUTH] secret_set:', _cronSecretSet, '| secret_len:', _cronSecretLen,
-    '| auth_present:', !!_authHeader, '| auth_match:', _authMatch)
-  // #endregion
-
   if (!validateCronAuth(req)) {
-    console.warn('[cron/generate-dashboard-snapshots] Acesso sem CRON_SECRET válido',
-      '| CRON_SECRET_SET:', !!process.env.CRON_SECRET,
-      '| CRON_SECRET_LEN:', process.env.CRON_SECRET?.length ?? 0,
-      '| AUTH_HEADER_PRESENT:', !!req.headers.authorization
-    )
+    console.warn('[cron/generate-dashboard-snapshots] Acesso sem CRON_SECRET válido')
     return res.status(401).json({ ok: false, error: 'Unauthorized' })
   }
 
   const svc = getServiceSupabase()
   if (!svc) {
-    console.error('[cron/generate-dashboard-snapshots] service_role não configurado',
-      '| VITE_SUPABASE_URL_SET:', !!process.env.VITE_SUPABASE_URL,
-      '| SERVICE_ROLE_SET:', !!process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
+    console.error('[cron/generate-dashboard-snapshots] service_role não configurado')
     return res.status(500).json({ ok: false, error: 'service_role não configurado' })
   }
 
@@ -296,176 +277,234 @@ export default async function handler(req, res) {
   const jobDate   = new Date().toISOString().slice(0, 10)
   const dates     = getTargetDates(DATES_BACK)
 
-  console.log('[cron/generate-dashboard-snapshots] Iniciando | jobDate:', jobDate, '| datas:', dates)
-  // #region agent log — diagnóstico Sprint 0
-  console.log('[DIAG:STARTED] jobDate:', jobDate, '| dates:', dates, '| svc_ok: true')
-  // #endregion
+  // ── 0. Guard de idempotência — Vercel at-least-once delivery ─────────────
+  // Cobre dois cenários:
+  //   a) Run 'completed'/'partial': invocação duplicada pós-término → ignorar
+  //   b) Run 'running' recente (< 10 min): invocação concorrente → ignorar
+  //      (race condition corrigida na FASE 5.4.1 — runs em progresso também bloqueiam)
+  //   c) Run 'running' stale (>= 10 min): run anterior travada → permitir nova execução
+  //      (cron tem timeout de 255s ≈ 4.25 min; 10 min garante margem segura)
+  try {
+    const { data: existingRun } = await svc
+      .from('dashboard_snapshot_cron_runs')
+      .select('id, status, started_at')
+      .eq('run_date', jobDate)
+      .in('status', ['completed', 'partial', 'running'])
+      .maybeSingle()
 
-  // ── 0. Criar registro de execução global (cron_runs header) ───────────────
+    if (existingRun) {
+      if (existingRun.status === 'running') {
+        const ageMs = Date.now() - new Date(existingRun.started_at).getTime()
+        if (ageMs < 10 * 60 * 1000) {
+          // Run legítima em progresso — bloquear invocação concorrente
+          console.info(
+            '[cron/generate-dashboard-snapshots] Run em progresso para', jobDate,
+            '— ignorando invocação concorrente | existingRunId:', existingRun.id,
+            '| age_ms:', ageMs
+          )
+          return res.status(200).json({
+            ok:       true,
+            skipped:  true,
+            reason:   'concurrent_run',
+            job_date: jobDate,
+          })
+        }
+        // Run stale (>= 10 min) — provável crash anterior; permitir nova execução
+        console.warn(
+          '[cron/generate-dashboard-snapshots] Run stale detectada para', jobDate,
+          '— permitindo nova execução | stale_run_id:', existingRun.id,
+          '| age_ms:', ageMs
+        )
+      } else {
+        // completed ou partial — invocação duplicada pós-término
+        console.info(
+          '[cron/generate-dashboard-snapshots] Run já completada para', jobDate,
+          '— ignorando invocação duplicada | existingRunId:', existingRun.id
+        )
+        return res.status(200).json({
+          ok:       true,
+          skipped:  true,
+          reason:   'duplicate_invocation',
+          job_date: jobDate,
+        })
+      }
+    }
+  } catch (err) {
+    // Falha no guard não impede a execução (benefício da dúvida)
+    console.warn('[cron/idempotency-guard] Erro ao verificar run existente:', err?.message)
+  }
+
+  console.log('[cron/generate-dashboard-snapshots] Iniciando | jobDate:', jobDate, '| datas:', dates)
+
+  // ── 1. Criar registro de execução global (cron_runs header) ───────────────
   let cronRunId = null
   try {
-    const { data: cronRun, error: cronRunErr } = await svc
+    const { data: cronRun } = await svc
       .from('dashboard_snapshot_cron_runs')
       .insert({
-        run_date:    jobDate,
-        started_at:  new Date(startedAt).toISOString(),
-        status:      'running',
+        run_date:   jobDate,
+        started_at: new Date(startedAt).toISOString(),
+        status:     'running',
       })
       .select('id')
       .single()
 
     cronRunId = cronRun?.id ?? null
-    // #region agent log — diagnóstico Sprint 0
-    console.log('[DIAG:CRON_RUN_INSERT] cronRunId:', cronRunId,
-      '| insertError:', cronRunErr?.message ?? cronRunErr?.code ?? null)
-    // #endregion
   } catch (err) {
     // Não falhar o cron por causa do registro de monitoramento
     console.warn('[cron] Falha ao criar cron_run header:', err?.message)
-    // #region agent log — diagnóstico Sprint 0
-    console.warn('[DIAG:CRON_RUN_EXCEPTION] err:', err?.message)
-    // #endregion
   }
 
-  // ── 1. Pruning das tabelas de log operacionais ────────────────────────────
-  await pruneOperationalTables(svc, jobDate)
+  // ── Processamento principal — outer try/catch garante cleanup do cron_run ──
+  try {
+    // ── 2. Pruning das tabelas de log operacionais ──────────────────────────
+    await pruneOperationalTables(svc, jobDate)
 
-  // ── 2. Buscar empresas ativas ─────────────────────────────────────────────
-  const { data: companies, error: companiesError } = await svc
-    .from('companies')
-    .select('id')
-    .is('deleted_at', null)
-    .eq('status', 'active')
+    // ── 3. Buscar empresas ativas ───────────────────────────────────────────
+    const { data: companies, error: companiesError } = await svc
+      .from('companies')
+      .select('id')
+      .is('deleted_at', null)
+      .eq('status', 'active')
 
-  if (companiesError) {
-    console.error('[cron/generate-dashboard-snapshots] Erro ao buscar empresas:', companiesError.message)
+    if (companiesError) {
+      throw new Error('Erro ao buscar empresas: ' + companiesError.message)
+    }
+
+    const companyIds = (companies ?? []).map(c => c.id)
+    const total      = companyIds.length
+
+    console.log('[cron/generate-dashboard-snapshots] Empresas ativas:', total)
+
+    if (total > 150) {
+      console.warn(
+        '[cron/generate-dashboard-snapshots] ATENÇÃO: empresas ativas (' + total + ') > 150.' +
+        ' Considerar migração para arquitetura dispatcher/worker (ver FASE 4.3).'
+      )
+    }
+
+    // ── 4. Processar em batches ─────────────────────────────────────────────
+    let processed  = 0
+    let failed     = 0
+    let timeoutHit = false
+
+    for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
+      if (Date.now() - startedAt > TIMEOUT_MS) {
+        console.warn('[cron/generate-dashboard-snapshots] Timeout preventivo atingido. Interrompendo.')
+        timeoutHit = true
+        break
+      }
+
+      const batch   = companyIds.slice(i, i + BATCH_SIZE)
+      const batchNo = Math.floor(i / BATCH_SIZE) + 1
+
+      for (const date of dates) {
+        const results = await processBatch(svc, batch, date, jobDate)
+        for (const r of results) {
+          if (r.ok) processed++
+          else      failed++
+        }
+      }
+
+      console.log(
+        '[cron/generate-dashboard-snapshots] Batch', batchNo,
+        '| processed:', processed, '| failed:', failed
+      )
+
+      if (i + BATCH_SIZE < companyIds.length) {
+        await sleep(BATCH_DELAY)
+      }
+    }
+
+    // ── 5. Drift check automático — amostra pós-geração ────────────────────
+    let driftChecked = 0
+    let driftAlerts  = 0
+
+    // Verificar drift apenas em D-1 (o mais recente e crítico)
+    const targetDate  = dates[0] // D-1
+    const driftSample = sampleCompanies(companyIds, DRIFT_SAMPLE_SIZE, jobDate)
+
+    for (const companyId of driftSample) {
+      if (Date.now() - startedAt > TIMEOUT_MS) {
+        console.warn('[cron/drift-check] Timeout atingido durante drift check, interrompendo')
+        break
+      }
+
+      const result = await runDriftCheckForCompany(svc, companyId, targetDate)
+
+      if (result) {
+        driftChecked++
+        if (result.status === 'critical') {
+          driftAlerts++
+          console.error(
+            '[cron/drift-check] DRIFT CRÍTICO | company:', companyId,
+            '| date:', targetDate,
+            '| max_drift:', result.maxDriftPct.toFixed(2) + '%'
+          )
+        } else if (result.status === 'warning') {
+          console.warn(
+            '[cron/drift-check] DRIFT WARNING | company:', companyId,
+            '| date:', targetDate,
+            '| max_drift:', result.maxDriftPct.toFixed(2) + '%'
+          )
+        }
+      }
+    }
+
+    // ── 6. Finalizar registro de execução global ────────────────────────────
+    const duration    = Date.now() - startedAt
+    const finalStatus = timeoutHit ? 'partial' : (failed === 0 ? 'completed' : 'partial')
+
+    if (cronRunId) {
+      await svc.from('dashboard_snapshot_cron_runs').update({
+        status:          finalStatus,
+        finished_at:     new Date().toISOString(),
+        total_companies: total,
+        processed_count: processed,
+        failed_count:    failed,
+        timeout_hit:     timeoutHit,
+        duration_ms:     duration,
+        drift_checked:   driftChecked,
+        drift_alerts:    driftAlerts,
+      }).eq('id', cronRunId)
+    }
+
+    console.log(
+      '[cron/generate-dashboard-snapshots] Concluído |',
+      'status:', finalStatus,
+      '| processed:', processed, '| failed:', failed,
+      '| drift_checked:', driftChecked, '| drift_alerts:', driftAlerts,
+      '| duration:', duration + 'ms'
+    )
+
+    return res.status(200).json({
+      ok:              true,
+      job_date:        jobDate,
+      dates,
+      total_companies: total,
+      processed,
+      failed,
+      timeout_hit:     timeoutHit,
+      drift_checked:   driftChecked,
+      drift_alerts:    driftAlerts,
+      duration_ms:     duration,
+      status:          finalStatus,
+    })
+  } catch (err) {
+    // Erro inesperado no processamento principal — garantir cleanup do cron_run
+    const duration = Date.now() - startedAt
+    console.error('[cron/generate-dashboard-snapshots] Erro inesperado:', err?.message)
+
     if (cronRunId) {
       await svc.from('dashboard_snapshot_cron_runs').update({
         status:      'failed',
         finished_at: new Date().toISOString(),
-        duration_ms: Date.now() - startedAt,
-      }).eq('id', cronRunId)
+        duration_ms: duration,
+      }).eq('id', cronRunId).catch(updateErr => {
+        console.error('[cron] Falha ao atualizar cron_run para failed:', updateErr?.message)
+      })
     }
-    return res.status(500).json({ ok: false, error: companiesError.message })
+
+    return res.status(500).json({ ok: false, error: err?.message ?? 'Erro interno' })
   }
-
-  const companyIds = (companies ?? []).map(c => c.id)
-  const total      = companyIds.length
-
-  console.log('[cron/generate-dashboard-snapshots] Empresas ativas:', total)
-
-  if (total > 150) {
-    console.warn(
-      '[cron/generate-dashboard-snapshots] ATENÇÃO: empresas ativas (' + total + ') > 150.' +
-      ' Considerar migração para arquitetura dispatcher/worker (ver FASE 4.3).'
-    )
-  }
-
-  // ── 3. Processar em batches ───────────────────────────────────────────────
-  let processed  = 0
-  let failed     = 0
-  let timeoutHit = false
-
-  for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
-    if (Date.now() - startedAt > TIMEOUT_MS) {
-      console.warn('[cron/generate-dashboard-snapshots] Timeout preventivo atingido. Interrompendo.')
-      timeoutHit = true
-      break
-    }
-
-    const batch   = companyIds.slice(i, i + BATCH_SIZE)
-    const batchNo = Math.floor(i / BATCH_SIZE) + 1
-
-    for (const date of dates) {
-      const results = await processBatch(svc, batch, date, jobDate)
-      for (const r of results) {
-        if (r.ok) processed++
-        else      failed++
-      }
-    }
-
-    console.log(
-      '[cron/generate-dashboard-snapshots] Batch', batchNo,
-      '| processed:', processed, '| failed:', failed
-    )
-
-    if (i + BATCH_SIZE < companyIds.length) {
-      await sleep(BATCH_DELAY)
-    }
-  }
-
-  // ── 4. Drift check automático — amostra pós-geração ──────────────────────
-  let driftChecked = 0
-  let driftAlerts  = 0
-
-  // Verificar drift apenas em D-1 (o mais recente e crítico)
-  const targetDate   = dates[0] // D-1
-  const driftSample  = sampleCompanies(companyIds, DRIFT_SAMPLE_SIZE, jobDate)
-
-  for (const companyId of driftSample) {
-    if (Date.now() - startedAt > TIMEOUT_MS) {
-      console.warn('[cron/drift-check] Timeout atingido durante drift check, interrompendo')
-      break
-    }
-
-    const result = await runDriftCheckForCompany(svc, companyId, targetDate)
-
-    if (result) {
-      driftChecked++
-      if (result.status === 'critical') {
-        driftAlerts++
-        console.error(
-          '[cron/drift-check] DRIFT CRÍTICO | company:', companyId,
-          '| date:', targetDate,
-          '| max_drift:', result.maxDriftPct.toFixed(2) + '%'
-        )
-      } else if (result.status === 'warning') {
-        console.warn(
-          '[cron/drift-check] DRIFT WARNING | company:', companyId,
-          '| date:', targetDate,
-          '| max_drift:', result.maxDriftPct.toFixed(2) + '%'
-        )
-      }
-    }
-  }
-
-  // ── 5. Finalizar registro de execução global ──────────────────────────────
-  const duration      = Date.now() - startedAt
-  const finalStatus   = timeoutHit ? 'partial' : (failed === 0 ? 'completed' : 'partial')
-
-  if (cronRunId) {
-    await svc.from('dashboard_snapshot_cron_runs').update({
-      status:          finalStatus,
-      finished_at:     new Date().toISOString(),
-      total_companies: total,
-      processed_count: processed,
-      failed_count:    failed,
-      timeout_hit:     timeoutHit,
-      duration_ms:     duration,
-      drift_checked:   driftChecked,
-      drift_alerts:    driftAlerts,
-    }).eq('id', cronRunId)
-  }
-
-  console.log(
-    '[cron/generate-dashboard-snapshots] Concluído |',
-    'status:', finalStatus,
-    '| processed:', processed, '| failed:', failed,
-    '| drift_checked:', driftChecked, '| drift_alerts:', driftAlerts,
-    '| duration:', duration + 'ms'
-  )
-
-  return res.status(200).json({
-    ok:              true,
-    job_date:        jobDate,
-    dates,
-    total_companies: total,
-    processed,
-    failed,
-    timeout_hit:     timeoutHit,
-    drift_checked:   driftChecked,
-    drift_alerts:    driftAlerts,
-    duration_ms:     duration,
-    status:          finalStatus,
-  })
 }

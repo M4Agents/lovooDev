@@ -25,7 +25,8 @@ import {
   assertMembership,
   jsonError,
 }                           from '../lib/dashboard/auth.js'
-import { withTiming }       from '../lib/dashboard/observability.js'
+import { withTiming }        from '../lib/dashboard/observability.js'
+import { fetchDailySeries } from '../lib/dashboard/snapshotSeries.js'
 
 // Métricas permitidas (whitelist para evitar injeção SQL)
 const ALLOWED_METRICS = new Set([
@@ -96,43 +97,28 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ── Buscar série temporal ──────────────────────────────────────────────
-    const { data: rows, error } = await withTiming(
-      'snapshot.trends.query',
-      async () => {
-        let query = svc
-          .from('dashboard_snapshots')
-          .select(['period_start', 'snapshot_taken_at', ...metrics].join(', '))
-          .eq('company_id', companyId)
-          .gte('period_start', fromDate)
-          .lte('period_start', toDate)
-          .order('period_start', { ascending: true })
-
-        if (funnelId) {
-          query = query.eq('funnel_id', funnelId)
-        } else {
-          query = query.is('funnel_id', null)
-        }
-
-        return query
-      },
-      { companyId },
-    )
-
-    if (error) {
-      console.error('[snapshot-trends] Erro:', error.message)
+    let rows: any[]
+    try {
+      rows = await withTiming(
+        'snapshot.trends.query',
+        () => fetchDailySeries(svc, { companyId, funnelId, metrics, fromDate, toDate }),
+        { companyId },
+      )
+    } catch (e: any) {
+      console.error('[snapshot-trends] Erro:', e?.message)
       jsonError(res, 500, 'Erro ao buscar snapshots')
       return
     }
 
     return res.status(200).json({
-      ok:        true,
-      company_id: companyId,
-      funnel_id:  funnelId,
-      from_date:  fromDate,
-      to_date:    toDate,
+      ok:          true,
+      company_id:  companyId,
+      funnel_id:   funnelId,
+      from_date:   fromDate,
+      to_date:     toDate,
       metrics,
-      data_points: (rows ?? []).length,
-      series:      rows ?? [],
+      data_points: rows.length,
+      series:      rows,
     })
   } catch (err: any) {
     console.error('[snapshot-trends] Erro:', err?.message)

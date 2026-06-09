@@ -22,7 +22,8 @@ import {
   assertMembership,
   jsonError,
 }                           from '../lib/dashboard/auth.js'
-import { withTiming }       from '../lib/dashboard/observability.js'
+import { withTiming }    from '../lib/dashboard/observability.js'
+import { calcDeltaPct } from '../lib/dashboard/deltaUtils.js'
 
 /** Subtrai N dias de uma data UTC e retorna YYYY-MM-DD */
 function subDays(base: Date, n: number): string {
@@ -106,12 +107,6 @@ export default async function handler(req: any, res: any): Promise<void> {
       // STATE: último valor de cada período
       const lastCurrRow = currRows.length > 0 ? currRows[currRows.length - 1] : null
       const lastPrevRow = prevRows.length > 0 ? prevRows[prevRows.length - 1] : null
-
-      function calcDeltaPct(curr: number | null, prev: number | null): number | null {
-        if (curr === null || prev === null) return null
-        if (prev === 0) return curr === 0 ? 0 : 100
-        return Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10
-      }
 
       const attendRatePct = calcDeltaPct(
         lastCurrRow ? Number(lastCurrRow.attendance_rate)  : null,

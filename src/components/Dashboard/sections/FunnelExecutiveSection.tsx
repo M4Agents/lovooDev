@@ -1,12 +1,21 @@
 import React from 'react'
 import { GitBranch, Clock, AlertTriangle, TrendingUp } from 'lucide-react'
-import type { FunnelExecutiveStage } from '../../../types/dashboard'
+import { DeltaBadge } from '../historical/DeltaBadge'
+import { getComparisonLabel } from '../../../lib/snapshotPeriods'
+import type {
+  ComparisonMode,
+  FunnelExecutiveStage,
+  FunnelExecutiveV2StageHistorical,
+} from '../../../types/dashboard'
 
 interface FunnelExecutiveSectionProps {
-  stages:         FunnelExecutiveStage[] | null
-  loading:        boolean
-  error:          string | null
+  stages:          FunnelExecutiveStage[] | null
+  loading:         boolean
+  error:           string | null
   funnelRequired?: boolean
+  // FASE 4.2 Sprint 6 — props opcionais (enriquecimento visual)
+  stageDeltasMap?: Map<string, FunnelExecutiveV2StageHistorical>
+  comparisonMode?: ComparisonMode
 }
 
 function fmt(value: number) {
@@ -15,12 +24,20 @@ function fmt(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 }
 
-function StageRow({ stage }: { stage: FunnelExecutiveStage }) {
-  const hasStall    = stage.stalled_count > 0
-  const stalledPct  = stage.opp_count > 0
+function StageRow({
+  stage,
+  delta,
+  periodLabel,
+}: {
+  stage:        FunnelExecutiveStage
+  delta?:       FunnelExecutiveV2StageHistorical
+  periodLabel?: string
+}) {
+  const hasStall   = stage.stalled_count > 0
+  const stalledPct = stage.opp_count > 0
     ? Math.round((stage.stalled_count / stage.opp_count) * 100)
     : 0
-  const color       = stage.stage_color ?? '#6366f1'
+  const color = stage.stage_color ?? '#6366f1'
 
   return (
     <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-xs">
@@ -30,15 +47,24 @@ function StageRow({ stage }: { stage: FunnelExecutiveStage }) {
       {/* Nome da etapa */}
       <span className="font-medium text-gray-800 dark:text-gray-100 truncate">{stage.stage_name}</span>
 
-      {/* Oportunidades */}
+      {/* Oportunidades — sem DeltaBadge (coluna w-8 insuficiente) */}
       <span className="text-right text-gray-500 dark:text-gray-400 tabular-nums w-8">
         {stage.opp_count}
       </span>
 
-      {/* Valor ponderado */}
-      <span className="text-right font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums w-20">
-        {stage.weighted_value > 0 ? fmt(stage.weighted_value) : '—'}
-      </span>
+      {/* Valor ponderado — com DeltaBadge quando disponível */}
+      <div className="flex flex-col items-end w-20">
+        <span className="font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
+          {stage.weighted_value > 0 ? fmt(stage.weighted_value) : '—'}
+        </span>
+        {delta && (
+          <DeltaBadge
+            pct={delta.weighted_value_pct ?? null}
+            higherIsBetter={true}
+            periodLabel={periodLabel}
+          />
+        )}
+      </div>
 
       {/* Avg days */}
       <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500 w-16 justify-end">
@@ -46,10 +72,20 @@ function StageRow({ stage }: { stage: FunnelExecutiveStage }) {
         <span className="tabular-nums">{stage.avg_days > 0 ? `${stage.avg_days}d` : '—'}</span>
       </div>
 
-      {/* Paradas */}
-      <div className={`flex items-center gap-1 w-12 justify-end ${hasStall ? 'text-amber-500' : 'text-gray-300 dark:text-gray-600'}`}>
-        {hasStall && <AlertTriangle className="h-3 w-3 shrink-0" />}
-        <span className="tabular-nums">{hasStall ? `${stage.stalled_count} (${stalledPct}%)` : '—'}</span>
+      {/* Paradas — com DeltaBadge quando disponível */}
+      <div className={`flex flex-col items-end w-12 ${hasStall ? 'text-amber-500' : 'text-gray-300 dark:text-gray-600'}`}>
+        <div className="flex items-center gap-1">
+          {hasStall && <AlertTriangle className="h-3 w-3 shrink-0" />}
+          <span className="tabular-nums">{hasStall ? `${stage.stalled_count} (${stalledPct}%)` : '—'}</span>
+        </div>
+        {delta && hasStall && (
+          // pipeline_risk semântica: mais paradas = ruim
+          <DeltaBadge
+            pct={delta.stalled_count_pct ?? null}
+            higherIsBetter={false}
+            periodLabel={periodLabel}
+          />
+        )}
       </div>
     </div>
   )
@@ -60,6 +96,8 @@ export function FunnelExecutiveSection({
   loading,
   error,
   funnelRequired,
+  stageDeltasMap,
+  comparisonMode,
 }: FunnelExecutiveSectionProps) {
   if (funnelRequired) {
     return (
@@ -97,8 +135,13 @@ export function FunnelExecutiveSection({
   const list = stages ?? []
 
   const totalWeighted = list.reduce((acc, s) => acc + s.weighted_value, 0)
-  const totalStalled  = list.reduce((acc, s) => acc + s.stalled_count, 0)
-  const totalOpps     = list.reduce((acc, s) => acc + s.opp_count, 0)
+  const totalStalled  = list.reduce((acc, s) => acc + s.stalled_count,  0)
+  const totalOpps     = list.reduce((acc, s) => acc + s.opp_count,       0)
+
+  const hasDeltas  = stageDeltasMap && stageDeltasMap.size > 0
+  const periodLabel = hasDeltas && comparisonMode
+    ? getComparisonLabel(comparisonMode)
+    : undefined
 
   return (
     <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5 space-y-3">
@@ -144,7 +187,12 @@ export function FunnelExecutiveSection({
       ) : (
         <div className="space-y-1.5">
           {list.map((stage) => (
-            <StageRow key={stage.stage_id} stage={stage} />
+            <StageRow
+              key={stage.stage_id}
+              stage={stage}
+              delta={hasDeltas ? stageDeltasMap.get(stage.stage_id) : undefined}
+              periodLabel={periodLabel}
+            />
           ))}
         </div>
       )}

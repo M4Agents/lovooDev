@@ -40,10 +40,12 @@ import { FunnelExecutiveSection }     from '../components/Dashboard/sections/Fun
 import { useAuth }                    from '../contexts/AuthContext'
 import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
+import { useSnapshotHealth }          from '../hooks/dashboard/useSnapshotHealth'
 import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
 import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
 import { useSnapshotSellerDeltas }    from '../hooks/dashboard/useSnapshotSellerDeltas'
 import type { DashboardFilters }      from '../services/dashboardApi'
+import type { SnapshotComparisonData, SellerSnapshotDelta, SnapshotTrendsData } from '../types/dashboard'
 import type { ComparisonMode }        from '../lib/snapshotPeriods'
 import type { DashboardTab }          from '../components/Dashboard/navigation/DashboardTabs'
 
@@ -132,6 +134,12 @@ export const NewDashboard: React.FC = () => {
   // Feature flags — sem flags ativas o dashboard se comporta exatamente como antes
   const flags = useFeatureFlags()
 
+  // FASE 4.2 Sprint 1A — Saúde do tenant histórico
+  // canUseSnapshots = false para insufficient_history, degraded, critical e em caso de erro
+  const snapshotHealth   = useSnapshotHealth(companyId)
+  const canUseSnapshots  = snapshotHealth.canUseSnapshots
+  const freshnessOk      = snapshotHealth.freshnessOk
+
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
     () => ({ period, funnelId, userId }),
@@ -144,20 +152,57 @@ export const NewDashboard: React.FC = () => {
   // Tendências (Fase 1)
   const trends = useDashboardTrends(filters)
 
+  // FASE 4.2 Sprint 3 — v2 ativo apenas quando flag ligada E tenant elegível
+  const sellerHybridActive = flags.hybridSellerRanking && canUseSnapshots
+
+  // FASE 4.2 Sprint 4 — v2 ativo apenas quando flag ligada E tenant elegível
+  const slaHybridActive = flags.hybridSlaAlerts && canUseSnapshots
+
+  // FASE 4.2 Sprint 5 — v2 ativo apenas quando flag ligada E tenant elegível
+  const forecastHybridActive = flags.hybridForecast && canUseSnapshots
+
+  // FASE 4.2 Sprint 6 — v2 ativo apenas quando flag ligada E tenant elegível
+  const funnelExecHybridActive = flags.hybridFunnelExecutive && canUseSnapshots
+
   // Fase 2 — Gestão Comercial
-  const sellerRanking = useSellerPerformance(filters)
-  const slaAlerts     = useSlaAlerts({ userId: userId ?? undefined })
+  // hybridMode=true → chama seller-ranking-v2 (ranking + deltas num único request)
+  // hybridMode=false → comportamento v1 original inalterado
+  const sellerRanking = useSellerPerformance(filters, {
+    hybridMode:     sellerHybridActive,
+    comparisonMode,
+  })
+  // hybridMode=true → chama sla-alerts-v2 (alertas + trend sla_breached_count num único request)
+  // hybridMode=false → comportamento v1 original inalterado
+  const slaAlerts = useSlaAlerts({
+    userId:     userId ?? undefined,
+    hybridMode: slaHybridActive,
+  })
   const leadOrigins   = useLeadOrigins(filters)
 
+  // FASE 4.2 Sprint 2 — v2 ativo apenas quando flag ligada E tenant elegível
+  const hybridModeActive = flags.hybridExecutiveSummary && canUseSnapshots
+
   // Dados base — summary precisa vir antes de funnelMode (que depende dele)
-  const summary    = useDashboardSummary(filters)
+  // hybridMode=true → chama executive-summary-v2 (realtime + comparação num único request)
+  // hybridMode=false → comportamento v1 original inalterado
+  const summary    = useDashboardSummary(filters, { hybridMode: hybridModeActive, comparisonMode })
   const insights   = useDashboardInsights(filters)
   const funnelMode = summary.data?.funnel_mode ?? 'single-funnel'
 
   // Fase 3A — Inteligência Executiva (funnelExecutive depende de funnelMode)
-  const forecast        = useDashboardForecast(filters)
+  // hybridMode=true → chama forecast-v2 (realtime + comparação histórica num único request)
+  // hybridMode=false → comportamento v1 original inalterado
+  const forecast        = useDashboardForecast(filters, {
+    hybridMode:     forecastHybridActive,
+    comparisonMode,
+  })
   const priorityAlerts  = usePriorityAlerts(userId)
-  const funnelExecutive = useFunnelExecutive(funnelId, funnelMode)
+  // hybridMode=true → chama funnel-executive-v2 (realtime + deltas por etapa num único request)
+  // hybridMode=false → comportamento v1 original inalterado
+  const funnelExecutive = useFunnelExecutive(funnelId, funnelMode, {
+    hybridMode:     funnelExecHybridActive,
+    comparisonMode,
+  })
 
   // Lê ?resume_analysis da URL (pós-checkout de créditos para retomada de análise de IA)
   const [resumeAnalysisId, setResumeAnalysisId] = useState<string | null>(null)
@@ -185,25 +230,61 @@ export const NewDashboard: React.FC = () => {
   // Ativação Comercial — hook isolado, roda sempre para evitar delay na troca de aba
   const activation = useDashboardActivation(filters)
 
-  // FASE 4.1 — Dados históricos (snapshot) — todos gateados por feature flags
+  // FASE 4.1 / 4.2 Sprint 1A+2 — Dados históricos gateados por flags + saúde do tenant
+  // Quando hybridModeActive=true: v2 já entrega comparison → useSnapshotComparison desativado
+  // Quando hybridModeActive=false: useSnapshotComparison opera normalmente (Sprint 1A)
   const snapshotComparison = useSnapshotComparison({
     companyId,
     funnelId,
-    mode:    comparisonMode,
-    enabled: flags.snapshotDelta,
+    mode:            comparisonMode,
+    enabled:         flags.snapshotDelta && !hybridModeActive,
+    canUseSnapshots,
   })
   const snapshotTrends = useSnapshotTrends({
     companyId,
     funnelId,
-    metrics: ['leads_created', 'conversations_attended', 'sla_breached_count', 'hot_count'],
-    days:    7,
-    enabled: flags.snapshotTrends || flags.snapshotDelta,
+    metrics:         ['leads_created', 'conversations_attended', 'sla_breached_count', 'hot_count'],
+    days:            7,
+    enabled:         flags.snapshotTrends || flags.snapshotDelta,
+    canUseSnapshots,
   })
+  // Quando sellerHybridActive=true: v2 já entrega deltas → useSnapshotSellerDeltas desativado
+  // Quando sellerHybridActive=false: useSnapshotSellerDeltas opera normalmente (Sprint 1A)
   const sellerDeltas = useSnapshotSellerDeltas({
     companyId,
-    mode:    comparisonMode,
-    enabled: flags.snapshotDelta,
+    mode:            comparisonMode,
+    enabled:         flags.snapshotDelta && !sellerHybridActive,
+    canUseSnapshots,
   })
+
+  // Fonte unificada de comparação histórica para o ExecutiveSummary:
+  //   - hybridModeActive=true  → vem do v2 (summary.historicalComparison)
+  //   - hybridModeActive=false → vem do useSnapshotComparison separado (Sprint 1A)
+  const comparisonData: SnapshotComparisonData | null =
+    hybridModeActive
+      ? summary.historicalComparison
+      : (flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotComparison.data : null)
+
+  // Fonte unificada de deltas para o SellerRankingSection:
+  //   - sellerHybridActive=true  → vem do v2 (sellerRanking.sellerDeltasMap)
+  //   - sellerHybridActive=false → vem do useSnapshotSellerDeltas separado (Sprint 1A)
+  const sellerDeltaMap: Map<string, SellerSnapshotDelta> =
+    sellerHybridActive
+      ? sellerRanking.sellerDeltasMap
+      : (flags.snapshotDelta && canUseSnapshots && freshnessOk ? sellerDeltas.byUserId : new Map())
+
+  // Fonte unificada de trend SLA para o SlaAlertsPanel:
+  //   - slaHybridActive=true  → vem do v2 (slaAlerts.slaTrendData)
+  //   - slaHybridActive=false → vem do useSnapshotTrends compartilhado (Sprint 1A)
+  const slaTrendSource: SnapshotTrendsData | null =
+    slaHybridActive
+      ? slaAlerts.slaTrendData
+      : (flags.snapshotTrends && canUseSnapshots && freshnessOk ? snapshotTrends.data : null)
+
+  const slaTrendPoints: number =
+    slaHybridActive
+      ? slaAlerts.slaTrendPoints
+      : (canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0)
 
   // Seções de funil só são exibidas se:
   //   - single-funnel (sempre), OU
@@ -246,8 +327,15 @@ export const NewDashboard: React.FC = () => {
             loading={usersLoading}
           />
 
-          {/* Toggle WoW/MoM — só aparece se alguma flag histórica estiver ligada */}
-          {(flags.snapshotDelta || flags.snapshotTrends || flags.snapshotComparison) && (
+          {/* Toggle WoW/MoM — visível quando qualquer funcionalidade que consuma comparisonMode estiver ativa */}
+          {(
+            flags.snapshotDelta          ||
+            flags.snapshotTrends         ||
+            flags.hybridExecutiveSummary ||
+            flags.hybridSellerRanking    ||
+            flags.hybridForecast         ||
+            flags.hybridFunnelExecutive
+          ) && canUseSnapshots && (
             <div className="flex items-center rounded-lg border border-gray-200 bg-white text-xs overflow-hidden">
               <button
                 onClick={() => setComparisonMode('wow')}
@@ -302,9 +390,9 @@ export const NewDashboard: React.FC = () => {
           error={summary.error}
           dashboardFilters={filters}
           periodLabel={periodLabel}
-          snapshotComparison={flags.snapshotDelta ? snapshotComparison.data : null}
-          snapshotTrends={flags.snapshotDelta ? snapshotTrends.data : null}
-          snapshotTrendPoints={snapshotTrends.dataPoints}
+          snapshotComparison={comparisonData}
+          snapshotTrends={flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotTrends.data : null}
+          snapshotTrendPoints={canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0}
           comparisonMode={comparisonMode}
         />
       </section>
@@ -333,7 +421,7 @@ export const NewDashboard: React.FC = () => {
           loading={sellerRanking.loading}
           error={sellerRanking.error}
           onRetry={sellerRanking.refetch}
-          sellerDeltas={flags.snapshotDelta ? sellerDeltas.byUserId : undefined}
+          sellerDeltas={sellerDeltaMap.size > 0 ? sellerDeltaMap : undefined}
           comparisonMode={comparisonMode}
         />
       </div>
@@ -344,6 +432,10 @@ export const NewDashboard: React.FC = () => {
           data={forecast.data}
           loading={forecast.loading}
           error={forecast.error}
+          historicalComparison={
+            forecastHybridActive ? forecast.historicalComparison : null
+          }
+          comparisonMode={comparisonMode}
         />
       </section>
 
@@ -381,8 +473,8 @@ export const NewDashboard: React.FC = () => {
           companyId={companyId}
           onRetry={slaAlerts.refetch}
           onLoadMore={slaAlerts.loadMore}
-          snapshotTrends={flags.snapshotTrends ? snapshotTrends.data : null}
-          snapshotTrendPoints={snapshotTrends.dataPoints}
+          snapshotTrends={slaTrendSource}
+          snapshotTrendPoints={slaTrendPoints}
         />
         <LeadOriginsSection
           data={leadOrigins.data}
@@ -506,6 +598,12 @@ export const NewDashboard: React.FC = () => {
           loading={funnelExecutive.loading}
           error={funnelExecutive.error}
           funnelRequired={funnelExecutive.funnelRequired}
+          stageDeltasMap={
+            funnelExecHybridActive && funnelExecutive.stageDeltasMap.size > 0
+              ? funnelExecutive.stageDeltasMap
+              : undefined
+          }
+          comparisonMode={comparisonMode}
         />
       </section>
 

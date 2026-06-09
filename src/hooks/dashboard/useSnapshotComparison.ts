@@ -21,11 +21,17 @@ import type { ComparisonMode }         from '../../lib/snapshotPeriods'
 type FallbackReason = 'missing_data' | 'api_error'
 
 interface Options {
-  companyId:  string | null | undefined
-  funnelId?:  string | null
-  mode:       ComparisonMode
+  companyId:        string | null | undefined
+  funnelId?:        string | null
+  mode:             ComparisonMode
   /** Se false, o hook não faz nenhum request (flag desligada) */
-  enabled?:   boolean
+  enabled?:         boolean
+  /**
+   * FASE 4.2 Sprint 1A — Tenant pode usar snapshots históricos.
+   * Se false, suprime todos os requests (insufficient_history, degraded, critical).
+   * Se undefined, não aplica gate de tenant (comportamento anterior).
+   */
+  canUseSnapshots?: boolean
 }
 
 interface Result {
@@ -34,7 +40,7 @@ interface Result {
   error:   string | null
 }
 
-export function useSnapshotComparison({ companyId, funnelId, mode, enabled = true }: Options): Result {
+export function useSnapshotComparison({ companyId, funnelId, mode, enabled = true, canUseSnapshots }: Options): Result {
   const [data,    setData]    = useState<SnapshotComparisonData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
@@ -42,7 +48,8 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!enabled || !companyId) {
+    const effectiveEnabled = enabled && canUseSnapshots !== false
+    if (!effectiveEnabled || !companyId) {
       setData(null)
       setLoading(false)
       setError(null)
@@ -85,7 +92,8 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
       })
 
     return () => { ctrl.abort() }
-  }, [companyId, funnelId, mode, enabled])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, funnelId, mode, enabled, canUseSnapshots])
 
   return { data, loading, error }
 }

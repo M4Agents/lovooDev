@@ -784,11 +784,19 @@ export interface SnapshotSellerDeltasData {
 /** Tipo de modo de comparação temporal */
 export type ComparisonMode = 'wow' | 'mom'
 
-// ── FASE 4.1.5 — Observabilidade e Health Score ──────────────────────────────
+// ── FASE 4.1.5 / Sprint 0.5 — Observabilidade e Health Score ─────────────────
 
-export type SnapshotFreshnessStatus = 'fresh' | 'delayed' | 'stale' | 'missing'
-export type SnapshotSeverity        = 'healthy' | 'degraded' | 'warning' | 'critical'
-export type SnapshotDriftStatus     = 'ok' | 'warning' | 'critical' | 'no_data'
+export type SnapshotFreshnessStatus  = 'fresh' | 'delayed' | 'stale' | 'missing'
+export type SnapshotSeverity         = 'healthy' | 'degraded' | 'warning' | 'critical'
+export type SnapshotDriftStatus      = 'ok' | 'warning' | 'critical' | 'no_data'
+export type SnapshotMaturityStatus   = 'mature' | 'new'
+/** Classificação consolidada do tenant (Sprint 0.5).
+ *  'healthy'              → maduro + score >= 85 → pronto para FASE 4.2
+ *  'insufficient_history' → novo (< 30 dias), sem problema operacional
+ *  'degraded'             → maduro + score 65-84 → investigar
+ *  'critical'             → maduro + score < 65  → não usar histórico
+ */
+export type SnapshotClassification   = 'healthy' | 'insufficient_history' | 'degraded' | 'critical'
 
 /** Resposta de GET /api/dashboard/snapshot-health */
 export interface SnapshotHealthData {
@@ -797,6 +805,12 @@ export interface SnapshotHealthData {
   reference_date: string
   health_score:   number
   severity:       SnapshotSeverity
+  classification: SnapshotClassification
+  maturity: {
+    status:          SnapshotMaturityStatus
+    days_of_history: number
+    threshold_days:  number
+  }
   components: {
     freshness: {
       score:       number
@@ -826,6 +840,95 @@ export interface SnapshotHealthData {
     ready:   boolean
     blocker: string | null
   }
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 Sprint 2 — Executive Summary Híbrido (v2)
+// ---------------------------------------------------------------------------
+
+/** Bloco de dados realtime do payload v2 — mesmo shape de ExecutiveData */
+export interface ExecutiveSummaryV2Realtime {
+  leads_count:             number
+  conversations_count:     number
+  hot_opportunities_count: number
+  alerts_count:            number
+  agent_mode:              'single-agent' | 'multi-agent'
+  funnel_mode:             'single-funnel' | 'multi-funnel'
+}
+
+/** Bloco histórico do payload v2 — contém apenas comparação (sem trends) */
+export interface ExecutiveSummaryV2Historical {
+  comparison: SnapshotComparisonData | null
+}
+
+/** Metadados do snapshot_meta retornados pelo v2 */
+export interface ExecutiveSummaryV2SnapshotMeta {
+  available:       boolean
+  comparison_mode: 'wow' | 'mom'
+  current_period:  { from: string; to: string }
+  previous_period: { from: string; to: string }
+}
+
+/** Resposta bruta de GET /api/dashboard/executive-summary-v2 */
+export interface ExecutiveSummaryV2Response {
+  ok:            boolean
+  realtime:      ExecutiveSummaryV2Realtime
+  historical:    ExecutiveSummaryV2Historical | null
+  snapshot_meta: ExecutiveSummaryV2SnapshotMeta
+  meta: {
+    period:     string
+    start_date: string
+    end_date:   string
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 Sprint 4 — SLA Alerts Híbrido (v2)
+// ---------------------------------------------------------------------------
+
+/** Metadados do snapshot_meta retornados pelo sla-alerts-v2 */
+export interface SlaAlertsV2SnapshotMeta {
+  available: boolean
+}
+
+/**
+ * Resposta bruta de GET /api/dashboard/sla-alerts-v2.
+ *
+ * O campo `historical` é shape-compatível com `SnapshotTrendsData`,
+ * permitindo que SlaAlertsPanel o consuma sem nenhuma alteração.
+ */
+export interface SlaAlertsV2Response {
+  ok: boolean
+  alerts: {
+    data: SlaAlertItem[]
+    meta: SlaAlertsMeta
+  }
+  historical: SnapshotTrendsData | null
+  snapshot_meta: SlaAlertsV2SnapshotMeta
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 Sprint 3 — Seller Ranking Híbrido (v2)
+// ---------------------------------------------------------------------------
+
+/** Metadados do snapshot_meta retornados pelo seller-ranking-v2 */
+export interface SellerRankingV2SnapshotMeta {
+  available:       boolean
+  comparison_mode: 'wow' | 'mom'
+}
+
+/** Resposta bruta de GET /api/dashboard/seller-ranking-v2 */
+export interface SellerRankingV2Response {
+  ok: boolean
+  ranking: {
+    data: SellerRankingEntry[]
+    meta: SellerRankingMeta
+  }
+  historical: {
+    sellers: SellerSnapshotDelta[]
+    mode:    'wow' | 'mom'
+  } | null
+  snapshot_meta: SellerRankingV2SnapshotMeta
 }
 
 // ---------------------------------------------------------------------------
@@ -874,4 +977,110 @@ export interface AlertSettingsResponse {
     /** Presente apenas quando há linha salva no banco (is_default = false) */
     updated_at?: string
   }
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 Sprint 5 — Forecast Híbrido (v2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dados históricos retornados pelo forecast-v2.
+ * Inclui valores absolutos de current/previous e deltas percentuais.
+ * Métricas STATE: pipeline_weighted, pipeline_risk, stalled_count.
+ * Métricas FLOW:  won_value.
+ * pipeline_risk tem semântica invertida (aumento = ruim).
+ */
+export interface ForecastV2Historical {
+  current: {
+    pipeline_weighted: number
+    pipeline_risk:     number
+    won_value:         number
+    stalled_count:     number
+  }
+  previous: {
+    pipeline_weighted: number
+    pipeline_risk:     number
+    won_value:         number
+    stalled_count:     number
+  }
+  deltas: {
+    pipeline_weighted_pct: number | null
+    pipeline_risk_pct:     number | null
+    won_value_pct:         number | null
+    stalled_count_pct:     number | null
+  }
+  comparison_mode: 'wow' | 'mom'
+  current_from:    string
+  current_to:      string
+  previous_from:   string
+  previous_to:     string
+}
+
+/** Metadados de snapshot retornados pelo forecast-v2 */
+export interface ForecastV2SnapshotMeta {
+  available:       boolean
+  comparison_mode: 'wow' | 'mom'
+  funnel_scoped:   boolean
+}
+
+/** Resposta bruta de GET /api/dashboard/forecast-v2 */
+export interface ForecastV2Response {
+  ok:            boolean
+  realtime:      Record<string, unknown>
+  historical:    ForecastV2Historical | null
+  snapshot_meta: ForecastV2SnapshotMeta
+  meta: {
+    period:    string
+    start:     string
+    end:       string
+    funnel_id: string | null
+    user_id:   string | null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FASE 4.2 Sprint 6 — Funnel Executive Híbrido (v2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Delta histórico por etapa do funil.
+ * Matching sempre via stage_id — nunca via position.
+ * Métricas STATE (LAST_VALUE): weighted_value e stalled_count.
+ * Etapas sem histórico no período anterior retornam null nos deltas.
+ */
+export interface FunnelExecutiveV2StageHistorical {
+  stage_id:           string
+  /** Delta pct do pipeline ponderado da etapa. higherIsBetter=true */
+  weighted_value_pct: number | null
+  /** Delta pct das oportunidades paradas da etapa. higherIsBetter=false */
+  stalled_count_pct:  number | null
+}
+
+/**
+ * Payload histórico retornado pelo funnel-executive-v2.
+ * null quando aggregate_snapshot_period falha ou funnel_stages_cache vazio.
+ */
+export interface FunnelExecutiveV2Historical {
+  stages:          FunnelExecutiveV2StageHistorical[]
+  comparison_mode: 'wow' | 'mom'
+  current_from:    string
+  current_to:      string
+  previous_from:   string
+  previous_to:     string
+}
+
+/** Metadados de snapshot retornados pelo funnel-executive-v2 */
+export interface FunnelExecutiveV2SnapshotMeta {
+  available:       boolean
+  comparison_mode: 'wow' | 'mom'
+  funnel_id:       string | null
+}
+
+/** Resposta bruta de GET /api/dashboard/funnel-executive-v2 */
+export interface FunnelExecutiveV2Response {
+  ok:            boolean
+  data:          FunnelExecutiveData        // Idêntico ao v1
+  meta:          FunnelExecutiveMeta        // Idêntico ao v1
+  historical:    FunnelExecutiveV2Historical | null
+  snapshot_meta: FunnelExecutiveV2SnapshotMeta
 }

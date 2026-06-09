@@ -19,9 +19,15 @@ import type { ComparisonMode }         from '../../lib/snapshotPeriods'
 type FallbackReason = 'missing_data' | 'api_error'
 
 interface Options {
-  companyId:  string | null | undefined
-  mode:       ComparisonMode
-  enabled?:   boolean
+  companyId:        string | null | undefined
+  mode:             ComparisonMode
+  enabled?:         boolean
+  /**
+   * FASE 4.2 Sprint 1A — Tenant pode usar snapshots históricos.
+   * Se false, suprime todos os requests (insufficient_history, degraded, critical).
+   * Se undefined, não aplica gate de tenant (comportamento anterior).
+   */
+  canUseSnapshots?: boolean
 }
 
 interface Result {
@@ -31,14 +37,15 @@ interface Result {
   byUserId:    Map<string, SellerSnapshotDelta>
 }
 
-export function useSnapshotSellerDeltas({ companyId, mode, enabled = true }: Options): Result {
+export function useSnapshotSellerDeltas({ companyId, mode, enabled = true, canUseSnapshots }: Options): Result {
   const [data,    setData]    = useState<SnapshotSellerDeltasData | null>(null)
   const [loading, setLoading] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!enabled || !companyId) {
+    const effectiveEnabled = enabled && canUseSnapshots !== false
+    if (!effectiveEnabled || !companyId) {
       setData(null)
       setLoading(false)
       return
@@ -68,7 +75,7 @@ export function useSnapshotSellerDeltas({ companyId, mode, enabled = true }: Opt
       })
 
     return () => { ctrl.abort() }
-  }, [companyId, mode, enabled])
+  }, [companyId, mode, enabled, canUseSnapshots])
 
   const byUserId = new Map<string, SellerSnapshotDelta>()
   if (data?.sellers) {

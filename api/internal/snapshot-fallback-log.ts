@@ -26,12 +26,29 @@ import {
   jsonError,
 }                           from '../lib/dashboard/auth.js'
 
-const VALID_ENDPOINTS = new Set(['comparison', 'trends', 'seller-deltas'])
-const VALID_REASONS   = new Set([
+const VALID_ENDPOINTS = new Set([
+  // FASE 4.1 — endpoints legados (frontend fire-and-forget)
+  'comparison',
+  'trends',
+  'seller-deltas',
+  // FASE 4.2 — endpoints v2 (backend logHistoricalFallback)
+  'executive-summary-v2',
+  'seller-ranking-v2',
+  'sla-alerts-v2',
+  'forecast-v2',
+  'funnel-executive-v2',
+])
+
+const VALID_REASONS = new Set([
+  // FASE 4.1 — motivos legados
   'missing_data',
   'api_error',
   'insufficient_points',
   'freshness_stale',
+  // FASE 4.2 — motivos dos endpoints v2
+  'aggregate_failed',
+  'cache_empty',
+  'no_snapshot_data',
 ])
 
 export default async function handler(req: any, res: any): Promise<void> {

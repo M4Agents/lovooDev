@@ -79,11 +79,33 @@ export type {
   SellerSnapshotDelta,
   SnapshotSellerDeltasData,
   ComparisonMode,
-  // Fase 4.1.5
+  // Fase 4.1.5 / Sprint 0.5 + FASE 4.2 Sprint 1A
   SnapshotHealthData,
   SnapshotFreshnessStatus,
   SnapshotSeverity,
   SnapshotDriftStatus,
+  SnapshotMaturityStatus,
+  SnapshotClassification,
+  // FASE 4.2 Sprint 2 — Executive Summary híbrido
+  ExecutiveSummaryV2Realtime,
+  ExecutiveSummaryV2Historical,
+  ExecutiveSummaryV2SnapshotMeta,
+  ExecutiveSummaryV2Response,
+  // FASE 4.2 Sprint 3 — Seller Ranking híbrido
+  SellerRankingV2SnapshotMeta,
+  SellerRankingV2Response,
+  // FASE 4.2 Sprint 4 — SLA Alerts híbrido
+  SlaAlertsV2SnapshotMeta,
+  SlaAlertsV2Response,
+  // FASE 4.2 Sprint 5 — Forecast híbrido
+  ForecastV2Historical,
+  ForecastV2SnapshotMeta,
+  ForecastV2Response,
+  // FASE 4.2 Sprint 6 — Funnel Executive híbrido
+  FunnelExecutiveV2StageHistorical,
+  FunnelExecutiveV2Historical,
+  FunnelExecutiveV2SnapshotMeta,
+  FunnelExecutiveV2Response,
   SellerRankingMeta,
   SellerRankingResponse,
   SlaAlertSeverity,
@@ -125,6 +147,11 @@ export type {
 // Importação local dos tipos necessários para as assinaturas das funções
 import type {
   DashboardFilters,
+  ExecutiveSummaryV2Response,
+  SellerRankingV2Response,
+  SlaAlertsV2Response,
+  ForecastV2Response,
+  FunnelExecutiveV2Response,
   SummaryResponse,
   FunnelSnapshotResponse,
   FunnelFlowResponse,
@@ -661,6 +688,29 @@ export const dashboardApi = {
   },
 
   /**
+   * SLA Alerts híbrido: alertas realtime + trend de sla_breached_count num único payload.
+   * FASE 4.2 Sprint 4: ativado via VITE_FEATURE_HYBRID_SLA_ALERTS=true.
+   *
+   * Retorna payload bruto — o campo `historical` é shape-compatível com
+   * SnapshotTrendsData, permitindo que SlaAlertsPanel o consuma sem alteração.
+   *
+   * Requer canUseSnapshots = true no frontend (validado via useSnapshotHealth).
+   * O endpoint não recalcula elegibilidade de tenant.
+   */
+  async getSlaAlertsV2(
+    companyId: string,
+    options:   { userId?: string | null; slaHours?: number; page?: number; limit?: number } = {},
+    signal?:   AbortSignal,
+  ): Promise<SlaAlertsV2Response> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (options.userId)                params.user_id   = options.userId
+    if (options.slaHours !== undefined) params.sla_hours = String(options.slaHours)
+    if (options.page !== undefined)     params.page      = String(options.page)
+    if (options.limit !== undefined)    params.limit     = String(options.limit)
+    return apiFetch<SlaAlertsV2Response>('/api/dashboard/sla-alerts-v2', params, signal)
+  },
+
+  /**
    * Volume, conversão e receita por canal de origem dos leads.
    * Retorna até 20 origens ordenadas por volume.
    */
@@ -698,6 +748,29 @@ export const dashboardApi = {
   },
 
   /**
+   * Forecast híbrido: forecast realtime + comparação histórica (WoW/MoM).
+   * FASE 4.2 Sprint 5.
+   *
+   * Requer canUseSnapshots = true no frontend (validado via useSnapshotHealth).
+   * O endpoint não recalcula elegibilidade de tenant.
+   */
+  async getForecastV2(
+    companyId:      string,
+    filters:        DashboardFilters,
+    comparisonMode: 'wow' | 'mom',
+    signal?:        AbortSignal,
+  ): Promise<ForecastV2Response> {
+    const params: Record<string, string> = {
+      company_id:      companyId,
+      comparison_mode: comparisonMode,
+      ...buildPeriodParams(filters),
+    }
+    if (filters.funnelId) params.funnel_id = filters.funnelId
+    if (filters.userId)   params.user_id   = filters.userId
+    return apiFetch<ForecastV2Response>('/api/dashboard/forecast-v2', params, signal)
+  },
+
+  /**
    * Alertas prioritários em tempo real (sem período).
    * Tipos: sla_critical, sla_high, stalled_opportunity, seller_risk.
    */
@@ -723,6 +796,28 @@ export const dashboardApi = {
     const params: Record<string, string> = { company_id: companyId }
     if (funnelId) params.funnel_id = funnelId
     return apiFetch<FunnelExecutiveResponse>('/api/dashboard/funnel-executive', params, signal)
+  },
+
+  /**
+   * Funil executivo híbrido: realtime por etapa + deltas WoW/MoM históricos.
+   * FASE 4.2 Sprint 6.
+   *
+   * Requer canUseSnapshots = true no frontend (validado via useSnapshotHealth).
+   * O endpoint não recalcula elegibilidade de tenant.
+   * Matching histórico por stage_id — nunca por position.
+   */
+  async getFunnelExecutiveV2(
+    companyId:      string,
+    funnelId:       string | null | undefined,
+    comparisonMode: 'wow' | 'mom',
+    signal?:        AbortSignal,
+  ): Promise<FunnelExecutiveV2Response> {
+    const params: Record<string, string> = {
+      company_id:      companyId,
+      comparison_mode: comparisonMode,
+    }
+    if (funnelId) params.funnel_id = funnelId
+    return apiFetch<FunnelExecutiveV2Response>('/api/dashboard/funnel-executive-v2', params, signal)
   },
 
   // ── FASE 4.0 — Snapshot histórico (shadow mode) ────────────────────────
@@ -802,6 +897,52 @@ export const dashboardApi = {
     const params: Record<string, string> = { company_id: companyId }
     if (date) params.date = date
     return apiFetch<SnapshotHealthData>('/api/dashboard/snapshot-health', params, signal)
+  },
+
+  /**
+   * Executive Summary híbrido: realtime + comparação histórica num único payload.
+   * FASE 4.2 Sprint 2: ativado via VITE_FEATURE_HYBRID_EXECUTIVE_SUMMARY=true.
+   *
+   * Retorna payload bruto — transformação para o formato do componente
+   * acontece no useDashboardSummary (hybridMode).
+   *
+   * Requer canUseSnapshots = true no frontend (validado via useSnapshotHealth).
+   * O endpoint não recalcula elegibilidade de tenant.
+   */
+  async getExecutiveSummaryV2(
+    companyId:      string,
+    filters:        DashboardFilters,
+    comparisonMode: 'wow' | 'mom',
+    signal?:        AbortSignal,
+  ): Promise<ExecutiveSummaryV2Response> {
+    return apiFetch<ExecutiveSummaryV2Response>(
+      '/api/dashboard/executive-summary-v2',
+      { company_id: companyId, comparison_mode: comparisonMode, ...buildPeriodParams(filters) },
+      signal,
+    )
+  },
+
+  /**
+   * Seller Ranking híbrido: ranking realtime + deltas históricos num único payload.
+   * FASE 4.2 Sprint 3: ativado via VITE_FEATURE_HYBRID_SELLER_RANKING=true.
+   *
+   * Retorna payload bruto — transformação para Map<string, SellerSnapshotDelta>
+   * acontece no useSellerPerformance (hybridMode).
+   *
+   * Requer canUseSnapshots = true no frontend (validado via useSnapshotHealth).
+   * O endpoint não recalcula elegibilidade de tenant.
+   */
+  async getSellerRankingV2(
+    companyId:      string,
+    filters:        DashboardFilters,
+    comparisonMode: 'wow' | 'mom',
+    signal?:        AbortSignal,
+  ): Promise<SellerRankingV2Response> {
+    return apiFetch<SellerRankingV2Response>(
+      '/api/dashboard/seller-ranking-v2',
+      { company_id: companyId, comparison_mode: comparisonMode, ...buildPeriodParams(filters) },
+      signal,
+    )
   },
 
   /**

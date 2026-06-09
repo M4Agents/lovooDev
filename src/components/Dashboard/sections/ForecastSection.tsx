@@ -1,12 +1,21 @@
 import React from 'react'
 import { TrendingUp, AlertTriangle, CheckCircle, XCircle, BarChart3 } from 'lucide-react'
 import { ForecastGauge } from '../charts/ForecastGauge'
-import type { ForecastData } from '../../../types/dashboard'
+import { DeltaBadge } from '../historical/DeltaBadge'
+import { getComparisonLabel } from '../../../lib/snapshotPeriods'
+import type {
+  ComparisonMode,
+  ForecastData,
+  ForecastV2Historical,
+} from '../../../types/dashboard'
 
 interface ForecastSectionProps {
   data:    ForecastData | null
   loading: boolean
   error:   string | null
+  // FASE 4.2 Sprint 5 — props opcionais (enriquecimento visual)
+  historicalComparison?: ForecastV2Historical | null
+  comparisonMode?:       ComparisonMode
 }
 
 function fmt(value: number) {
@@ -21,12 +30,16 @@ function StatCard({
   value,
   sub,
   colorClass,
+  badge,
+  subBadge,
 }: {
   icon: React.ElementType
   label: string
   value: string
   sub?: string
   colorClass: string
+  badge?:    React.ReactNode
+  subBadge?: React.ReactNode
 }) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -35,14 +48,28 @@ function StatCard({
       </div>
       <div className="min-w-0">
         <p className="text-xs text-gray-500 dark:text-gray-400 leading-none mb-0.5">{label}</p>
-        <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{value}</p>
-        {sub && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>}
+        <div className="flex items-baseline gap-1.5">
+          <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{value}</p>
+          {badge}
+        </div>
+        {(sub || subBadge) && (
+          <div className="flex items-center gap-1 mt-0.5">
+            {sub && <p className="text-xs text-gray-400 dark:text-gray-500">{sub}</p>}
+            {subBadge}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-export function ForecastSection({ data, loading, error }: ForecastSectionProps) {
+export function ForecastSection({
+  data,
+  loading,
+  error,
+  historicalComparison,
+  comparisonMode,
+}: ForecastSectionProps) {
   if (loading) {
     return (
       <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5 animate-pulse">
@@ -71,10 +98,16 @@ export function ForecastSection({ data, loading, error }: ForecastSectionProps) 
 
   if (!data) return null
 
-  const conversionPct = data.conversion_rate ?? 0
+  const conversionPct  = data.conversion_rate ?? 0
   const stalledRiskPct = data.pipeline_weighted > 0
     ? Math.round((data.pipeline_risk / data.pipeline_weighted) * 100)
     : 0
+
+  const hasHistorical = !!historicalComparison
+  const periodLabel   = hasHistorical && comparisonMode
+    ? getComparisonLabel(comparisonMode)
+    : undefined
+  const deltas        = historicalComparison?.deltas
 
   return (
     <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5 space-y-4">
@@ -92,6 +125,13 @@ export function ForecastSection({ data, loading, error }: ForecastSectionProps) 
           value={fmt(data.pipeline_weighted)}
           sub={`${data.open_count} oportunidades`}
           colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"
+          badge={hasHistorical ? (
+            <DeltaBadge
+              pct={deltas?.pipeline_weighted_pct ?? null}
+              higherIsBetter={true}
+              periodLabel={periodLabel}
+            />
+          ) : undefined}
         />
         <StatCard
           icon={CheckCircle}
@@ -106,6 +146,22 @@ export function ForecastSection({ data, loading, error }: ForecastSectionProps) 
           value={fmt(data.pipeline_risk)}
           sub={`${data.stalled_count} paradas`}
           colorClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+          badge={hasHistorical ? (
+            // pipeline_risk: semântica invertida — aumento = ruim
+            <DeltaBadge
+              pct={deltas?.pipeline_risk_pct ?? null}
+              higherIsBetter={false}
+              periodLabel={periodLabel}
+            />
+          ) : undefined}
+          subBadge={hasHistorical ? (
+            // stalled_count: mais paradas = ruim
+            <DeltaBadge
+              pct={deltas?.stalled_count_pct ?? null}
+              higherIsBetter={false}
+              periodLabel={periodLabel}
+            />
+          ) : undefined}
         />
         <StatCard
           icon={CheckCircle}
@@ -113,6 +169,13 @@ export function ForecastSection({ data, loading, error }: ForecastSectionProps) 
           value={fmt(data.won_value)}
           sub={`${conversionPct}% conversão`}
           colorClass="bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+          badge={hasHistorical ? (
+            <DeltaBadge
+              pct={deltas?.won_value_pct ?? null}
+              higherIsBetter={true}
+              periodLabel={periodLabel}
+            />
+          ) : undefined}
         />
       </div>
 

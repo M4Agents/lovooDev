@@ -18,12 +18,18 @@ import type { SnapshotTrendsData }     from '../../types/dashboard'
 type FallbackReason = 'missing_data' | 'api_error' | 'insufficient_points'
 
 interface Options {
-  companyId:  string | null | undefined
-  funnelId?:  string | null
-  metrics:    string[]
+  companyId:        string | null | undefined
+  funnelId?:        string | null
+  metrics:          string[]
   /** Número de dias (máx. 30) */
-  days?:      number
-  enabled?:   boolean
+  days?:            number
+  enabled?:         boolean
+  /**
+   * FASE 4.2 Sprint 1A — Tenant pode usar snapshots históricos.
+   * Se false, suprime todos os requests (insufficient_history, degraded, critical).
+   * Se undefined, não aplica gate de tenant (comportamento anterior).
+   */
+  canUseSnapshots?: boolean
 }
 
 interface Result {
@@ -38,8 +44,9 @@ export function useSnapshotTrends({
   companyId,
   funnelId,
   metrics,
-  days    = 7,
-  enabled = true,
+  days            = 7,
+  enabled         = true,
+  canUseSnapshots,
 }: Options): Result {
   const [data,    setData]    = useState<SnapshotTrendsData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -53,7 +60,8 @@ export function useSnapshotTrends({
   const metricsKey = metrics.join(',')
 
   useEffect(() => {
-    if (!enabled || !companyId || metrics.length === 0) {
+    const effectiveEnabled = enabled && canUseSnapshots !== false
+    if (!effectiveEnabled || !companyId || metrics.length === 0) {
       setData(null)
       setLoading(false)
       setError(null)
@@ -92,7 +100,7 @@ export function useSnapshotTrends({
 
     return () => { ctrl.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, funnelId, metricsKey, safeDays, enabled])
+  }, [companyId, funnelId, metricsKey, safeDays, enabled, canUseSnapshots])
 
   return {
     data,
