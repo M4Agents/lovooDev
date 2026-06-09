@@ -2733,7 +2733,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       )}
 
       {/* ── Campo de texto + elementos contextuais ───────────────────────── */}
-      <div className={`flex-1 flex flex-col ${(isRecording || !!audioBlobPreview) ? 'hidden' : ''}`}>
+      <div className={`flex-1 flex flex-col ${!!audioBlobPreview ? 'hidden' : isRecording ? 'hidden sm:block' : ''}`}>
         {isRecording && (
           <div className="mb-2 px-3 py-2 rounded-lg bg-gray-100 hidden sm:flex items-center space-x-3">
             {/* Desktop: banner com botão X e waveform */}
@@ -2765,6 +2765,20 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 />
               ))}
             </div>
+
+            {/* Botão verde: parar gravação e abrir prévia */}
+            <button
+              type="button"
+              onClick={stopRecording}
+              aria-label="Parar e ouvir áudio"
+              title="Parar e ouvir áudio"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-xs transition-colors flex-shrink-0"
+            >
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              <span>Parar</span>
+            </button>
           </div>
         )}
 
