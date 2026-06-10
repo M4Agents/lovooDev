@@ -32,7 +32,9 @@ const INLINE_DEFAULT_LIMIT  = 30
 const INLINE_MAX_LIMIT      = 30
 
 // Mesmo limite já validado em buildFunnelSnapshotMetrics (Sprint 5.9.2-B)
-const OPPS_BATCH_SIZE = 200
+const OPPS_BATCH_SIZE  = 200
+const LEAD_BATCH_SIZE  = 200
+const MANAGER_ROLES    = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
@@ -58,6 +60,23 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     const membership = await assertMembership(svc, user.id, companyId)
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
+
+    // ------------------------------------------------------------------
+    // 2b. RBAC — derivar effectiveUserId
+    // ------------------------------------------------------------------
+    const callerRole = membership.role as string
+    const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
+
+    let effectiveUserId: string | null = null
+    if (!MANAGER_ROLES.has(callerRole)) {
+      // seller / partner → sempre scopado ao próprio usuário
+      effectiveUserId = user.id
+    } else if (rawUserId) {
+      // manager+ com user_id explícito → validar membership do alvo
+      const targetMembership = await assertMembership(svc, rawUserId, companyId)
+      if (!targetMembership) { jsonError(res, 403, 'user_id inválido ou sem acesso à empresa'); return }
+      effectiveUserId = rawUserId
+    }
 
     // ------------------------------------------------------------------
     // 3. Período (opcional — filtra por updated_at)
@@ -116,10 +135,63 @@ export default async function handler(req: any, res: any): Promise<void> {
 
       // Sem posições → retornar lista vazia imediatamente
       if (allowedOppIds.length === 0) {
+        if (effectiveUserId) res.setHeader('Cache-Control', 'private, no-store')
         return res.status(200).json({
           ok: true,
           data: [],
-          meta: { page, limit, total: 0, has_more: false, period, start_date: resolvedRange.start, end_date: resolvedRange.end, funnel_id: funnelId },
+          meta: { page, limit, total: 0, has_more: false, period, start_date: resolvedRange.start, end_date: resolvedRange.end, funnel_id: funnelId, user_id: effectiveUserId ?? null, user_scoped: effectiveUserId !== null },
+        })
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 6b. RBAC — filtrar oportunidades do effectiveUserId (via leads)
+    // ------------------------------------------------------------------
+    if (effectiveUserId) {
+      const { data: sellerLeads, error: leadsErr } = await svc
+        .from('leads')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('responsible_user_id', effectiveUserId)
+      if (leadsErr) throw new Error(`seller leads: ${leadsErr.message}`)
+      const sellerLeadIds = (sellerLeads ?? []).map((l: { id: string }) => l.id)
+
+      if (sellerLeadIds.length === 0) {
+        res.setHeader('Cache-Control', 'private, no-store')
+        return res.status(200).json({
+          ok: true,
+          data: [],
+          meta: { page, limit, total: 0, has_more: false, period, start_date: resolvedRange.start, end_date: resolvedRange.end, funnel_id: funnelId, user_id: effectiveUserId, user_scoped: true },
+        })
+      }
+
+      // Buscar opportunity IDs dos leads do seller — com batching
+      const sellerOppIds: string[] = []
+      for (let i = 0; i < sellerLeadIds.length; i += LEAD_BATCH_SIZE) {
+        const batch = sellerLeadIds.slice(i, i + LEAD_BATCH_SIZE)
+        const { data: batchData, error: batchErr } = await svc
+          .from('opportunities')
+          .select('id')
+          .eq('company_id', companyId)
+          .in('lead_id', batch)
+        if (batchErr) throw new Error(`seller opps batch: ${batchErr.message}`)
+        sellerOppIds.push(...(batchData ?? []).map((o: { id: string }) => o.id))
+      }
+
+      // Intersectar com filtro de funil/etapa se ambos presentes
+      if (allowedOppIds !== null) {
+        const sellerSet = new Set(sellerOppIds)
+        allowedOppIds = allowedOppIds.filter(id => sellerSet.has(id))
+      } else {
+        allowedOppIds = sellerOppIds
+      }
+
+      if (allowedOppIds.length === 0) {
+        res.setHeader('Cache-Control', 'private, no-store')
+        return res.status(200).json({
+          ok: true,
+          data: [],
+          meta: { page, limit, total: 0, has_more: false, period, start_date: resolvedRange.start, end_date: resolvedRange.end, funnel_id: funnelId, user_id: effectiveUserId, user_scoped: true },
         })
       }
     }
@@ -245,6 +317,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       last_interaction_at: o.last_interaction_at ?? null,
     }))
 
+    res.setHeader(
+      'Cache-Control',
+      effectiveUserId ? 'private, no-store' : 's-maxage=60, stale-while-revalidate=300',
+    )
+
     return res.status(200).json({
       ok: true,
       data,
@@ -252,11 +329,13 @@ export default async function handler(req: any, res: any): Promise<void> {
         page,
         limit,
         total,
-        has_more: offset + limit < total,
+        has_more:    offset + limit < total,
         period,
-        start_date: resolvedRange.start,
-        end_date:   resolvedRange.end,
-        funnel_id:  funnelId ?? null,
+        start_date:  resolvedRange.start,
+        end_date:    resolvedRange.end,
+        funnel_id:   funnelId ?? null,
+        user_id:     effectiveUserId ?? null,
+        user_scoped: effectiveUserId !== null,
       },
     })
 

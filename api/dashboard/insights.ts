@@ -31,6 +31,13 @@ import {
 } from '../lib/dashboard/auth.js'
 
 // ---------------------------------------------------------------------------
+// Constantes RBAC
+// ---------------------------------------------------------------------------
+
+const MANAGER_ROLES   = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
+const INSIGHT_BATCH_SIZE = 200
+
+// ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
@@ -60,7 +67,35 @@ async function computeHotOpportunities(
   resolvedRange: ResolvedRange,
   funnelId: string | null,
   policies: InsightPolicies,
+  userId?: string | null,
 ): Promise<InsightItem | null> {
+  // Quando user-scoped: buscar opp IDs dos leads do vendedor
+  let userOppIds: string[] | null = null
+  if (userId) {
+    const { data: sellerLeads, error: leadsErr } = await svc
+      .from('leads')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('responsible_user_id', userId)
+    if (leadsErr) throw new Error(`hot_opportunity/leads: ${leadsErr.message}`)
+    const sellerLeadIds = (sellerLeads ?? []).map((l: { id: string }) => l.id)
+    if (sellerLeadIds.length === 0) return null
+
+    const oppIds: string[] = []
+    for (let i = 0; i < sellerLeadIds.length; i += INSIGHT_BATCH_SIZE) {
+      const batch = sellerLeadIds.slice(i, i + INSIGHT_BATCH_SIZE)
+      const { data, error } = await svc
+        .from('opportunities')
+        .select('id')
+        .eq('company_id', companyId)
+        .in('lead_id', batch)
+      if (error) throw new Error(`hot_opportunity/opps batch: ${error.message}`)
+      oppIds.push(...(data ?? []).map((o: { id: string }) => o.id))
+    }
+    if (oppIds.length === 0) return null
+    userOppIds = oppIds
+  }
+
   let query = svc
     .from('opportunities')
     .select('id', { count: 'exact', head: true })
@@ -70,7 +105,9 @@ async function computeHotOpportunities(
     .gte('updated_at', resolvedRange.start)
     .lte('updated_at', resolvedRange.end)
 
-  if (funnelId) {
+  if (userOppIds) {
+    query = query.in('id', userOppIds)
+  } else if (funnelId) {
     // Filtrar via opportunity_funnel_positions (sem company_id)
     const { data: positions } = await svc
       .from('opportunity_funnel_positions')
@@ -110,6 +147,7 @@ async function computeCoolingOpportunities(
   companyId: string,
   funnelId: string | null,
   policies: InsightPolicies,
+  userId?: string | null,
 ): Promise<InsightItem | null> {
   const cutoff = new Date(Date.now() - policies.cooling_threshold_days * 86_400_000).toISOString()
 
@@ -117,6 +155,33 @@ async function computeCoolingOpportunities(
   // PostgREST: (last_interaction_at IS NOT NULL AND last_interaction_at < cutoff)
   //         OR (last_interaction_at IS NULL AND updated_at < cutoff)
   const coolingFilter = `last_interaction_at.lt.${cutoff},and(last_interaction_at.is.null,updated_at.lt.${cutoff})`
+
+  // Quando user-scoped: buscar opp IDs dos leads do vendedor
+  let userOppIds: string[] | null = null
+  if (userId) {
+    const { data: sellerLeads, error: leadsErr } = await svc
+      .from('leads')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('responsible_user_id', userId)
+    if (leadsErr) throw new Error(`cooling_opportunity/leads: ${leadsErr.message}`)
+    const sellerLeadIds = (sellerLeads ?? []).map((l: { id: string }) => l.id)
+    if (sellerLeadIds.length === 0) return null
+
+    const oppIds: string[] = []
+    for (let i = 0; i < sellerLeadIds.length; i += INSIGHT_BATCH_SIZE) {
+      const batch = sellerLeadIds.slice(i, i + INSIGHT_BATCH_SIZE)
+      const { data, error } = await svc
+        .from('opportunities')
+        .select('id')
+        .eq('company_id', companyId)
+        .in('lead_id', batch)
+      if (error) throw new Error(`cooling_opportunity/opps batch: ${error.message}`)
+      oppIds.push(...(data ?? []).map((o: { id: string }) => o.id))
+    }
+    if (oppIds.length === 0) return null
+    userOppIds = oppIds
+  }
 
   // count: 'exact' sem head: true retorna data + count total em uma única query
   let query = svc
@@ -127,7 +192,9 @@ async function computeCoolingOpportunities(
     .or(coolingFilter)
     .limit(500) // defensivo; count continua refletindo o total real
 
-  if (funnelId) {
+  if (userOppIds) {
+    query = query.in('id', userOppIds)
+  } else if (funnelId) {
     const { data: positions } = await svc
       .from('opportunity_funnel_positions')
       .select('opportunity_id')
@@ -427,6 +494,21 @@ export default async function handler(req: any, res: any): Promise<void> {
     const membership = await assertMembership(svc, user.id, companyId)
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
+    // 2b. RBAC — derivar effectiveUserId
+    const callerRole = membership.role as string
+    const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
+
+    let effectiveUserId: string | null = null
+    if (!MANAGER_ROLES.has(callerRole)) {
+      // seller / partner → sempre scopado ao próprio usuário
+      effectiveUserId = user.id
+    } else if (rawUserId) {
+      // manager+ com user_id explícito → validar membership do alvo
+      const targetMembership = await assertMembership(svc, rawUserId, companyId)
+      if (!targetMembership) { jsonError(res, 403, 'user_id inválido ou sem acesso à empresa'); return }
+      effectiveUserId = rawUserId
+    }
+
     // 3. Período
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
@@ -455,12 +537,19 @@ export default async function handler(req: any, res: any): Promise<void> {
     ])
 
     // 6. Calcular insights em paralelo — falha isolada nunca quebra o endpoint
+    // Role gates:
+    //   - seller/partner: recebem apenas hot_opportunity e cooling_opportunity (próprios)
+    //   - manager+: recebem todos os insights gerenciais
+    //   - ai_tool_issue: visível apenas para manager/admin/system_admin/super_admin
+    const isManagerPlus = MANAGER_ROLES.has(callerRole)
+
     const tasks = [
-      computeHotOpportunities(svc, companyId, resolvedRange, funnelId, policies),
-      computeCoolingOpportunities(svc, companyId, funnelId, policies),
-      computeAiToolIssues(svc, companyId, policies),
-      // Insights de funil só disponíveis quando funnel_id fornecido
-      ...(funnelId
+      computeHotOpportunities(svc, companyId, resolvedRange, funnelId, policies, effectiveUserId),
+      computeCoolingOpportunities(svc, companyId, funnelId, policies, effectiveUserId),
+      // ai_tool_issue: apenas para manager+
+      ...(isManagerPlus ? [computeAiToolIssues(svc, companyId, policies)] : []),
+      // Insights de funil: apenas para manager+ e somente quando funnel_id fornecido
+      ...(isManagerPlus && funnelId
         ? [
             computeFunnelBottleneck(svc, companyId, funnelId, policies),
             computeConversionDrop(svc, companyId, funnelId, resolvedRange, policies),
@@ -477,8 +566,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
       .slice(0, 5)
 
-    // 7. Resposta — cache curto (insights mudam com movimentações)
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120')
+    // 7. Resposta — cache condicional por escopo de usuário
+    res.setHeader(
+      'Cache-Control',
+      effectiveUserId ? 'private, no-store' : 's-maxage=60, stale-while-revalidate=120',
+    )
 
     return res.status(200).json({
       ok:   true,
