@@ -5,7 +5,7 @@
 // Rota atual (src/App.tsx): /dashboard → ModernDashboard (NÃO alterado neste passo)
 // =====================================================
 
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react'
 import { Settings2 } from 'lucide-react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { FunnelSelector }             from '../components/Dashboard/filters/FunnelSelector'
@@ -224,6 +224,12 @@ export const NewDashboard: React.FC = () => {
   const snapshot = useFunnelSnapshot(funnelId, funnelMode)
   const flow     = useFunnelFlow(funnelId, filters)
 
+  // Âncora de scroll: KPI "Alertas Críticos" → PriorityAlertsSection
+  const priorityAlertsSectionRef = useRef<HTMLElement>(null)
+  const handleAlertsClick = useCallback(() => {
+    priorityAlertsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   // Label do período ativo para exibir no header
   const periodLabel = period.label ?? 'Período selecionado'
 
@@ -394,11 +400,12 @@ export const NewDashboard: React.FC = () => {
           snapshotTrends={flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotTrends.data : null}
           snapshotTrendPoints={canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0}
           comparisonMode={comparisonMode}
+          onAlertsClick={handleAlertsClick}
         />
       </section>
 
       {/* ── Alertas Prioritários (Fase 3A) — onde agir agora ───────────── */}
-      <section>
+      <section ref={priorityAlertsSectionRef}>
         <PriorityAlertsSection
           data={priorityAlerts.data}
           loading={priorityAlerts.loading}
