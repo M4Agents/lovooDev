@@ -1028,15 +1028,22 @@ export const Leads: React.FC = () => {
                     <td className="px-4 py-2">
                       {lead.tags && lead.tags.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-1">
-                          {lead.tags.slice(0, 3).map(tag => (
-                            <TagBadge key={tag.id} tag={tag} size="sm" />
-                          ))}
-                          {lead.tags.length > 3 && (
+                          {lead.tags.slice(0, 4).map(tag => (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
-                              title={lead.tags.slice(3).map(t => t.name).join(', ')}
+                              key={tag.id}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-medium"
+                              title={tag.name}
                             >
-                              +{lead.tags.length - 3}
+                              <Tag className="w-2.5 h-2.5 flex-shrink-0" />
+                              {tag.name}
+                            </span>
+                          ))}
+                          {lead.tags.length > 4 && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500"
+                              title={lead.tags.slice(4).map(t => t.name).join(', ')}
+                            >
+                              +{lead.tags.length - 4}
                             </span>
                           )}
                         </div>
