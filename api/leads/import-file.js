@@ -483,7 +483,11 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
         console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
       }
 
-      if (leadFunnelId) await positionInFunnel(svc, leadId, leadFunnelId, leadStageId);
+      if (leadFunnelId) await positionInFunnel(svc, existingLeadId, leadFunnelId, leadStageId);
+
+      try { if (rawLead.tags) await assignTags(svc, companyId, existingLeadId, rawLead.tags, existingTags); }
+      catch (tagErr) { console.error('[import-file] tags (duplicate) error:', tagErr?.message); }
+
       const resp = await assignResponsible().catch(() => ({ responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 }));
 
       return { ...zero, duplicate: 1, duplicateReentry, ...resp };
