@@ -36,6 +36,8 @@ import { useDashboardActivation }     from '../hooks/dashboard/useDashboardActiv
 import { ForecastSection }            from '../components/Dashboard/sections/ForecastSection'
 import { PriorityAlertsSection }      from '../components/Dashboard/sections/PriorityAlertsSection'
 import { FunnelExecutiveSection }     from '../components/Dashboard/sections/FunnelExecutiveSection'
+import { PipelineCurrentSection }     from '../components/Dashboard/sections/PipelineCurrentSection'
+import { FunnelFlowSection }          from '../components/Dashboard/sections/FunnelFlowSection'
 import { useAuth }                    from '../contexts/AuthContext'
 import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
@@ -47,66 +49,6 @@ import type { DashboardFilters }      from '../services/dashboardApi'
 import type { SnapshotComparisonData, SellerSnapshotDelta, SnapshotTrendsData } from '../types/dashboard'
 import type { ComparisonMode }        from '../lib/snapshotPeriods'
 import type { DashboardTab }          from '../components/Dashboard/navigation/DashboardTabs'
-
-// ---------------------------------------------------------------------------
-// Sub-componentes auxiliares do layout de funil
-// ---------------------------------------------------------------------------
-
-interface FunnelStageRowProps {
-  name: string
-  value: number
-  suffix: string
-}
-
-interface ConversionRowProps {
-  fromName: string
-  toName: string
-  rate: number
-  advanced: number
-  inSource: number
-}
-
-function FunnelStageRow({ name, value, suffix }: FunnelStageRowProps) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-700">{name}</span>
-      <span className="text-sm font-semibold text-gray-900">
-        {value.toLocaleString('pt-BR')} <span className="font-normal text-gray-500 text-xs">{suffix}</span>
-      </span>
-    </div>
-  )
-}
-
-function ConversionRow({ fromName, toName, rate, advanced, inSource }: ConversionRowProps) {
-  const color = rate >= 60 ? 'text-green-600' : rate >= 30 ? 'text-yellow-600' : 'text-red-500'
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-600">
-        {fromName} → {toName}
-      </span>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-gray-400 text-xs">{advanced}/{inSource}</span>
-        <span className={`font-bold ${color}`}>{rate.toFixed(1)}%</span>
-      </div>
-    </div>
-  )
-}
-
-function SectionError({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-      {message}
-    </div>
-  )
-}
-
-function SectionEmpty({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg bg-gray-50 border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-      {message}
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // NewDashboard
@@ -485,108 +427,15 @@ export const NewDashboard: React.FC = () => {
 
       {/* ── Funil ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* Pipeline atual (Snapshot) */}
-        <section className="bg-white rounded-xl border border-gray-200 p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Pipeline atual</h2>
-          <p className="text-xs text-gray-400 mb-3">Onde estão suas oportunidades agora</p>
-
-          {!showFunnelSections && (
-            <SectionEmpty message="Selecione um funil para visualizar o Pipeline e o Fluxo no período" />
-          )}
-
-          {showFunnelSections && snapshot.error && <SectionError message={snapshot.error} />}
-
-          {showFunnelSections && snapshot.loading && (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />
-              ))}
-            </div>
-          )}
-
-          {showFunnelSections && !snapshot.loading && !snapshot.error && (
-            <>
-              {snapshot.data?.stages.length === 0 ? (
-                <SectionEmpty message="Nenhuma oportunidade aberta no funil" />
-              ) : (
-                snapshot.data?.stages.map((stage) => (
-                  <FunnelStageRow
-                    key={stage.stage_id}
-                    name={stage.stage_name}
-                    value={stage.count}
-                    suffix="estão na etapa"
-                  />
-                ))
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Fluxo no período (Flow) */}
-        <section className="bg-white rounded-xl border border-gray-200 p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1">Fluxo no período</h2>
-          <p className="text-xs text-gray-400 mb-3">Por onde as oportunidades passaram em {periodLabel}</p>
-
-          {!showFunnelSections && (
-            <SectionEmpty message="Selecione um funil para ver o fluxo e a conversão por etapa" />
-          )}
-
-          {showFunnelSections && flow.funnelRequired && (
-            <SectionEmpty message="Selecione um funil para ver o fluxo e a conversão por etapa" />
-          )}
-
-          {showFunnelSections && !flow.funnelRequired && flow.error && <SectionError message={flow.error} />}
-
-          {showFunnelSections && !flow.funnelRequired && flow.loading && (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />
-              ))}
-            </div>
-          )}
-
-          {showFunnelSections && !flow.funnelRequired && !flow.loading && !flow.error && (
-            <>
-              {/* Passagens por etapa */}
-              {flow.data?.flow.stages.length === 0 ? (
-                <SectionEmpty message="Sem movimentações no período selecionado" />
-              ) : (
-                <div className="mb-4">
-                  {flow.data?.flow.stages.map((stage) => (
-                    <FunnelStageRow
-                      key={stage.stage_id}
-                      name={stage.stage_name}
-                      value={stage.unique_count}
-                      suffix="passaram pela etapa"
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Conversão entre etapas */}
-              {(flow.data?.conversions.conversions.length ?? 0) > 0 && (
-                <>
-                  <div className="border-t border-gray-100 pt-3 mt-1">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Conversão
-                    </h3>
-                    {flow.data?.conversions.conversions.map((c) => (
-                      <ConversionRow
-                        key={`${c.from_stage_id}-${c.to_stage_id}`}
-                        fromName={c.from_stage_name}
-                        toName={c.to_stage_name}
-                        rate={c.conversion_rate_pct}
-                        advanced={c.advanced}
-                        inSource={c.in_source}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </section>
+        <PipelineCurrentSection
+          snapshot={snapshot}
+          showFunnelSections={showFunnelSections}
+        />
+        <FunnelFlowSection
+          flow={flow}
+          showFunnelSections={showFunnelSections}
+          periodLabel={periodLabel}
+        />
       </div>
 
       {/* ── Funil Executivo (Fase 3A) — complementa o snapshot acima ────── */}
