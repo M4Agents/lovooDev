@@ -37,6 +37,8 @@ interface UseDashboardSummaryResult {
   loading: boolean
   error:   string | null
   refetch: () => void
+  /** true quando os KPIs foram filtrados por userId (seller/partner ou manager com filtro) */
+  userScoped: boolean
   /** Populado apenas quando hybridMode=true — comparação histórica do v2 */
   historicalComparison: SnapshotComparisonData | null
   /** Populado apenas quando hybridMode=true — metadados do snapshot */
@@ -58,6 +60,7 @@ export function useDashboardSummary(
   const [meta,    setMeta]    = useState<{ period: string; start_date: string; end_date: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
+  const [userScoped,           setUserScoped]           = useState(false)
   const [historicalComparison, setHistoricalComparison] = useState<SnapshotComparisonData | null>(null)
   const [snapshotMeta,         setSnapshotMeta]         = useState<ExecutiveSummaryV2SnapshotMeta | null>(null)
 
@@ -104,6 +107,7 @@ export function useDashboardSummary(
           start_date: res.meta.start_date,
           end_date:   res.meta.end_date,
         })
+        setUserScoped(res.snapshot_meta?.user_scoped ?? res.meta?.user_scoped ?? false)
         // Dados históricos — null quando comparison falhou no backend
         setHistoricalComparison(res.historical?.comparison ?? null)
         setSnapshotMeta(res.snapshot_meta)
@@ -113,6 +117,7 @@ export function useDashboardSummary(
         const res = await dashboardApi.getSummary(companyId, filters, abortRef.current.signal)
         setData(res.data)
         setMeta(res.meta)
+        setUserScoped(res.meta?.user_scoped ?? false)
         setHistoricalComparison(null)
         setSnapshotMeta(null)
       }
@@ -130,5 +135,5 @@ export function useDashboardSummary(
     return () => abortRef.current?.abort()
   }, [fetch])
 
-  return { data, meta, loading, error, refetch: fetch, historicalComparison, snapshotMeta }
+  return { data, meta, loading, error, refetch: fetch, userScoped, historicalComparison, snapshotMeta }
 }

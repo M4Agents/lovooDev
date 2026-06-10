@@ -30,6 +30,8 @@ import {
 } from '../lib/dashboard/auth.js'
 import { withTiming, logDashboardError } from '../lib/dashboard/observability.js'
 
+const MANAGER_ROLES = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
+
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
 
@@ -58,7 +60,25 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ------------------------------------------------------------------
-    // 3. Resolução do período
+    // 3. RBAC — determina effectiveUserId por role
+    // ------------------------------------------------------------------
+    const callerRole = membership.role
+    const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
+
+    let effectiveUserId: string | null = null
+
+    if (!MANAGER_ROLES.has(callerRole)) {
+      effectiveUserId = user.id
+    } else if (rawUserId) {
+      const targetMembership = await assertMembership(svc, rawUserId, companyId)
+      if (!targetMembership) {
+        jsonError(res, 403, 'Usuário selecionado não é membro ativo desta empresa'); return
+      }
+      effectiveUserId = rawUserId
+    }
+
+    // ------------------------------------------------------------------
+    // 4. Resolução do período
     // ------------------------------------------------------------------
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
@@ -73,14 +93,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ------------------------------------------------------------------
-    // 4. Métricas em paralelo (cada uma falha de forma independente)
+    // 5. Métricas em paralelo (cada uma falha de forma independente)
     // ------------------------------------------------------------------
     const ctx = { companyId, period }
 
     const [agentModeResult, funnelModeResult, execMetricsResult] = await Promise.allSettled([
-      withTiming('dashboard.summary.agent_mode',   () => detectAgentMode(svc, companyId),                        ctx),
-      withTiming('dashboard.summary.funnel_mode',  () => detectFunnelMode(svc, companyId),                       ctx),
-      withTiming('dashboard.summary.exec_metrics', () => buildExecutiveMetrics(svc, companyId, resolvedRange),    ctx),
+      withTiming('dashboard.summary.agent_mode',   () => detectAgentMode(svc, companyId),                                       ctx),
+      withTiming('dashboard.summary.funnel_mode',  () => detectFunnelMode(svc, companyId),                                      ctx),
+      withTiming('dashboard.summary.exec_metrics', () => buildExecutiveMetrics(svc, companyId, resolvedRange, effectiveUserId), ctx),
     ])
 
     const agentMode   = agentModeResult.status   === 'fulfilled' ? agentModeResult.value   : 'single-agent'
@@ -101,8 +121,10 @@ export default async function handler(req: any, res: any): Promise<void> {
       },
       meta: {
         period,
-        start_date: resolvedRange.start,
-        end_date:   resolvedRange.end,
+        start_date:  resolvedRange.start,
+        end_date:    resolvedRange.end,
+        user_id:     effectiveUserId ?? null,
+        user_scoped: effectiveUserId !== null,
       },
     })
 

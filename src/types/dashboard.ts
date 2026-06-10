@@ -97,7 +97,10 @@ export interface ExecutiveData {
 export interface SummaryResponse {
   ok:   boolean
   data: ExecutiveData
-  meta: Omit<DashboardMeta, 'funnel_id'>
+  meta: Omit<DashboardMeta, 'funnel_id'> & {
+    user_id?:     string | null
+    user_scoped?: boolean
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -874,11 +877,13 @@ export interface ExecutiveSummaryV2Response {
   ok:            boolean
   realtime:      ExecutiveSummaryV2Realtime
   historical:    ExecutiveSummaryV2Historical | null
-  snapshot_meta: ExecutiveSummaryV2SnapshotMeta
+  snapshot_meta: ExecutiveSummaryV2SnapshotMeta & { user_scoped?: boolean }
   meta: {
-    period:     string
-    start_date: string
-    end_date:   string
+    period:      string
+    start_date:  string
+    end_date:    string
+    user_id?:    string | null
+    user_scoped?: boolean
   }
 }
 

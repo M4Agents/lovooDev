@@ -42,6 +42,12 @@ interface ExecutiveSummaryProps {
   snapshotTrends?:      SnapshotTrendsData | null
   snapshotTrendPoints?: number
   comparisonMode?:      ComparisonMode
+  /**
+   * Quando true, os KPIs estão filtrados por usuário (seller/partner ou manager com filtro).
+   * Suprime DeltaBadge e Sparklines pois os snapshots históricos são sempre company-wide
+   * e comparar seller-realtime com company-snapshot geraria deltas enganosos.
+   */
+  userScoped?:      boolean
   /** Callback chamado ao clicar no KPI "Alertas críticos". Substitui drawer placeholder. */
   onAlertsClick?:   () => void
 }
@@ -80,6 +86,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   snapshotTrends,
   snapshotTrendPoints = 0,
   comparisonMode = 'wow',
+  userScoped = false,
   onAlertsClick,
 }) => {
   const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
@@ -87,9 +94,13 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   const buildDrawerFilters = (): EntityListFilters => ({
     period:   dashboardFilters.period,
     funnelId: dashboardFilters.funnelId ?? null,
+    userId:   dashboardFilters.userId ?? null,
   })
 
-  const hasSnapshot = !!snapshotComparison
+  // Desabilita deltas/sparklines quando os KPIs estão filtrados por seller:
+  // os snapshots são sempre company-wide, comparar seller-realtime com
+  // company-snapshot geraria deltas enganosos.
+  const hasSnapshot = !!snapshotComparison && !userScoped
   const periodLabel2 = getComparisonLabel(comparisonMode)
 
   // Deltas por métrica
