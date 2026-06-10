@@ -397,11 +397,8 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
       .limit(1)
       .maybeSingle();
 
-    // #region agent log
-    console.log('[DEBUG-836198][H-2] positionInFunnel opp query', JSON.stringify({leadId,funnelId,targetStageId,oppFound:!!opp,oppId:opp?.id}));
-    // #endregion
     if (opp) {
-      const { error: updateErr } = await svc
+      await svc
         .from('opportunity_funnel_positions')
         .update({
           funnel_id:        funnelId,
@@ -410,15 +407,9 @@ async function positionInFunnel(svc, leadId, funnelId, targetStageId) {
           updated_at:       new Date().toISOString(),
         })
         .eq('opportunity_id', opp.id);
-      // #region agent log
-      console.log('[DEBUG-836198][H-3] positionInFunnel update result', JSON.stringify({oppId:opp.id,updateError:updateErr?.message||null,updateCode:updateErr?.code||null}));
-      // #endregion
     }
   } catch (err) {
     console.error('[import-file] funnel positioning error:', err?.message);
-    // #region agent log
-    console.log('[DEBUG-836198][H-3] positionInFunnel exception', JSON.stringify({error:err?.message}));
-    // #endregion
   }
 }
 
@@ -491,10 +482,6 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
       } catch (err) {
         console.error('[import-file] lead reentry error:', { message: err?.message, leadId: existingLeadId });
       }
-
-      // #region agent log
-      console.log('[DEBUG-836198][H-1] duplicate positionInFunnel guard', JSON.stringify({leadFunnelId,leadStageId,existingLeadId,rawLeadFunnelName:rawLead.funnel_name,rawLeadStageName:rawLead.stage_name}));
-      // #endregion
 
       if (leadFunnelId) await positionInFunnel(svc, existingLeadId, leadFunnelId, leadStageId);
 
