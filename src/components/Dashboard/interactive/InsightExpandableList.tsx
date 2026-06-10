@@ -8,7 +8,7 @@
 // Cache via CSS hidden — sem refetch ao reabrir o mesmo card.
 // =====================================================
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
@@ -41,6 +41,7 @@ function buildFilters(insight: InsightItem, dashboardFilters: DashboardFilters):
   const base: EntityListFilters = {
     period:   dashboardFilters.period,
     funnelId: (insight.filters.funnelId as string | null | undefined) ?? dashboardFilters.funnelId ?? null,
+    userId:   dashboardFilters.userId ?? null,
     limit:    10,
     source:   'insight_inline',
   }
