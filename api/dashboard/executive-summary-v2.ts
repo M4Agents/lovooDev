@@ -47,6 +47,8 @@ import {
 }                    from '../lib/dashboard/observability.js'
 import { calcDelta } from '../lib/dashboard/deltaUtils.js'
 
+const MANAGER_ROLES = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
+
 // ---------------------------------------------------------------------------
 // getComparisonData — chama aggregate_snapshot_period × 2 e calcula deltas
 // ---------------------------------------------------------------------------
@@ -148,7 +150,23 @@ export default async function handler(req: any, res: any): Promise<void> {
     const membership = await assertMembership(svc, user.id, companyId)
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
-    // ── 3. Período realtime ──────────────────────────────────────────────────
+    // ── 3. RBAC — determina effectiveUserId por role ──────────────────────────
+    const callerRole = membership.role
+    const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
+
+    let effectiveUserId: string | null = null
+
+    if (!MANAGER_ROLES.has(callerRole)) {
+      effectiveUserId = user.id
+    } else if (rawUserId) {
+      const targetMembership = await assertMembership(svc, rawUserId, companyId)
+      if (!targetMembership) {
+        jsonError(res, 403, 'Usuário selecionado não é membro ativo desta empresa'); return
+      }
+      effectiveUserId = rawUserId
+    }
+
+    // ── 4. Período realtime ──────────────────────────────────────────────────
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
@@ -180,7 +198,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         const [agentMode, funnelMode, execMetrics] = await Promise.all([
           detectAgentMode(svc, companyId).catch(() => 'single-agent' as const),
           detectFunnelMode(svc, companyId).catch(() => 'single-funnel' as const),
-          buildExecutiveMetrics(svc, companyId, resolvedRange),
+          buildExecutiveMetrics(svc, companyId, resolvedRange, effectiveUserId),
         ])
         return { ...execMetrics, agent_mode: agentMode, funnel_mode: funnelMode }
       }, ctx),
@@ -249,11 +267,16 @@ export default async function handler(req: any, res: any): Promise<void> {
         comparison_mode: comparisonMode,
         current_period:  { from: currentFrom, to: currentTo },
         previous_period: { from: previousFrom, to: previousTo },
+        // Quando user_scoped=true, deltas históricos são suprimidos no frontend
+        // pois os snapshots não têm escopo por usuário.
+        user_scoped:     effectiveUserId !== null,
       },
       meta: {
         period,
-        start_date: resolvedRange.start,
-        end_date:   resolvedRange.end,
+        start_date:  resolvedRange.start,
+        end_date:    resolvedRange.end,
+        user_id:     effectiveUserId ?? null,
+        user_scoped: effectiveUserId !== null,
       },
     })
 

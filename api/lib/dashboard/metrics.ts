@@ -198,13 +198,83 @@ export function buildHotOpportunityFilter(
 }
 
 // ---------------------------------------------------------------------------
+// buildExecutiveMetrics — helpers internos (seller-scoped)
+// ---------------------------------------------------------------------------
+
+/** Tamanho dos lotes para queries .in() sobre lead_ids (evita URL longa no PostgREST). */
+const EXEC_BATCH_SIZE = 200
+
+/**
+ * COUNT de conversas cujos lead_ids estão em sellerLeadIds.
+ * Usa batching de EXEC_BATCH_SIZE para não estourar o limite de URL do PostgREST.
+ */
+async function countConversationsForLeads(
+  svc: SupabaseClient,
+  companyId: string,
+  resolvedRange: ResolvedRange,
+  sellerLeadIds: string[],
+): Promise<number> {
+  if (sellerLeadIds.length === 0) return 0
+  let total = 0
+  for (let i = 0; i < sellerLeadIds.length; i += EXEC_BATCH_SIZE) {
+    const batch = sellerLeadIds.slice(i, i + EXEC_BATCH_SIZE)
+    const { count, error } = await svc
+      .from('chat_conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('updated_at', resolvedRange.start)
+      .lte('updated_at', resolvedRange.end)
+      .in('lead_id', batch)
+    if (error) throw new Error(`countConversations-batch: ${error.message}`)
+    total += count ?? 0
+  }
+  return total
+}
+
+/**
+ * COUNT de oportunidades quentes cujos lead_ids estão em sellerLeadIds.
+ * Usa batching de EXEC_BATCH_SIZE para não estourar o limite de URL do PostgREST.
+ */
+async function countHotOppsForLeads(
+  svc: SupabaseClient,
+  companyId: string,
+  resolvedRange: ResolvedRange,
+  sellerLeadIds: string[],
+): Promise<number> {
+  if (sellerLeadIds.length === 0) return 0
+  let total = 0
+  for (let i = 0; i < sellerLeadIds.length; i += EXEC_BATCH_SIZE) {
+    const batch = sellerLeadIds.slice(i, i + EXEC_BATCH_SIZE)
+    const { count, error } = await svc
+      .from('opportunities')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'open')
+      .gte('probability', 70)
+      .gte('updated_at', resolvedRange.start)
+      .lte('updated_at', resolvedRange.end)
+      .in('lead_id', batch)
+    if (error) throw new Error(`countHotOpps-batch: ${error.message}`)
+    total += count ?? 0
+  }
+  return total
+}
+
+// ---------------------------------------------------------------------------
 // buildExecutiveMetrics
 // ---------------------------------------------------------------------------
 
 /**
- * KPIs executivos: 4 contagens simples em paralelo.
- * Cada query é leve (COUNT com company_id + filtro temporal).
- * Promise.allSettled garante que falha isolada retorna 0 sem quebrar o restante.
+ * KPIs executivos: 4 contagens em paralelo (visão company-wide)
+ * ou filtradas por userId (visão seller/scoped).
+ *
+ * Quando userId é fornecido:
+ *   1. Busca lead_ids do seller (responsible_user_id = userId)
+ *   2. Aplica filtro nos 3 KPIs dependentes (leads, conversations, hot_opps)
+ *   3. alerts_count usa RPC get_dashboard_alerts_count que já aceita p_user_id
+ *   4. Se seller não tiver leads → counts de leads/conversations/hot_opps = 0
+ *
+ * Batching de EXEC_BATCH_SIZE para conversations e hot_opps (evita URL longa no PostgREST).
  */
 export async function buildExecutiveMetrics(
   svc: SupabaseClient,
@@ -215,6 +285,57 @@ export async function buildExecutiveMetrics(
   if (!companyId) throw new Error('buildExecutiveMetrics: companyId é obrigatório')
   if (!resolvedRange?.start) throw new Error('buildExecutiveMetrics: resolvedRange é obrigatório')
 
+  // ── Caminho seller-scoped (userId fornecido) ──────────────────────────────
+  if (userId) {
+    // 1. Buscar lead_ids do seller (sem filtro de período — universo completo)
+    const { data: sellerLeads, error: leadsErr } = await svc
+      .from('leads')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('responsible_user_id', userId)
+      .is('deleted_at', null)
+
+    if (leadsErr) throw new Error(`buildExecutiveMetrics/seller-leads: ${leadsErr.message}`)
+
+    const sellerLeadIds = (sellerLeads ?? []).map((l: { id: string }) => l.id)
+
+    // 2. Leads no período (simples — apenas os leads do seller criados no período)
+    const leadsInPeriodQuery = svc
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('responsible_user_id', userId)
+      .gte('created_at', resolvedRange.start)
+      .lte('created_at', resolvedRange.end)
+      .is('deleted_at', null)
+
+    // 3. Todos os KPIs em paralelo usando helpers com batching quando necessário
+    const [leadsResult, convsResult, hotResult, alertsResult] = await Promise.allSettled([
+      leadsInPeriodQuery,
+      countConversationsForLeads(svc, companyId, resolvedRange, sellerLeadIds),
+      countHotOppsForLeads(svc, companyId, resolvedRange, sellerLeadIds),
+      svc.rpc('get_dashboard_alerts_count', {
+        p_company_id: companyId,
+        p_user_id:    userId,
+      }).then(({ data, error }: { data: number | null; error: unknown }) =>
+        ({ count: typeof data === 'number' ? data : null, error }),
+      ),
+    ])
+
+    const safeN = (r: PromiseSettledResult<number>) =>
+      r.status === 'fulfilled' ? r.value : 0
+    const safeCount = (r: PromiseSettledResult<{ count: number | null; error: unknown }>) =>
+      r.status === 'fulfilled' ? (r.value.count ?? 0) : 0
+
+    return {
+      leads_count:             safeCount(leadsResult  as PromiseSettledResult<{ count: number | null; error: unknown }>),
+      conversations_count:     safeN(convsResult      as PromiseSettledResult<number>),
+      hot_opportunities_count: safeN(hotResult        as PromiseSettledResult<number>),
+      alerts_count:            safeCount(alertsResult as PromiseSettledResult<{ count: number | null; error: unknown }>),
+    }
+  }
+
+  // ── Caminho company-wide (userId ausente) — comportamento original ─────────
   const [leadsResult, convsResult, alertsResult, hotResult] = await Promise.allSettled([
     // BUG-01: filtrar deleted_at IS NULL para não contar leads removidos
     svc
@@ -234,11 +355,12 @@ export async function buildExecutiveMetrics(
       .lte('updated_at', resolvedRange.end),
 
     // Fase 3A: alerts_count real via RPC get_dashboard_alerts_count
-    // SLA >= 4h + oportunidades abertas paradas > 14 dias com probability >= 60
     svc.rpc('get_dashboard_alerts_count', {
       p_company_id: companyId,
-      p_user_id:    userId ?? null,
-    }).then(({ data, error }) => ({ count: typeof data === 'number' ? data : null, error })),
+      p_user_id:    null,
+    }).then(({ data, error }: { data: number | null; error: unknown }) =>
+      ({ count: typeof data === 'number' ? data : null, error }),
+    ),
 
     // BUG-03: opportunity_funnel_positions não tem company_id; query direta em opportunities
     svc

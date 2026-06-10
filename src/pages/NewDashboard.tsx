@@ -341,6 +341,7 @@ export const NewDashboard: React.FC = () => {
           snapshotTrends={flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotTrends.data : null}
           snapshotTrendPoints={canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0}
           comparisonMode={comparisonMode}
+          userScoped={summary.userScoped}
           onAlertsClick={handleAlertsClick}
         />
       </section>
