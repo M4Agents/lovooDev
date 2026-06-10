@@ -31,6 +31,9 @@ const MAX_LIMIT             = 20
 const INLINE_DEFAULT_LIMIT  = 30
 const INLINE_MAX_LIMIT      = 30
 
+// Mesmo limite já validado em buildFunnelSnapshotMetrics (Sprint 5.9.2-B)
+const OPPS_BATCH_SIZE = 200
+
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
   if (req.method === 'OPTIONS') { res.status(204).end(); return }
@@ -134,24 +137,57 @@ export default async function handler(req: any, res: any): Promise<void> {
 
       if (status)              q = q.eq('status', status)
       if (probabilityMin !== null && !isNaN(probabilityMin)) q = q.gte('probability', probabilityMin)
-      if (allowedOppIds)       q = q.in('id', allowedOppIds)
       return q
     }
 
-    const [countResult, dataResult] = await Promise.all([
-      buildBaseQuery('id', true),
-      buildBaseQuery('id, title, probability, status, updated_at, lead_id, last_interaction_at')
-        .order('updated_at', { ascending: false })
-        .range(offset, offset + limit - 1),
-    ])
+    // Quando allowedOppIds é grande, dividir em batches para não exceder o
+    // limite de URL do PostgREST (mesmo padrão de buildFunnelSnapshotMetrics).
+    type OppRow = { id: string; title: string; probability: number; status: string; updated_at: string; lead_id: string; last_interaction_at: string | null }
 
-    if (countResult.error) throw new Error(`count: ${countResult.error.message}`)
-    if (dataResult.error)  throw new Error(`data: ${dataResult.error.message}`)
+    let opps: OppRow[] = []
+    let total = 0
 
-    const opps = (dataResult.data ?? []) as Array<{
-      id: string; title: string; probability: number; status: string; updated_at: string; lead_id: string; last_interaction_at: string | null
-    }>
-    const total = countResult.count ?? 0
+    if (!allowedOppIds) {
+      // Sem filtro de funil/etapa: query direta
+      const [countResult, dataResult] = await Promise.all([
+        buildBaseQuery('id', true),
+        buildBaseQuery('id, title, probability, status, updated_at, lead_id, last_interaction_at')
+          .order('updated_at', { ascending: false })
+          .range(offset, offset + limit - 1),
+      ])
+      if (countResult.error) throw new Error(`count: ${countResult.error.message}`)
+      if (dataResult.error)  throw new Error(`data: ${dataResult.error.message}`)
+      opps  = (dataResult.data ?? []) as OppRow[]
+      total = countResult.count ?? 0
+    } else if (allowedOppIds.length <= OPPS_BATCH_SIZE) {
+      // Lista pequena: query única com .in()
+      const [countResult, dataResult] = await Promise.all([
+        buildBaseQuery('id', true).in('id', allowedOppIds),
+        buildBaseQuery('id, title, probability, status, updated_at, lead_id, last_interaction_at')
+          .in('id', allowedOppIds)
+          .order('updated_at', { ascending: false })
+          .range(offset, offset + limit - 1),
+      ])
+      if (countResult.error) throw new Error(`count: ${countResult.error.message}`)
+      if (dataResult.error)  throw new Error(`data: ${dataResult.error.message}`)
+      opps  = (dataResult.data ?? []) as OppRow[]
+      total = countResult.count ?? 0
+    } else {
+      // Lista grande: batching para não exceder limite de URL do PostgREST
+      const allRows: OppRow[] = []
+      for (let i = 0; i < allowedOppIds.length; i += OPPS_BATCH_SIZE) {
+        const batch = allowedOppIds.slice(i, i + OPPS_BATCH_SIZE)
+        const { data, error } = await buildBaseQuery('id, title, probability, status, updated_at, lead_id, last_interaction_at')
+          .in('id', batch)
+          .order('updated_at', { ascending: false })
+        if (error) throw new Error(`data batch: ${error.message}`)
+        allRows.push(...((data ?? []) as OppRow[]))
+      }
+      // Re-ordenar globalmente e aplicar paginação manual
+      allRows.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      total = allRows.length
+      opps  = allRows.slice(offset, offset + limit)
+    }
 
     // ------------------------------------------------------------------
     // 8. Enriquecer com lead names (batch)
