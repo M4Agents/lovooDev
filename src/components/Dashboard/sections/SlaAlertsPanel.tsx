@@ -202,14 +202,17 @@ export function SlaAlertsPanel({
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-rose-500" />
-          <h3 className="text-sm font-semibold text-gray-800">Leads sem Resposta (SLA)</h3>
-          {total > 0 && (
-            <span className="text-xs bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-full font-semibold">
-              {total}
-            </span>
-          )}
+        <div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-rose-500" />
+            <h3 className="text-sm font-semibold text-gray-800">Leads sem Resposta (SLA)</h3>
+            {total > 0 && (
+              <span className="text-xs bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-full font-semibold">
+                {total}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">Lista completa de leads aguardando atendimento.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Botão da trendline — só aparece se houver dados suficientes */}
