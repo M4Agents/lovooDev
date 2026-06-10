@@ -287,12 +287,24 @@ export async function buildFunnelSnapshotMetrics(
   if (!companyId) throw new Error('buildFunnelSnapshotMetrics: companyId é obrigatório')
   if (!funnelId)  throw new Error('buildFunnelSnapshotMetrics: funnelId é obrigatório')
 
+  // #region agent log
+  console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'entry', cid: companyId.slice(0, 8), fid: funnelId.slice(0, 8), ts: Date.now() }))
+  // #endregion
+
   // 1. Etapas do funil ordenadas por posição
   const { data: stages, error: stagesErr } = await svc
     .from('funnel_stages')
     .select('id, name, position')
     .eq('funnel_id', funnelId)
     .order('position', { ascending: true })
+
+  // #region agent log
+  if (stagesErr) {
+    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'stages_failed', cid: companyId.slice(0, 8), fid: funnelId.slice(0, 8), msg: stagesErr.message, code: (stagesErr as any).code, details: (stagesErr as any).details, hint: (stagesErr as any).hint }))
+  } else {
+    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'stages_ok', fid: funnelId.slice(0, 8), count: stages?.length ?? 0 }))
+  }
+  // #endregion
 
   if (stagesErr) throw new Error(`buildFunnelSnapshotMetrics/stages: ${stagesErr.message}`)
   if (!stages || stages.length === 0) return { funnel_id: funnelId, stages: [] }
@@ -307,6 +319,14 @@ export async function buildFunnelSnapshotMetrics(
     .eq('funnel_id', funnelId)
     .limit(10_000)
 
+  // #region agent log
+  if (posErr) {
+    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'positions_failed', cid: companyId.slice(0, 8), fid: funnelId.slice(0, 8), msg: posErr.message, code: (posErr as any).code, details: (posErr as any).details, hint: (posErr as any).hint }))
+  } else {
+    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'positions_ok', fid: funnelId.slice(0, 8), count: positions?.length ?? 0 }))
+  }
+  // #endregion
+
   if (posErr) throw new Error(`buildFunnelSnapshotMetrics/positions: ${posErr.message}`)
 
   // BUG-05: buscar valor real das oportunidades para calcular total_value por etapa
@@ -320,6 +340,13 @@ export async function buildFunnelSnapshotMetrics(
       .from('opportunities')
       .select('id, value')
       .in('id', oppIds)
+    // #region agent log
+    if (oppsErr) {
+      console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'opps_values_failed', cid: companyId.slice(0, 8), fid: funnelId.slice(0, 8), oppCount: oppIds.length, msg: oppsErr.message, code: (oppsErr as any).code, details: (oppsErr as any).details, hint: (oppsErr as any).hint }))
+    } else {
+      console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'opps_values_ok', fid: funnelId.slice(0, 8), loaded: opps?.length ?? 0, requested: oppIds.length }))
+    }
+    // #endregion
     if (oppsErr) throw new Error(`buildFunnelSnapshotMetrics/opportunity_values: ${oppsErr.message}`)
     ;(opps ?? []).forEach((o: { id: string; value: number | null }) => valueMap.set(o.id, o.value ?? 0))
   }
