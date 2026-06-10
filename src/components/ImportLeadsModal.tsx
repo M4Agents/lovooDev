@@ -351,12 +351,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
             lead.status = value;
           } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
             lead.interest = value;
-          } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
-            lead.tags = value;
           } else if (lowerHeader === 'funnel_name' || lowerHeader === 'funil' || lowerHeader === 'funil_name') {
             lead.funnel_name = value;
           } else if (lowerHeader === 'stage_name' || lowerHeader === 'etapa' || lowerHeader === 'etapa_funil') {
             lead.stage_name = value;
+          } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
+            lead.tags = value;
           } else {
             lead[header] = value;
           }
@@ -550,12 +550,12 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
           lead.status = value;
         } else if (lowerHeader.includes('interesse') || lowerHeader.includes('interest')) {
           lead.interest = value;
-        } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
-          lead.tags = value;
         } else if (lowerHeader === 'funnel_name' || lowerHeader === 'funil' || lowerHeader === 'funil_name') {
           lead.funnel_name = value;
         } else if (lowerHeader === 'stage_name' || lowerHeader === 'etapa' || lowerHeader === 'etapa_funil') {
           lead.stage_name = value;
+        } else if (lowerHeader.includes('tag') || lowerHeader.includes('etiqueta')) {
+          lead.tags = value;
         } else {
           lead[header] = value;
         }
