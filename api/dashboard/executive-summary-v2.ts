@@ -248,7 +248,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ── 6. Resposta ──────────────────────────────────────────────────────────
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+    // user-scoped: dados por usuário — nunca cachear no CDN (URL é idêntica entre sellers)
+    // company-wide: cache normal de 60s
+    if (effectiveUserId !== null) {
+      res.setHeader('Cache-Control', 'private, no-store')
+    } else {
+      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+    }
 
     logEndpointCall(svc, {
       companyId,
