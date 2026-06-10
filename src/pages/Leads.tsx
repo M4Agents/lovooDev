@@ -479,12 +479,12 @@ export const Leads: React.FC = () => {
 
   const getOriginColor = (origin: string) => {
     switch (origin) {
-      case 'landing_page':          return 'bg-purple-100 text-purple-800';
-      case 'whatsapp':              return 'bg-green-100 text-green-800';
-      case 'manual':                return 'bg-blue-100 text-blue-800';
-      case 'import':                return 'bg-orange-100 text-orange-800';
-      case 'webhook_ultra_simples': return 'bg-indigo-100 text-indigo-800';
-      default:                      return 'bg-gray-100 text-gray-800';
+      case 'landing_page':          return 'text-purple-700';
+      case 'whatsapp':              return 'text-green-700';
+      case 'manual':                return 'text-blue-700';
+      case 'import':                return 'text-orange-600';
+      case 'webhook_ultra_simples': return 'text-indigo-700';
+      default:                      return 'text-gray-500';
     }
   };
 
@@ -1011,7 +1011,7 @@ export const Leads: React.FC = () => {
                   )}
                   {visibleColumns.includes('origem') && (
                     <td className="px-4 py-2 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getOriginColor(lead.origin)}`}>
+                      <span className={`text-[10px] font-medium ${getOriginColor(lead.origin)}`}>
                         {getOriginLabel(lead.origin)}
                       </span>
                     </td>
