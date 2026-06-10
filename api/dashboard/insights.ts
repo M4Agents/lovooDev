@@ -92,7 +92,7 @@ async function computeHotOpportunities(
     title:       `${count} oportunidade${count > 1 ? 's' : ''} quente${count > 1 ? 's' : ''}`,
     description: `Com probabilidade ≥ ${policies.hot_probability_threshold}% e abertas no período`,
     entityType:  'opportunities',
-    filters:     { probability_min: 70, status: 'open', funnelId: funnelId ?? undefined },
+    filters:     { probability_min: policies.hot_probability_threshold, status: 'open', funnelId: funnelId ?? undefined },
     actionLabel: 'Ver oportunidades',
   }
 }

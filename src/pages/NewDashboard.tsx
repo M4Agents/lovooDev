@@ -13,7 +13,6 @@ import { UserSelector }               from '../components/Dashboard/filters/User
 import { AlertSettingsModal }         from '../components/Dashboard/settings/AlertSettingsModal'
 import { ExecutiveSummary }           from '../components/Dashboard/sections/ExecutiveSummary'
 import { IntelligenceCentral }        from '../components/Dashboard/sections/IntelligenceCentral'
-import { ActionCenter }               from '../components/Dashboard/sections/ActionCenter'
 import { TrendsSection }              from '../components/Dashboard/sections/TrendsSection'
 import { SellerRankingSection }       from '../components/Dashboard/sections/SellerRankingSection'
 import { SlaAlertsPanel }             from '../components/Dashboard/sections/SlaAlertsPanel'
@@ -459,14 +458,6 @@ export const NewDashboard: React.FC = () => {
           companyId={companyId}
           resumeAnalysisId={resumeAnalysisId}
           onRefetchInsights={insights.refetch}
-        />
-      </section>
-
-      {/* ── Action Center ──────────────────────────────────────────────── */}
-      <section className="bg-white rounded-xl border border-gray-200 p-4">
-        <ActionCenter
-          dashboardFilters={filters}
-          periodLabel={periodLabel}
         />
       </section>
 
