@@ -578,10 +578,14 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   onToggle={() => setSla({ enabled: !form.sla.enabled })}
                 />
 
+                <p className="text-xs text-gray-500 leading-relaxed pl-1">
+                  Define quando um lead aparece nos alertas por falta de resposta humana.
+                </p>
+
                 <div className="pl-1 space-y-3">
                   <NumericField
                     label="Aparece após"
-                    hint="Lead sem resposta humana há mais de X horas."
+                    hint="Lead aparece em Alertas Prioritários e em Leads sem Resposta após este tempo sem resposta humana."
                     value={form.sla.min_hours}
                     step={0.5}
                     unit="horas"
@@ -590,7 +594,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   />
                   <NumericField
                     label="Crítico após"
-                    hint="Lead marcado como crítico após X horas. Deve ser maior que o valor acima."
+                    hint="Lead recebe badge Crítico em ambos os blocos de alerta após este tempo. Deve ser maior que o valor acima."
                     value={form.sla.critical_hours}
                     step={0.5}
                     unit="horas"
@@ -599,6 +603,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   />
                   <NumericField
                     label="Máximo de alertas exibidos"
+                    hint="Limita apenas os alertas de SLA exibidos em Alertas Prioritários."
                     value={form.sla.limit}
                     step={1}
                     unit="alertas"
@@ -626,10 +631,14 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   onToggle={() => setStalled({ enabled: !form.stalled.enabled })}
                 />
 
+                <p className="text-xs text-gray-500 leading-relaxed pl-1">
+                  Define quais oportunidades aparecem em Alertas Prioritários por falta de interação.
+                </p>
+
                 <div className="pl-1 space-y-3">
                   <NumericField
                     label="Parada há mais de"
-                    hint="Oportunidade sem interação há mais de X dias."
+                    hint="Oportunidade sem interação aparece em Alertas Prioritários e é considerada parada no Forecast Comercial."
                     value={form.stalled.idle_days}
                     step={1}
                     unit="dias"
@@ -647,6 +656,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   />
                   <NumericField
                     label="Máximo de alertas exibidos"
+                    hint="Limita apenas as oportunidades paradas exibidas em Alertas Prioritários."
                     value={form.stalled.limit}
                     step={1}
                     unit="alertas"
@@ -674,6 +684,10 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   onToggle={() => setSellerRisk({ enabled: !form.sellerRisk.enabled })}
                 />
 
+                <p className="text-xs text-gray-500 leading-relaxed pl-1">
+                  Visível apenas para gerentes e administradores na visão geral da equipe.
+                </p>
+
                 <div className="pl-1 space-y-3">
                   <NumericField
                     label="Leads aguardando há mais de"
@@ -695,6 +709,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   />
                   <NumericField
                     label="Máximo de vendedores exibidos"
+                    hint="Limita o número de vendedores listados em Alertas Prioritários."
                     value={form.sellerRisk.limit}
                     step={1}
                     unit="vendedores"

@@ -345,9 +345,12 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
     <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-5 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-amber-500" />
-          <h3 className="font-semibold text-gray-900 text-sm">Alertas Prioritários</h3>
+        <div>
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-500" />
+            <h3 className="font-semibold text-gray-900 text-sm">Alertas Prioritários</h3>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">Alertas que exigem ação imediata da operação.</p>
         </div>
         {data && (data.critical > 0 || data.high > 0) && (
           <div className="flex items-center gap-1.5">
