@@ -7,8 +7,13 @@
 // Query params:
 //   company_id  (obrigatório)
 //   period / start_date / end_date
+//   user_id     (opcional — manager+ filtra por vendedor; seller/partner ignora e usa auth.uid)
 //   page (default 1)
 //   limit (default 20, max 20)
+//
+// RBAC:
+//   seller/partner → sempre filtra por responsible_user_id = auth.uid()
+//   manager+       → company-wide quando user_id ausente; filtra pelo alvo validado quando presente
 // =====================================================
 
 import { getSupabaseAdmin }  from '../lib/automation/supabaseAdmin.js'
@@ -19,6 +24,8 @@ import {
   assertMembership,
   jsonError,
 } from '../lib/dashboard/auth.js'
+
+const MANAGER_ROLES = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT     = 20
@@ -49,7 +56,28 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ------------------------------------------------------------------
-    // 3. Período
+    // 3. RBAC — determina effectiveUserId por role
+    // ------------------------------------------------------------------
+    const callerRole = membership.role
+    const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
+
+    let effectiveUserId: string | null = null
+
+    if (!MANAGER_ROLES.has(callerRole)) {
+      // seller / partner: sempre força o próprio ID (ignora query.user_id)
+      effectiveUserId = user.id
+    } else if (rawUserId) {
+      // manager+: se user_id enviado, valida que o alvo é membro ativo
+      const targetMembership = await assertMembership(svc, rawUserId, companyId)
+      if (!targetMembership) {
+        jsonError(res, 403, 'Usuário selecionado não é membro ativo desta empresa'); return
+      }
+      effectiveUserId = rawUserId
+    }
+    // manager+ sem user_id → effectiveUserId = null → visão company-wide
+
+    // ------------------------------------------------------------------
+    // 4. Período
     // ------------------------------------------------------------------
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
@@ -60,23 +88,27 @@ export default async function handler(req: any, res: any): Promise<void> {
     catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
 
     // ------------------------------------------------------------------
-    // 4. Paginação
+    // 5. Paginação
     // ------------------------------------------------------------------
     const page  = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1)
     const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(String(req.query.limit ?? String(DEFAULT_LIMIT)), 10) || DEFAULT_LIMIT))
     const offset = (page - 1) * limit
 
     // ------------------------------------------------------------------
-    // 5. Count + dados em paralelo
+    // 6. Count + dados em paralelo
     // ------------------------------------------------------------------
     function buildBase(select: string, head = false) {
-      return svc
+      let q = svc
         .from('leads')
         .select(select, head ? { count: 'exact', head: true } : undefined)
         .eq('company_id', companyId)
         .is('deleted_at', null)
         .gte('created_at', resolvedRange.start)
         .lte('created_at', resolvedRange.end)
+
+      if (effectiveUserId) q = q.eq('responsible_user_id', effectiveUserId)
+
+      return q
     }
 
     const [countResult, dataResult] = await Promise.all([
@@ -107,10 +139,11 @@ export default async function handler(req: any, res: any): Promise<void> {
         page,
         limit,
         total,
-        has_more: offset + limit < total,
+        has_more:   offset + limit < total,
         period,
         start_date: resolvedRange.start,
         end_date:   resolvedRange.end,
+        user_id:    effectiveUserId ?? null,
       },
     })
 
