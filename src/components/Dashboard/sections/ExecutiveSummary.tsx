@@ -42,6 +42,8 @@ interface ExecutiveSummaryProps {
   snapshotTrends?:      SnapshotTrendsData | null
   snapshotTrendPoints?: number
   comparisonMode?:      ComparisonMode
+  /** Callback chamado ao clicar no KPI "Alertas críticos". Substitui drawer placeholder. */
+  onAlertsClick?:   () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   snapshotTrends,
   snapshotTrendPoints = 0,
   comparisonMode = 'wow',
+  onAlertsClick,
 }) => {
   const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
 
@@ -204,7 +207,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </SnapshotDataGuard>
         </InteractiveMetricCard>
 
-        {/* Alertas críticos */}
+        {/* Alertas críticos — clique faz scroll até PriorityAlertsSection */}
         <InteractiveMetricCard
           title="Alertas críticos"
           value={data?.alerts_count ?? 0}
@@ -213,14 +216,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           accent="red"
           emptyLabel="Sem alertas no momento"
           loading={loading}
-          onClick={() =>
-            openDrawer(
-              'alerts',
-              'Alertas críticos',
-              'Insights críticos não reconhecidos',
-              buildDrawerFilters(),
-            )
-          }
+          onClick={onAlertsClick}
         >
           {/* SLA: lower is better → queda = verde */}
           <SnapshotDataGuard dataPoints={snapshotTrendPoints} enabled={hasSnapshot}>
