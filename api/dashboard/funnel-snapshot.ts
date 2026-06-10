@@ -98,9 +98,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     // 4. Snapshot
     // ------------------------------------------------------------------
-    // #region agent log
-    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'handler_pre_build', cid: companyId.slice(0, 8), fid: effectiveFunnelId.slice(0, 8), funnelMode, ts: Date.now() }))
-    // #endregion
     const snapshot = await withTiming(
       'dashboard.funnel_snapshot',
       () => buildFunnelSnapshotMetrics(svc, companyId, effectiveFunnelId),
@@ -123,12 +120,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     })
 
   } catch (err: unknown) {
-    // #region agent log
-    const diagMsg = err instanceof Error ? err.message : String(err)
-    const diagStack = err instanceof Error ? err.stack?.split('\n').slice(0, 5).join(' | ') : undefined
-    console.error('[PIPELINE-DIAG]', JSON.stringify({ step: 'handler_catch', cid: (req.query?.company_id as string | undefined)?.slice(0, 8), fid: typeof req.query?.funnel_id === 'string' ? req.query.funnel_id.slice(0, 8) : 'none', msg: diagMsg, stack: diagStack }))
-    // #endregion
     logDashboardError('dashboard.funnel_snapshot', err, { endpoint: '/api/dashboard/funnel-snapshot', companyId: req.query?.company_id as string | undefined })
-    jsonError(res, 500, 'Erro interno do servidor')
+    jsonError(res, 500, 'Não foi possível carregar o pipeline atual.')
   }
 }
