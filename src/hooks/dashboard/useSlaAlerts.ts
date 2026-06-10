@@ -28,6 +28,7 @@ export interface HybridOptions {
 
 interface UseSlaAlertsOptions {
   userId?:     string | null
+  /** Threshold em horas. Quando ausente, o backend usa dashboard_alert_settings.sla_settings.min_minutes */
   slaHours?:   number
   limit?:      number
   hybridMode?: boolean
@@ -50,7 +51,7 @@ export function useSlaAlerts(options: UseSlaAlertsOptions = {}): UseSlaAlertsRes
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
-  const { userId = null, slaHours = 6, limit = 20, hybridMode = false } = options
+  const { userId = null, slaHours, limit = 20, hybridMode = false } = options
 
   const [data,          setData]         = useState<SlaAlertItem[]>([])
   const [meta,          setMeta]         = useState<SlaAlertsMeta | null>(null)
