@@ -31,6 +31,8 @@
 //
 // Nota: snapshots são company-wide ou por funnel — não por usuário.
 // Quando user_id ativo, o histórico retorna dados de toda a empresa/funil como contexto.
+//
+// stalled_days: lido de dashboard_alert_settings.stalled_settings.idle_minutes (fallback 14d).
 // =====================================================
 
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js'
@@ -48,8 +50,9 @@ import {
   logDashboardError,
   logHistoricalFallback,
   logEndpointCall,
-}                       from '../lib/dashboard/observability.js'
-import { calcDeltaPct } from '../lib/dashboard/deltaUtils.js'
+}                           from '../lib/dashboard/observability.js'
+import { calcDeltaPct }     from '../lib/dashboard/deltaUtils.js'
+import { STALLED_DEFAULTS } from '../lib/dashboard/alertSettingsDefaults.js'
 
 const MANAGER_ROLES = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
 
@@ -113,6 +116,17 @@ export default async function handler(req: any, res: any): Promise<void> {
       if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
     }
 
+    // 5.5. Resolver stalled_days a partir das configurações da empresa
+    //      Fonte: dashboard_alert_settings.stalled_settings.idle_minutes; fallback 14d
+    const { data: stalledSettingsRow } = await svc
+      .from('dashboard_alert_settings')
+      .select('stalled_settings')
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    const stalledSettingsDb = (stalledSettingsRow?.stalled_settings as { idle_minutes?: number } | null) ?? {}
+    const stalledDays = Math.round((stalledSettingsDb.idle_minutes ?? STALLED_DEFAULTS.idle_minutes) / 1440)
+
     // 6. Modo de comparação + períodos históricos (lib compartilhada)
     const rawMode = typeof req.query.comparison_mode === 'string'
       ? req.query.comparison_mode.trim()
@@ -135,7 +149,7 @@ export default async function handler(req: any, res: any): Promise<void> {
             p_end_date:     resolvedRange.end.split('T')[0],
             p_funnel_id:    funnelId ?? null,
             p_user_id:      effectiveUserId ?? null,
-            p_stalled_days: 14,
+            p_stalled_days: stalledDays,
           })
           if (error) throw new Error(`get_dashboard_forecast: ${error.message}`)
           return data ?? {
@@ -291,10 +305,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       },
       meta: {
         period,
-        start:     resolvedRange.start,
-        end:       resolvedRange.end,
-        funnel_id: funnelId,
-        user_id:   effectiveUserId,
+        start:            resolvedRange.start,
+        end:              resolvedRange.end,
+        funnel_id:        funnelId,
+        user_id:          effectiveUserId,
+        stalled_days_used: stalledDays,
       },
     })
 
