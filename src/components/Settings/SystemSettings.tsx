@@ -62,6 +62,11 @@ export const SystemSettings: React.FC = () => {
     company?.restrict_leads_to_owner ?? false
   )
 
+  // Restrição de visibilidade do chat por responsável
+  const [restrictChatByAssigned, setRestrictChatByAssigned] = useState(
+    company?.chat_visibility_by_assigned_to ?? false
+  )
+
   const commonTimezones = useMemo(
     () =>
       COMMON_TIMEZONE_DEFS.map((def) => ({
@@ -80,6 +85,7 @@ export const SystemSettings: React.FC = () => {
     setAlertDismissalScope(company.alert_dismissal_scope ?? 'company')
     setUseCatalogItems(company.opportunity_items_enabled ?? false)
     setRestrictLeadsToOwner(company.restrict_leads_to_owner ?? false)
+    setRestrictChatByAssigned(company.chat_visibility_by_assigned_to ?? false)
   }, [company])
 
   // Verifica suporte do plano para composição por itens (uma vez por empresa)
@@ -121,6 +127,7 @@ export const SystemSettings: React.FC = () => {
           country_code: normalizedCountry,
           opportunity_items_enabled: useCatalogItems,
           restrict_leads_to_owner: restrictLeadsToOwner,
+          chat_visibility_by_assigned_to: restrictChatByAssigned,
           updated_at: new Date().toISOString(),
         })
         .eq('id', company.id)
@@ -169,6 +176,7 @@ export const SystemSettings: React.FC = () => {
     (normalizedCountry ?? '') !== (companyCountryNorm ?? '') ||
     useCatalogItems !== (company?.opportunity_items_enabled ?? false) ||
     restrictLeadsToOwner !== (company?.restrict_leads_to_owner ?? false) ||
+    restrictChatByAssigned !== (company?.chat_visibility_by_assigned_to ?? false) ||
     (isMaster && alertDismissalScope !== (company?.alert_dismissal_scope ?? 'company'))
 
   const groupedCommonTimezones = commonTimezones.reduce((groups, tz) => {
@@ -436,9 +444,31 @@ export const SystemSettings: React.FC = () => {
             />
           </button>
         </div>
+        {/* Restrição de visibilidade do chat por responsável */}
+      <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg border mt-3">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-900">Restringir visibilidade do chat por responsável</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Quando ativado, usuários com perfil <span className="font-mono bg-gray-100 px-1 rounded">Seller</span> visualizam apenas conversas atribuídas a eles ou sem responsável definido.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setRestrictChatByAssigned(v => !v)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+            restrictChatByAssigned ? 'bg-indigo-600' : 'bg-gray-200'
+          }`}
+          role="switch"
+          aria-checked={restrictChatByAssigned}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+              restrictChatByAssigned ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
       </div>
-
-      {/* Botão Salvar */}
+    </div>
       <div className="flex gap-3">
         <button
           onClick={handleSave}
@@ -458,6 +488,7 @@ export const SystemSettings: React.FC = () => {
               setAlertDismissalScope(company?.alert_dismissal_scope ?? 'company')
               setUseCatalogItems(company?.opportunity_items_enabled ?? false)
               setRestrictLeadsToOwner(company?.restrict_leads_to_owner ?? false)
+              setRestrictChatByAssigned(company?.chat_visibility_by_assigned_to ?? false)
             }}
             className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >

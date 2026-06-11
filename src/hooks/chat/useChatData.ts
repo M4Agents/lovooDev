@@ -10,6 +10,8 @@ import { supabase } from '../../lib/supabase'
 import { useChatRealtime } from './useChatRealtime'
 import { ChatEventBus, useChatEvent } from '../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../config/chatFeatures'
+import { isConversationVisibleForUser } from '../../utils/chatVisibility'
+import type { ChatVisibilityContext } from '../../utils/chatVisibility'
 import type {
   ChatConversation,
   ConversationFilter,
@@ -23,7 +25,8 @@ import type {
 export const useChatData = (
   companyId: string,
   userId: string,
-  initialConversationId?: string
+  initialConversationId?: string,
+  visibilityContext?: ChatVisibilityContext
 ): UseChatDataReturn => {
   // Estados principais
   const [instances, setInstances] = useState<any[]>([])
@@ -128,6 +131,8 @@ export const useChatData = (
   // Listener para novas conversas criadas
   useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
     if (conversation.company_id === companyId) {
+      // Verificar visibilidade antes de adicionar à lista local
+      if (visibilityContext && !isConversationVisibleForUser(conversation, visibilityContext)) return
       setConversations(prev => {
         // Evitar duplicatas
         if (prev.some(conv => conv.id === conversation.id)) return prev
@@ -139,11 +144,26 @@ export const useChatData = (
   // Listener para conversas atualizadas
   useChatEvent('chat:conversation:updated', (payload: any) => {
     if (payload.data && payload.data.company_id === companyId) {
-      setConversations(prev => 
-        prev.map(conv => 
-          conv.id === payload.data.id ? payload.data : conv
+      const updated: ChatConversation = payload.data
+      if (visibilityContext) {
+        const visible = isConversationVisibleForUser(updated, visibilityContext)
+        setConversations(prev => {
+          const exists = prev.some(conv => conv.id === updated.id)
+          if (!visible) {
+            // Conversa deixou de ser visível (ex: atribuída a outro seller) → remover
+            return prev.filter(conv => conv.id !== updated.id)
+          }
+          if (!exists) {
+            // Conversa passou a ser visível (ex: atribuída a este seller) → adicionar
+            return [updated, ...prev]
+          }
+          return prev.map(conv => conv.id === updated.id ? updated : conv)
+        })
+      } else {
+        setConversations(prev =>
+          prev.map(conv => conv.id === updated.id ? updated : conv)
         )
-      )
+      }
     }
   }, [companyId])
 
@@ -330,24 +350,32 @@ export const useChatData = (
               // Verificar se já existe para evitar duplicatas
               const exists = prev.some(conv => conv.id === newConversation.id)
               if (exists) return prev
+              // Verificar visibilidade antes de adicionar
+              if (visibilityContext && !isConversationVisibleForUser(newConversation, visibilityContext)) return prev
               return [newConversation, ...prev]
             })
           } else if (payload.eventType === 'UPDATE') {
             // CORREÇÃO: Atualização parcial inteligente para preservar estrutura da view
-            setConversations(prev => 
-              prev.map(conv => 
-                conv.id === payload.new.id 
-                  ? { 
-                      ...conv, 
+            setConversations(prev => {
+              const updated = prev.map(conv =>
+                conv.id === payload.new.id
+                  ? {
+                      ...conv,
                       unread_count: payload.new.unread_count,
                       last_message_at: payload.new.last_message_at ? new Date(payload.new.last_message_at) : conv.last_message_at,
                       last_message_content: payload.new.last_message_content || conv.last_message_content,
                       last_message_direction: payload.new.last_message_direction || conv.last_message_direction,
+                      assigned_to: payload.new.assigned_to !== undefined
+                        ? payload.new.assigned_to
+                        : conv.assigned_to,
                       updated_at: new Date(payload.new.updated_at)
                     }
                   : conv
               )
-            )
+              // Re-aplicar filtro de visibilidade após merge (assigned_to pode ter mudado)
+              if (!visibilityContext) return updated
+              return updated.filter(conv => isConversationVisibleForUser(conv, visibilityContext))
+            })
         } else if (payload.eventType === 'DELETE') {
           const deletedId = payload.old.id
           setConversations(prev => 

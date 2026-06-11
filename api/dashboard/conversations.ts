@@ -64,6 +64,31 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ------------------------------------------------------------------
+    // 2b. Feature flag de visibilidade do chat por responsável
+    //
+    // Quando chat_visibility_by_assigned_to = true E callerRole = seller,
+    // o filtro de conversas usa chat_conversations.assigned_to em vez de
+    // leads.responsible_user_id — alinhando Dashboard ao comportamento do Chat.
+    //
+    // flag=false → caminho atual preservado (zero impacto em empresas existentes).
+    // ------------------------------------------------------------------
+    const callerRole = membership.role
+
+    let chatVisibilityFlag = false
+    {
+      const { data: companyRow } = await svc
+        .from('companies')
+        .select('chat_visibility_by_assigned_to')
+        .eq('id', companyId)
+        .single()
+      chatVisibilityFlag = companyRow?.chat_visibility_by_assigned_to === true
+    }
+
+    // useChatVisibility = true apenas para sellers na empresa com a flag ativa.
+    // partner, manager, admin, system_admin, super_admin: caminho atual.
+    const useChatVisibility = chatVisibilityFlag && callerRole === 'seller'
+
+    // ------------------------------------------------------------------
     // 3. Período
     // ------------------------------------------------------------------
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
@@ -89,7 +114,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     // 6. RBAC — determina effectiveUserId por role
     // ------------------------------------------------------------------
-    const callerRole = membership.role
     const rawUserId  = typeof req.query.user_id === 'string' ? req.query.user_id.trim() : null
 
     let effectiveUserId: string | null = null
@@ -108,9 +132,85 @@ export default async function handler(req: any, res: any): Promise<void> {
     // manager+ sem user_id → effectiveUserId = null → visão company-wide
 
     // ------------------------------------------------------------------
-    // 7. Resolve lead_ids do seller (quando effectiveUserId definido).
-    //    Necessário pois chat_conversations não tem responsible_user_id.
-    //    Usa batching de LEAD_BATCH_SIZE para evitar URL longa no PostgREST.
+    // 7a. [NOVO] Caminho via assigned_to quando flag ativa + seller
+    //
+    //    Substitui a indireção leads→lead_ids→conversations.lead_id pelo
+    //    filtro direto conversations.assigned_to = effectiveUserId.
+    //
+    //    Nota sobre assigned_to IS NULL:
+    //      O Chat exibe conversas sem responsável como visíveis ao seller,
+    //      pois representam filas disponíveis. O Dashboard, como visão de
+    //      métricas pessoais, inclui apenas as conversas efetivamente
+    //      atribuídas ao seller (assigned_to = effectiveUserId).
+    //      Conversas sem responsável não são contabilizadas no desempenho
+    //      individual do seller.
+    //
+    //    Performance: usa idx_chat_conv_company_assigned (company_id, assigned_to).
+    // ------------------------------------------------------------------
+    if (useChatVisibility && effectiveUserId !== null) {
+      function applyBaseFiltersChat(q: any) {
+        q = q.eq('company_id', companyId)
+             .gte('updated_at', resolvedRange.start)
+             .lte('updated_at', resolvedRange.end)
+             .eq('assigned_to', effectiveUserId)
+        if (aiState) q = q.eq('ai_state', aiState)
+        return q
+      }
+
+      const [countResult, dataResult] = await Promise.all([
+        applyBaseFiltersChat(
+          svc.from('chat_conversations').select('id', { count: 'exact', head: true })
+        ),
+        applyBaseFiltersChat(
+          svc.from('chat_conversations').select('id, contact_name, lead_id, ai_state, last_message_at, status, unread_count')
+        )
+          .order('last_message_at', { ascending: false, nullsFirst: false })
+          .range(offset, offset + limit - 1),
+      ])
+
+      if (countResult.error) throw new Error(`count-chat: ${countResult.error.message}`)
+      if (dataResult.error)  throw new Error(`data-chat: ${dataResult.error.message}`)
+
+      const convs = dataResult.data ?? []
+      const total = countResult.count ?? 0
+
+      const leadIds = [...new Set(convs.map((c: any) => c.lead_id).filter(Boolean))] as string[]
+      const leadMap = new Map<string, string>()
+      if (leadIds.length > 0) {
+        const { data: leads } = await svc.from('leads').select('id, name').in('id', leadIds)
+        ;(leads ?? []).forEach((l: { id: string; name: string }) => leadMap.set(l.id, l.name))
+      }
+
+      return res.status(200).json({
+        ok: true,
+        data: convs.map((c: any) => ({
+          conversation_id:  c.id,
+          lead_id:          c.lead_id ?? null,
+          lead_name:        c.contact_name || (c.lead_id ? leadMap.get(c.lead_id) : null) || '—',
+          ai_state:         c.ai_state ?? 'unknown',
+          last_message_at:  c.last_message_at ?? null,
+          status:           c.status ?? '',
+          unread_count:     c.unread_count ?? 0,
+        })),
+        meta: {
+          page,
+          limit,
+          total,
+          has_more:   offset + limit < total,
+          period,
+          start_date: resolvedRange.start,
+          end_date:   resolvedRange.end,
+          ai_state:   aiState ?? null,
+          user_id:    effectiveUserId,
+        },
+      })
+    }
+
+    // ------------------------------------------------------------------
+    // 7b. Caminho original: resolve lead_ids via responsible_user_id.
+    //     Executado quando: flag=false, ou role != seller (partner, manager+).
+    //     Inalterado — comportamento 100% preservado.
+    //     Usa batching de LEAD_BATCH_SIZE para evitar URL longa no PostgREST.
     // ------------------------------------------------------------------
     let sellerLeadIds: string[] | null = null
 

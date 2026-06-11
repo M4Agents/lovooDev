@@ -37,6 +37,8 @@ export type Company = {
   alert_dismissal_scope?: 'company' | 'user';
   /** Quando true, usuários sem view_all_leads só veem leads atribuídos a eles (enforcement via RLS) */
   restrict_leads_to_owner?: boolean;
+  /** Quando true, sellers visualizam apenas conversas de chat onde assigned_to = próprio uid ou assigned_to IS NULL */
+  chat_visibility_by_assigned_to?: boolean;
   created_at: string;
   updated_at: string;
   

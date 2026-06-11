@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { useInstagramChatData } from '../../hooks/chat/useInstagramChatData'
 import { useInstagramCommentsData } from '../../hooks/instagram/useInstagramCommentsData'
+import { useAuth } from '../../contexts/AuthContext'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
@@ -32,7 +33,15 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 }) => {
   const { t } = useTranslation('chat')
   const navigate = useNavigate()
-  const chatData = useChatData(companyId, userId, initialConversationId)
+  const { company, currentRole } = useAuth()
+
+  const visibilityContext = useMemo(() => ({
+    flag: company?.chat_visibility_by_assigned_to ?? false,
+    role: currentRole,
+    userId,
+  }), [company?.chat_visibility_by_assigned_to, currentRole, userId])
+
+  const chatData = useChatData(companyId, userId, initialConversationId, visibilityContext)
 
   // Canal ativo — persiste entre sessões com fallback seguro
   const [selectedChannel, setSelectedChannel] = useState<ChatChannel>(() => {
@@ -345,7 +354,15 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
   userId
 }) => {
   const { t } = useTranslation('chat')
-  const chatData = useChatData(companyId, userId)
+  const { company, currentRole } = useAuth()
+
+  const visibilityContext = useMemo(() => ({
+    flag: company?.chat_visibility_by_assigned_to ?? false,
+    role: currentRole,
+    userId,
+  }), [company?.chat_visibility_by_assigned_to, currentRole, userId])
+
+  const chatData = useChatData(companyId, userId, undefined, visibilityContext)
   const [activeView, setActiveView] = React.useState<'conversations' | 'chat' | 'lead'>('conversations')
   const [lockedConversation, setLockedConversation] = React.useState<ChatConversation | null>(null)
 
