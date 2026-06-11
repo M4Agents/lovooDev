@@ -77,9 +77,6 @@ export function useDashboardSummary(
       return
     }
 
-    // #region agent log 836198
-    console.log('[DBG-836198] useDashboardSummary: fetch-start', { companyId, hybridMode, filtersUserId: filters.userId })
-    // #endregion
 
     abortRef.current?.abort()
     abortRef.current = new AbortController()
@@ -96,10 +93,6 @@ export function useDashboardSummary(
           comparisonMode,
           abortRef.current.signal,
         )
-
-        // #region agent log 836198
-        console.log('[DBG-836198] useDashboardSummary: v2-response', { companyId, funnel_mode: res.realtime?.funnel_mode, agent_mode: res.realtime?.agent_mode, metaUserScoped: res.meta?.user_scoped })
-        // #endregion
 
         // Normalizar realtime para o mesmo shape de ExecutiveData
         setData({
@@ -123,9 +116,6 @@ export function useDashboardSummary(
       } else {
         // ── Modo v1: realtime puro (comportamento original) ────────────────
         const res = await dashboardApi.getSummary(companyId, filters, abortRef.current.signal)
-        // #region agent log 836198
-        console.log('[DBG-836198] useDashboardSummary: v1-response', { companyId, funnel_mode: res.data?.funnel_mode, agent_mode: res.data?.agent_mode, metaUserScoped: res.meta?.user_scoped, metaUserId: res.meta?.user_id })
-        // #endregion
         setData(res.data)
         setMeta(res.meta)
         setUserScoped(res.meta?.user_scoped ?? false)
