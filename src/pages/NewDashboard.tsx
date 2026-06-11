@@ -247,6 +247,14 @@ export const NewDashboard: React.FC = () => {
   //   - multi-funnel com funnel selecionado
   const showFunnelSections = funnelMode === 'single-funnel' || !!funnelId
 
+  // #region agent log 836198
+  useEffect(() => {
+    if (!summary.loading) {
+      console.log('[DBG-836198] NewDashboard: state-snapshot', { companyId, funnelMode, showFunnelSections, canViewTeamDashboard, summaryError: summary.error, summaryDataNull: summary.data === null })
+    }
+  }, [summary.loading, funnelMode, companyId, canViewTeamDashboard, summary.error, summary.data, showFunnelSections])
+  // #endregion
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 space-y-6">
 
