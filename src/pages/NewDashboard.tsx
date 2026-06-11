@@ -58,7 +58,14 @@ export const NewDashboard: React.FC = () => {
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
-  const { canManageConversationalAgents } = useAccessControl()
+  const {
+    canViewTeamDashboard,
+    canViewPipelineDashboard,
+    canViewFunnelExecutive,
+    canViewFunnelFlow,
+    canViewLeadOrigins,
+    canViewDashboardSettings,
+  } = useAccessControl()
 
   // Modal de configuração dos alertas
   const [alertSettingsOpen, setAlertSettingsOpen] = useState(false)
@@ -266,16 +273,18 @@ export const NewDashboard: React.FC = () => {
             />
           )}
 
-          {/* Seletor de vendedor (Fase 1) — visível apenas para manager+ */}
-          <UserSelector
-            users={dashboardUsers}
-            userId={userId}
-            onSelect={setUserId}
-            loading={usersLoading}
-          />
+          {/* Seletor de vendedor (Fase 1) — apenas para manager+ */}
+          {canViewTeamDashboard && (
+            <UserSelector
+              users={dashboardUsers}
+              userId={userId}
+              onSelect={setUserId}
+              loading={usersLoading}
+            />
+          )}
 
-          {/* Toggle WoW/MoM — visível quando qualquer funcionalidade que consuma comparisonMode estiver ativa */}
-          {(
+          {/* Toggle WoW/MoM — apenas para manager+ e quando feature flags ativas */}
+          {canViewTeamDashboard && (
             flags.snapshotDelta          ||
             flags.snapshotTrends         ||
             flags.hybridExecutiveSummary ||
@@ -310,7 +319,7 @@ export const NewDashboard: React.FC = () => {
           )}
 
           {/* Engrenagem — configurar alertas (apenas admin+) */}
-          {canManageConversationalAgents && (
+          {canViewDashboardSettings && (
             <button
               onClick={() => setAlertSettingsOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
@@ -375,18 +384,20 @@ export const NewDashboard: React.FC = () => {
         />
       </div>
 
-      {/* ── Forecast Comercial (Fase 3A) ────────────────────────────────── */}
-      <section>
-        <ForecastSection
-          data={forecast.data}
-          loading={forecast.loading}
-          error={forecast.error}
-          historicalComparison={
-            forecastHybridActive ? forecast.historicalComparison : null
-          }
-          comparisonMode={comparisonMode}
-        />
-      </section>
+      {/* ── Forecast Comercial (Fase 3A) — apenas manager+ ─────────────── */}
+      {canViewTeamDashboard && (
+        <section>
+          <ForecastSection
+            data={forecast.data}
+            loading={forecast.loading}
+            error={forecast.error}
+            historicalComparison={
+              forecastHybridActive ? forecast.historicalComparison : null
+            }
+            comparisonMode={comparisonMode}
+          />
+        </section>
+      )}
 
       {/* ── Inteligência Comercial ──────────────────────────────────────── */}
       <section>
@@ -405,7 +416,8 @@ export const NewDashboard: React.FC = () => {
       </section>
 
       {/* ── SLA + Origens (Fase 2) ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* LeadOriginsSection: apenas manager+. Quando oculto, SlaAlertsPanel ocupa largura total */}
+      <div className={`grid grid-cols-1 gap-4 ${canViewLeadOrigins ? 'lg:grid-cols-2' : ''}`}>
         <SlaAlertsPanel
           data={slaAlerts.data}
           meta={slaAlerts.meta}
@@ -417,43 +429,53 @@ export const NewDashboard: React.FC = () => {
           snapshotTrends={slaTrendSource}
           snapshotTrendPoints={slaTrendPoints}
         />
-        <LeadOriginsSection
-          data={leadOrigins.data}
-          meta={leadOrigins.meta}
-          loading={leadOrigins.loading}
-          error={leadOrigins.error}
-          onRetry={leadOrigins.refetch}
-        />
+        {canViewLeadOrigins && (
+          <LeadOriginsSection
+            data={leadOrigins.data}
+            meta={leadOrigins.meta}
+            loading={leadOrigins.loading}
+            error={leadOrigins.error}
+            onRetry={leadOrigins.refetch}
+          />
+        )}
       </div>
 
-      {/* ── Funil ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PipelineCurrentSection
-          snapshot={snapshot}
-          showFunnelSections={showFunnelSections}
-        />
-        <FunnelFlowSection
-          flow={flow}
-          showFunnelSections={showFunnelSections}
-          periodLabel={periodLabel}
-        />
-      </div>
+      {/* ── Funil — apenas manager+ ────────────────────────────────────── */}
+      {(canViewPipelineDashboard || canViewFunnelFlow) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {canViewPipelineDashboard && (
+            <PipelineCurrentSection
+              snapshot={snapshot}
+              showFunnelSections={showFunnelSections}
+            />
+          )}
+          {canViewFunnelFlow && (
+            <FunnelFlowSection
+              flow={flow}
+              showFunnelSections={showFunnelSections}
+              periodLabel={periodLabel}
+            />
+          )}
+        </div>
+      )}
 
-      {/* ── Funil Executivo (Fase 3A) — complementa o snapshot acima ────── */}
-      <section>
-        <FunnelExecutiveSection
-          stages={funnelExecutive.data?.stages ?? null}
-          loading={funnelExecutive.loading}
-          error={funnelExecutive.error}
-          funnelRequired={funnelExecutive.funnelRequired}
-          stageDeltasMap={
-            funnelExecHybridActive && funnelExecutive.stageDeltasMap.size > 0
-              ? funnelExecutive.stageDeltasMap
-              : undefined
-          }
-          comparisonMode={comparisonMode}
-        />
-      </section>
+      {/* ── Funil Executivo (Fase 3A) — apenas manager+ ─────────────────── */}
+      {canViewFunnelExecutive && (
+        <section>
+          <FunnelExecutiveSection
+            stages={funnelExecutive.data?.stages ?? null}
+            loading={funnelExecutive.loading}
+            error={funnelExecutive.error}
+            funnelRequired={funnelExecutive.funnelRequired}
+            stageDeltasMap={
+              funnelExecHybridActive && funnelExecutive.stageDeltasMap.size > 0
+                ? funnelExecutive.stageDeltasMap
+                : undefined
+            }
+            comparisonMode={comparisonMode}
+          />
+        </section>
+      )}
 
       {/* ── Modo do sistema (debug — remover antes de produção) ─────────── */}
       {import.meta.env.DEV && summary.data && (

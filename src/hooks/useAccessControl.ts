@@ -175,6 +175,28 @@ export function useAccessControl() {
   const canViewAllLeads = hasPermission('view_all_leads')
   const canEditAllLeads = hasPermission('edit_all_leads')
 
+  // ── Dashboard — visibilidade de blocos por role ────────────
+  // Partner NÃO incluído: acesso depende de empresas atribuídas,
+  // não é um manager operacional da empresa.
+  const canViewTeamDashboard =
+    currentRole === 'manager'      ||
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
+  const canViewPipelineDashboard = canViewTeamDashboard
+  const canViewFunnelExecutive   = canViewTeamDashboard
+  const canViewFunnelFlow        = canViewTeamDashboard
+  const canViewLeadOrigins       = canViewTeamDashboard
+
+  // Configuração de alertas: admin+ e impersonação
+  const canViewDashboardSettings =
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
   return {
     // Identidade
     isSaaSAdmin,
@@ -240,5 +262,13 @@ export function useAccessControl() {
     // Integração Instagram
     canManageInstagramIntegration,
     canConnectInstagram,
+
+    // Dashboard — visibilidade de blocos por role
+    canViewTeamDashboard,
+    canViewPipelineDashboard,
+    canViewFunnelExecutive,
+    canViewFunnelFlow,
+    canViewLeadOrigins,
+    canViewDashboardSettings,
   }
 }
