@@ -17,6 +17,7 @@ import type {
 export interface HybridOptions {
   hybridMode:     boolean
   comparisonMode: ComparisonMode
+  enabled?:       boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ export function useDashboardForecast(
 
   const hybridMode     = hybridOpts?.hybridMode     ?? false
   const comparisonMode = hybridOpts?.comparisonMode ?? 'wow'
+  const enabled        = hybridOpts?.enabled        ?? true
 
   const [data, setData]       = useState<ForecastData | null>(null)
   const [meta, setMeta]       = useState<ForecastMeta | null>(null)
@@ -61,6 +63,7 @@ export function useDashboardForecast(
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(async () => {
+    if (!enabled) return
     if (!companyId) return
 
     abortRef.current?.abort()
@@ -105,6 +108,7 @@ export function useDashboardForecast(
       setLoading(false)
     }
   }, [
+    enabled,
     companyId,
     filters.period,
     filters.funnelId,
