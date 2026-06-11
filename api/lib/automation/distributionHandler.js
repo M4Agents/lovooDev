@@ -113,6 +113,22 @@ export async function executeDistribution(node, context, supabase) {
       assignmentErrors.push(`lead ${context.leadId}: ${leadError.message}`)
     } else {
       assignedLead = true
+
+      // [chat-sync] Propagar responsible_user_id para conversas do lead.
+      // Falha não-fatal: segue o mesmo padrão de isolamento do distributionHandler.
+      try {
+        const { data: syncCount, error: syncError } = await supabase.rpc(
+          'sync_lead_responsible_to_conversations',
+          { p_lead_id: Number(context.leadId), p_responsible_user_id: selectedUserId }
+        )
+        if (syncError) {
+          console.warn(`[chat-sync] lead=${context.leadId} responsible=${selectedUserId} error=${syncError.message}`)
+        } else {
+          console.log(`[chat-sync] lead=${context.leadId} responsible=${selectedUserId} updated_conversations=${syncCount ?? 0}`)
+        }
+      } catch (syncErr) {
+        console.warn(`[chat-sync] lead=${context.leadId} responsible=${selectedUserId} exception=${syncErr?.message}`)
+      }
     }
   }
 

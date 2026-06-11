@@ -870,7 +870,24 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         }
         
         await api.updateLead(currentLeadId, updateData)
-        
+
+        // [chat-sync] Fire-and-forget: propagar responsável para conversas do lead.
+        // Não bloqueia UX, nunca lança erro, nunca chega ao catch principal.
+        const normalizedResponsibleId =
+          newResponsibleId && newResponsibleId.trim() !== '' ? newResponsibleId : null
+
+        if (normalizedResponsibleId) {
+          supabase.auth.getSession().then(({ data: sessionData }) => {
+            const syncToken = sessionData.session?.access_token
+            if (!syncToken) return
+            fetch('/api/leads/sync-chat-assignment', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
+              body:    JSON.stringify({ leadId: currentLeadId, responsibleUserId: normalizedResponsibleId }),
+            }).catch(() => {})
+          }).catch(() => {})
+        }
+
         // Atualizar estado local
         setCurrentResponsibleId(newResponsibleId)
         

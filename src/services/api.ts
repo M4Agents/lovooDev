@@ -1895,21 +1895,24 @@ export const api = {
   async bulkAssignLeads(
     leadIds: number[],
     responsibleUserId: string | null,
-    companyId: string
+    // companyId mantido na assinatura para compatibilidade com callers existentes,
+    // mas o backend resolve company_id pelos leads (não confia no payload)
+    _companyId: string
   ): Promise<{ updated: number; requested: number }> {
-    const MAX_BULK_ASSIGN = 200;
     if (leadIds.length === 0) return { updated: 0, requested: 0 };
-    const deduped = Array.from(new Set(leadIds));
-    if (deduped.length > MAX_BULK_ASSIGN) {
-      throw new Error(`Máximo de ${MAX_BULK_ASSIGN} leads por operação.`);
-    }
-    const { data, error } = await supabase
-      .from('leads')
-      .update({ responsible_user_id: responsibleUserId })
-      .in('id', deduped)
-      .eq('company_id', companyId)
-      .select('id');
-    if (error) throw error;
-    return { updated: (data ?? []).length, requested: deduped.length };
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
+
+    const res = await fetch('/api/leads/bulk-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ leadIds, responsibleUserId }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error ?? 'Erro ao atribuir responsável');
+    return { updated: json.updated, requested: json.requested };
   },
 };

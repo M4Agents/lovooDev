@@ -461,6 +461,23 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
         console.error('[import-file] responsible_user update error:', respErr.message);
         return { responsibleAssigned: 0, responsibleNotFound: 0, responsibleUpdateError: 1 };
       }
+
+      // [chat-sync] Propagar responsible_user_id para conversas do lead.
+      // Não-fatal: nunca interrompe a importação.
+      try {
+        const { data: syncCount, error: syncError } = await svc.rpc(
+          'sync_lead_responsible_to_conversations',
+          { p_lead_id: Number(leadId), p_responsible_user_id: userId }
+        );
+        if (syncError) {
+          console.warn(`[chat-sync] import lead=${leadId} responsible=${userId} error=${syncError.message}`);
+        } else {
+          console.log(`[chat-sync] import lead=${leadId} responsible=${userId} updated_conversations=${syncCount ?? 0}`);
+        }
+      } catch (syncErr) {
+        console.warn(`[chat-sync] import lead=${leadId} responsible=${userId} exception=${syncErr?.message}`);
+      }
+
       return { responsibleAssigned: 1, responsibleNotFound: 0, responsibleUpdateError: 0 };
     };
 

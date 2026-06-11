@@ -120,6 +120,23 @@ async function assignLeadOwner(config, context, supabase) {
     .eq('company_id', context.companyId)
 
   if (error) throw new Error(`Erro ao atribuir responsável ao lead: ${error.message}`)
+
+  // [chat-sync] Propagar responsible_user_id para conversas do lead.
+  // Falha não-fatal: nunca interrompe a atribuição do lead.
+  try {
+    const { data: syncCount, error: syncError } = await supabase.rpc(
+      'sync_lead_responsible_to_conversations',
+      { p_lead_id: Number(leadId), p_responsible_user_id: ownerId }
+    )
+    if (syncError) {
+      console.warn(`[chat-sync] lead=${leadId} responsible=${ownerId} error=${syncError.message}`)
+    } else {
+      console.log(`[chat-sync] lead=${leadId} responsible=${ownerId} updated_conversations=${syncCount ?? 0}`)
+    }
+  } catch (syncErr) {
+    console.warn(`[chat-sync] lead=${leadId} responsible=${ownerId} exception=${syncErr?.message}`)
+  }
+
   return { executed: true, action: 'assign_lead_owner', leadId, ownerId }
 }
 
