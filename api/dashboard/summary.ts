@@ -97,10 +97,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     const ctx = { companyId, period }
 
-    // #region agent log 836198
-    console.log('[DBG-836198] summary.ts: request-params', { companyId, callerRole, effectiveUserId })
-    // #endregion
-
     const [agentModeResult, funnelModeResult, execMetricsResult] = await Promise.allSettled([
       withTiming('dashboard.summary.agent_mode',   () => detectAgentMode(svc, companyId),                                       ctx),
       withTiming('dashboard.summary.funnel_mode',  () => detectFunnelMode(svc, companyId),                                      ctx),
@@ -111,9 +107,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     const funnelMode  = funnelModeResult.status  === 'fulfilled' ? funnelModeResult.value  : 'single-funnel'
     const execMetrics = execMetricsResult.status === 'fulfilled' ? execMetricsResult.value : { leads_count: 0, conversations_count: 0, hot_opportunities_count: 0, alerts_count: 0 }
 
-    // #region agent log 836198
-    console.log('[DBG-836198] summary.ts: result', { companyId, funnelMode, funnelModeStatus: funnelModeResult.status, funnelModeError: funnelModeResult.status === 'rejected' ? (funnelModeResult as any).reason?.message : null })
-    // #endregion
 
     // ------------------------------------------------------------------
     // 5. Resposta
