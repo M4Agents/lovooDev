@@ -275,13 +275,14 @@ export const NewDashboard: React.FC = () => {
             onPeriodChange={setPeriod}
           />
 
-          {/* Seletor de funil — só renderiza quando há múltiplos funis */}
-          {funnelMode === 'multi-funnel' && (
-            <FunnelSelector
-              funnelId={funnelId}
-              onSelect={setFunnelId}
-            />
-          )}
+          {/* Seletor de funil — renderiza sempre para auto-selecionar em single-funnel.
+               O componente retorna null quando funnels.length <= 1 (invisível),
+               mas seu useEffect popula funnelId automaticamente, permitindo que
+               useFunnelFlow carregue mesmo sem interação do usuário. */}
+          <FunnelSelector
+            funnelId={funnelId}
+            onSelect={setFunnelId}
+          />
 
           {/* Seletor de vendedor (Fase 1) — apenas para manager+ */}
           {canViewTeamDashboard && (
