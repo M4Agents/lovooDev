@@ -25,6 +25,7 @@ interface UseFunnelSnapshotResult {
 export function useFunnelSnapshot(
   funnelId?: string | null,
   funnelMode?: 'single-funnel' | 'multi-funnel',
+  enabled = true,
 ): UseFunnelSnapshotResult {
   const { company } = useAuth()
   const companyId = company?.id ?? null
@@ -40,6 +41,7 @@ export function useFunnelSnapshot(
   const funnelRequired = funnelMode === 'multi-funnel' && !funnelId
 
   const load = useCallback(async () => {
+    if (!enabled) return
     if (!companyId) return
     if (funnelMode === 'multi-funnel' && !funnelId) return
 
@@ -59,20 +61,21 @@ export function useFunnelSnapshot(
     } finally {
       setLoading(false)
     }
-  }, [companyId, funnelId, funnelMode])
+  }, [enabled, companyId, funnelId, funnelMode])
 
   useEffect(() => {
-    // Limpa dados quando entra em estado de "funil obrigatório"
-    if (funnelRequired) {
+    // Limpa dados quando funil obrigatório ausente ou bloco desabilitado por role
+    if (funnelRequired || !enabled) {
       setData(null)
       setMeta(null)
       setError(null)
+      setLoading(false)
       return
     }
 
     void load()
     return () => abortRef.current?.abort()
-  }, [load, funnelRequired])
+  }, [load, funnelRequired, enabled])
 
   return { data, meta, loading, error, funnelRequired, refetch: load }
 }

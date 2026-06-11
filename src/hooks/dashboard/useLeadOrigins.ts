@@ -16,7 +16,7 @@ interface UseLeadOriginsResult {
   refetch: () => void
 }
 
-export function useLeadOrigins(filters: DashboardFilters): UseLeadOriginsResult {
+export function useLeadOrigins(filters: DashboardFilters, enabled = true): UseLeadOriginsResult {
   const { company } = useAuth()
   const companyId = company?.id ?? null
 
@@ -28,6 +28,7 @@ export function useLeadOrigins(filters: DashboardFilters): UseLeadOriginsResult 
   const abortRef = useRef<AbortController | null>(null)
 
   const fetchData = useCallback(async () => {
+    if (!enabled) return
     if (!companyId) return
 
     if (filters.period.type === 'custom' && (!filters.period.startDate || !filters.period.endDate)) {
@@ -50,7 +51,7 @@ export function useLeadOrigins(filters: DashboardFilters): UseLeadOriginsResult 
     } finally {
       setLoading(false)
     }
-  }, [companyId, filters])
+  }, [enabled, companyId, filters])
 
   useEffect(() => {
     void fetchData()

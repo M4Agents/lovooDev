@@ -22,7 +22,8 @@ interface UseFunnelFlowResult {
 
 export function useFunnelFlow(
   funnelId: string | null | undefined,
-  filters: DashboardFilters,
+  filters:  DashboardFilters,
+  enabled = true,
 ): UseFunnelFlowResult {
   const { company } = useAuth()
   const companyId = company?.id ?? null
@@ -38,6 +39,7 @@ export function useFunnelFlow(
   const funnelRequired = !funnelId
 
   const fetch = useCallback(async () => {
+    if (!enabled) return
     if (!companyId || !funnelId) return
 
     // Período custom sem datas completas: aguardar
@@ -61,20 +63,21 @@ export function useFunnelFlow(
     } finally {
       setLoading(false)
     }
-  }, [companyId, funnelId, filters])
+  }, [enabled, companyId, funnelId, filters])
 
   useEffect(() => {
-    // Limpa dados anteriores quando funnelId some
-    if (!funnelId) {
+    // Limpa dados quando funnelId ausente ou bloco desabilitado por role
+    if (!funnelId || !enabled) {
       setData(null)
       setMeta(null)
       setError(null)
+      setLoading(false)
       return
     }
 
     void fetch()
     return () => abortRef.current?.abort()
-  }, [fetch, funnelId])
+  }, [fetch, funnelId, enabled])
 
   return { data, meta, loading, error, funnelRequired, refetch: fetch }
 }

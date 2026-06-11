@@ -17,6 +17,7 @@ import type {
 export interface HybridOptions {
   hybridMode:     boolean
   comparisonMode: ComparisonMode
+  enabled?:       boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ export function useFunnelExecutive(
 
   const hybridMode     = hybridOpts?.hybridMode     ?? false
   const comparisonMode = hybridOpts?.comparisonMode ?? 'wow'
+  const enabled        = hybridOpts?.enabled        ?? true
 
   const [data, setData]       = useState<FunnelExecutiveData | null>(null)
   const [meta, setMeta]       = useState<FunnelExecutiveMeta | null>(null)
@@ -66,6 +68,7 @@ export function useFunnelExecutive(
   const funnelRequired = funnelMode === 'multi-funnel' && !funnelId
 
   const load = useCallback(async () => {
+    if (!enabled) return
     if (!companyId) return
     if (funnelMode === 'multi-funnel' && !funnelId) return
 
@@ -114,6 +117,7 @@ export function useFunnelExecutive(
       setLoading(false)
     }
   }, [
+    enabled,
     companyId,
     funnelId,
     funnelMode,
@@ -122,10 +126,12 @@ export function useFunnelExecutive(
   ])
 
   useEffect(() => {
-    if (funnelRequired) {
+    // Limpa dados quando funil obrigatório ausente ou bloco desabilitado por role
+    if (funnelRequired || !enabled) {
       setData(null)
       setMeta(null)
       setError(null)
+      setLoading(false)
       setStageDeltasMap(new Map())
       setSnapshotMeta(null)
       return
@@ -133,7 +139,7 @@ export function useFunnelExecutive(
 
     void load()
     return () => abortRef.current?.abort()
-  }, [load, funnelRequired])
+  }, [load, funnelRequired, enabled])
 
   return {
     data,

@@ -125,7 +125,7 @@ export const NewDashboard: React.FC = () => {
     userId:     userId ?? undefined,
     hybridMode: slaHybridActive,
   })
-  const leadOrigins   = useLeadOrigins(filters)
+  const leadOrigins   = useLeadOrigins(filters, canViewLeadOrigins)
 
   // FASE 4.2 Sprint 2 — v2 ativo apenas quando flag ligada E tenant elegível
   const hybridModeActive = flags.hybridExecutiveSummary && canUseSnapshots
@@ -143,6 +143,7 @@ export const NewDashboard: React.FC = () => {
   const forecast        = useDashboardForecast(filters, {
     hybridMode:     forecastHybridActive,
     comparisonMode,
+    enabled:        canViewTeamDashboard,
   })
   const priorityAlerts  = usePriorityAlerts(userId)
   // hybridMode=true → chama funnel-executive-v2 (realtime + deltas por etapa num único request)
@@ -150,6 +151,7 @@ export const NewDashboard: React.FC = () => {
   const funnelExecutive = useFunnelExecutive(funnelId, funnelMode, {
     hybridMode:     funnelExecHybridActive,
     comparisonMode,
+    enabled:        canViewFunnelExecutive,
   })
 
   // Lê ?resume_analysis da URL (pós-checkout de créditos para retomada de análise de IA)
@@ -169,8 +171,8 @@ export const NewDashboard: React.FC = () => {
   }, [])
 
   // Passa funnelMode para useFunnelSnapshot evitar request sem funnelId em multi-funnel
-  const snapshot = useFunnelSnapshot(funnelId, funnelMode)
-  const flow     = useFunnelFlow(funnelId, filters)
+  const snapshot = useFunnelSnapshot(funnelId, funnelMode, canViewPipelineDashboard)
+  const flow     = useFunnelFlow(funnelId, filters, canViewFunnelFlow)
 
   // Âncora de scroll: KPI "Alertas Críticos" → PriorityAlertsSection
   const priorityAlertsSectionRef = useRef<HTMLElement>(null)
