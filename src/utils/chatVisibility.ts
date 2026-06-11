@@ -17,11 +17,14 @@ export interface ChatVisibilityContext {
  * Determina se uma conversa deve ser visível para o usuário no cliente.
  *
  * Regras (espelho client-side do helper SQL auth_chat_visibility_restricted):
- *   - flag = false  → sempre visível (comportamento atual preservado)
- *   - role != seller → sempre visível (admin, manager, system_admin, super_admin, partner)
+ *   - flag = false       → sempre visível (comportamento atual preservado)
+ *   - role != seller     → sempre visível (admin, manager, system_admin, super_admin, partner)
  *   - assigned_to === userId → visível (própria conversa)
- *   - assigned_to === null   → visível (sem responsável)
+ *   - assigned_to === null   → invisível para seller (conversa sem responsável)
  *   - caso contrário         → invisível (conversa de outro seller)
+ *
+ * Regra de negócio: seller com flag ativa vê SOMENTE conversas atribuídas a ele.
+ * Conversas sem assigned_to (IS NULL) são visíveis apenas para admin/manager e superiores.
  *
  * Esta função é EXCLUSIVAMENTE para UX (evitar itens fantasma no estado local).
  * A segurança real é garantida pelo banco (RLS + guards nas RPCs).
@@ -34,8 +37,8 @@ export function isConversationVisibleForUser(
   if (role !== 'seller') return true
 
   const assignedId = conversation.assigned_to?.id ?? null
-  if (assignedId === null) return true
   if (assignedId === userId) return true
 
+  // assigned_to IS NULL ou assigned_to de outro seller → invisível para seller restrito
   return false
 }
