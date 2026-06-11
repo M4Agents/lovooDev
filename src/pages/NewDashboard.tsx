@@ -340,7 +340,7 @@ export const NewDashboard: React.FC = () => {
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'operation' && (<>
 
-      {/* ── KPIs executivos ────────────────────────────────────────────── */}
+      {/* ── 1. KPIs executivos ─────────────────────────────────────────── */}
       <section>
         <ExecutiveSummary
           data={summary.data}
@@ -357,17 +357,61 @@ export const NewDashboard: React.FC = () => {
         />
       </section>
 
-      {/* ── Alertas Prioritários (Fase 3A) — onde agir agora ───────────── */}
-      <section ref={priorityAlertsSectionRef}>
-        <PriorityAlertsSection
-          data={priorityAlerts.data}
-          loading={priorityAlerts.loading}
-          error={priorityAlerts.error}
+      {/* ── 2. Inteligência Comercial ───────────────────────────────────── */}
+      <section>
+        <IntelligenceCentral
+          data={insights.data}
+          loading={insights.loading}
+          error={insights.error}
+          canCustomize={insights.canCustomize}
+          canAiAnalysis={insights.canAiAnalysis}
+          dashboardFilters={filters}
+          periodLabel={periodLabel}
           companyId={companyId}
+          resumeAnalysisId={resumeAnalysisId}
+          onRefetchInsights={insights.refetch}
         />
       </section>
 
-      {/* ── Inbound por Dia + Ranking Comercial (lado a lado) ──────────── */}
+      {/* ── 3–5. Ações Urgentes ─────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-gray-800">Ações Urgentes</h2>
+
+        <section ref={priorityAlertsSectionRef}>
+          <PriorityAlertsSection
+            data={priorityAlerts.data}
+            loading={priorityAlerts.loading}
+            error={priorityAlerts.error}
+            companyId={companyId}
+          />
+        </section>
+
+        {/* LeadOriginsSection: apenas manager+. Quando oculto, SlaAlertsPanel ocupa largura total */}
+        <div className={`grid grid-cols-1 gap-4 ${canViewLeadOrigins ? 'lg:grid-cols-2' : ''}`}>
+          <SlaAlertsPanel
+            data={slaAlerts.data}
+            meta={slaAlerts.meta}
+            loading={slaAlerts.loading}
+            error={slaAlerts.error}
+            companyId={companyId}
+            onRetry={slaAlerts.refetch}
+            onLoadMore={slaAlerts.loadMore}
+            snapshotTrends={slaTrendSource}
+            snapshotTrendPoints={slaTrendPoints}
+          />
+          {canViewLeadOrigins && (
+            <LeadOriginsSection
+              data={leadOrigins.data}
+              meta={leadOrigins.meta}
+              loading={leadOrigins.loading}
+              error={leadOrigins.error}
+              onRetry={leadOrigins.refetch}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── 6. Inbound por Dia + Ranking Comercial ──────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TrendsSection
           data={trends.data}
@@ -386,9 +430,11 @@ export const NewDashboard: React.FC = () => {
         />
       </div>
 
-      {/* ── Forecast Comercial (Fase 3A) — apenas manager+ ─────────────── */}
+      {/* ── 7–10. Pipeline Comercial — apenas manager+ ──────────────────── */}
       {canViewTeamDashboard && (
-        <section>
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-gray-800">Pipeline Comercial</h2>
+
           <ForecastSection
             data={forecast.data}
             loading={forecast.loading}
@@ -398,85 +444,40 @@ export const NewDashboard: React.FC = () => {
             }
             comparisonMode={comparisonMode}
           />
-        </section>
-      )}
 
-      {/* ── Inteligência Comercial ──────────────────────────────────────── */}
-      <section>
-        <IntelligenceCentral
-          data={insights.data}
-          loading={insights.loading}
-          error={insights.error}
-          canCustomize={insights.canCustomize}
-          canAiAnalysis={insights.canAiAnalysis}
-          dashboardFilters={filters}
-          periodLabel={periodLabel}
-          companyId={companyId}
-          resumeAnalysisId={resumeAnalysisId}
-          onRefetchInsights={insights.refetch}
-        />
-      </section>
-
-      {/* ── SLA + Origens (Fase 2) ──────────────────────────────────────── */}
-      {/* LeadOriginsSection: apenas manager+. Quando oculto, SlaAlertsPanel ocupa largura total */}
-      <div className={`grid grid-cols-1 gap-4 ${canViewLeadOrigins ? 'lg:grid-cols-2' : ''}`}>
-        <SlaAlertsPanel
-          data={slaAlerts.data}
-          meta={slaAlerts.meta}
-          loading={slaAlerts.loading}
-          error={slaAlerts.error}
-          companyId={companyId}
-          onRetry={slaAlerts.refetch}
-          onLoadMore={slaAlerts.loadMore}
-          snapshotTrends={slaTrendSource}
-          snapshotTrendPoints={slaTrendPoints}
-        />
-        {canViewLeadOrigins && (
-          <LeadOriginsSection
-            data={leadOrigins.data}
-            meta={leadOrigins.meta}
-            loading={leadOrigins.loading}
-            error={leadOrigins.error}
-            onRetry={leadOrigins.refetch}
-          />
-        )}
-      </div>
-
-      {/* ── Funil — apenas manager+ ────────────────────────────────────── */}
-      {(canViewPipelineDashboard || canViewFunnelFlow) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {canViewPipelineDashboard && (
-            <PipelineCurrentSection
-              snapshot={snapshot}
-              showFunnelSections={showFunnelSections}
-            />
+          {(canViewPipelineDashboard || canViewFunnelFlow) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {canViewPipelineDashboard && (
+                <PipelineCurrentSection
+                  snapshot={snapshot}
+                  showFunnelSections={showFunnelSections}
+                />
+              )}
+              {canViewFunnelFlow && (
+                <FunnelFlowSection
+                  flow={flow}
+                  showFunnelSections={showFunnelSections}
+                  periodLabel={periodLabel}
+                />
+              )}
+            </div>
           )}
-          {canViewFunnelFlow && (
-            <FunnelFlowSection
-              flow={flow}
-              showFunnelSections={showFunnelSections}
-              periodLabel={periodLabel}
+
+          {canViewFunnelExecutive && (
+            <FunnelExecutiveSection
+              stages={funnelExecutive.data?.stages ?? null}
+              loading={funnelExecutive.loading}
+              error={funnelExecutive.error}
+              funnelRequired={funnelExecutive.funnelRequired}
+              stageDeltasMap={
+                funnelExecHybridActive && funnelExecutive.stageDeltasMap.size > 0
+                  ? funnelExecutive.stageDeltasMap
+                  : undefined
+              }
+              comparisonMode={comparisonMode}
             />
           )}
         </div>
-      )}
-
-      {/* ── Funil Executivo (Fase 3A) — apenas manager+ ─────────────────── */}
-      {canViewFunnelExecutive && (
-        <section>
-          <FunnelExecutiveSection
-            stages={funnelExecutive.data?.stages ?? null}
-            loading={funnelExecutive.loading}
-            error={funnelExecutive.error}
-            funnelRequired={funnelExecutive.funnelRequired}
-            stageDeltasMap={
-              funnelExecHybridActive && funnelExecutive.stageDeltasMap.size > 0
-                ? funnelExecutive.stageDeltasMap
-                : undefined
-            }
-            comparisonMode={comparisonMode}
-          />
-        </section>
       )}
 
       {/* ── Modo do sistema (debug — remover antes de produção) ─────────── */}
