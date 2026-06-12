@@ -107,6 +107,41 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── 3b. Atalho de atualização direta para admins da plataforma ────────────
+  // Quando isParentUser = true (super_admin/system_admin agindo em nome da empresa),
+  // não há fluxo de pagamento — o plano é atribuído diretamente, sem Stripe.
+  // Isso cobre empresas is_free = true e qualquer empresa sem stripe_subscription_id.
+  if (isParentUser) {
+    const rpcResult = await svc.rpc('admin_set_company_plan', {
+      p_actor_user_id: userId,
+      p_company_id:    effectiveCompanyId,
+      p_plan_id:       to_plan_id,
+    })
+
+    if (rpcResult.error) {
+      console.error('[POST /api/stripe/plans/checkout] admin_set_company_plan error:', rpcResult.error.message)
+      return res.status(500).json({ error: 'Erro ao atualizar plano' })
+    }
+
+    if (!rpcResult.data?.success) {
+      const errCode = rpcResult.data?.error ?? 'unknown_error'
+      const STATUS_MAP: Record<string, number> = {
+        already_on_this_plan:   400,
+        has_stripe_subscription: 422,
+        plan_not_found:         422,
+        company_not_found:      404,
+        forbidden:              403,
+      }
+      return res.status(STATUS_MAP[errCode] ?? 400).json({ error: errCode })
+    }
+
+    console.log('[POST /api/stripe/plans/checkout] admin direct update:', {
+      company: effectiveCompanyId, plan: to_plan_id, by: userId,
+    })
+
+    return res.status(200).json({ direct_update: true, plan_name: rpcResult.data.plan_name })
+  }
+
   try {
     // Instância Stripe inicializada cedo para uso tanto na validação de PCR stale
     // quanto na criação da Checkout Session (passos 8 e 9).

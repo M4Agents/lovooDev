@@ -435,6 +435,13 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
           return
         }
 
+        if (json.direct_update) {
+          setSelectedPlan(null)
+          setActionSuccess(`Plano ${json.plan_name ?? ''} atribuído com sucesso.`.trim())
+          refetchAll()
+          return
+        }
+
         if (json.checkout_url) {
           window.location.href = json.checkout_url
         }
