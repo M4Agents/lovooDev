@@ -95,27 +95,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── 6. Sync (apenas quando responsibleUserId não for null) ─────────────────
+  // ── 6. Sync — sempre executado (null = limpar assigned_to) ─────────────────
+  // Helper v2 aceita null: limpa assigned_to em todas as conversas do lead
   let conversationsSynced = 0
 
-  if (resolvedResponsibleId !== null) {
-    try {
-      const { data: syncCount, error: syncError } = await svc.rpc(
-        'sync_lead_responsible_to_conversations',
-        {
-          p_lead_id:            leadId as number,
-          p_responsible_user_id: resolvedResponsibleId,
-        }
-      )
-      if (syncError) {
-        console.warn(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId} error=${syncError.message}`)
-      } else {
-        conversationsSynced = syncCount ?? 0
-        console.log(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId} updated_conversations=${conversationsSynced}`)
+  try {
+    const { data: syncCount, error: syncError } = await svc.rpc(
+      'sync_lead_responsible_to_conversations',
+      {
+        p_lead_id:             leadId as number,
+        p_responsible_user_id: resolvedResponsibleId,  // null = clear
       }
-    } catch (syncErr) {
-      console.warn(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId} exception=${(syncErr as Error)?.message}`)
+    )
+    if (syncError) {
+      console.warn(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId ?? 'NULL'} error=${syncError.message}`)
+    } else {
+      conversationsSynced = syncCount ?? 0
+      console.log(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId ?? 'NULL'} updated_conversations=${conversationsSynced}`)
     }
+  } catch (syncErr) {
+    console.warn(`[chat-sync] lead=${leadId} responsible=${resolvedResponsibleId ?? 'NULL'} exception=${(syncErr as Error)?.message}`)
   }
 
   // ── 7. Resposta ──────────────────────────────────────────────────────────

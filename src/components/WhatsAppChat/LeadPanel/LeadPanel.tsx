@@ -876,14 +876,14 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         const normalizedResponsibleId =
           newResponsibleId && newResponsibleId.trim() !== '' ? newResponsibleId : null
 
-        if (normalizedResponsibleId) {
+        if (currentLeadId) {
           supabase.auth.getSession().then(({ data: sessionData }) => {
             const syncToken = sessionData.session?.access_token
             if (!syncToken) return
             fetch('/api/leads/sync-chat-assignment', {
               method:  'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
-              body:    JSON.stringify({ leadId: currentLeadId, responsibleUserId: normalizedResponsibleId }),
+              body:    JSON.stringify({ leadId: currentLeadId, responsibleUserId: normalizedResponsibleId ?? null }),
             }).catch(() => {})
           }).catch(() => {})
         }

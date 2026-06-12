@@ -132,28 +132,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const updated = (updatedRows ?? []).length
   console.log(`[bulk-assign] user=${user.id} leads=${deduped.length} updated=${updated}`)
 
-  // ── 10. Sync chat (não-fatal, apenas quando responsibleUserId não for null) ─
+  // ── 10. Sync chat — sempre executado (null = bulk clear de assigned_to) ─────
+  // Helper v2 aceita null: limpa assigned_to em todas as conversas dos leads
   let conversationsSynced = 0
 
-  if (resolvedResponsibleId !== null) {
-    try {
-      const { data: syncCount, error: syncError } = await svc.rpc(
-        'bulk_sync_lead_responsible_to_conversations',
-        {
-          p_lead_ids:            deduped,
-          p_responsible_user_id: resolvedResponsibleId,
-          p_company_id:          companyId,
-        }
-      )
-      if (syncError) {
-        console.warn(`[chat-sync] leads=${deduped.length} error=${syncError.message}`)
-      } else {
-        conversationsSynced = syncCount ?? 0
-        console.log(`[chat-sync] leads=${deduped.length} updated_conversations=${conversationsSynced}`)
+  try {
+    const { data: syncCount, error: syncError } = await svc.rpc(
+      'bulk_sync_lead_responsible_to_conversations',
+      {
+        p_lead_ids:            deduped,
+        p_responsible_user_id: resolvedResponsibleId,  // null = bulk clear
+        p_company_id:          companyId,
       }
-    } catch (syncErr) {
-      console.warn(`[chat-sync] leads=${deduped.length} exception=${(syncErr as Error)?.message}`)
+    )
+    if (syncError) {
+      console.warn(`[chat-sync] leads=${deduped.length} responsible=${resolvedResponsibleId ?? 'NULL'} error=${syncError.message}`)
+    } else {
+      conversationsSynced = syncCount ?? 0
+      console.log(`[chat-sync] leads=${deduped.length} responsible=${resolvedResponsibleId ?? 'NULL'} updated_conversations=${conversationsSynced}`)
     }
+  } catch (syncErr) {
+    console.warn(`[chat-sync] leads=${deduped.length} exception=${(syncErr as Error)?.message}`)
   }
 
   // ── 11. Resposta ──────────────────────────────────────────────────────────
