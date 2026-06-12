@@ -71,19 +71,40 @@ export default async function handler(req, res) {
     return res.status(ctx.status).json({ error: ctx.error })
   }
 
-  const { svc, effectiveCompanyId, userId } = ctx
+  const { svc, effectiveCompanyId, userId, isParentUser } = ctx
 
-  // ── 3. Verificar role: apenas admin+ pode iniciar checkout de plano ────────
-  const { data: membership } = await svc
-    .from('company_users')
-    .select('role')
-    .eq('company_id', effectiveCompanyId)
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle()
+  // #region agent log
+  console.log('[DEBUG-69b1bb][checkout.js]', JSON.stringify({ isParentUser, effectiveCompanyId, userId, to_plan_id }))
+  // #endregion
 
-  if (!membership || !ALLOWED_ROLES.has(membership.role)) {
-    return res.status(403).json({ error: 'Acesso restrito a administradores da empresa' })
+  // ── 3. Verificar role ──────────────────────────────────────────────────────
+  // Trilha 1 (empresa filha): membership direta com role admin+
+  // Trilha 2 (empresa pai agindo em filha): super_admin ou system_admin da empresa pai
+  if (isParentUser) {
+    const { data: parentMemberships } = await svc
+      .from('company_users')
+      .select('role, companies!inner(company_type)')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .in('role', ['super_admin', 'system_admin'])
+
+    const hasParentAdminRole = parentMemberships?.some(m => m.companies?.company_type === 'parent')
+
+    if (!hasParentAdminRole) {
+      return res.status(403).json({ error: 'Acesso restrito a administradores da plataforma' })
+    }
+  } else {
+    const { data: membership } = await svc
+      .from('company_users')
+      .select('role')
+      .eq('company_id', effectiveCompanyId)
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (!membership || !ALLOWED_ROLES.has(membership.role)) {
+      return res.status(403).json({ error: 'Acesso restrito a administradores da empresa' })
+    }
   }
 
   try {

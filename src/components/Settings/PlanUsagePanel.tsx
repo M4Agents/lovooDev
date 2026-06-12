@@ -418,7 +418,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
       } else {
         // ── Nova assinatura via Stripe Checkout (sem assinatura ou trial interno) ──
-        const resp = await fetch('/api/stripe/plans/checkout', {
+        const resp = await fetch(`/api/stripe/plans/checkout?company_id=${encodeURIComponent(companyId)}`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body:    JSON.stringify({ to_plan_id: selectedPlan.id }),
@@ -426,7 +426,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
         const json = await resp.json()
         // #region agent log
-        console.log('[DEBUG-69b1bb][PlanUsagePanel] /stripe/plans/checkout response', { status: resp.status, json })
+        console.log('[DEBUG-69b1bb][PlanUsagePanel] /stripe/plans/checkout response', { status: resp.status, error: json?.error, json })
         // #endregion
 
         if (!resp.ok) {
