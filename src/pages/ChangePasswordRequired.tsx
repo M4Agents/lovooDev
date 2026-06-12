@@ -126,9 +126,13 @@ export const ChangePasswordRequired: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    signOut();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch {
+      // Garante navegação mesmo com erro
+    }
+    window.location.href = '/';
   };
 
   return (

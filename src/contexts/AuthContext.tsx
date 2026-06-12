@@ -626,6 +626,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     
+    // Limpar user explicitamente — não depender apenas do onAuthStateChange
+    // para evitar corrida com PublicRoute que redirecionaria de volta ao dashboard
+    setUser(null);
+
     // Limpar estados
     setCompany(null);
     setIsImpersonating(false);

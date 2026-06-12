@@ -81,8 +81,12 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+    } catch {
+      // Mesmo com erro no signOut, força navegação para limpar a sessão local
+    }
+    window.location.href = '/';
   };
 
   const navItems = useMemo(
