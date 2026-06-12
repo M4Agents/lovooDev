@@ -385,6 +385,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       // Trial interno ou sem assinatura → checkout; assinatura Stripe ativa → change
       const useCheckout = !hasSubscription || isInternalTrial
 
+      // #region agent log
+      console.log('[DEBUG-69b1bb][PlanUsagePanel] subscription data', { subscription, hasSubscription, isInternalTrial, useCheckout, selectedPlanId: selectedPlan?.id, selectedPlanName: selectedPlan?.name })
+      // #endregion
+
       if (!useCheckout) {
         // ── Alterar plano existente via Stripe ─────────────────────────────
         const resp = await fetch('/api/stripe/plans/change', {
@@ -394,6 +398,9 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         })
 
         const json = await resp.json()
+        // #region agent log
+        console.log('[DEBUG-69b1bb][PlanUsagePanel] /stripe/plans/change response', { status: resp.status, json })
+        // #endregion
 
         if (!resp.ok) {
           setActionError(STRIPE_ERROR_MSGS[json.error] ?? 'Erro ao alterar plano. Tente novamente.')
@@ -418,6 +425,9 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         })
 
         const json = await resp.json()
+        // #region agent log
+        console.log('[DEBUG-69b1bb][PlanUsagePanel] /stripe/plans/checkout response', { status: resp.status, json })
+        // #endregion
 
         if (!resp.ok) {
           setActionError(STRIPE_ERROR_MSGS[json.error] ?? 'Erro ao iniciar checkout. Tente novamente.')
@@ -461,6 +471,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
   const usage           = data.usage
   const hasSubscription = subscription?.has_subscription ?? false
   const isInternalTrial = subscription?.is_internal_trial ?? false
+
+  // #region agent log
+  console.log('[DEBUG-69b1bb][PlanUsagePanel] render state', { companyId, subscription, currentPlan: currentPlan?.name, currentPlanId: currentPlan?.id })
+  // #endregion
 
   const handleHirePlan = () => {
     document.getElementById('planos-disponiveis')?.scrollIntoView({ behavior: 'smooth' })
