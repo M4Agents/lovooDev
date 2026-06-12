@@ -114,8 +114,9 @@ export function ForecastSection({
       {/* Header */}
       <div className="flex items-center gap-2">
         <BarChart3 className="h-4 w-4 text-indigo-500" />
-        <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Forecast Comercial</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Previsão Comercial</h3>
       </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">Acompanhe a projeção de resultados com base no pipeline atual.</p>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">

@@ -254,7 +254,7 @@ export const NewDashboard: React.FC = () => {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-bold text-gray-900">Inteligência Comercial</h1>
+          <h1 className="text-xl font-bold text-gray-900">Painel Comercial</h1>
           <p className="text-sm text-gray-500">
             No período: <span className="font-medium text-gray-700">{periodLabel}</span>
           </p>
@@ -377,7 +377,10 @@ export const NewDashboard: React.FC = () => {
 
       {/* ── 3–5. Ações Urgentes ─────────────────────────────────────────── */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-gray-800">Ações Urgentes</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Ações Urgentes</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Leads que exigem resposta imediata ou estão em risco de abandono.</p>
+        </div>
 
         <section ref={priorityAlertsSectionRef}>
           <PriorityAlertsSection
@@ -413,29 +416,36 @@ export const NewDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 6. Inbound por Dia + Ranking Comercial ──────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <TrendsSection
-          data={trends.data}
-          loading={trends.loading}
-          error={trends.error}
-          onRetry={trends.refetch}
-        />
-        <SellerRankingSection
-          data={sellerRanking.data}
-          meta={sellerRanking.meta}
-          loading={sellerRanking.loading}
-          error={sellerRanking.error}
-          onRetry={sellerRanking.refetch}
-          sellerDeltas={sellerDeltaMap.size > 0 ? sellerDeltaMap : undefined}
-          comparisonMode={comparisonMode}
-        />
+      {/* ── 6. Performance Comercial ────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Performance Comercial</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Volumes, tendências e desempenho comercial do período.</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <TrendsSection
+            data={trends.data}
+            loading={trends.loading}
+            error={trends.error}
+            onRetry={trends.refetch}
+          />
+          <SellerRankingSection
+            data={sellerRanking.data}
+            meta={sellerRanking.meta}
+            loading={sellerRanking.loading}
+            error={sellerRanking.error}
+            onRetry={sellerRanking.refetch}
+            sellerDeltas={sellerDeltaMap.size > 0 ? sellerDeltaMap : undefined}
+            comparisonMode={comparisonMode}
+          />
+        </div>
       </div>
 
       {/* ── 7–10. Pipeline Comercial — apenas manager+ ──────────────────── */}
       {canViewTeamDashboard && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-800">Pipeline Comercial</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Situação atual do funil, movimentos do período e projeção de receita.</p>
 
           <ForecastSection
             data={forecast.data}

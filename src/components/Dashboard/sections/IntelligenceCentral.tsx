@@ -261,8 +261,7 @@ export const IntelligenceCentral: React.FC<IntelligenceCentralProps> = ({
       {/* Cabeçalho */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">Inteligência Comercial</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Baseada em comportamento real</p>
+          <h2 className="text-sm font-semibold text-gray-900">Recomendações Automáticas</h2>
           <p className="text-xs text-gray-400 mt-0.5">Insights automáticos · {periodLabel}</p>
         </div>
 

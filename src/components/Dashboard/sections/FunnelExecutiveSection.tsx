@@ -104,9 +104,9 @@ export function FunnelExecutiveSection({
       <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5">
         <div className="flex items-center gap-2 mb-2">
           <GitBranch className="h-4 w-4 text-indigo-400" />
-          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Funil Executivo</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Saúde do Funil</h3>
         </div>
-        <p className="text-xs text-gray-400 dark:text-gray-500">Selecione um funil para ver a visão executiva.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Selecione um funil para ver a visão consolidada.</p>
       </div>
     )
   }
@@ -149,7 +149,7 @@ export function FunnelExecutiveSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-indigo-500" />
-          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Funil Executivo</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Saúde do Funil</h3>
         </div>
         {list.length > 0 && (
           <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
@@ -166,6 +166,7 @@ export function FunnelExecutiveSection({
           </div>
         )}
       </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 -mt-1">Visão consolidada da performance e evolução do funil.</p>
 
       {/* Cabeçalho da tabela */}
       {list.length > 0 && (
