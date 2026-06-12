@@ -104,8 +104,12 @@ export default async function handler(req, res) {
     }
 
     // ── 5. Resposta — stripe_subscription_id NUNCA exposto ao frontend ────
+    // has_subscription = true somente se há assinatura Stripe ativa OU trial interno.
+    // Empresas com is_free=true (status='active', sem stripe) retornam false para
+    // que o frontend use o fluxo de checkout em vez de tentar alterar uma sub inexistente.
+    const has_subscription = !!sub.stripe_subscription_id || isInternalTrial
     return res.status(200).json({
-      has_subscription:     true,
+      has_subscription,
       status:               sub.status,
       is_internal_trial:    isInternalTrial,
       days_remaining:       daysRemaining,

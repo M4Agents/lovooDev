@@ -386,7 +386,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       const useCheckout = !hasSubscription || isInternalTrial
 
       // #region agent log
-      console.log('[DEBUG-69b1bb][PlanUsagePanel] subscription data', { subscription, hasSubscription, isInternalTrial, useCheckout, selectedPlanId: selectedPlan?.id, selectedPlanName: selectedPlan?.name })
+      console.log('[DEBUG-69b1bb][PlanUsagePanel] subscription data POST-FIX', { subscription, hasSubscription, isInternalTrial, useCheckout, selectedPlanId: selectedPlan?.id, selectedPlanName: selectedPlan?.name })
       // #endregion
 
       if (!useCheckout) {
