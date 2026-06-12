@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Building2, Globe, Clock, CalendarClock,
-  Edit2, Trash2, LogIn, Copy, Check, X, Gift,
+  Edit2, Trash2, LogIn, Copy, Check, X, Gift, Layers,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAccessControl } from '../../hooks/useAccessControl'
@@ -30,6 +30,12 @@ interface CreateResult {
 }
 
 type ClientCompany = Company & { plans?: { name: string; slug: string } | null }
+
+interface Plan {
+  id:   string
+  name: string
+  slug: string
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +78,15 @@ const FREE_PLAN_ERROR_MSGS: Record<string, string> = {
   subscription_not_found:  'Empresa não possui assinatura registrada.',
   has_stripe_subscription: 'Esta empresa já possui uma assinatura Stripe ativa. Não é possível aplicar o plano gratuito.',
   growth_plan_not_found:   'Plano Growth não encontrado. Contate o suporte.',
+}
+
+const SET_PLAN_ERROR_MSGS: Record<string, string> = {
+  forbidden:               'Você não tem permissão para executar esta ação.',
+  company_not_found:       'Empresa não encontrada.',
+  not_a_client_company:    'Esta operação só é permitida para empresas clientes.',
+  subscription_not_found:  'Empresa não possui assinatura registrada.',
+  has_stripe_subscription: 'Esta empresa possui assinatura Stripe ativa. Gerencie pelo portal Stripe.',
+  plan_not_found:          'Plano não encontrado ou inativo.',
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -123,6 +138,14 @@ export const CompaniesPanel: React.FC = () => {
   const [freePlanSuccess,  setFreePlanSuccess]  = useState(false)
   const [freePlanMap,      setFreePlanMap]      = useState<Record<string, boolean>>({})
 
+  // ── Modal de definição de plano ───────────────────────────────────────────
+  const [setPlanCompany,  setSetPlanCompany]  = useState<ClientCompany | null>(null)
+  const [setPlanLoading,  setSetPlanLoading]  = useState(false)
+  const [setPlanError,    setSetPlanError]    = useState<string | null>(null)
+  const [setPlanSuccess,  setSetPlanSuccess]  = useState(false)
+  const [setPlanId,       setSetPlanId]       = useState<string>('')
+  const [availablePlans,  setAvailablePlans]  = useState<Plan[]>([])
+
   // ── Copiar invite link ────────────────────────────────────────────────────
   const [copiedLink, setCopiedLink] = useState(false)
 
@@ -153,6 +176,14 @@ export const CompaniesPanel: React.FC = () => {
           setFreePlanMap(map)
         }
       }
+
+      // Carregar planos ativos para o modal de definição de plano
+      const { data: plans } = await supabase
+        .from('plans')
+        .select('id, name, slug')
+        .eq('is_active', true)
+        .order('sort_order')
+      setAvailablePlans((plans ?? []) as Plan[])
     } catch (err) {
       console.error('[CompaniesPanel] Erro ao carregar empresas:', err)
     } finally {
@@ -399,6 +430,47 @@ export const CompaniesPanel: React.FC = () => {
     }
   }
 
+  // ── Definir plano direto ──────────────────────────────────────────────────
+
+  const handleSetPlan = async () => {
+    if (!isSaaSAdmin || !setPlanCompany || !setPlanId) return
+
+    setSetPlanLoading(true)
+    setSetPlanError(null)
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Sessão inválida')
+
+      const res = await fetch('/api/admin/companies/set-plan', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ company_id: setPlanCompany.id, plan_id: setPlanId }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        const msg = SET_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao definir plano.'
+        setSetPlanError(msg)
+        return
+      }
+
+      setSetPlanSuccess(true)
+      loadCompanies()
+      setTimeout(() => {
+        setSetPlanCompany(null)
+        setSetPlanSuccess(false)
+        setSetPlanError(null)
+        setSetPlanId('')
+      }, 2200)
+    } catch {
+      setSetPlanError('Erro interno ao processar operação.')
+    } finally {
+      setSetPlanLoading(false)
+    }
+  }
+
   // ── Impersonar ────────────────────────────────────────────────────────────
 
   const handleImpersonate = async (comp: ClientCompany) => {
@@ -544,6 +616,15 @@ export const CompaniesPanel: React.FC = () => {
                     >
                       <Gift className="w-3 h-3" />
                       {isFree ? 'Gratuito ✓' : 'Gratuito'}
+                    </button>
+                  )}
+                  {isSaaSAdmin && (
+                    <button
+                      onClick={() => { setSetPlanCompany(comp); setSetPlanError(null); setSetPlanSuccess(false); setSetPlanId('') }}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                      title="Definir plano diretamente"
+                    >
+                      <Layers className="w-3 h-3" /> Plano
                     </button>
                   )}
                   {(isSaaSAdmin || isSystemAdmin) && (
@@ -905,6 +986,68 @@ export const CompaniesPanel: React.FC = () => {
                     : freePlanMap[freePlanCompany.id]
                     ? 'Revogar gratuito'
                     : 'Conceder gratuito'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal de Definição de Plano ────────────────────────────────────── */}
+      {setPlanCompany && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                <Layers className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900">Definir Plano</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Atribui diretamente um plano a <strong>{setPlanCompany.name}</strong> sem fluxo Stripe.
+                  Indicado para empresas gerenciadas manualmente pela plataforma.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Plano</label>
+              <select
+                value={setPlanId}
+                onChange={e => setSetPlanId(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Selecione um plano...</option>
+                {availablePlans.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {setPlanSuccess && (
+              <p className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2 font-medium">
+                Plano atribuído com sucesso!
+              </p>
+            )}
+
+            {setPlanError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{setPlanError}</p>
+            )}
+
+            {!setPlanSuccess && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setSetPlanCompany(null); setSetPlanError(null); setSetPlanId('') }}
+                  className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSetPlan}
+                  disabled={setPlanLoading || !setPlanId}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {setPlanLoading ? 'Salvando...' : 'Definir Plano'}
                 </button>
               </div>
             )}
