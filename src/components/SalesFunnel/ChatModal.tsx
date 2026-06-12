@@ -83,11 +83,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
       const convId = await chatApi.getConversationByLeadId(leadId, companyId)
 
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69b1bb'},body:JSON.stringify({sessionId:'69b1bb',location:'ChatModal.tsx:getConversationByLeadId',message:'resultado getConversationByLeadId',data:{convId,leadId,companyId},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{})
-      console.log('[DEBUG-69b1bb][ChatModal] getConversationByLeadId result', {convId, leadId, companyId})
-      // #endregion
-
       if (convId) {
         setConversationId(convId)
       } else {
@@ -192,11 +187,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         leadPhone,
         leadName || undefined
       )
-
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69b1bb'},body:JSON.stringify({sessionId:'69b1bb',location:'ChatModal.tsx:createOrGetConversation',message:'resultado createOrGetConversation',data:{conversationId:conversation.id,assignedTo:conversation.assigned_to,instanceId:conversation.instance_id,leadId:conversation.lead_id},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{})
-      console.log('[DEBUG-69b1bb][ChatModal] createOrGetConversation result', {id:conversation.id, assigned_to:conversation.assigned_to, instance_id:conversation.instance_id})
-      // #endregion
 
       // Criar lead + oportunidade automaticamente se contato for novo
       if (!conversation.lead_id) {
