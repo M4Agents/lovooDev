@@ -125,12 +125,12 @@ export default async function handler(req, res) {
 
     if (!rpcResult.data?.success) {
       const errCode = rpcResult.data?.error ?? 'unknown_error'
-      const STATUS_MAP: Record<string, number> = {
-        already_on_this_plan:   400,
+      const STATUS_MAP = {
+        already_on_this_plan:    400,
         has_stripe_subscription: 422,
-        plan_not_found:         422,
-        company_not_found:      404,
-        forbidden:              403,
+        plan_not_found:          422,
+        company_not_found:       404,
+        forbidden:               403,
       }
       return res.status(STATUS_MAP[errCode] ?? 400).json({ error: errCode })
     }
