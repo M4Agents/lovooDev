@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { UserSelector } from './WhatsAppChat/UserSelector';
@@ -110,6 +111,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   onSave
 }) => {
   const { company } = useAuth();
+  const { canAssignLead, currentUserId } = useLeadPermissions();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
@@ -341,6 +343,19 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
   }, [isOpen, lead, company?.id]);
 
+  // Auto-assignment: preenche responsible_user_id com currentUserId para novos leads.
+  // Roda em efeito separado para lidar com carregamento assíncrono de userRoles:
+  // o efeito principal pode disparar antes de currentUserId estar disponível.
+  // O guard `prev.responsible_user_id || currentUserId` preserva qualquer valor
+  // já definido no estado antes do currentUserId carregar.
+  useEffect(() => {
+    if (!isOpen || lead || !currentUserId) return;
+    setFormData(prev => ({
+      ...prev,
+      responsible_user_id: prev.responsible_user_id || currentUserId,
+    }));
+  }, [isOpen, lead, currentUserId]);
+
 
   // NOVO: Função para buscar CEP
   const handleCEPSearch = async (cep: string) => {
@@ -380,6 +395,10 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company?.id) return;
+    // Guard: currentUserId é undefined quando userRoles ainda não carregou.
+    // Nesse estado canAssignLead() pode retornar false mesmo para admin/manager.
+    // Aguardar carregamento completo antes de permitir submit.
+    if (!currentUserId) return;
 
     // Validar dados da empresa
     const errors: Record<string, string> = {};
@@ -430,8 +449,15 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         ...formData,
         ...companyData,
         company_id: company?.id,
-        // Limpar campos UUID vazios para evitar erro de sintaxe
-        responsible_user_id: formData.responsible_user_id || null,
+        // Determina o responsável final:
+        // - Edição: preserva o responsável salvo no banco (formData vem do lead existente).
+        // - Criação com canAssignLead: usa a escolha do formulário.
+        // - Criação sem canAssignLead (seller): força currentUserId, independente do estado do form.
+        responsible_user_id: (() => {
+          if (lead?.id) return formData.responsible_user_id || null;
+          if (canAssignLead()) return formData.responsible_user_id || null;
+          return currentUserId || null;
+        })(),
         visitor_id: formData.visitor_id || null,
         custom_fields: customFieldValues,
         
@@ -907,8 +933,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     users={companyUsers}
                     selectedUser={formData.responsible_user_id}
                     onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
-                    showNoneOption={true}
-                    disabled={loading}
+                    showNoneOption={false}
+                    disabled={loading || !canAssignLead()}
                   />
                 </div>
 

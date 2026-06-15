@@ -13,6 +13,8 @@ interface LeadPermissions {
   canAssignLead: () => boolean;
   canViewAllLeads: () => boolean;
   isRestrictedToOwnLeads: () => boolean;
+  /** auth.users.id do usuário na empresa ativa. Undefined enquanto userRoles ainda carrega. */
+  currentUserId: string | undefined;
 }
 
 /**
@@ -101,5 +103,6 @@ export const useLeadPermissions = (): LeadPermissions => {
     canAssignLead,
     canViewAllLeads,
     isRestrictedToOwnLeads,
+    currentUserId,
   };
 };
