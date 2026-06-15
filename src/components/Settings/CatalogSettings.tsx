@@ -194,7 +194,7 @@ const CatalogProductList: React.FC<{
   categories: CatalogCategory[]
   onRefresh: () => void
 }> = ({ companyId, defaultCurrency, thumbnails, allServices, categories, onRefresh }) => {
-  const { isMaster } = useAccessControl()
+  const { isMaster, canWriteCatalog } = useAccessControl()
   const [listItems, setListItems] = useState<CatalogProduct[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -258,6 +258,7 @@ const CatalogProductList: React.FC<{
   }
 
   const handleDeleteProduct = async (p: CatalogProduct) => {
+    if (!canWriteCatalog) return
     if (!window.confirm(`Excluir permanentemente o produto "${p.name}"?\n\nMídias e vínculos associados também serão removidos. Esta ação não pode ser desfeita.\n\nSe o produto estiver vinculado a oportunidades, a exclusão será bloqueada e você poderá apenas inativá-lo.`)) return
     try {
       await catalogApi.deleteProduct(p.id, companyId)
@@ -333,14 +334,16 @@ const CatalogProductList: React.FC<{
         )}
         <div className="flex-1" />
         {/* Ações */}
-        <button
-          type="button"
-          onClick={() => setImportOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          <Upload className="w-3.5 h-3.5" />
-          Importar
-        </button>
+        {canWriteCatalog && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Importar
+          </button>
+        )}
         <button
           type="button"
           onClick={() => exportCatalogToCsv(listItems, 'produtos.csv')}
@@ -350,19 +353,21 @@ const CatalogProductList: React.FC<{
           <Download className="w-3.5 h-3.5" />
           Exportar CSV
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setFormSessionKey(`product-${Date.now()}`)
-            setCreating(true)
-            setEditing(null)
-            setPostCreateHint(false)
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
-        >
-          <Plus className="w-4 h-4" />
-          Novo produto
-        </button>
+        {canWriteCatalog && (
+          <button
+            type="button"
+            onClick={() => {
+              setFormSessionKey(`product-${Date.now()}`)
+              setCreating(true)
+              setEditing(null)
+              setPostCreateHint(false)
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
+          >
+            <Plus className="w-4 h-4" />
+            Novo produto
+          </button>
+        )}
       </div>
 
       {/* Drawer de filtros avançados */}
@@ -461,14 +466,16 @@ const CatalogProductList: React.FC<{
                 <td className="px-3 py-2">{p.availability_status}</td>
                 <td className="px-3 py-2">
                   <div className="inline-flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setFormSessionKey(`product-edit-${p.id}`); setEditing(p); setCreating(false); setPostCreateHint(false) }}
-                      className="text-indigo-600 hover:underline inline-flex items-center gap-1"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />Editar
-                    </button>
-                    {isMaster && (
+                    {canWriteCatalog && (
+                      <button
+                        type="button"
+                        onClick={() => { setFormSessionKey(`product-edit-${p.id}`); setEditing(p); setCreating(false); setPostCreateHint(false) }}
+                        className="text-indigo-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />Editar
+                      </button>
+                    )}
+                    {canWriteCatalog && isMaster && (
                       <button
                         type="button"
                         onClick={() => handleDeleteProduct(p)}
@@ -516,6 +523,7 @@ const ProductForm: React.FC<{
   onCancel: () => void
   onSaved: (saved: CatalogProduct) => void
 }> = ({ companyId, defaultCurrency, initial, allProducts, allServices, categories, onCancel, onSaved }) => {
+  const { canWriteCatalog } = useAccessControl()
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
@@ -567,6 +575,7 @@ const ProductForm: React.FC<{
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canWriteCatalog) return
     setSaving(true)
     try {
       if (initial) {
@@ -883,7 +892,7 @@ const CatalogServiceList: React.FC<{
   categories: CatalogCategory[]
   onRefresh: () => void
 }> = ({ companyId, defaultCurrency, thumbnails, allProducts, categories, onRefresh }) => {
-  const { isMaster } = useAccessControl()
+  const { isMaster, canWriteCatalog } = useAccessControl()
   const [listItems, setListItems] = useState<CatalogService[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -940,6 +949,7 @@ const CatalogServiceList: React.FC<{
   }
 
   const handleDeleteService = async (s: CatalogService) => {
+    if (!canWriteCatalog) return
     if (!window.confirm(`Excluir permanentemente o serviço "${s.name}"?\n\nMídias e vínculos associados também serão removidos. Esta ação não pode ser desfeita.\n\nSe o serviço estiver vinculado a oportunidades, a exclusão será bloqueada e você poderá apenas inativá-lo.`)) return
     try {
       await catalogApi.deleteService(s.id, companyId)
@@ -1002,13 +1012,15 @@ const CatalogServiceList: React.FC<{
           </button>
         )}
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => setImportOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          <Upload className="w-3.5 h-3.5" />Importar
-        </button>
+        {canWriteCatalog && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Upload className="w-3.5 h-3.5" />Importar
+          </button>
+        )}
         <button
           type="button"
           onClick={() => exportCatalogToCsv(listItems, 'servicos.csv')}
@@ -1017,13 +1029,15 @@ const CatalogServiceList: React.FC<{
         >
           <Download className="w-3.5 h-3.5" />Exportar CSV
         </button>
-        <button
-          type="button"
-          onClick={() => { setFormSessionKey(`service-${Date.now()}`); setCreating(true); setEditing(null); setPostCreateHint(false) }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
-        >
-          <Plus className="w-4 h-4" />Novo serviço
-        </button>
+        {canWriteCatalog && (
+          <button
+            type="button"
+            onClick={() => { setFormSessionKey(`service-${Date.now()}`); setCreating(true); setEditing(null); setPostCreateHint(false) }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
+          >
+            <Plus className="w-4 h-4" />Novo serviço
+          </button>
+        )}
       </div>
 
       {drawerOpen && (
@@ -1114,14 +1128,16 @@ const CatalogServiceList: React.FC<{
                 <td className="px-3 py-2">{s.availability_status}</td>
                 <td className="px-3 py-2">
                   <div className="inline-flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setFormSessionKey(`service-edit-${s.id}`); setEditing(s); setCreating(false); setPostCreateHint(false) }}
-                      className="text-indigo-600 hover:underline inline-flex items-center gap-1"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />Editar
-                    </button>
-                    {isMaster && (
+                    {canWriteCatalog && (
+                      <button
+                        type="button"
+                        onClick={() => { setFormSessionKey(`service-edit-${s.id}`); setEditing(s); setCreating(false); setPostCreateHint(false) }}
+                        className="text-indigo-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />Editar
+                      </button>
+                    )}
+                    {canWriteCatalog && isMaster && (
                       <button
                         type="button"
                         onClick={() => handleDeleteService(s)}
@@ -1169,6 +1185,7 @@ const ServiceForm: React.FC<{
   onCancel: () => void
   onSaved: (saved: CatalogService) => void
 }> = ({ companyId, defaultCurrency, initial, allProducts, allServices, categories, onCancel, onSaved }) => {
+  const { canWriteCatalog } = useAccessControl()
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
@@ -1219,6 +1236,7 @@ const ServiceForm: React.FC<{
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canWriteCatalog) return
     setSaving(true)
     try {
       if (initial) {
@@ -1521,6 +1539,7 @@ type CategorySectionProps = {
 }
 
 const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categories, companyId, onRefresh }) => {
+  const { canWriteCatalog } = useAccessControl()
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -1530,7 +1549,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName.trim()) return
+    if (!canWriteCatalog || !newName.trim()) return
     setCreating(true)
     setSectionError(null)
     try {
@@ -1545,7 +1564,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
   }
 
   const handleUpdate = async (id: string) => {
-    if (!editName.trim()) return
+    if (!canWriteCatalog || !editName.trim()) return
     setSavingId(id)
     setSectionError(null)
     try {
@@ -1560,6 +1579,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
   }
 
   const handleToggleActive = async (cat: CatalogCategory) => {
+    if (!canWriteCatalog) return
     setSavingId(cat.id)
     setSectionError(null)
     try {
@@ -1573,6 +1593,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
   }
 
   const handleRemove = async (id: string) => {
+    if (!canWriteCatalog) return
     if (!window.confirm('Remover categoria? Produtos/serviços vinculados perderão a categoria (dados preservados).')) return
     setSavingId(id)
     setSectionError(null)
@@ -1597,23 +1618,25 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
         <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">{sectionError}</p>
       )}
 
-      <form onSubmit={handleCreate} className="flex gap-2">
-        <input
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          placeholder="Nova categoria…"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          maxLength={120}
-        />
-        <button
-          type="submit"
-          disabled={creating || !newName.trim()}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Adicionar
-        </button>
-      </form>
+      {canWriteCatalog && (
+        <form onSubmit={handleCreate} className="flex gap-2">
+          <input
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            placeholder="Nova categoria…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            maxLength={120}
+          />
+          <button
+            type="submit"
+            disabled={creating || !newName.trim()}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Adicionar
+          </button>
+        </form>
+      )}
 
       {categories.length === 0 ? (
         <p className="text-xs text-slate-400 italic">Nenhuma categoria cadastrada.</p>
@@ -1654,35 +1677,39 @@ const CategorySection: React.FC<CategorySectionProps> = ({ type, label, categori
                   <span className={`flex-1 text-sm ${cat.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
                     {cat.name}
                   </span>
-                  <button
-                    type="button"
-                    disabled={savingId === cat.id}
-                    onClick={() => handleToggleActive(cat)}
-                    className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
-                    title={cat.is_active ? 'Desativar' : 'Ativar'}
-                  >
-                    {cat.is_active ? 'Ativa' : 'Inativa'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingId(cat.id)
-                      setEditName(cat.name)
-                    }}
-                    className="text-indigo-600 hover:text-indigo-800"
-                    title="Editar nome"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={savingId === cat.id}
-                    onClick={() => handleRemove(cat.id)}
-                    className="text-red-500 hover:text-red-700 disabled:opacity-50"
-                    title="Remover categoria"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canWriteCatalog && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={savingId === cat.id}
+                        onClick={() => handleToggleActive(cat)}
+                        className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                        title={cat.is_active ? 'Desativar' : 'Ativar'}
+                      >
+                        {cat.is_active ? 'Ativa' : 'Inativa'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(cat.id)
+                          setEditName(cat.name)
+                        }}
+                        className="text-indigo-600 hover:text-indigo-800"
+                        title="Editar nome"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingId === cat.id}
+                        onClick={() => handleRemove(cat.id)}
+                        className="text-red-500 hover:text-red-700 disabled:opacity-50"
+                        title="Remover categoria"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </li>

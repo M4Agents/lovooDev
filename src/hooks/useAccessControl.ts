@@ -181,6 +181,39 @@ export function useAccessControl() {
   // ── Landing pages ──────────────────────────────────────────
   const canSeeLandingPageOwner = currentRole === 'super_admin'
 
+  // ── Abas de Configurações — controle de acesso por role ────
+  // Seller e partner bloqueados em todas as abas administrativas.
+  // Matriz explícita por role — sem hasPermission(), sem template,
+  // sem comparação por tier.
+  const _settingsManagerOrAdmin =
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
+  // Aba Usuários
+  const canAccessUsersTab = _settingsManagerOrAdmin
+
+  // Aba Planos e Uso
+  const canAccessPlanUsageTab = _settingsManagerOrAdmin
+
+  // Aba Automações (e rotas /automations, /automations/:id/edit)
+  const canAccessAutomations = _settingsManagerOrAdmin
+
+  // Aba Sistema
+  const canAccessSystemSettings = _settingsManagerOrAdmin
+
+  // Aba Tracking Site / Landing Pages
+  const canAccessTrackingSite = _settingsManagerOrAdmin
+
+  // Aba Dados da Empresa
+  const canAccessCompanyData = _settingsManagerOrAdmin
+
+  // Catálogo — escrita (criar, editar, excluir produtos/serviços/categorias)
+  // Seller: somente leitura. Manager+: leitura e escrita.
+  const canWriteCatalog = _settingsManagerOrAdmin
+
   // ── Leads ───────────────────────────────────────────────────
   const canViewLeads    = hasPermission('leads')
   const canViewAllLeads = hasPermission('view_all_leads')
@@ -284,5 +317,14 @@ export function useAccessControl() {
     canViewFunnelFlow,
     canViewLeadOrigins,
     canViewDashboardSettings,
+
+    // Abas de Configurações — acesso por role (seller/partner bloqueados)
+    canAccessUsersTab,
+    canAccessPlanUsageTab,
+    canAccessAutomations,
+    canAccessSystemSettings,
+    canAccessTrackingSite,
+    canAccessCompanyData,
+    canWriteCatalog,
   }
 }

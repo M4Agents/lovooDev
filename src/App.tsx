@@ -92,7 +92,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function AppRoutes() {
-  const { isSaaSAdmin, isSystemAdmin } = useAccessControl();
+  const { isSaaSAdmin, isSystemAdmin, canAccessAutomations } = useAccessControl();
 
   return (
     <Routes>
@@ -228,7 +228,9 @@ function AppRoutes() {
         path="/automations"
         element={
           <ProtectedRoute>
-            <Automations />
+            <RoleProtectedRoute guard={canAccessAutomations}>
+              <Automations />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         }
       />
@@ -236,7 +238,9 @@ function AppRoutes() {
         path="/automations/:id/edit"
         element={
           <ProtectedRoute>
-            <FlowEditor />
+            <RoleProtectedRoute guard={canAccessAutomations}>
+              <FlowEditor />
+            </RoleProtectedRoute>
           </ProtectedRoute>
         }
       />

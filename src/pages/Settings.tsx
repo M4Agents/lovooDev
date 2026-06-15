@@ -51,7 +51,7 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, isSystemAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours, canViewImportHistory, canManageInstagramIntegration } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, isSystemAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours, canViewImportHistory, canManageInstagramIntegration, canAccessUsersTab, canAccessPlanUsageTab, canAccessAutomations, canAccessSystemSettings, canAccessTrackingSite, canAccessCompanyData } = useAccessControl();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,6 +153,22 @@ export const Settings: React.FC = () => {
       setActiveTab(tabParam as typeof validTabs[number]);
     }
   }, [searchParams, location.state]);
+
+  // Fase 5: redirecionar seller/partner para 'integracoes' caso tente acessar aba bloqueada
+  useEffect(() => {
+    if (isLoadingCompany) return;
+    const restricted: Record<string, boolean> = {
+      'usuarios':   canAccessUsersTab,
+      'planos-uso': canAccessPlanUsageTab,
+      'automacoes': canAccessAutomations,
+      'sistema':    canAccessSystemSettings,
+      'tracking':   canAccessTrackingSite,
+      'empresas':   canAccessCompanyData,
+    };
+    if (activeTab in restricted && !restricted[activeTab]) {
+      setActiveTab('integracoes');
+    }
+  }, [activeTab, isLoadingCompany, canAccessUsersTab, canAccessPlanUsageTab, canAccessAutomations, canAccessSystemSettings, canAccessTrackingSite, canAccessCompanyData]);
 
   // Detectar retorno do Stripe Checkout (success ou cancelled)
   useEffect(() => {
@@ -1141,22 +1157,26 @@ export const Settings: React.FC = () => {
             {t('tabs.integrations')}
           </button>
 
-          <button onClick={() => setActiveTab('usuarios')} className={navItemClass('usuarios')}>
-            <Users className="w-4 h-4 shrink-0" />
-            {t('tabs.users')}
-          </button>
+          {canAccessUsersTab && (
+            <button onClick={() => setActiveTab('usuarios')} className={navItemClass('usuarios')}>
+              <Users className="w-4 h-4 shrink-0" />
+              {t('tabs.users')}
+            </button>
+          )}
 
-          {(company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && (
+          {canAccessPlanUsageTab && (company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && (
             <button onClick={() => setActiveTab('planos-uso')} className={navItemClass('planos-uso')}>
               <CreditCard className="w-4 h-4 shrink-0" />
               Planos e Uso
             </button>
           )}
 
-          <button onClick={() => setActiveTab('automacoes')} className={navItemClass('automacoes')}>
-            <Zap className="w-4 h-4 shrink-0" />
-            Automações
-          </button>
+          {canAccessAutomations && (
+            <button onClick={() => setActiveTab('automacoes')} className={navItemClass('automacoes')}>
+              <Zap className="w-4 h-4 shrink-0" />
+              Automações
+            </button>
+          )}
 
           {canManageConversationalAgents && (
             <button onClick={() => setActiveTab('agentes-empresa')} className={navItemClass('agentes-empresa')}>
@@ -1170,20 +1190,26 @@ export const Settings: React.FC = () => {
             Produtos e Serviços
           </button>
 
-          <button onClick={() => setActiveTab('sistema')} className={navItemClass('sistema')}>
-            <SettingsIcon className="w-4 h-4 shrink-0" />
-            {t('tabs.system')}
-          </button>
+          {canAccessSystemSettings && (
+            <button onClick={() => setActiveTab('sistema')} className={navItemClass('sistema')}>
+              <SettingsIcon className="w-4 h-4 shrink-0" />
+              {t('tabs.system')}
+            </button>
+          )}
 
-          <button onClick={() => setActiveTab('tracking')} className={navItemClass('tracking')}>
-            <FileText className="w-4 h-4 shrink-0" />
-            {t('tabs.trackingSite')}
-          </button>
+          {canAccessTrackingSite && (
+            <button onClick={() => setActiveTab('tracking')} className={navItemClass('tracking')}>
+              <FileText className="w-4 h-4 shrink-0" />
+              {t('tabs.trackingSite')}
+            </button>
+          )}
 
-          <button onClick={() => setActiveTab('empresas')} className={navItemClass('empresas')}>
-            <Building className="w-4 h-4 shrink-0" />
-            {t('tabs.companyData')}
-          </button>
+          {canAccessCompanyData && (
+            <button onClick={() => setActiveTab('empresas')} className={navItemClass('empresas')}>
+              <Building className="w-4 h-4 shrink-0" />
+              {t('tabs.companyData')}
+            </button>
+          )}
 
           {/* Separador exclusivo da empresa pai */}
           {(canAccessCompanies || canAccessPlans || canManageOpenAI || canManageAiGovernance) && (
@@ -2772,7 +2798,7 @@ export const Settings: React.FC = () => {
       )}
 
       {/* Aba Usuários - INTERFACE REORGANIZADA COM SUBMENUS */}
-      {activeTab === 'usuarios' && (
+      {activeTab === 'usuarios' && canAccessUsersTab && (
         <div className="space-y-6">
           {/* Navegação de Submenus */}
           <div className="border-b border-slate-200">
@@ -2822,14 +2848,14 @@ export const Settings: React.FC = () => {
       )}
 
       {/* Aba Tracking Site */}
-      {activeTab === 'tracking' && (
+      {activeTab === 'tracking' && canAccessTrackingSite && (
         <div className="space-y-6">
           <ModernLandingPages />
         </div>
       )}
 
       {/* Aba Empresas com Sub-abas */}
-      {activeTab === 'empresas' && (
+      {activeTab === 'empresas' && canAccessCompanyData && (
         <div className="space-y-6">
           {/* Sub-abas da Empresa */}
           <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg">
@@ -3914,7 +3940,7 @@ export const Settings: React.FC = () => {
       )}
 
       {/* Aba Sistema */}
-      {activeTab === 'sistema' && (
+      {activeTab === 'sistema' && canAccessSystemSettings && (
         <div className="space-y-6">
           <SystemSettings />
         </div>
@@ -3960,7 +3986,7 @@ export const Settings: React.FC = () => {
       )}
 
       {/* Aba Planos e Uso (empresa filha e empresa pai para platform admins) */}
-      {activeTab === 'planos-uso' && (company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && company?.id && (
+      {activeTab === 'planos-uso' && canAccessPlanUsageTab && (company?.company_type === 'client' || isSaaSAdmin || isSystemAdmin) && company?.id && (
         <div className="space-y-6">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Planos e Uso</h2>
@@ -4060,7 +4086,7 @@ export const Settings: React.FC = () => {
       )}
 
           {/* Aba Automações */}
-          {activeTab === 'automacoes' && (
+          {activeTab === 'automacoes' && canAccessAutomations && (
             <div className="[&>div]:min-h-0 [&>div]:bg-transparent">
               <Automations />
             </div>
