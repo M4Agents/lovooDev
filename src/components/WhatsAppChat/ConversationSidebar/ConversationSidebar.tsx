@@ -93,7 +93,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   // #region agent log
   React.useEffect(() => {
     if (selectedChannel !== 'instagram') {
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-D|H-E',location:'ConversationSidebar.tsx:props',message:'[DBG-5] sidebar props',data:{conversationsPropLength:conversations.length,filterType:filter.type,filterSearch:(filter as any).search||null,selectedInstance:selectedInstance||'all',loading,hasMoreConversations},timestamp:Date.now()})}).catch(()=>{});
+      console.log('[DBG-5] sidebar props', {conversationsPropLength: conversations.length, filterType: filter.type, filterSearch: (filter as any).search || null, selectedInstance: selectedInstance || 'all', loading, hasMoreConversations});
     }
   }, [conversations.length, filter.type, (filter as any).search, selectedChannel, loading]);
   // #endregion
@@ -343,7 +343,7 @@ const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
   const { t } = useTranslation('chat')
   // #region agent log
   React.useEffect(() => {
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-A|H-E',location:'ConversationSidebar.tsx:WhatsAppConversationList',message:'[DBG-4] list render',data:{filteredCount:filteredConversations.length,loading,selectedInstance:selectedInstance||'all',searchTerm:searchTerm||null,hasMoreConversations},timestamp:Date.now()})}).catch(()=>{});
+    console.log('[DBG-4] list render', {filteredCount: filteredConversations.length, loading, selectedInstance: selectedInstance || 'all', searchTerm: searchTerm || null, hasMoreConversations});
   }, [filteredConversations.length, loading]);
   // #endregion
   return loading ? (

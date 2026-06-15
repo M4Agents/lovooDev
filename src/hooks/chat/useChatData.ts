@@ -394,7 +394,7 @@ export const useChatData = (
     const afterTypeFilter = filtered.length
 
     // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-A|H-D|H-E',location:'useChatData.ts:filteredConversations',message:'[DBG-3] filteredConversations pipeline',data:{afterRpc,afterSearch,afterTypeFilter,filterType:filter.type,filterSearch:filter.search||null},timestamp:Date.now()})}).catch(()=>{});
+    console.log('[DBG-3] filteredConversations pipeline', {afterRpc, afterSearch, afterTypeFilter, filterType: filter.type, filterSearch: filter.search || null});
     // #endregion
 
     // ✅ CORREÇÃO: Ordenar por última mensagem (mais recentes primeiro) com proteção
