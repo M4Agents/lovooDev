@@ -281,6 +281,17 @@ export class ChatApi {
     p_user_id:         string | null
   }): Promise<{ messages: ChatMessage[]; totalCount: number }> {
     const { data, error } = await supabase.rpc('chat_get_messages', params)
+    // #region debug
+    console.log('[DEBUG chat_get_messages]', {
+      p_limit: params.p_limit,
+      hasError: !!error,
+      errorMsg: error?.message,
+      success: data?.success,
+      total_count: data?.total_count,
+      total_count_type: typeof data?.total_count,
+      rows: (data?.data || []).length,
+    })
+    // #endregion
     if (error) throw error
     if (!data?.success) throw new Error(data?.error || 'Erro ao buscar mensagens')
     return {

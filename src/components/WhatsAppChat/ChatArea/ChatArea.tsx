@@ -172,6 +172,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const { messages: messagesData, totalCount } =
         await chatApi.getRecentMessagesWithTotal(conversationId, companyId, 50, userId)
 
+      // #region debug
+      console.log('[DEBUG fetchMessages]', {
+        messagesLoaded: messagesData?.length,
+        totalCount,
+        hasMoreWillBe: totalCount > 50,
+        convChanged: activeConvRef.current !== convSnapshot,
+      })
+      // #endregion
+
       // Proteção de race condition: descartar resultado se a conversa mudou durante o await
       if (activeConvRef.current !== convSnapshot) return
 
