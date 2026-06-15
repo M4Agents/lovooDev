@@ -2,15 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn, Mail, Lock } from 'lucide-react';
+import { LogIn, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { t } = useTranslation('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [showResendButton, setShowResendButton] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const { signIn, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
 
@@ -19,12 +21,20 @@ export const Login: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const type = urlParams.get('type');
-    
+
     if (type === 'invite' && token) {
       console.log('Login: Invite token detected, redirecting to accept-invite');
       navigate(`/accept-invite?${urlParams.toString()}`);
     }
   }, [navigate]);
+
+  // Detectar sessão expirada sinalizada pelo AuthContext
+  useEffect(() => {
+    if (sessionStorage.getItem('lovoo_session_expired') === 'true') {
+      setSessionExpired(true);
+      sessionStorage.removeItem('lovoo_session_expired');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +130,13 @@ export const Login: React.FC = () => {
 
           {/* Form Section */}
           <div className="px-8 pb-8">
+          {/* Banner: sessão expirada */}
+          {sessionExpired && (
+            <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
+              <span>Sua sessão expirou. Por favor, faça login novamente para continuar.</span>
+            </div>
+          )}
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -148,13 +165,22 @@ export const Login: React.FC = () => {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white"
+                  className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 focus:bg-white"
                   placeholder={t('login.fields.passwordPlaceholder')}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 

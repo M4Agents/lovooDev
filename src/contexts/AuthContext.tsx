@@ -92,6 +92,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔧 FLAG PARA EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
   const [isFetchingCompany, setIsFetchingCompany] = useState(false);
 
+  // Ref para distinguir logout intencional de expiração de sessão.
+  // true = usuário clicou em "Sair"; false = sessão expirou inesperadamente.
+  const isSigningOutRef = React.useRef(false);
+
   // Sincronizar currentRole sempre que company ou userRoles mudam.
   // Corrige o problema de stale closure: refreshUserRoles pode ser chamado
   // quando company ainda é null (closure capturada antes do setCompany).
@@ -420,6 +424,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('🔧 AuthContext: fetchCompany called, roles will be refreshed automatically');
           }
         } else {
+          // Sessão perdida. Se não foi logout intencional, sinalizar para a tela de login.
+          const wasIntentional = isSigningOutRef.current;
+          isSigningOutRef.current = false;
+
+          if (!wasIntentional) {
+            // Sessão expirada inesperadamente (ex: refresh token inválido/400)
+            // Sinalizar via sessionStorage para a tela de Login exibir aviso.
+            sessionStorage.setItem('lovoo_session_expired', 'true');
+          }
+
           // 🔧 PROTEÇÃO: NÃO SOBRESCREVER EMPRESA JÁ CARREGADA
           if (!company || !company.id) {
             console.log('🔧 AuthContext: No session user, clearing company state');
@@ -617,6 +631,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     console.log('🔧 AuthContext: Starting signOut process');
     
+    // Sinalizar que este logout é intencional — evita que onAuthStateChange
+    // marque a sessão como "expirada" e exiba o aviso desnecessário.
+    isSigningOutRef.current = true;
+
     // Limpar todos os dados de impersonação
     localStorage.removeItem('lovoo_crm_impersonating');
     localStorage.removeItem('lovoo_crm_original_user');
