@@ -103,15 +103,21 @@ export async function executeDistribution(node, context, supabase) {
   const assignmentErrors  = []
 
   if (context.leadId) {
-    const { error: leadError } = await supabase
+    // Guard: não sobrescreve leads que já têm responsável atribuído automaticamente
+    // pela instância WhatsApp (ou por qualquer outro meio anterior à distribuição).
+    // .is('responsible_user_id', null) faz o UPDATE atingir apenas leads sem responsável.
+    // 0 linhas afetadas sem erro = lead já tinha responsável → distribuição pula silenciosamente.
+    const { data: updatedLeads, error: leadError } = await supabase
       .from('leads')
       .update({ responsible_user_id: selectedUserId })
       .eq('id', context.leadId)
       .eq('company_id', context.companyId)
+      .is('responsible_user_id', null)
+      .select('id')
 
     if (leadError) {
       assignmentErrors.push(`lead ${context.leadId}: ${leadError.message}`)
-    } else {
+    } else if (updatedLeads && updatedLeads.length > 0) {
       assignedLead = true
 
       // [chat-sync] Propagar responsible_user_id para conversas do lead.
@@ -130,6 +136,7 @@ export async function executeDistribution(node, context, supabase) {
         console.warn(`[chat-sync] lead=${context.leadId} responsible=${selectedUserId} exception=${syncErr?.message}`)
       }
     }
+    // updatedLeads.length === 0 sem erro: lead já tinha responsável — distribuição pulou
   }
 
   if (context.opportunityId) {

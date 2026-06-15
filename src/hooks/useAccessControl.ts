@@ -150,6 +150,17 @@ export function useAccessControl() {
     isSaaSAdmin
   )
 
+  // ── Instâncias WhatsApp — responsável automático ──────────
+  // Alinhado com update_instance_assigned_user RPC:
+  // roles permitidos: super_admin, system_admin, admin, manager.
+  // seller e partner não têm acesso a esta configuração.
+  const canManageWhatsAppAssignedUser =
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
   // ── Integração Instagram ───────────────────────────────────
   // Ver aba: admin, manager, super_admin, system_admin, impersonando
   const canManageInstagramIntegration =
@@ -258,6 +269,9 @@ export function useAccessControl() {
 
     // Importação de leads por arquivo
     canImportLeads,
+
+    // Instâncias WhatsApp — responsável automático
+    canManageWhatsAppAssignedUser,
 
     // Integração Instagram
     canManageInstagramIntegration,

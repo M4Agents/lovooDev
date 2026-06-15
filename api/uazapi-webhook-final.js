@@ -314,6 +314,7 @@ async function processMessage(payload) {
         .select('id, company_id, provider_instance_id')
         .eq('phone_number', ownerPhone)
         .eq('status', 'connected')
+        .is('deleted_at', null)
         .single();
 
       if (phoneError || !instanceByPhone) {
@@ -1028,7 +1029,8 @@ async function processMessage(payload) {
           .rpc('create_lead_from_whatsapp_safe', {
             p_company_id: company.id,
             p_phone: phoneNumber,
-            p_name: senderName
+            p_name: senderName,
+            p_instance_id: instance.id  // v7: atribuição automática de responsável por instância
           });
         
         if (leadError) {
@@ -1060,6 +1062,24 @@ async function processMessage(payload) {
           
           if (leadResult.lead_id && conversationId) {
             await supabase.from('chat_conversations').update({ lead_id: leadResult.lead_id }).eq('id', conversationId);
+
+            // Fase 3c: sincronizar assigned_to na conversa quando lead novo veio com responsável da instância
+            if (leadResult.created && leadResult.responsible_user_id) {
+              try {
+                const { data: syncCount, error: syncError } = await supabaseAdminForLead
+                  .rpc('sync_lead_responsible_to_conversations', {
+                    p_lead_id:             Number(leadResult.lead_id),
+                    p_responsible_user_id: leadResult.responsible_user_id,
+                  });
+                if (syncError) {
+                  console.error('[webhook] chat-sync assigned_to error:', syncError.message);
+                } else {
+                  console.log('[webhook] chat-sync assigned_to ok:', { lead_id: leadResult.lead_id, responsible: leadResult.responsible_user_id, updated: syncCount ?? 0 });
+                }
+              } catch (syncErr) {
+                console.error('[webhook] chat-sync assigned_to exception:', syncErr?.message);
+              }
+            }
           }
           // Expor para uso no dispatch de message.received
           inboundLeadId = leadResult.lead_id || null;

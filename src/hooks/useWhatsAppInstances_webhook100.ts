@@ -354,6 +354,37 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   }, [companyId, fetchInstances]);
 
   // =====================================================
+  // ATUALIZAR RESPONSÁVEL DA INSTÂNCIA
+  // =====================================================
+  const updateAssignedUser = useCallback(async (
+    instanceId: string,
+    assignedUserId: string | null
+  ) => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { data, error } = await supabase.rpc('update_instance_assigned_user', {
+        p_instance_id:      instanceId,
+        p_company_id:       companyId,
+        p_assigned_user_id: assignedUserId,
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Erro ao atualizar responsável');
+
+      await fetchInstances();
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro ao atualizar responsável:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao atualizar responsável',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
+  // =====================================================
   // NOVA FUNÇÃO: SINCRONIZAR DADOS DO PERFIL
   // =====================================================
   const syncProfileData = useCallback(async (instanceId: string) => {
@@ -408,6 +439,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     syncWithUazapi,
     updateInstanceName,
     fetchInstances,
-    syncProfileData
+    syncProfileData,
+    updateAssignedUser,
   };
 };

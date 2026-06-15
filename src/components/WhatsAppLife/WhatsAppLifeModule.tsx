@@ -4,13 +4,15 @@
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Smartphone, Plus, Crown, CheckCircle, Edit2, Trash2, User, AlertCircle } from 'lucide-react';
+import { Smartphone, Plus, Crown } from 'lucide-react';
 import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
 import { useCompany } from '../../hooks/useCompany';
+import { useAccessControl } from '../../hooks/useAccessControl';
+import { supabase } from '../../lib/supabase';
 import { AddInstanceModal } from './AddInstanceModal';
 import { QRCodeModal } from './QRCodeModal';
-import { InstanceAvatar } from './InstanceAvatar';
+import { InstanceCard } from './InstanceCard';
 
 // =====================================================
 // COMPONENTE PRINCIPAL (VERSÃO FUNCIONAL)
@@ -40,8 +42,15 @@ export const WhatsAppLifeModule: React.FC = () => {
     deleteInstance,
     updateInstanceName,
     fetchInstances,
-    syncProfileData
+    syncProfileData,
+    updateAssignedUser,
   } = useWhatsAppInstancesWebhook100(company?.id);
+
+  const { canManageWhatsAppAssignedUser } = useAccessControl();
+
+  // Usuários disponíveis para seleção de responsável — carregados uma única vez no módulo
+  const [companyUsers, setCompanyUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   
   const { 
     planLimits, 
@@ -251,6 +260,41 @@ export const WhatsAppLifeModule: React.FC = () => {
       });
     }
   }, [instances, syncProfileData]);
+
+  // =====================================================
+  // CARREGAR USUÁRIOS PARA SELETOR DE RESPONSÁVEL
+  // =====================================================
+  useEffect(() => {
+    if (!company?.id || !canManageWhatsAppAssignedUser) return;
+
+    const loadUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const { data, error } = await supabase.rpc('get_assignable_users', {
+          p_company_id: company.id,
+        });
+        if (error) throw error;
+        setCompanyUsers(data || []);
+      } catch (err) {
+        console.error('[WhatsAppLifeModule] Erro ao carregar usuários:', err);
+        setCompanyUsers([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    loadUsers();
+  }, [company?.id, canManageWhatsAppAssignedUser]);
+
+  // =====================================================
+  // HANDLER: ATUALIZAR RESPONSÁVEL DA INSTÂNCIA
+  // =====================================================
+  const handleAssignedUserChange = useCallback(async (
+    instanceId: string,
+    assignedUserId: string | null
+  ) => {
+    return await updateAssignedUser(instanceId, assignedUserId);
+  }, [updateAssignedUser]);
 
   // Função para iniciar polling de instância temporária
   const startTempInstancePolling = useCallback((tempInstanceId: string, isReconnect: boolean = false) => {
@@ -611,100 +655,17 @@ export const WhatsAppLifeModule: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {instances.map((instance) => (
-                <div key={instance.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <InstanceAvatar
-                        profilePictureUrl={instance.profile_picture_url}
-                        profileName={instance.profile_name}
-                        instanceName={instance.instance_name}
-                        status={instance.status}
-                        size="md"
-                      />
-                      <div>
-                        <h4 className="font-medium text-gray-900">{instance.instance_name}</h4>
-                        <p className="text-sm text-gray-600">
-                          {instance.profile_name || 'Perfil não disponível'}
-                        </p>
-                        {instance.phone_number && (
-                          <p className="text-xs text-gray-500">{instance.phone_number}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          instance.status === 'connected' ? 'bg-green-100 text-green-800' :
-                          instance.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {instance.status === 'connected' ? 'Conectado' :
-                           instance.status === 'connecting' ? 'Conectando' : 'Desconectado'}
-                        </span>
-
-                        {/* Badge de restrição WhatsApp — separado do status de conexão */}
-                        {(instance as any).restriction_key && (
-                          <div className="mt-1.5">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
-                              <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                              Restrição temporária de envio
-                            </span>
-                            {(instance as any).restriction_since && (
-                              <p className="text-xs text-orange-600 mt-0.5">
-                                Desde {new Date((instance as any).restriction_since).toLocaleString('pt-BR', {
-                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                                })}
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {instance.connected_at && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Conectado em {(() => {
-                              const date = new Date(instance.connected_at);
-                              // Ajustar para horário de São Paulo (UTC-3)
-                              const saoPauloTime = new Date(date.getTime() - (3 * 60 * 60 * 1000));
-                              return saoPauloTime.toLocaleString('pt-BR', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit'
-                              });
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                      
-                      {/* Botões de Ação */}
-                      <div className="flex gap-1 ml-2">
-                        <button
-                          onClick={() => handleSyncProfile(instance)}
-                          className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded"
-                          title="Sincronizar foto do perfil"
-                        >
-                          <User className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEditInstance(instance)}
-                          className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                          title="Alterar nome"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteInstance(instance)}
-                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                          title="Excluir instância"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <InstanceCard
+                  key={instance.id}
+                  instance={instance}
+                  companyUsers={companyUsers}
+                  loadingUsers={loadingUsers}
+                  canManageWhatsAppAssignedUser={canManageWhatsAppAssignedUser}
+                  onAssignedUserChange={handleAssignedUserChange}
+                  onSyncProfile={handleSyncProfile}
+                  onEdit={handleEditInstance}
+                  onDelete={handleDeleteInstance}
+                />
               ))}
             </div>
           )}

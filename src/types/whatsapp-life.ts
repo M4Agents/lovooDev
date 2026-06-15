@@ -39,6 +39,9 @@ export interface WhatsAppLifeInstance {
   restriction_since?: string | null;
   restriction_checked_at?: string | null;
   restriction_payload?: Record<string, unknown> | null;
+
+  // Responsável automático por leads criados via esta instância
+  assigned_user_id?: string | null;
 }
 
 export type WhatsAppInstanceStatus = 
@@ -255,6 +258,11 @@ export interface UseInstancesReturn {
   }>;
   fetchInstances: () => Promise<void>;
   syncProfileData: (instanceId: string) => Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }>;
+  updateAssignedUser: (instanceId: string, assignedUserId: string | null) => Promise<{
     success: boolean;
     data?: any;
     error?: string;
