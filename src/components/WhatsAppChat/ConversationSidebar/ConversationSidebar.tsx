@@ -90,14 +90,6 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
 
-  // #region agent log
-  React.useEffect(() => {
-    if (selectedChannel !== 'instagram') {
-      console.log('[DBG-5] sidebar props', {conversationsPropLength: conversations.length, filterType: filter.type, filterSearch: (filter as any).search || null, selectedInstance: selectedInstance || 'all', loading, hasMoreConversations});
-    }
-  }, [conversations.length, filter.type, (filter as any).search, selectedChannel, loading]);
-  // #endregion
-
   const isInstagram = selectedChannel === 'instagram'
 
   // Tab ativa para Instagram (incluindo 'comments' e 'pending')
@@ -341,11 +333,6 @@ const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
   hasMoreConversations = false, loadMoreConversations, loadingMoreConversations = false
 }) => {
   const { t } = useTranslation('chat')
-  // #region agent log
-  React.useEffect(() => {
-    console.log('[DBG-4] list render', {filteredCount: filteredConversations.length, loading, selectedInstance: selectedInstance || 'all', searchTerm: searchTerm || null, hasMoreConversations});
-  }, [filteredConversations.length, loading]);
-  // #endregion
   return loading ? (
     <div className="flex items-center justify-center py-12">
       <div className="relative">

@@ -161,9 +161,6 @@ export const useChatData = (
         0,
         CONVERSATIONS_PAGE_SIZE
       )
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-B|H-C',location:'useChatData.ts:fetchConversations',message:'[DBG-5] fetchConversations result',data:{dataLength:data.length,hasMore,selectedInstance,filterType:filter.type},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       setConversations(data)
       setLoadedConversationPages(1)
       setHasMoreConversations(hasMore)
@@ -370,8 +367,6 @@ export const useChatData = (
 
   const filteredConversations = useMemo(() => {
     let filtered = [...conversations]
-    const afterRpc = filtered.length
-
     // Aplicar busca por texto se fornecida
     if (filter.search) {
       const searchLower = filter.search.toLowerCase()
@@ -381,8 +376,6 @@ export const useChatData = (
         conv.last_message_content?.toLowerCase().includes(searchLower)
       )
     }
-    const afterSearch = filtered.length
-
     // NOVO: Aplicar filtro por tipo
     if (filter.type === 'unread') {
       filtered = filtered.filter(conv => conv.unread_count > 0)
@@ -391,12 +384,6 @@ export const useChatData = (
     } else if (filter.type === 'unassigned') {
       filtered = filtered.filter(conv => !conv.assigned_to)
     }
-    const afterTypeFilter = filtered.length
-
-    // #region agent log
-    console.log('[DBG-3] filteredConversations pipeline', {afterRpc, afterSearch, afterTypeFilter, filterType: filter.type, filterSearch: filter.search || null});
-    // #endregion
-
     // ✅ CORREÇÃO: Ordenar por última mensagem (mais recentes primeiro) com proteção
     filtered.sort((a, b) => {
       try {

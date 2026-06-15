@@ -78,9 +78,6 @@ export class ChatApi {
     limit: number = 50
   ): Promise<{ conversations: ChatConversation[]; hasMore: boolean }> {
     try {
-      // #region agent log
-      console.log('[DBG-1] RPC params', {companyId, userId, filterType: filter.type, filterSearch: filter.search, instanceId: instanceId || null, limit, offset});
-      // #endregion
       const { data, error } = await supabase.rpc('chat_get_conversations', {
         p_company_id:  companyId,
         p_user_id:     userId,
@@ -92,9 +89,6 @@ export class ChatApi {
       if (error) throw error
       if (!data.success) throw new Error(data.error || 'Erro ao buscar conversas')
       const conversations = (data.data || []).map((raw: any) => ChatApi.mapConversation(raw))
-      // #region agent log
-      console.log('[DBG-2] RPC result', {rawDataLength: (data.data||[]).length, mappedLength: conversations.length, hasMore: conversations.length >= limit, success: data.success});
-      // #endregion
       return { conversations, hasMore: conversations.length >= limit }
     } catch (error) {
       console.error('Error fetching conversations page:', error)
@@ -323,17 +317,6 @@ export class ChatApi {
     p_user_id:         string | null
   }): Promise<{ messages: ChatMessage[]; totalCount: number }> {
     const { data, error } = await supabase.rpc('chat_get_messages', params)
-    // #region debug
-    console.log('[DEBUG chat_get_messages]', {
-      p_limit: params.p_limit,
-      hasError: !!error,
-      errorMsg: error?.message,
-      success: data?.success,
-      total_count: data?.total_count,
-      total_count_type: typeof data?.total_count,
-      rows: (data?.data || []).length,
-    })
-    // #endregion
     if (error) throw error
     if (!data?.success) throw new Error(data?.error || 'Erro ao buscar mensagens')
     return {
