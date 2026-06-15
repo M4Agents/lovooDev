@@ -366,7 +366,13 @@ export const useChatData = (
   // =====================================================
 
   const filteredConversations = useMemo(() => {
-    let filtered = [...conversations]
+    // Aplicar restrição de visibilidade por seller (espelho client-side do RLS).
+    // Necessário porque o RPC chat_get_conversations é SECURITY DEFINER e bypassa o RLS,
+    // retornando todas as conversas da empresa independentemente do assigned_to.
+    let filtered = visibilityContext
+      ? conversations.filter(conv => isConversationVisibleForUser(conv, visibilityContext))
+      : [...conversations]
+
     // Aplicar busca por texto se fornecida
     if (filter.search) {
       const searchLower = filter.search.toLowerCase()
@@ -399,7 +405,7 @@ export const useChatData = (
     })
 
     return filtered
-  }, [conversations, filter.search, filter.type])
+  }, [conversations, filter.search, filter.type, visibilityContext])
 
   // =====================================================
   // SUBSCRIPTION PARA TEMPO REAL
