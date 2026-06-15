@@ -263,6 +263,79 @@ export class ChatApi {
     }
   }
 
+  // =====================================================
+  // PAGINAÇÃO COM METADADOS — carga inicial e histórico
+  // =====================================================
+
+  /**
+   * Helper privado: chama chat_get_messages e normaliza a resposta.
+   * Retorna mensagens mapeadas + total_count do banco.
+   * Usado por getRecentMessagesWithTotal e getMessages (via refatoração interna).
+   */
+  private static async rawMessagesRpc(params: {
+    p_conversation_id: string
+    p_company_id:      string
+    p_limit:           number
+    p_offset:          number
+    p_reverse_order:   boolean
+    p_user_id:         string | null
+  }): Promise<{ messages: ChatMessage[]; totalCount: number }> {
+    const { data, error } = await supabase.rpc('chat_get_messages', params)
+    if (error) throw error
+    if (!data?.success) throw new Error(data?.error || 'Erro ao buscar mensagens')
+    return {
+      messages:   (data.data || []).map((raw: any) => ChatApi.mapMessage(raw)),
+      totalCount: (data.total_count as number) ?? 0,
+    }
+  }
+
+  /**
+   * Busca as N mensagens mais recentes e retorna também o total da conversa.
+   * Usado pela carga inicial do ChatArea.
+   */
+  static async getRecentMessagesWithTotal(
+    conversationId: string,
+    companyId: string,
+    limit: number = 50,
+    userId?: string
+  ): Promise<{ messages: ChatMessage[]; totalCount: number }> {
+    const { messages, totalCount } = await ChatApi.rawMessagesRpc({
+      p_conversation_id: conversationId,
+      p_company_id:      companyId,
+      p_limit:           limit,
+      p_offset:          0,
+      p_reverse_order:   true,
+      p_user_id:         userId ?? null,
+    })
+    // Reverter de DESC para ASC (mais antigas no topo)
+    return { messages: messages.reverse(), totalCount }
+  }
+
+  /**
+   * Busca mensagens anteriores a um timestamp e retorna também
+   * quantas mensagens ainda existem antes desse ponto (remaining_count).
+   * Usado pelo botão "Carregar mais" do ChatArea.
+   */
+  static async getOlderMessagesWithRemaining(
+    conversationId: string,
+    companyId: string,
+    beforeTimestamp: Date,
+    limit: number = 50
+  ): Promise<{ messages: ChatMessage[]; remaining: number }> {
+    const { data, error } = await supabase.rpc('chat_get_messages_before_timestamp', {
+      p_conversation_id:  conversationId,
+      p_company_id:       companyId,
+      p_before_timestamp: beforeTimestamp.toISOString(),
+      p_limit:            limit,
+    })
+    if (error) throw error
+    if (!data?.success) throw new Error(data?.error || 'Erro ao buscar mensagens antigas')
+    return {
+      messages:  (data.data || []).map((raw: any) => ChatApi.mapMessage(raw)),
+      remaining: (data.remaining_count as number) ?? 0,
+    }
+  }
+
   static async sendMessage(
     conversationId: string,
     companyId: string,

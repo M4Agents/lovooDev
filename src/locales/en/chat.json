@@ -119,7 +119,9 @@
     "emptyMessages": "No messages yet",
     "emptyMessagesHint": "Send the first message to start the conversation",
     "loadMoreLoading": "Loading messages...",
-    "loadMore": "Load earlier messages",
+    "loadMore": "Load 50 more messages",
+    "messagesCount": "Showing {{shown}} of {{total}} messages",
+    "messagesTotal": "{{total}} messages",
     "previewAlt": "Preview"
   },
   "instanceAlert": {

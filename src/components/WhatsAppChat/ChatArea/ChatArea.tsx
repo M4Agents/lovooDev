@@ -67,6 +67,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showSuggestionPanel, setShowSuggestionPanel] = useState(false)
   const [pendingSuggestion, setPendingSuggestion]     = useState<string | null>(null)
 
+  // Total de mensagens da conversa (carga inicial via RPC total_count)
+  const [totalMessages, setTotalMessages] = useState<number | null>(null)
+
+  // Ref para proteção mínima de race condition em fetchMessages
+  const activeConvRef = useRef<string>(conversationId)
+
   // Trava de reação — evita múltiplos requests simultâneos na mesma mensagem (Ajuste 3)
   const [reactingMessageId, setReactingMessageId] = useState<string | null>(null)
   
@@ -158,45 +164,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // =====================================================
 
   const fetchMessages = async () => {
+    // Captura local do conversationId para proteção de race condition
+    const convSnapshot = conversationId
     try {
       setLoading(true)
-      // Carregando mensagens...
-      
-      // NOVO: Carregar mensagens recentes (aumentado para 50 para garantir mídia recente)
-      const messagesData = await chatApi.getRecentMessages(conversationId, companyId, 50, userId)
-      
-      // Logs removidos por segurança
-      
+
+      const { messages: messagesData, totalCount } =
+        await chatApi.getRecentMessagesWithTotal(conversationId, companyId, 50, userId)
+
+      // Proteção de race condition: descartar resultado se a conversa mudou durante o await
+      if (activeConvRef.current !== convSnapshot) return
+
+      setTotalMessages(totalCount)
+      setHasMoreMessages(totalCount > 50)
+
       // Merge inteligente: preservar mensagens locais temporárias
       setMessages(prev => {
-        // Processando estado do chat...
-        
-        // Mensagens temporárias (ainda não confirmadas no banco)
         const tempMessages = prev.filter(msg => msg.id.startsWith('temp-'))
-        
-        // Mensagens do banco
-        const bankMessages = messagesData || []
-        
-        // Combinar sem duplicatas
-        const allMessages = [...bankMessages, ...tempMessages]
-        
-        // Ordenar por timestamp
-        const sortedMessages = allMessages.sort((a, b) => 
+        const allMessages  = [...(messagesData || []), ...tempMessages]
+        return allMessages.sort((a, b) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
-        
-        // Merge de mensagens concluído
-        
-        // Processando mensagens de mídia...  
-        
-        return sortedMessages
       })
-      
+
     } catch (error) {
       console.error('Erro ao carregar mensagens')
       // Em caso de erro, manter mensagens existentes
     } finally {
-      setLoading(false)
+      if (activeConvRef.current === convSnapshot) setLoading(false)
     }
   }
 
@@ -313,26 +308,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       // Pegar timestamp da mensagem mais antiga
       const oldestTimestamp = new Date(messages[0].timestamp)
       
-      // Carregar mensagens anteriores
-      const olderMessages = await chatApi.getOlderMessages(
-        conversationId, 
-        companyId, 
-        oldestTimestamp, 
-        20
-      )
+      // Carregar mensagens anteriores (50 por vez, com remaining_count como fonte de verdade)
+      const { messages: olderMessages, remaining } =
+        await chatApi.getOlderMessagesWithRemaining(conversationId, companyId, oldestTimestamp, 50)
 
       if (olderMessages.length === 0) {
         setHasMoreMessages(false)
-        // Não há mais mensagens antigas
         return
       }
 
+      setHasMoreMessages(remaining > 0)
+
       // Adicionar mensagens antigas no início da lista
-      setMessages(prev => {
-        const newMessages = [...olderMessages, ...prev]
-        // Mensagens antigas adicionadas
-        return newMessages
-      })
+      setMessages(prev => [...olderMessages, ...prev])
 
       // Restaurar posição APÓS DOM atualizar
       requestAnimationFrame(() => {
@@ -585,6 +573,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   useEffect(() => {
     if (conversationId && companyId) {
+      // Reset de paginação ao trocar de conversa
+      activeConvRef.current = conversationId
+      setHasMoreMessages(true)
+      setTotalMessages(null)
+
       fetchMessages()
       fetchConversation() // CORREÇÃO: Adicionar busca dos dados da conversa para o header
       
@@ -1420,9 +1413,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         ) : (
           <>
-            {/* Botão "Carregar Mais" no topo */}
+            {/* Contador de mensagens + botão "Carregar Mais" no topo */}
+            {totalMessages !== null && (
+              <p className="text-xs text-gray-400 text-center pt-3 pb-1">
+                {hasMoreMessages
+                  ? t('chatArea.messagesCount', {
+                      shown: messages.filter(m => !m.id.startsWith('temp-')).length,
+                      total: totalMessages,
+                    })
+                  : t('chatArea.messagesTotal', { total: totalMessages })
+                }
+              </p>
+            )}
             {hasMoreMessages && (
-              <div className="text-center py-3 border-b border-gray-200 mb-4">
+              <div className="text-center pb-3 border-b border-gray-200 mb-4">
                 <button
                   onClick={loadOlderMessages}
                   disabled={loadingOlder}

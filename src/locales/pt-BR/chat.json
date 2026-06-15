@@ -256,7 +256,9 @@
     "emptyMessages": "Nenhuma mensagem ainda",
     "emptyMessagesHint": "Envie a primeira mensagem para começar a conversa",
     "loadMoreLoading": "Carregando mensagens...",
-    "loadMore": "Carregar mensagens anteriores",
+    "loadMore": "Carregar mais 50 mensagens",
+    "messagesCount": "Exibindo {{shown}} de {{total}} mensagens",
+    "messagesTotal": "{{total}} mensagens",
     "previewAlt": "Preview"
   },
   "instanceAlert": {
