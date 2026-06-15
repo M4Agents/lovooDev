@@ -40,7 +40,9 @@
     "emptyNoResults": "Nenhuma conversa encontrada",
     "emptyNoConversations": "Nenhuma conversa ainda",
     "emptyHintSearch": "Tente ajustar os termos da busca",
-    "emptyHintDefault": "As conversas aparecerão aqui quando você receber mensagens"
+    "emptyHintDefault": "As conversas aparecerão aqui quando você receber mensagens",
+    "loadMore": "Carregar mais 50 conversas",
+    "loadMoreLoading": "Carregando..."
   },
   "conversationItem": {
     "contactAlt": "Contato",

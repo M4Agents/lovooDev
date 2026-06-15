@@ -60,6 +60,42 @@ export class ChatApi {
     }
   }
 
+  // =====================================================
+  // PAGINAÇÃO — carga inicial e "load more" da lista
+  // =====================================================
+
+  /**
+   * Busca uma página de conversas com suporte a offset.
+   * Agnóstico ao tamanho de página — recebe limit como parâmetro.
+   * hasMore é inferido por data.length >= limit (sem migration SQL).
+   */
+  static async getConversationsPage(
+    companyId: string,
+    userId: string,
+    filter: ConversationFilter,
+    instanceId?: string,
+    offset: number = 0,
+    limit: number = 50
+  ): Promise<{ conversations: ChatConversation[]; hasMore: boolean }> {
+    try {
+      const { data, error } = await supabase.rpc('chat_get_conversations', {
+        p_company_id:  companyId,
+        p_user_id:     userId,
+        p_filter_type: filter.type,
+        p_instance_id: instanceId || null,
+        p_limit:       limit,
+        p_offset:      offset,
+      })
+      if (error) throw error
+      if (!data.success) throw new Error(data.error || 'Erro ao buscar conversas')
+      const conversations = (data.data || []).map((raw: any) => ChatApi.mapConversation(raw))
+      return { conversations, hasMore: conversations.length >= limit }
+    } catch (error) {
+      console.error('Error fetching conversations page:', error)
+      throw error
+    }
+  }
+
   static async createOrGetConversation(
     companyId: string,
     instanceId: string,

@@ -242,6 +242,11 @@ export interface UseChatDataReturn {
   // Loading states
   instancesLoading: boolean
   conversationsLoading: boolean
+
+  // Paginação da lista de conversas
+  hasMoreConversations: boolean
+  loadMoreConversations: () => Promise<void>
+  loadingMoreConversations: boolean
   
   // Actions
   setSelectedInstance: (id: string) => void

@@ -4,7 +4,7 @@
 // Hook principal para gerenciar dados do chat
 // NÃO MODIFICA hooks existentes
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { chatApi } from '../../services/chat/chatApi'
 import { supabase } from '../../lib/supabase'
 import { useChatRealtime } from './useChatRealtime'
@@ -17,6 +17,16 @@ import type {
   ConversationFilter,
   UseChatDataReturn
 } from '../../types/whatsapp-chat'
+
+// Tamanho de página para paginação da lista de conversas.
+// Definido aqui (camada de hook) — o chatApi não conhece este valor.
+const CONVERSATIONS_PAGE_SIZE = 50
+
+// Helper de deduplicação por id
+const dedupeConversations = (list: ChatConversation[]): ChatConversation[] => {
+  const seen = new Set<string>()
+  return list.filter(c => seen.has(c.id) ? false : (seen.add(c.id), true))
+}
 
 // =====================================================
 // HOOK PRINCIPAL
@@ -48,6 +58,72 @@ export const useChatData = (
   const [instancesLoading, setInstancesLoading] = useState(true)
   const [conversationsLoading, setConversationsLoading] = useState(false)
 
+  // Estados de paginação da lista de conversas
+  const [loadedConversationPages,    setLoadedConversationPages]    = useState(1)
+  const [hasMoreConversations,       setHasMoreConversations]       = useState(false)
+  const [loadingMoreConversations,   setLoadingMoreConversations]   = useState(false)
+
+  // Ref sincronizado para uso nos listeners de realtime (evita stale closure)
+  const loadedPagesRef = useRef(1)
+  useEffect(() => {
+    loadedPagesRef.current = loadedConversationPages
+  }, [loadedConversationPages])
+
+  // =====================================================
+  // CARREGAR MAIS CONVERSAS (paginação — "Load more")
+  // =====================================================
+
+  const loadMoreConversations = useCallback(async () => {
+    if (!companyId || !userId || loadingMoreConversations || !hasMoreConversations) return
+
+    // Snapshots para proteção contra race condition
+    const instanceSnapshot = selectedInstance
+    const filterTypeSnapshot = filter.type
+    const companyIdSnapshot = companyId
+
+    const offset = loadedConversationPages * CONVERSATIONS_PAGE_SIZE
+    const instanceFilter = selectedInstance === 'all' ? undefined : selectedInstance
+
+    setLoadingMoreConversations(true)
+    try {
+      const { conversations: newData, hasMore } = await chatApi.getConversationsPage(
+        companyId,
+        userId,
+        filter,
+        instanceFilter,
+        offset,
+        CONVERSATIONS_PAGE_SIZE
+      )
+
+      // Descartar resultado se o contexto mudou durante o await
+      if (
+        companyId      !== companyIdSnapshot  ||
+        selectedInstance !== instanceSnapshot  ||
+        filter.type    !== filterTypeSnapshot
+      ) return
+
+      const nextPages  = loadedConversationPages + 1
+      const maxVisible = nextPages * CONVERSATIONS_PAGE_SIZE
+
+      setConversations(prev =>
+        dedupeConversations([...prev, ...newData]).slice(0, maxVisible)
+      )
+      setLoadedConversationPages(nextPages)
+      setHasMoreConversations(hasMore)
+    } catch (error) {
+      console.error('Error loading more conversations:', error)
+    } finally {
+      // Só limpa o loading se o contexto ainda for o mesmo
+      if (
+        companyId        === companyIdSnapshot  &&
+        selectedInstance === instanceSnapshot   &&
+        filter.type      === filterTypeSnapshot
+      ) {
+        setLoadingMoreConversations(false)
+      }
+    }
+  }, [companyId, userId, filter, selectedInstance, loadedConversationPages, hasMoreConversations, loadingMoreConversations])
+
   // =====================================================
   // BUSCAR INSTÂNCIAS DISPONÍVEIS
   // =====================================================
@@ -76,18 +152,22 @@ export const useChatData = (
 
     try {
       setConversationsLoading(true)
-      // Se selectedInstance for 'all', passar undefined para buscar todas as instâncias
       const instanceFilter = selectedInstance === 'all' ? undefined : selectedInstance
-      const conversationsData = await chatApi.getConversations(
+      const { conversations: data, hasMore } = await chatApi.getConversationsPage(
         companyId,
         userId,
         filter,
-        instanceFilter
+        instanceFilter,
+        0,
+        CONVERSATIONS_PAGE_SIZE
       )
-      setConversations(conversationsData)
+      setConversations(data)
+      setLoadedConversationPages(1)
+      setHasMoreConversations(hasMore)
     } catch (error) {
       console.error('Error fetching conversations:', error)
       setConversations([])
+      setHasMoreConversations(false)
     } finally {
       setConversationsLoading(false)
     }
@@ -131,15 +211,14 @@ export const useChatData = (
   // Listener para novas conversas criadas
   useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
     if (conversation.company_id === companyId) {
-      // Verificar visibilidade antes de adicionar à lista local
       if (visibilityContext && !isConversationVisibleForUser(conversation, visibilityContext)) return
       setConversations(prev => {
-        // Evitar duplicatas
         if (prev.some(conv => conv.id === conversation.id)) return prev
-        return [conversation, ...prev]
+        // Slice via ref para evitar stale closure após load more
+        return [conversation, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
       })
     }
-  }, [companyId])
+  }, [companyId, visibilityContext])
 
   // Listener para conversas atualizadas
   useChatEvent('chat:conversation:updated', (payload: any) => {
@@ -150,12 +229,11 @@ export const useChatData = (
         setConversations(prev => {
           const exists = prev.some(conv => conv.id === updated.id)
           if (!visible) {
-            // Conversa deixou de ser visível (ex: atribuída a outro seller) → remover
             return prev.filter(conv => conv.id !== updated.id)
           }
           if (!exists) {
-            // Conversa passou a ser visível (ex: atribuída a este seller) → adicionar
-            return [updated, ...prev]
+            // Conversa passou a ser visível — prepend com slice via ref
+            return [updated, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
           }
           return prev.map(conv => conv.id === updated.id ? updated : conv)
         })
@@ -165,7 +243,7 @@ export const useChatData = (
         )
       }
     }
-  }, [companyId])
+  }, [companyId, visibilityContext])
 
   // Listener para mensagens recebidas (atualizar última mensagem da conversa)
   useChatEvent('chat:message:received', (payload: any) => {
@@ -242,9 +320,11 @@ export const useChatData = (
 
   const handleSetSelectedInstance = useCallback((instanceId: string) => {
     setSelectedInstance(instanceId)
-    setSelectedConversation(undefined) // Limpar conversa selecionada
-    
-    // Salvar no localStorage escopado por usuário
+    setSelectedConversation(undefined)
+    // Reset de paginação ao trocar de instância
+    setConversations([])
+    setLoadedConversationPages(1)
+    setHasMoreConversations(false)
     localStorage.setItem(`chat_selected_instance_${userId}`, instanceId)
   }, [userId])
 
@@ -254,9 +334,11 @@ export const useChatData = (
 
   const handleSetFilter = useCallback((newFilter: ConversationFilter) => {
     setFilter(newFilter)
-    setSelectedConversation(undefined) // Limpar conversa selecionada
-    
-    // Salvar no localStorage escopado por usuário
+    setSelectedConversation(undefined)
+    // Reset de paginação ao trocar de filtro
+    setConversations([])
+    setLoadedConversationPages(1)
+    setHasMoreConversations(false)
     localStorage.setItem(`chat_filter_state_${userId}`, JSON.stringify(newFilter))
   }, [userId])
 
@@ -489,6 +571,11 @@ export const useChatData = (
     // Loading states
     instancesLoading,
     conversationsLoading,
+    
+    // Paginação da lista de conversas
+    hasMoreConversations,
+    loadMoreConversations,
+    loadingMoreConversations,
     
     // Actions
     setSelectedInstance: handleSetSelectedInstance,

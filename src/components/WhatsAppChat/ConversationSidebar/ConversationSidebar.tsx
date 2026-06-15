@@ -51,6 +51,10 @@ interface ConversationSidebarProps {
   onSelectConversation: (conversationId: string) => void
   onFilterChange: (filter: ConversationFilter) => void
   onRefresh: () => void
+  /** Paginação da lista de conversas */
+  hasMoreConversations?: boolean
+  loadMoreConversations?: () => Promise<void>
+  loadingMoreConversations?: boolean
   /** Canal ativo — padrão 'whatsapp' */
   selectedChannel: ChatChannel
   onChannelChange: (channel: ChatChannel) => void
@@ -75,6 +79,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onSelectConversation,
   onFilterChange,
   onRefresh,
+  hasMoreConversations = false,
+  loadMoreConversations,
+  loadingMoreConversations = false,
   selectedChannel,
   onChannelChange,
   igData,
@@ -295,6 +302,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               onSelectConversation={onSelectConversation}
               selectedInstance={selectedInstance}
               searchTerm={searchTerm}
+              hasMoreConversations={hasMoreConversations}
+              loadMoreConversations={loadMoreConversations}
+              loadingMoreConversations={loadingMoreConversations}
             />
         }
       </div>
@@ -313,10 +323,14 @@ interface WhatsAppConversationListProps {
   onSelectConversation: (id: string) => void
   selectedInstance?: string
   searchTerm: string
+  hasMoreConversations?: boolean
+  loadMoreConversations?: () => Promise<void>
+  loadingMoreConversations?: boolean
 }
 
 const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
-  loading, filteredConversations, selectedConversation, onSelectConversation, selectedInstance, searchTerm
+  loading, filteredConversations, selectedConversation, onSelectConversation, selectedInstance, searchTerm,
+  hasMoreConversations = false, loadMoreConversations, loadingMoreConversations = false
 }) => {
   const { t } = useTranslation('chat')
   return loading ? (
@@ -354,6 +368,21 @@ const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
           showInstanceBadge={!selectedInstance || selectedInstance === 'all'}
         />
       ))}
+
+      {hasMoreConversations && (
+        <div className="p-3">
+          <button
+            onClick={loadMoreConversations}
+            disabled={loadingMoreConversations}
+            className="w-full py-2.5 px-4 rounded-xl text-sm font-medium transition-all duration-200 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 disabled:cursor-not-allowed text-slate-600"
+          >
+            {loadingMoreConversations
+              ? t('sidebar.loadMoreLoading')
+              : t('sidebar.loadMore')
+            }
+          </button>
+        </div>
+      )}
     </div>
   )
 }

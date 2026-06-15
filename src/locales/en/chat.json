@@ -36,7 +36,9 @@
     "emptyNoResults": "No conversations found",
     "emptyNoConversations": "No conversations yet",
     "emptyHintSearch": "Try adjusting your search terms",
-    "emptyHintDefault": "Conversations will appear here when you receive messages"
+    "emptyHintDefault": "Conversations will appear here when you receive messages",
+    "loadMore": "Load 50 more conversations",
+    "loadMoreLoading": "Loading..."
   },
   "conversationItem": {
     "contactAlt": "Contact",

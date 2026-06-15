@@ -253,6 +253,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             onSelectConversation={handleSelectConversation}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
+            hasMoreConversations={chatData.hasMoreConversations}
+            loadMoreConversations={chatData.loadMoreConversations}
+            loadingMoreConversations={chatData.loadingMoreConversations}
             selectedChannel={selectedChannel}
             onChannelChange={handleChannelChange}
             igData={igSidebarData}
@@ -443,6 +446,9 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
             onSelectConversation={handleSelectConversationMobile}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
+            hasMoreConversations={chatData.hasMoreConversations}
+            loadMoreConversations={chatData.loadMoreConversations}
+            loadingMoreConversations={chatData.loadingMoreConversations}
           />
         )}
 
