@@ -418,6 +418,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (companyData.company_telefone && !validatePhone(companyData.company_telefone)) {
       errors.company_telefone = 'Telefone inválido';
     }
+    if (!lead?.id && formData.phone && !validatePhone(formData.phone)) {
+      errors.phone = 'Telefone inválido. Informe DDD + número (10 ou 11 dígitos).';
+    }
 
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
@@ -549,10 +552,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   };
 
   const handleInputChange = (field: string, value: string) => {
+    let processedValue = value;
+
+    if (field === 'phone') {
+      processedValue = maskPhone(value);
+    }
+
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: processedValue
     }));
+
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+    }
   };
 
   const handleCompanyInputChange = (field: string, value: string) => {
@@ -862,9 +875,14 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+                    className={`w-full px-4 py-3 border ${
+                      validationErrors.phone ? 'border-red-300' : 'border-gray-300'
+                    } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400`}
                     placeholder="(11) 99999-9999"
                   />
+                  {validationErrors.phone && (
+                    <p className="text-sm text-red-600">{validationErrors.phone}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
