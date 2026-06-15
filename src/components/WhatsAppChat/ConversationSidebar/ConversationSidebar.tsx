@@ -90,6 +90,14 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
 
+  // #region agent log
+  React.useEffect(() => {
+    if (selectedChannel !== 'instagram') {
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-D|H-E',location:'ConversationSidebar.tsx:props',message:'[DBG-5] sidebar props',data:{conversationsPropLength:conversations.length,filterType:filter.type,filterSearch:(filter as any).search||null,selectedInstance:selectedInstance||'all',loading,hasMoreConversations},timestamp:Date.now()})}).catch(()=>{});
+    }
+  }, [conversations.length, filter.type, (filter as any).search, selectedChannel, loading]);
+  // #endregion
+
   const isInstagram = selectedChannel === 'instagram'
 
   // Tab ativa para Instagram (incluindo 'comments' e 'pending')
@@ -333,6 +341,11 @@ const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
   hasMoreConversations = false, loadMoreConversations, loadingMoreConversations = false
 }) => {
   const { t } = useTranslation('chat')
+  // #region agent log
+  React.useEffect(() => {
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-A|H-E',location:'ConversationSidebar.tsx:WhatsAppConversationList',message:'[DBG-4] list render',data:{filteredCount:filteredConversations.length,loading,selectedInstance:selectedInstance||'all',searchTerm:searchTerm||null,hasMoreConversations},timestamp:Date.now()})}).catch(()=>{});
+  }, [filteredConversations.length, loading]);
+  // #endregion
   return loading ? (
     <div className="flex items-center justify-center py-12">
       <div className="relative">

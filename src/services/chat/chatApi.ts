@@ -78,6 +78,9 @@ export class ChatApi {
     limit: number = 50
   ): Promise<{ conversations: ChatConversation[]; hasMore: boolean }> {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-A|H-B|H-C',location:'chatApi.ts:getConversationsPage',message:'[DBG-1] RPC params',data:{companyId,userId,filterType:filter.type,filterSearch:filter.search,instanceId:instanceId||null,limit,offset},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const { data, error } = await supabase.rpc('chat_get_conversations', {
         p_company_id:  companyId,
         p_user_id:     userId,
@@ -89,6 +92,9 @@ export class ChatApi {
       if (error) throw error
       if (!data.success) throw new Error(data.error || 'Erro ao buscar conversas')
       const conversations = (data.data || []).map((raw: any) => ChatApi.mapConversation(raw))
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',runId:'run1',hypothesisId:'H-B',location:'chatApi.ts:getConversationsPage',message:'[DBG-2] RPC result',data:{rawDataLength:(data.data||[]).length,mappedLength:conversations.length,hasMore:conversations.length>=limit,success:data.success},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return { conversations, hasMore: conversations.length >= limit }
     } catch (error) {
       console.error('Error fetching conversations page:', error)
