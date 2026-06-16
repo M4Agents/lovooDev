@@ -612,7 +612,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   const { canEditLead } = useLeadPermissions()
 
   // FASE 5ZD: detectar seller restrito para filtrar instâncias disponíveis
-  const { currentRole, company } = useAuth()
+  const { currentRole, company, user } = useAuth()
   const isRestrictedSeller =
     (company?.chat_visibility_by_assigned_to ?? false) && currentRole === 'seller'
 
@@ -641,10 +641,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
         // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
         // #region agent log
-        console.log('[DEBUG 449c25] loadInstances: isRestrictedSeller', isRestrictedSeller, 'userId', userId, 'type', typeof userId)
+        console.log('[DEBUG 449c25] loadInstances (ContactInfo): isRestrictedSeller', isRestrictedSeller, 'user?.id', user?.id)
         // #endregion
         const instances = isRestrictedSeller
-          ? allInstances.filter((i: any) => i.assigned_user_id === userId)
+          ? allInstances.filter((i: any) => i.assigned_user_id === user?.id)
           : allInstances
 
         setAvailableInstances(instances)
@@ -663,7 +663,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
     
     loadInstances()
-  }, [companyId, conversation?.instance_id, isRestrictedSeller, userId])
+  }, [companyId, conversation?.instance_id, isRestrictedSeller, user?.id])
 
   // Carregar usuários da empresa para atribuição de responsável
   // Usa get_assignable_users (acessível a qualquer membro ativo, incluindo manager/seller)
