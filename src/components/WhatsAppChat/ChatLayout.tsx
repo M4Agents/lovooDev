@@ -243,6 +243,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       {!hideConversationSidebar && (
         <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
           <ConversationSidebar
+            companyId={companyId}
+            userId={userId}
             instances={chatData.instances}
             conversations={chatData.conversations}
             selectedInstance={chatData.selectedInstance}
@@ -436,6 +438,8 @@ export const ChatLayoutMobile: React.FC<ChatLayoutProps> = ({
       <div className="flex-1 overflow-hidden">
         {activeView === 'conversations' && (
           <ConversationSidebar
+            companyId={companyId}
+            userId={userId}
             instances={chatData.instances}
             conversations={chatData.conversations}
             selectedInstance={chatData.selectedInstance}

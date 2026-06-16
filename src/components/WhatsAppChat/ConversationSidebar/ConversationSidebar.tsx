@@ -5,7 +5,7 @@
 // Suporta canal WhatsApp e Instagram via ChannelSelector.
 // O comportamento do canal WhatsApp permanece intacto.
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import type { ChatConversation, ConversationFilter } from '../../../types/whatsapp-chat'
@@ -20,6 +20,7 @@ import { ChannelSelector } from '../ChannelSelector/ChannelSelector'
 import { InstagramAccountSelector } from '../InstagramAccountSelector/InstagramAccountSelector'
 import { InstagramSidebarContent } from '../InstagramSidebarContent'
 import { resolvePhotoUrl } from '../../../utils/imageUtils'
+import { chatApi } from '../../../services/chat/chatApi'
 
 // =====================================================
 // TIPOS DO COMPONENTE
@@ -41,6 +42,9 @@ export interface InstagramSidebarData {
 }
 
 interface ConversationSidebarProps {
+  /** FASE 5ZG: necessários para busca no banco */
+  companyId: string
+  userId: string
   instances: any[]
   conversations: ChatConversation[]
   selectedInstance?: string
@@ -56,8 +60,8 @@ interface ConversationSidebarProps {
   loadMoreConversations?: () => Promise<void>
   loadingMoreConversations?: boolean
   /** Canal ativo — padrão 'whatsapp' */
-  selectedChannel: ChatChannel
-  onChannelChange: (channel: ChatChannel) => void
+  selectedChannel?: ChatChannel
+  onChannelChange?: (channel: ChatChannel) => void
   /** Dados do canal Instagram (opcional quando whatsapp selecionado) */
   igData?: InstagramSidebarData
   /** Dados de comentários Instagram (opcional) */
@@ -69,6 +73,8 @@ interface ConversationSidebarProps {
 // =====================================================
 
 export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
+  companyId,
+  userId,
   instances,
   conversations,
   selectedInstance,
@@ -89,6 +95,13 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 }) => {
   const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
+
+  // FASE 5ZG: estados de busca no banco
+  const [searchResults,  setSearchResults]  = useState<ChatConversation[]>([])
+  const [isSearching,    setIsSearching]    = useState(false)
+  const [searchError,    setSearchError]    = useState(false)
+  // Contador para descartar respostas de requests obsoletas (race condition)
+  const searchRequestRef = useRef(0)
 
   const isInstagram = selectedChannel === 'instagram'
 
@@ -120,8 +133,56 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   }, [conversations, igData, igCommentsData, isInstagram, t])
 
   // =====================================================
-  // CONVERSAS WA FILTRADAS POR BUSCA LOCAL
+  // FASE 5ZG — BUSCA REAL NO BANCO (debounce + anti-race)
   // =====================================================
+  // Ativada quando searchTerm >= 2 chars (WhatsApp apenas).
+  // Respeita visibilidade de sellers (FASE 5ZC via RPC).
+
+  useEffect(() => {
+    if (isInstagram || searchTerm.trim().length < 2) {
+      setSearchResults([])
+      setSearchError(false)
+      return
+    }
+
+    const requestId = ++searchRequestRef.current
+
+    const timeout = setTimeout(async () => {
+      setIsSearching(true)
+      setSearchError(false)
+      try {
+        const instanceFilter = selectedInstance === 'all' ? undefined : selectedInstance
+        const results = await chatApi.searchConversations(
+          companyId,
+          userId,
+          filter,
+          searchTerm,
+          instanceFilter
+        )
+        if (requestId === searchRequestRef.current) {
+          setSearchResults(results)
+        }
+      } catch {
+        if (requestId === searchRequestRef.current) {
+          setSearchError(true)
+        }
+      } finally {
+        if (requestId === searchRequestRef.current) {
+          setIsSearching(false)
+        }
+      }
+    }, 400)
+
+    return () => clearTimeout(timeout)
+  }, [searchTerm, companyId, userId, filter.type, selectedInstance, isInstagram])
+
+  // =====================================================
+  // CONVERSAS WA — origem dinâmica (busca ou lista paginada)
+  // =====================================================
+  // Quando busca ativa (>= 2 chars): usa resultados do banco.
+  // Quando vazio/curto: usa lista paginada carregada (comportamento original).
+
+  const isSearchActive = searchTerm.trim().length >= 2 && !isInstagram
 
   const filteredWaConversations = conversations.filter(conversation => {
     if (!searchTerm) return true
@@ -133,6 +194,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       (!isRestricted && conversation.last_message_content?.toLowerCase().includes(searchLower))
     )
   })
+
+  const conversationsToShow = isSearchActive ? searchResults : filteredWaConversations
 
   // =====================================================
   // HANDLERS DO CANAL INSTAGRAM
@@ -297,12 +360,15 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           )
           : <WhatsAppConversationList
               loading={loading}
-              filteredConversations={filteredWaConversations}
+              filteredConversations={conversationsToShow}
               selectedConversation={selectedConversation}
               onSelectConversation={onSelectConversation}
               selectedInstance={selectedInstance}
               searchTerm={searchTerm}
-              hasMoreConversations={hasMoreConversations}
+              isSearchActive={isSearchActive}
+              isSearching={isSearching}
+              searchError={searchError}
+              hasMoreConversations={!isSearchActive && hasMoreConversations}
               loadMoreConversations={loadMoreConversations}
               loadingMoreConversations={loadingMoreConversations}
             />
@@ -323,6 +389,10 @@ interface WhatsAppConversationListProps {
   onSelectConversation: (id: string) => void
   selectedInstance?: string
   searchTerm: string
+  /** FASE 5ZG: controles de busca no banco */
+  isSearchActive?: boolean
+  isSearching?: boolean
+  searchError?: boolean
   hasMoreConversations?: boolean
   loadMoreConversations?: () => Promise<void>
   loadingMoreConversations?: boolean
@@ -330,9 +400,30 @@ interface WhatsAppConversationListProps {
 
 const WhatsAppConversationList: React.FC<WhatsAppConversationListProps> = ({
   loading, filteredConversations, selectedConversation, onSelectConversation, selectedInstance, searchTerm,
+  isSearchActive = false, isSearching = false, searchError = false,
   hasMoreConversations = false, loadMoreConversations, loadingMoreConversations = false
 }) => {
   const { t } = useTranslation('chat')
+
+  // Buscando no banco...
+  if (isSearching) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-[#00a884]" />
+        <p className="text-sm text-slate-500">Buscando...</p>
+      </div>
+    )
+  }
+
+  // Erro na busca
+  if (searchError) {
+    return (
+      <div className="text-center py-12 px-6">
+        <p className="text-sm text-red-500">Erro na busca. Tente novamente.</p>
+      </div>
+    )
+  }
+
   return loading ? (
     <div className="flex items-center justify-center py-12">
       <div className="relative">

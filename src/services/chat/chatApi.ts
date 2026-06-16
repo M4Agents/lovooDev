@@ -96,6 +96,39 @@ export class ChatApi {
     }
   }
 
+  // =====================================================
+  // BUSCA DE CONVERSAS — FASE 5ZG
+  // =====================================================
+  // Chama chat_get_conversations com p_search para busca
+  // real no banco, sem paginação (offset=0, limit=100).
+  // Respeita todas as regras de visibilidade da FASE 5ZC.
+
+  static async searchConversations(
+    companyId: string,
+    userId: string,
+    filter: ConversationFilter,
+    searchTerm: string,
+    instanceId?: string,
+    limit: number = 100
+  ): Promise<ChatConversation[]> {
+    const term = searchTerm.trim()
+    if (!term || term.length < 2) return []
+
+    const { data, error } = await supabase.rpc('chat_get_conversations', {
+      p_company_id:  companyId,
+      p_user_id:     userId,
+      p_filter_type: filter.type,
+      p_instance_id: instanceId || null,
+      p_limit:       limit,
+      p_offset:      0,
+      p_search:      term
+    })
+
+    if (error) throw error
+    if (!data.success) throw new Error(data.error || 'Erro na busca de conversas')
+    return (data.data || []).map(this.mapConversation)
+  }
+
   static async createOrGetConversation(
     companyId: string,
     instanceId: string,
