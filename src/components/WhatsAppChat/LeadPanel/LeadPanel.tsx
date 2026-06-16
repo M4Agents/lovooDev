@@ -251,9 +251,14 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
     try {
       setLoading(true)
       
-      // Buscar conversa para pegar telefone
-      const conversations = await chatApi.getConversations(companyId, userId, { type: 'all' })
-      const conv = conversations.find(c => c.id === conversationId)
+      // Buscar conversa diretamente por ID — evita o limite de paginação (50)
+      const { data: convData } = await supabase
+        .from('chat_conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      const conv = convData ?? undefined
       setConversation(conv)
       
       if (conv) {
