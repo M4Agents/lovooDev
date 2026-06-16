@@ -898,6 +898,65 @@ export const api = {
 
       console.log('API: Lead created successfully:', lead);
 
+      // Re-vincular conversas órfãs ao novo lead (fire-and-forget)
+      // Cenário: lead foi deletado e recriado manualmente. Conversas existentes ainda
+      // apontam para o lead deletado (lead_id de deleted_at IS NOT NULL) ou para NULL.
+      // A lógica é: encontrar conversas com mesmo telefone na mesma empresa cujo
+      // lead_id atual está "quebrado" (nulo ou aponta para lead deletado) e vinculá-las
+      // ao novo lead. Nunca substitui vínculo para lead ativo.
+      if ((leadData as any).phone && lead.id && lead.company_id) {
+        const phoneNorm = String((leadData as any).phone).replace(/\D/g, '')
+        ;(async () => {
+          try {
+            // Buscar conversas ativas com este telefone cujo lead_id está nulo ou deletado
+            const { data: orphanConvs } = await supabase
+              .from('chat_conversations')
+              .select('id, lead_id')
+              .eq('company_id', lead.company_id)
+              .eq('status', 'active')
+              .or(`contact_phone.eq.${(leadData as any).phone},contact_phone.eq.${phoneNorm}`)
+
+            if (!orphanConvs || orphanConvs.length === 0) return
+
+            // Filtrar: apenas conversas com lead_id nulo ou lead deletado
+            const orphanIds: string[] = []
+            for (const conv of orphanConvs) {
+              if (!conv.lead_id) {
+                orphanIds.push(conv.id)
+                continue
+              }
+              // Verificar se o lead vinculado está deletado
+              const { data: linkedLead } = await supabase
+                .from('leads')
+                .select('id, deleted_at')
+                .eq('id', conv.lead_id)
+                .maybeSingle()
+              if (linkedLead?.deleted_at) {
+                orphanIds.push(conv.id)
+              }
+            }
+
+            if (orphanIds.length === 0) return
+
+            const { error: relinkError } = await supabase
+              .from('chat_conversations')
+              .update({ lead_id: lead.id, updated_at: new Date().toISOString() })
+              .in('id', orphanIds)
+              .eq('company_id', lead.company_id)
+
+            // #region agent log
+            console.log(`[debug-449c25][createLead] re-vínculo de conversas órfãs`, {
+              new_lead_id: lead.id, phone: (leadData as any).phone,
+              orphanIds, relinkError: relinkError?.message ?? null,
+            })
+            // #endregion
+          } catch (relinkErr) {
+            // Nunca bloqueia a criação do lead — apenas loga
+            console.error('[api.createLead] relink orphan conversations failed:', relinkErr)
+          }
+        })()
+      }
+
       // Disparar automação backend (fire-and-forget — nunca bloqueia a criação)
       supabase.auth.getSession().then(({ data: sessionData }) => {
         const token = sessionData.session?.access_token
