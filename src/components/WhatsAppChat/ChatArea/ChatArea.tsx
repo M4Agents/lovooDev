@@ -353,10 +353,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         .eq('id', conversationId)
         .eq('company_id', companyId)
         .maybeSingle()
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'ChatArea.tsx:fetchConversation',message:'conv direto de chat_conversations',data:{conversationId,instance_id:conv?.instance_id,instance_name:(conv as any)?.instance_name,instance_status:(conv as any)?.instance_status,instance_deleted:(conv as any)?.instance_deleted,has_conv:!!conv},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{})
-      // #endregion
-      setConversation(conv || null)
+
+      // Enriquecer com dados da instância (instance_name, instance_status, instance_deleted)
+      // que não existem na tabela chat_conversations — são calculados via JOIN na RPC.
+      let enriched: any = conv
+      if (conv?.instance_id) {
+        const { data: inst } = await supabase
+          .from('whatsapp_life_instances')
+          .select('instance_name, status, deleted_at')
+          .eq('id', conv.instance_id)
+          .maybeSingle()
+        enriched = {
+          ...conv,
+          instance_name:    inst?.instance_name ?? 'Instância Desconectada',
+          instance_status:  inst?.status        ?? 'disconnected',
+          instance_deleted: inst ? inst.deleted_at !== null : false,
+        }
+        // #region agent log
+        console.log('[debug-449c25] fetchConversation enriched', {
+          conversationId, instance_id: conv.instance_id,
+          instance_name: enriched.instance_name,
+          instance_status: enriched.instance_status,
+          instance_deleted: enriched.instance_deleted,
+        })
+        // #endregion
+      }
+      setConversation(enriched || null)
 
       // Carregar foto do contato a partir das informações detalhadas do contato
       if (conv) {
