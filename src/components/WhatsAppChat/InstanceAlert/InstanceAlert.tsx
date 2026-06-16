@@ -31,12 +31,6 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
 
-  // #region agent log
-  console.log('[debug-449c25] InstanceAlert props', {
-    conversationId, instanceId, instanceName, instanceStatus, instanceDeleted,
-    willShow: !(instanceStatus === 'connected' && !instanceDeleted),
-  })
-  // #endregion
   // Não mostrar alerta se instância está conectada
   if (instanceStatus === 'connected' && !instanceDeleted) {
     return null

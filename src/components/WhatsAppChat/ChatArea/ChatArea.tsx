@@ -369,14 +369,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           instance_status:  inst?.status        ?? 'disconnected',
           instance_deleted: inst ? inst.deleted_at !== null : false,
         }
-        // #region agent log
-        console.log('[debug-449c25] fetchConversation enriched', {
-          conversationId, instance_id: conv.instance_id,
-          instance_name: enriched.instance_name,
-          instance_status: enriched.instance_status,
-          instance_deleted: enriched.instance_deleted,
-        })
-        // #endregion
       }
       setConversation(enriched || null)
 
