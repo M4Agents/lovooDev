@@ -811,13 +811,55 @@ export const api = {
       // Sanitizar email vazio para evitar violação da constraint valid_email
       if ((leadData as any).email === '') delete (leadData as any).email;
 
+      // ── Normalizar telefone ─────────────────────────────────────────────────
+      // Garante formato consistente com webhook/WhatsApp (5511987654321).
+      // Impacto: apenas leads com 10 ou 11 dígitos (sem DDI) ganham o prefixo 55.
+      // Leads já com 12–13 dígitos (ex: vindos do chat) ficam inalterados.
+      if ((leadData as any).phone) {
+        const rawDigits = String((leadData as any).phone).replace(/\D/g, '');
+        if (rawDigits.length === 10 || rawDigits.length === 11) {
+          (leadData as any).phone = '55' + rawDigits;
+        } else if (rawDigits.length > 0) {
+          (leadData as any).phone = rawDigits;
+        }
+      }
+
+      // ── Deduplicação pré-insert ─────────────────────────────────────────────
+      // Previne criação de lead duplicado quando já existe um lead com o mesmo
+      // número (ex: lead criado pelo WhatsApp antes do cadastro manual).
+      // Usa phone_normalized (coluna gerada no banco) para comparação eficiente.
+      // Verifica o número normalizado completo E os últimos 11 dígitos (cobre
+      // leads antigos gravados sem DDI: "11987654321" vs "5511987654321").
+      if ((leadData as any).phone && (leadData as any).company_id) {
+        const phoneNorm = String((leadData as any).phone).replace(/\D/g, '');
+        const right11   = phoneNorm.slice(-11);
+        const lookupValues = phoneNorm.length >= 10
+          ? [...new Set([phoneNorm, right11])]
+          : [];
+
+        if (lookupValues.length > 0) {
+          const { data: existingLead } = await supabase
+            .from('leads')
+            .select('id, name, phone, origin')
+            .eq('company_id', (leadData as any).company_id)
+            .is('deleted_at', null)
+            .in('phone_normalized', lookupValues)
+            .limit(1)
+            .maybeSingle();
+
+          if (existingLead) {
+            // #region agent log
+            console.log(`[DEBUG-449c25][api.createLead] DEDUP HIT — lead existente id=${existingLead.id} phone="${existingLead.phone}" origin="${existingLead.origin}"`);
+            // #endregion
+            return existingLead;
+          }
+        }
+      }
+
       // #region agent log
-      console.log('[DEBUG-449c25][api.createLead] PHONE FORMAT:', {
-        phone: (leadData as any).phone,
-        phone_digits: (leadData as any).phone?.replace(/\D/g, ''),
-        digits_len: (leadData as any).phone?.replace(/\D/g, '')?.length,
-        origin: (leadData as any).origin,
-      });
+      const _dbgPhone = (leadData as any).phone;
+      const _dbgDigits = _dbgPhone?.replace(/\D/g, '');
+      console.log(`[DEBUG-449c25][api.createLead] INSERTING phone="${_dbgPhone}" digits="${_dbgDigits}" len=${_dbgDigits?.length} origin="${(leadData as any).origin}"`);
       // #endregion
 
       // Verificar sessão ativa antes do INSERT.

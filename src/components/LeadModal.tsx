@@ -490,12 +490,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       };
       
       // #region agent log
-      console.log('[DEBUG-449c25][LeadModal] PHONE FORMAT antes de createLead:', {
-        phone: (leadData as any).phone,
-        formDataPhone: (formData as any).phone,
-        phone_digits: (leadData as any).phone?.replace(/\D/g, ''),
-        digits_len: (leadData as any).phone?.replace(/\D/g, '')?.length,
-      });
+      const _dbgLMPhone = (leadData as any).phone;
+      const _dbgLMDigits = _dbgLMPhone?.replace(/\D/g, '');
+      console.log(`[DEBUG-449c25][LeadModal] phone="${_dbgLMPhone}" (antes da normalização em api.ts) digits="${_dbgLMDigits}" len=${_dbgLMDigits?.length}`);
       // #endregion
       console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
       console.log('🔍 LEADMODAL - COMPANY_ID FINAL:', leadData.company_id);
