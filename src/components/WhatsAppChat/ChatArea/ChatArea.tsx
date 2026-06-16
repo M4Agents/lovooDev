@@ -346,9 +346,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const fetchConversation = async () => {
     try {
-      // Carregando conversa...
-      const conversations = await chatApi.getConversations(companyId, userId, { type: 'all' })
-      const conv = conversations.find(c => c.id === conversationId)
+      // Buscar conversa diretamente por ID — evita o limite de paginação (50)
+      const { data: conv } = await supabase
+        .from('chat_conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .eq('company_id', companyId)
+        .maybeSingle()
       setConversation(conv || null)
 
       // Carregar foto do contato a partir das informações detalhadas do contato
