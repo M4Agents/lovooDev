@@ -44,6 +44,7 @@ export const WhatsAppLifeModule: React.FC = () => {
     fetchInstances,
     syncProfileData,
     updateAssignedUser,
+    updateAvailableToAll,
   } = useWhatsAppInstancesWebhook100(company?.id);
 
   const { canManageWhatsAppAssignedUser } = useAccessControl();
@@ -295,6 +296,16 @@ export const WhatsAppLifeModule: React.FC = () => {
   ) => {
     return await updateAssignedUser(instanceId, assignedUserId);
   }, [updateAssignedUser]);
+
+  // =====================================================
+  // FASE 5ZE: HANDLER — DISPONÍVEL PARA TODOS
+  // =====================================================
+  const handleAvailableToAllChange = useCallback(async (
+    instanceId: string,
+    value: boolean
+  ) => {
+    return await updateAvailableToAll(instanceId, value);
+  }, [updateAvailableToAll]);
 
   // Função para iniciar polling de instância temporária
   const startTempInstancePolling = useCallback((tempInstanceId: string, isReconnect: boolean = false) => {
@@ -662,6 +673,7 @@ export const WhatsAppLifeModule: React.FC = () => {
                   loadingUsers={loadingUsers}
                   canManageWhatsAppAssignedUser={canManageWhatsAppAssignedUser}
                   onAssignedUserChange={handleAssignedUserChange}
+                  onAvailableToAllChange={handleAvailableToAllChange}
                   onSyncProfile={handleSyncProfile}
                   onEdit={handleEditInstance}
                   onDelete={handleDeleteInstance}

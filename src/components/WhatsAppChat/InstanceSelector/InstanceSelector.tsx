@@ -17,6 +17,7 @@ interface WhatsAppInstance {
   profile_picture_url?: string
   status: string
   assigned_user_id?: string | null
+  available_to_all?: boolean | null
 }
 
 interface InstanceSelectorProps {

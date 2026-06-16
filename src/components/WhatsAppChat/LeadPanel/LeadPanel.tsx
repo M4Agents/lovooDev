@@ -635,9 +635,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         setLoadingInstances(true)
         const allInstances = await chatApi.getCompanyInstances(companyId)
 
-        // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
+        // FASE 5ZE: seller restrito vê instâncias próprias OU available_to_all = true
         const instances = isRestrictedSeller
-          ? allInstances.filter((i: any) => i.assigned_user_id === user?.id)
+          ? allInstances.filter(
+              (i: any) =>
+                i.assigned_user_id === user?.id ||
+                i.available_to_all === true
+            )
           : allInstances
 
         setAvailableInstances(instances)
@@ -1206,9 +1210,13 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
         setLoadingInstances(true)
         const allInstances = await chatApi.getCompanyInstances(companyId)
 
-        // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
+        // FASE 5ZE: seller restrito vê instâncias próprias OU available_to_all = true
         const instances = isRestrictedSeller
-          ? allInstances.filter((i: any) => i.assigned_user_id === user?.id)
+          ? allInstances.filter(
+              (i: any) =>
+                i.assigned_user_id === user?.id ||
+                i.available_to_all === true
+            )
           : allInstances
 
         setAvailableInstances(instances)

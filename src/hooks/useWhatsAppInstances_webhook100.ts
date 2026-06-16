@@ -385,6 +385,35 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   }, [companyId, fetchInstances]);
 
   // =====================================================
+  // FASE 5ZE: ATUALIZAR DISPONIBILIDADE PARA TODOS
+  // =====================================================
+  const updateAvailableToAll = useCallback(async (
+    instanceId: string,
+    availableToAll: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { error } = await supabase
+        .from('whatsapp_life_instances')
+        .update({ available_to_all: availableToAll })
+        .eq('id', instanceId)
+        .eq('company_id', companyId);
+
+      if (error) throw new Error(error.message);
+
+      await fetchInstances();
+      return { success: true };
+    } catch (err) {
+      console.error('[useWhatsAppInstancesWebhook100] Erro ao atualizar disponibilidade:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao atualizar disponibilidade',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
+  // =====================================================
   // NOVA FUNÇÃO: SINCRONIZAR DADOS DO PERFIL
   // =====================================================
   const syncProfileData = useCallback(async (instanceId: string) => {
@@ -441,5 +470,6 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     fetchInstances,
     syncProfileData,
     updateAssignedUser,
+    updateAvailableToAll,
   };
 };

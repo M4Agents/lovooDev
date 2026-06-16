@@ -23,6 +23,10 @@ interface InstanceCardProps {
     instanceId: string,
     assignedUserId: string | null
   ) => Promise<{ success: boolean; error?: string }>;
+  onAvailableToAllChange?: (
+    instanceId: string,
+    value: boolean
+  ) => Promise<{ success: boolean; error?: string }>;
   onSyncProfile: (instance: WhatsAppLifeInstance) => void;
   onEdit: (instance: WhatsAppLifeInstance) => void;
   onDelete: (instance: WhatsAppLifeInstance) => void;
@@ -38,12 +42,27 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   loadingUsers,
   canManageWhatsAppAssignedUser,
   onAssignedUserChange,
+  onAvailableToAllChange,
   onSyncProfile,
   onEdit,
   onDelete,
 }) => {
-  const [isSaving, setIsSaving]           = useState(false);
-  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [isSaving, setIsSaving]                     = useState(false);
+  const [assignmentError, setAssignmentError]         = useState<string | null>(null);
+  const [isSavingAvailable, setIsSavingAvailable]     = useState(false);
+  const [availableToAllError, setAvailableToAllError] = useState<string | null>(null);
+
+  const handleAvailableToAllToggle = async () => {
+    if (!onAvailableToAllChange) return;
+    const newValue = !instance.available_to_all;
+    setIsSavingAvailable(true);
+    setAvailableToAllError(null);
+    const result = await onAvailableToAllChange(instance.id, newValue);
+    setIsSavingAvailable(false);
+    if (!result.success) {
+      setAvailableToAllError(result.error || 'Erro ao atualizar disponibilidade');
+    }
+  };
 
   const handleAssignedUserSelect = async (userId: string) => {
     const assignedUserId = userId === '' ? null : userId;
@@ -157,9 +176,10 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         </div>
       </div>
 
-      {/* Linha de responsável — apenas para admin/manager e acima */}
+      {/* Linha de responsável + toggle disponível para todos — apenas para admin/manager e acima */}
       {canManageWhatsAppAssignedUser && (
         <div className="mt-3 pt-3 border-t border-gray-100">
+          {/* Seletor de responsável */}
           <div className="flex items-center gap-3">
             <span className="text-xs font-medium text-gray-500 flex-shrink-0">
               Responsável
@@ -177,6 +197,35 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               )}
             </div>
           </div>
+
+          {/* Toggle: Disponível para todos os usuários (FASE 5ZE) */}
+          <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-xs font-medium text-gray-700">
+                Disponível para todos os usuários
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Quando ativado, todos os sellers podem ver e selecionar esta instância
+              </p>
+            </div>
+            <button
+              onClick={handleAvailableToAllToggle}
+              disabled={isSavingAvailable || !onAvailableToAllChange}
+              className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed ${
+                instance.available_to_all ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+              title={instance.available_to_all ? 'Desativar disponibilidade para todos' : 'Ativar disponibilidade para todos'}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  instance.available_to_all ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+          {availableToAllError && (
+            <p className="mt-1 text-xs text-red-600">{availableToAllError}</p>
+          )}
         </div>
       )}
     </div>

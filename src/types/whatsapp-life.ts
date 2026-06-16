@@ -42,6 +42,10 @@ export interface WhatsAppLifeInstance {
 
   // Responsável automático por leads criados via esta instância
   assigned_user_id?: string | null;
+
+  // FASE 5ZE: instância compartilhada — disponível no seletor de todos os sellers
+  // A visibilidade da conversa continua definida por chat_conversations.assigned_to
+  available_to_all?: boolean;
 }
 
 export type WhatsAppInstanceStatus = 
@@ -265,6 +269,10 @@ export interface UseInstancesReturn {
   updateAssignedUser: (instanceId: string, assignedUserId: string | null) => Promise<{
     success: boolean;
     data?: any;
+    error?: string;
+  }>;
+  updateAvailableToAll: (instanceId: string, availableToAll: boolean) => Promise<{
+    success: boolean;
     error?: string;
   }>;
 }

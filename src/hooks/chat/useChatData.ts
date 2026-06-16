@@ -135,12 +135,16 @@ export const useChatData = (
       setInstancesLoading(true)
       const instancesData = await chatApi.getCompanyInstances(companyId)
 
-      // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele.
+      // FASE 5ZE: seller restrito vê instâncias atribuídas a ele OU available_to_all = true.
       // Admin/manager/system_admin/super_admin: sem filtro.
+      // A visibilidade de conversas continua definida por assigned_to (não alterado).
       const filtered =
-        visibilityContext?.flag && visibilityContext?.role === 'seller'
+        visibilityContext?.flag &&
+        visibilityContext?.role === 'seller'
           ? instancesData.filter(
-              (i: any) => i.assigned_user_id === visibilityContext.userId
+              (i: any) =>
+                i.assigned_user_id === visibilityContext.userId ||
+                i.available_to_all === true
             )
           : instancesData
 
