@@ -134,14 +134,24 @@ export const useChatData = (
     try {
       setInstancesLoading(true)
       const instancesData = await chatApi.getCompanyInstances(companyId)
-      setInstances(instancesData)
+
+      // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele.
+      // Admin/manager/system_admin/super_admin: sem filtro.
+      const filtered =
+        visibilityContext?.flag && visibilityContext?.role === 'seller'
+          ? instancesData.filter(
+              (i: any) => i.assigned_user_id === visibilityContext.userId
+            )
+          : instancesData
+
+      setInstances(filtered)
     } catch (error) {
       console.error('Error fetching instances:', error)
       setInstances([])
     } finally {
       setInstancesLoading(false)
     }
-  }, [companyId])
+  }, [companyId, visibilityContext])
 
   // =====================================================
   // BUSCAR CONVERSAS

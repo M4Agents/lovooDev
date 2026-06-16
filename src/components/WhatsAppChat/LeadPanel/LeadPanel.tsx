@@ -14,6 +14,7 @@ import { InstanceSelector } from '../InstanceSelector'
 import { UserSelector } from '../UserSelector'
 import { supabase } from '../../../lib/supabase'
 import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
+import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
@@ -606,6 +607,11 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   // Hook de permissões
   const { canEditLead } = useLeadPermissions()
 
+  // FASE 5ZD: detectar seller restrito para filtrar instâncias disponíveis
+  const { currentRole, company } = useAuth()
+  const isRestrictedSeller =
+    (company?.chat_visibility_by_assigned_to ?? false) && currentRole === 'seller'
+
   useEffect(() => {
     if (contact) {
       setFormData({
@@ -627,7 +633,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       
       try {
         setLoadingInstances(true)
-        const instances = await chatApi.getCompanyInstances(companyId)
+        const allInstances = await chatApi.getCompanyInstances(companyId)
+
+        // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
+        const instances = isRestrictedSeller
+          ? allInstances.filter((i: any) => i.assigned_user_id === userId)
+          : allInstances
+
         setAvailableInstances(instances)
         
         // Pré-selecionar instância atual da conversa
@@ -644,7 +656,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
     
     loadInstances()
-  }, [companyId, conversation?.instance_id])
+  }, [companyId, conversation?.instance_id, isRestrictedSeller, userId])
 
   // Carregar usuários da empresa para atribuição de responsável
   // Usa get_assignable_users (acessível a qualquer membro ativo, incluindo manager/seller)
@@ -659,10 +671,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             p_company_id: companyId
           })
         
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'da6971'},body:JSON.stringify({sessionId:'da6971',location:'LeadPanel.tsx:loadCompanyUsers',message:'get_assignable_users result',data:{companyId,count:data?.length??0,error:error?.message??null,firstUser:data?.[0]?.display_name??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
         if (error) throw error
         setCompanyUsers(data || [])
       } catch (error) {
@@ -1150,6 +1158,11 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   associatedLead
 }) => {
   const { t } = useTranslation('chat')
+
+  // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
+  const { currentRole, company, user } = useAuth()
+  const isRestrictedSeller =
+    (company?.chat_visibility_by_assigned_to ?? false) && currentRole === 'seller'
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState<ScheduleMessageForm>({
     content: '',
@@ -1191,7 +1204,13 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     async function loadInstances() {
       try {
         setLoadingInstances(true)
-        const instances = await chatApi.getCompanyInstances(companyId)
+        const allInstances = await chatApi.getCompanyInstances(companyId)
+
+        // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
+        const instances = isRestrictedSeller
+          ? allInstances.filter((i: any) => i.assigned_user_id === user?.id)
+          : allInstances
+
         setAvailableInstances(instances)
         
         // Pré-selecionar instância da conversa se disponível
@@ -1209,7 +1228,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     }
     
     loadInstances()
-  }, [companyId, instanceId])
+  }, [companyId, instanceId, isRestrictedSeller, user?.id])
 
   // Função para selecionar emoji
   const handleSelectEmoji = (emoji: string) => {
