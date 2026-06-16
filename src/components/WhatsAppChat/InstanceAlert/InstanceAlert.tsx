@@ -31,6 +31,9 @@ export const InstanceAlert: React.FC<InstanceAlertProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'InstanceAlert.tsx:render',message:'InstanceAlert props recebidos',data:{conversationId,instanceId,instanceName,instanceStatus,instanceDeleted,willShow:!(instanceStatus==='connected'&&!instanceDeleted)},timestamp:Date.now(),hypothesisId:'A+B'})}).catch(()=>{})
+  // #endregion
   // Não mostrar alerta se instância está conectada
   if (instanceStatus === 'connected' && !instanceDeleted) {
     return null
