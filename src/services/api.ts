@@ -811,6 +811,15 @@ export const api = {
       // Sanitizar email vazio para evitar violação da constraint valid_email
       if ((leadData as any).email === '') delete (leadData as any).email;
 
+      // #region agent log
+      console.log('[DEBUG-449c25][api.createLead] PHONE FORMAT:', {
+        phone: (leadData as any).phone,
+        phone_digits: (leadData as any).phone?.replace(/\D/g, ''),
+        digits_len: (leadData as any).phone?.replace(/\D/g, '')?.length,
+        origin: (leadData as any).origin,
+      });
+      // #endregion
+
       // Verificar sessão ativa antes do INSERT.
       // Se o refresh token expirou, o cliente Supabase limpa a sessão e a
       // requisição seria enviada com anon role — o RLS negaria com 42501.

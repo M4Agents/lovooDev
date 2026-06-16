@@ -489,6 +489,14 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         anuncio: adData.anuncio || undefined
       };
       
+      // #region agent log
+      console.log('[DEBUG-449c25][LeadModal] PHONE FORMAT antes de createLead:', {
+        phone: (leadData as any).phone,
+        formDataPhone: (formData as any).phone,
+        phone_digits: (leadData as any).phone?.replace(/\D/g, ''),
+        digits_len: (leadData as any).phone?.replace(/\D/g, '')?.length,
+      });
+      // #endregion
       console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
       console.log('🔍 LEADMODAL - COMPANY_ID FINAL:', leadData.company_id);
       console.log('🔍 LEADMODAL - VERIFICAR SE COMPANY_ID FOI SOBRESCRITO:', {
