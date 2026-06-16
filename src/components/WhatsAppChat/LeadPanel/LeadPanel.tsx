@@ -163,10 +163,6 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   userId,
   onLeadSaved
 }) => {
-  // #region agent log
-  if (typeof userId === 'undefined') console.error('[DEBUG 449c25] LeadPanel: userId is UNDEFINED', { conversationId, companyId })
-  else console.log('[DEBUG 449c25] LeadPanel render: userId OK', userId?.slice(0, 8))
-  // #endregion
   const { t } = useTranslation('chat')
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [scheduledMessages, setScheduledMessages] = useState<ChatScheduledMessage[]>([])
@@ -640,9 +636,6 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         const allInstances = await chatApi.getCompanyInstances(companyId)
 
         // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele
-        // #region agent log
-        console.log('[DEBUG 449c25] loadInstances (ContactInfo): isRestrictedSeller', isRestrictedSeller, 'user?.id', user?.id)
-        // #endregion
         const instances = isRestrictedSeller
           ? allInstances.filter((i: any) => i.assigned_user_id === user?.id)
           : allInstances

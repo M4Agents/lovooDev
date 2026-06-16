@@ -137,9 +137,6 @@ export const useChatData = (
 
       // FASE 5ZD: seller restrito vê apenas instâncias atribuídas a ele.
       // Admin/manager/system_admin/super_admin: sem filtro.
-      // #region agent log
-      console.log('[DEBUG 449c25] fetchInstances: visibilityContext', { flag: visibilityContext?.flag, role: visibilityContext?.role, userId: visibilityContext?.userId })
-      // #endregion
       const filtered =
         visibilityContext?.flag && visibilityContext?.role === 'seller'
           ? instancesData.filter(
