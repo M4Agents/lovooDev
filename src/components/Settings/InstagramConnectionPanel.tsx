@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock, Trash2 } from 'lucide-react';
+import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useInstagramConnections } from '../../hooks/useInstagramConnections';
+import type { ConnectWithTokenResult } from '../../hooks/useInstagramConnections';
 import type { InstagramConnection } from '../../types/instagram-chat';
 import { useAccessControl } from '../../hooks/useAccessControl';
 import { computeConnectionHealth } from '../../utils/instagram/computeConnectionHealth';
@@ -63,12 +64,55 @@ export function InstagramConnectionPanel({ companyId }: Props) {
   const ig = (key: string, opts?: Record<string, unknown>) =>
     t(`integrations.instagram.${key}`, opts);
   const { canConnectInstagram } = useAccessControl();
-  const { connections, loading, loadingAction, error, refetch, connect, disconnect, deleteConnection, syncPhoto } = useInstagramConnections(companyId);
+  const { connections, loading, loadingAction, error, refetch, connect, connectWithToken, disconnect, deleteConnection, syncPhoto } = useInstagramConnections(companyId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncingPhotoId, setSyncingPhotoId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Estados do modal de conexão por token
+  const [showTokenModal, setShowTokenModal]       = useState(false);
+  const [rawToken, setRawToken]                   = useState('');
+  const [showTokenValue, setShowTokenValue]       = useState(false);
+  const [tokenLoading, setTokenLoading]           = useState(false);
+  const [tokenResult, setTokenResult]             = useState<ConnectWithTokenResult | null>(null);
+  const tokenInputRef                             = useRef<HTMLInputElement>(null);
+
+  function openTokenModal() {
+    setRawToken('');
+    setTokenResult(null);
+    setShowTokenValue(false);
+    setShowTokenModal(true);
+    setTimeout(() => tokenInputRef.current?.focus(), 100);
+  }
+
+  function closeTokenModal() {
+    setRawToken('');
+    setTokenResult(null);
+    setShowTokenValue(false);
+    setShowTokenModal(false);
+  }
+
+  async function handleConnectWithToken() {
+    if (!rawToken.trim()) return;
+
+    setTokenLoading(true);
+    setTokenResult(null);
+
+    const result = await connectWithToken(companyId, rawToken.trim());
+
+    setRawToken(''); // limpar sempre, independente do resultado
+    setTokenLoading(false);
+    setTokenResult(result);
+
+    if (result.success) {
+      // Fechar automaticamente após 4s em caso de sucesso total
+      if (result.status === 'active') {
+        setTimeout(() => closeTokenModal(), 4000);
+      }
+    }
+  }
 
   async function handleConnect() {
     setActionError(null);
@@ -150,14 +194,23 @@ export function InstagramConnectionPanel({ companyId }: Props) {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           {canConnectInstagram && (
-            <button
-              onClick={handleConnect}
-              disabled={loadingAction}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              {loadingAction ? 'Conectando...' : ig('connect')}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={handleConnect}
+                disabled={loadingAction}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                {loadingAction ? 'Conectando...' : ig('connect')}
+              </button>
+              <button
+                onClick={openTokenModal}
+                disabled={loadingAction}
+                className="text-xs text-slate-400 hover:text-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Conectar com token (avançado)
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -211,6 +264,19 @@ export function InstagramConnectionPanel({ companyId }: Props) {
               {ig('connect')}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Tela vazia: botão secundário de token abaixo do botão OAuth */}
+      {!loading && connections.length === 0 && canConnectInstagram && (
+        <div className="flex justify-center">
+          <button
+            onClick={openTokenModal}
+            disabled={loadingAction}
+            className="text-xs text-slate-400 hover:text-purple-600 transition-colors disabled:opacity-50"
+          >
+            Conectar com token (avançado)
+          </button>
         </div>
       )}
 
@@ -323,6 +389,175 @@ export function InstagramConnectionPanel({ companyId }: Props) {
               </div>
             );
           })}
+        </div>
+      )}
+      {/* Modal: Conectar com token */}
+      {showTokenModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) closeTokenModal(); }}
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg">
+                  <Instagram className="w-4 h-4 text-white" />
+                </div>
+                <h3 className="text-base font-semibold text-slate-900">Conectar com token</h3>
+              </div>
+              <button
+                onClick={closeTokenModal}
+                disabled={tokenLoading}
+                className="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Resultado de sucesso */}
+            {tokenResult?.success && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">
+                      {tokenResult.username ? `@${tokenResult.username} conectado!` : 'Conta conectada com sucesso!'}
+                    </p>
+                    {tokenResult.status === 'limited' && (
+                      <p className="mt-1 text-amber-700">
+                        Status: <strong>limitado</strong> — webhooks não configurados.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Aviso de webhook não configurado */}
+                {(!tokenResult.webhook_subscribed || tokenResult.status === 'limited') && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <p>
+                      {tokenResult.warning ??
+                        'O recebimento de mensagens pode não funcionar. Verifique as permissões do token.'}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={closeTokenModal}
+                  className="w-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
+
+            {/* Resultado de erro */}
+            {tokenResult && !tokenResult.success && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>{tokenResult.error ?? 'Erro ao conectar. Tente novamente.'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setTokenResult(null)}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all"
+                  >
+                    Tentar novamente
+                  </button>
+                  <button
+                    onClick={closeTokenModal}
+                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Formulário (visível apenas quando não há resultado) */}
+            {!tokenResult && (
+              <>
+                <p className="text-sm text-slate-500">
+                  Insira um token de acesso gerado pelo painel{' '}
+                  <a
+                    href="https://developers.facebook.com/tools/explorer/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-600 hover:underline"
+                  >
+                    Meta Graph API Explorer
+                  </a>{' '}
+                  usando o app desta plataforma.
+                </p>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-700">
+                    Token de acesso
+                  </label>
+                  <div className="relative">
+                    <input
+                      ref={tokenInputRef}
+                      type={showTokenValue ? 'text' : 'password'}
+                      value={rawToken}
+                      onChange={(e) => setRawToken(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !tokenLoading) handleConnectWithToken(); }}
+                      disabled={tokenLoading}
+                      placeholder="Cole o token aqui..."
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full pr-10 pl-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent disabled:opacity-50 disabled:bg-slate-50 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenValue(v => !v)}
+                      disabled={tokenLoading}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                      aria-label={showTokenValue ? 'Ocultar token' : 'Mostrar token'}
+                    >
+                      {showTokenValue
+                        ? <EyeOff className="w-4 h-4" />
+                        : <Eye className="w-4 h-4" />
+                      }
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    O token nunca é armazenado localmente e é criptografado antes de salvar.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleConnectWithToken}
+                    disabled={tokenLoading || !rawToken.trim()}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {tokenLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Validando...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Conectar
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={closeTokenModal}
+                    disabled={tokenLoading}
+                    className="px-4 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
