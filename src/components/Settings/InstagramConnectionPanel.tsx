@@ -77,12 +77,14 @@ export function InstagramConnectionPanel({ companyId }: Props) {
   const [showTokenValue, setShowTokenValue]       = useState(false);
   const [tokenLoading, setTokenLoading]           = useState(false);
   const [tokenResult, setTokenResult]             = useState<ConnectWithTokenResult | null>(null);
+  const [showInstructions, setShowInstructions]   = useState(false);
   const tokenInputRef                             = useRef<HTMLInputElement>(null);
 
   function openTokenModal() {
     setRawToken('');
     setTokenResult(null);
     setShowTokenValue(false);
+    setShowInstructions(false);
     setShowTokenModal(true);
     setTimeout(() => tokenInputRef.current?.focus(), 100);
   }
@@ -91,6 +93,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
     setRawToken('');
     setTokenResult(null);
     setShowTokenValue(false);
+    setShowInstructions(false);
     setShowTokenModal(false);
   }
 
@@ -480,18 +483,87 @@ export function InstagramConnectionPanel({ companyId }: Props) {
             {/* Formulário (visível apenas quando não há resultado) */}
             {!tokenResult && (
               <>
-                <p className="text-sm text-slate-500">
-                  Insira um token de acesso gerado pelo painel{' '}
-                  <a
-                    href="https://developers.facebook.com/tools/explorer/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-purple-600 hover:underline"
+                {/* Guia colapsável: como gerar o token via BM System User */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowInstructions(v => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                   >
-                    Meta Graph API Explorer
-                  </a>{' '}
-                  usando o app desta plataforma.
-                </p>
+                    <span>Como gerar o token</span>
+                    <svg
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showInstructions ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showInstructions && (
+                    <div className="px-3 pb-3 pt-1 space-y-3 border-t border-slate-100 bg-slate-50">
+                      <ol className="space-y-2 text-xs text-slate-600">
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">1</span>
+                          <span>
+                            Acesse{' '}
+                            <a
+                              href="https://business.facebook.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-600 hover:underline font-medium"
+                            >
+                              business.facebook.com
+                            </a>
+                          </span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">2</span>
+                          <span>Abra as <strong>Configurações do Negócio</strong> (ícone de engrenagem)</span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">3</span>
+                          <span>Navegue em <strong>Usuários → Usuários do Sistema</strong></span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">4</span>
+                          <span>Selecione o <strong>Usuário do Sistema</strong> com permissões administrativas</span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">5</span>
+                          <span>Clique em <strong>"Gerar novo token"</strong></span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">6</span>
+                          <span>Selecione o <strong>aplicativo da plataforma Lovoo</strong></span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">7</span>
+                          <div>
+                            <p>Marque as permissões obrigatórias:</p>
+                            <ul className="mt-1 space-y-0.5">
+                              <li className="font-mono text-[10px] text-slate-500">• instagram_business_basic</li>
+                              <li className="font-mono text-[10px] text-slate-500">• instagram_business_manage_messages</li>
+                              <li className="font-mono text-[10px] text-slate-500">• instagram_business_manage_comments</li>
+                            </ul>
+                          </div>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 mt-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center">8</span>
+                          <span>Gere o token e copie o valor para o campo abaixo</span>
+                        </li>
+                      </ol>
+
+                      <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                        <p className="text-[11px] text-slate-500">
+                          Tokens de Usuário do Sistema normalmente possuem longa duração, mas podem ser revogados pela Meta ou perder validade caso permissões sejam alteradas.
+                        </p>
+                        <p className="text-[11px] text-amber-600">
+                          Utilize apenas o aplicativo indicado pela plataforma Lovoo. Tokens gerados em outros aplicativos Meta serão rejeitados.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-700">
