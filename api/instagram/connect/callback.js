@@ -158,8 +158,19 @@ export default async function handler(req, res) {
     llUrl.searchParams.set('client_secret', appSecret);
     llUrl.searchParams.set('access_token',  shortLivedToken);
 
+    // #region agent log
+    console.log('[debug:449c25] ll-token-request H-A,H-B,H-C url=%s method=GET(default) shortLivedTokenPresent=%s len=%d',
+      llUrl.toString().replace(appSecret,'[REDACTED]').replace(shortLivedToken,'[TOKEN]'),
+      !!shortLivedToken, shortLivedToken?.length ?? 0);
+    // #endregion
+
     const llRes  = await fetch(llUrl.toString());
     const llData = await llRes.json();
+
+    // #region agent log
+    console.log('[debug:449c25] ll-token-response H-A,H-B,H-C status=%d ok=%s errorMessage=%s errorType=%s hasAccessToken=%s',
+      llRes.status, llRes.ok, llData?.error?.message, llData?.error?.type, !!llData?.access_token);
+    // #endregion
 
     if (!llRes.ok || llData.error) {
       console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
