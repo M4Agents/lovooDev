@@ -138,10 +138,11 @@ export default async function handler(req, res) {
       : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
 
     // #region agent log
-    console.log('[debug:449c25] short-lived-token-data H-F expiresIn=%s tokenType=%s rawKeys=%s',
+    console.log('[debug:449c25] short-lived-token-data rawKeys=%s expiresIn=%s tokenType=%s shortLivedTokenPresent=%s len=%d',
+      Object.keys(tokenData).join(','),
       entry.expires_in ?? tokenData.expires_in ?? 'undefined',
       entry.token_type ?? tokenData.token_type ?? 'undefined',
-      Object.keys(tokenData).join(','));
+      !!shortLivedToken, shortLivedToken?.length ?? 0);
     // #endregion
   } catch (err) {
     console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
@@ -158,29 +159,58 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Trocar short-lived → long-lived token (60 dias) ────────────────────
-  // Business Login usa graph.facebook.com com grant_type=fb_exchange_token (H-E).
+  // Fluxo oficial Instagram Business Login: GET graph.instagram.com/access_token
+  // com grant_type=ig_exchange_token. Testa primeiro sem versão, depois v21.0.
   let longLivedToken, expiresIn;
   try {
-    const llUrl = new URL('https://graph.facebook.com/oauth/access_token');
-    llUrl.searchParams.set('grant_type',       'fb_exchange_token');
-    llUrl.searchParams.set('client_id',        appId);
-    llUrl.searchParams.set('client_secret',    appSecret);
-    llUrl.searchParams.set('fb_exchange_token', shortLivedToken);
-
-    // #region agent log
-    console.log('[debug:449c25] ll-token-request H-E endpoint=graph.facebook.com/oauth/access_token grant=fb_exchange_token shortLivedTokenPresent=%s len=%d',
-      !!shortLivedToken, shortLivedToken?.length ?? 0);
+    // #region agent log — H-K: verificar app secret
+    console.log('[debug:449c25] H-K appSecretPresent=%s appSecretLength=%d appIdPresent=%s appIdLength=%d',
+      !!appSecret, appSecret?.length ?? 0, !!appId, appId?.length ?? 0);
     // #endregion
 
-    const llRes  = await fetch(llUrl.toString());
-    const llData = await llRes.json();
+    // Passo 2 — tentativa 1: endpoint sem versão (documentado pela Meta)
+    const buildExchangeUrl = (base) => {
+      const u = new URL(base);
+      u.searchParams.set('grant_type',    'ig_exchange_token');
+      u.searchParams.set('client_secret', appSecret);
+      u.searchParams.set('access_token',  shortLivedToken);
+      return u.toString();
+    };
 
-    // #region agent log
-    console.log('[debug:449c25] ll-token-response H-E status=%d ok=%s errorMessage=%s hasAccessToken=%s expiresIn=%s',
-      llRes.status, llRes.ok, llData?.error?.message, !!llData?.access_token, llData?.expires_in);
-    // #endregion
+    const ENDPOINTS = [
+      'https://graph.instagram.com/access_token',
+      'https://graph.instagram.com/v21.0/access_token',
+    ];
 
-    if (!llRes.ok || llData.error) {
+    let llData = null;
+    let llRes  = null;
+
+    for (const endpoint of ENDPOINTS) {
+      const url = buildExchangeUrl(endpoint);
+
+      // #region agent log
+      console.log('[debug:449c25] ll-token-request endpoint=%s grant=ig_exchange_token client_secret_present=%s access_token_present=%s',
+        endpoint, !!appSecret, !!shortLivedToken);
+      // #endregion
+
+      // eslint-disable-next-line no-await-in-loop
+      llRes  = await fetch(url);
+      // eslint-disable-next-line no-await-in-loop
+      llData = await llRes.json();
+
+      // #region agent log
+      console.log('[debug:449c25] ll-token-response endpoint=%s status=%d ok=%s error_code=%s error_type=%s error_message=%s hasAccessToken=%s expiresIn=%s',
+        endpoint, llRes.status, llRes.ok,
+        llData?.error?.code ?? 'none',
+        llData?.error?.type ?? 'none',
+        llData?.error?.message ?? 'none',
+        !!llData?.access_token, llData?.expires_in ?? 'undefined');
+      // #endregion
+
+      if (llRes.ok && !llData?.error) break; // sucesso — sai do loop
+    }
+
+    if (!llRes.ok || llData?.error) {
       console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
       return redirectError(res, 'token_exchange_failed');
     }
