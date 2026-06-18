@@ -62,7 +62,51 @@ export default async function handler(req, res) {
   const signature = req.headers['x-hub-signature-256'] ?? '';
   const appSecret = process.env.INSTAGRAM_APP_SECRET ?? '';
 
-  if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+  // #region agent log — diagnóstico pré-validação
+  const _ua          = req.headers['user-agent']   ?? '';
+  const _ct          = req.headers['content-type'] ?? '';
+  const _sigRaw      = req.headers['x-hub-signature-256'] ?? '';
+  const _sigOld      = req.headers['x-hub-signature']     ?? '';
+  const _bodyLen     = rawBody?.length ?? 0;
+  const _sigPresent  = !!_sigRaw;
+  const _sigFmt      = _sigRaw.startsWith('sha256=');
+  const _sigHexLen   = _sigFmt ? _sigRaw.slice(7).length : 0;
+  const _secretOk    = !!appSecret && appSecret.length > 0;
+
+  // Inferir razão do 401 sem chamar a função real
+  let _reasonFor401 = 'unknown';
+  if (!_sigPresent)               _reasonFor401 = 'missing_x-hub-signature-256';
+  else if (!_secretOk)            _reasonFor401 = 'app_secret_empty';
+  else if (_bodyLen === 0)        _reasonFor401 = 'empty_raw_body';
+  else if (!_sigFmt)              _reasonFor401 = 'signature_missing_sha256_prefix';
+  else if (_sigHexLen !== 64)     _reasonFor401 = 'signature_hex_length_unexpected_' + _sigHexLen;
+  else                            _reasonFor401 = 'hmac_mismatch';
+
+  console.log('[instagram-webhook-debug] method=%s userAgent=%s contentType=%s hasXHubSignature=%s hasXHubSignature256=%s hasHubMode=%s hasHubChallenge=%s bodyLength=%d signatureValidationAttempted=%s isVerificationRequest=%s isWebhookEvent=%s reasonFor401=%s signatureHexLength=%d appSecretLength=%d',
+    req.method,
+    _ua,
+    _ct,
+    !!_sigOld,
+    !!_sigRaw,
+    !!(req.query?.['hub.mode']),
+    !!(req.query?.['hub.challenge']),
+    _bodyLen,
+    true,
+    false,
+    true,
+    _reasonFor401,
+    _sigHexLen,
+    appSecret.length
+  );
+  // #endregion
+
+  const _sigValid = verifyWebhookSignature(rawBody, signature, appSecret);
+
+  // #region agent log — resultado da validação
+  console.log('[instagram-webhook-debug] signatureValidationPassed=%s', _sigValid);
+  // #endregion
+
+  if (!_sigValid) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
