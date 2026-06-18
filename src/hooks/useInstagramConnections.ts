@@ -5,16 +5,6 @@ import type { InstagramConnection } from '../types/instagram-chat';
 // Re-exporta InstagramConnection para manter compatibilidade com importações existentes
 export type { InstagramConnection };
 
-export interface ConnectWithTokenResult {
-  success: boolean;
-  status?: 'active' | 'limited';
-  username?: string;
-  missing_scopes?: string[];
-  webhook_subscribed?: boolean;
-  warning?: string;
-  error?: string;
-}
-
 interface UseInstagramConnectionsReturn {
   connections: InstagramConnection[];
   loading: boolean;
@@ -22,7 +12,6 @@ interface UseInstagramConnectionsReturn {
   error: string | null;
   refetch: () => void;
   connect: (companyId: string) => Promise<void>;
-  connectWithToken: (companyId: string, rawToken: string) => Promise<ConnectWithTokenResult>;
   disconnect: (connectionId: string) => Promise<{ success: boolean; error?: string }>;
   deleteConnection: (connectionId: string) => Promise<{ success: boolean; error?: string }>;
   syncPhoto: (connectionId: string) => Promise<{ success: boolean; photoUrl?: string | null; error?: string }>;
@@ -259,51 +248,6 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     }
   }, []);
 
-  const connectWithToken = useCallback(async (
-    cId: string,
-    rawToken: string,
-  ): Promise<ConnectWithTokenResult> => {
-    setLoadingAction(true);
-    setError(null);
-
-    try {
-      const token = await getToken();
-      if (!token) {
-        return { success: false, error: 'Sessão expirada. Recarregue a página.' };
-      }
-
-      const res = await fetch('/api/instagram/connect/token', {
-        method: 'POST',
-        headers: {
-          Authorization:  `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ company_id: cId, raw_token: rawToken }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        return { success: false, error: json.error ?? 'Erro ao conectar com token.' };
-      }
-
-      await fetchConnections();
-
-      return {
-        success:            true,
-        status:             json.status,
-        username:           json.username,
-        webhook_subscribed: json.webhook_subscribed,
-        missing_scopes:     json.missing_scopes ?? [],
-        warning:            json.warning,
-      };
-    } catch {
-      return { success: false, error: 'Erro de conexão. Tente novamente.' };
-    } finally {
-      setLoadingAction(false);
-    }
-  }, [fetchConnections]);
-
   return {
     connections,
     loading,
@@ -311,7 +255,6 @@ export function useInstagramConnections(companyId: string | undefined): UseInsta
     error,
     refetch: fetchConnections,
     connect,
-    connectWithToken,
     disconnect,
     deleteConnection,
     syncPhoto,
