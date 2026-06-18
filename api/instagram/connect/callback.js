@@ -225,8 +225,21 @@ export default async function handler(req, res) {
     meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
     meUrl.searchParams.set('access_token', longLivedToken);
 
+    // #region agent log
+    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/me fields=id,username,name,profile_picture_url,user_id');
+    // #endregion
+
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
+
+    // #region agent log
+    console.log('[debug:449c25] me-response status=%d ok=%s rawKeys=%s error_code=%s error_type=%s error_message=%s',
+      meRes.status, meRes.ok,
+      Object.keys(meData).join(','),
+      meData?.error?.code   ?? 'none',
+      meData?.error?.type   ?? 'none',
+      meData?.error?.message ?? 'none');
+    // #endregion
 
     if (!meData.error) {
       username          = meData.username            ?? igUserId;
@@ -235,8 +248,16 @@ export default async function handler(req, res) {
       if (meData.id) igUserId = String(meData.id);
       // user_id é o IGBID — usado pelo webhook para identificar a conta receptora
       if (meData.user_id) igWebhookId = String(meData.user_id);
+
+      // #region agent log
+      console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s igWebhookId=%s',
+        username, !!displayName, !!profilePictureUrl, igUserId, igWebhookId);
+      // #endregion
     }
-  } catch {
+  } catch (meErr) {
+    // #region agent log
+    console.log('[debug:449c25] me-exception message=%s', meErr?.message ?? 'unknown');
+    // #endregion
     // Não-fatal: continua com igUserId como fallback de username
   }
 
