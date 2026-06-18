@@ -151,25 +151,28 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Trocar short-lived → long-lived token (60 dias) ────────────────────
+  // Business Login API exige POST com body urlencoded (GET retorna 400).
   let longLivedToken, expiresIn;
   try {
-    const llUrl = new URL('https://graph.instagram.com/access_token');
-    llUrl.searchParams.set('grant_type',    'ig_exchange_token');
-    llUrl.searchParams.set('client_secret', appSecret);
-    llUrl.searchParams.set('access_token',  shortLivedToken);
-
     // #region agent log
-    console.log('[debug:449c25] ll-token-request H-A,H-B,H-C url=%s method=GET(default) shortLivedTokenPresent=%s len=%d',
-      llUrl.toString().replace(appSecret,'[REDACTED]').replace(shortLivedToken,'[TOKEN]'),
+    console.log('[debug:449c25] ll-token-request POST shortLivedTokenPresent=%s len=%d',
       !!shortLivedToken, shortLivedToken?.length ?? 0);
     // #endregion
 
-    const llRes  = await fetch(llUrl.toString());
+    const llRes  = await fetch('https://graph.instagram.com/access_token', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    new URLSearchParams({
+        grant_type:    'ig_exchange_token',
+        client_secret: appSecret,
+        access_token:  shortLivedToken,
+      }).toString(),
+    });
     const llData = await llRes.json();
 
     // #region agent log
-    console.log('[debug:449c25] ll-token-response H-A,H-B,H-C status=%d ok=%s errorMessage=%s errorType=%s hasAccessToken=%s',
-      llRes.status, llRes.ok, llData?.error?.message, llData?.error?.type, !!llData?.access_token);
+    console.log('[debug:449c25] ll-token-response status=%d ok=%s errorMessage=%s hasAccessToken=%s',
+      llRes.status, llRes.ok, llData?.error?.message, !!llData?.access_token);
     // #endregion
 
     if (!llRes.ok || llData.error) {
