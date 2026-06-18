@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   }
 
   // ── 4. Trocar code → short-lived token ─────────────────────────────────────
-  let shortLivedToken, igUserId, grantedScopes;
+  let shortLivedToken, igUserId, grantedScopes, shortLivedExpiresIn;
   try {
     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
       method:  'POST',
@@ -128,9 +128,10 @@ export default async function handler(req, res) {
     // Business Login retorna { data: [{ access_token, user_id, permissions }] }
     // ou diretamente { access_token, user_id, permissions }
     // permissions pode ser array ["scope1","scope2"] OU string "scope1,scope2"
-    const entry      = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
-    shortLivedToken  = entry.access_token;
-    igUserId         = String(entry.user_id ?? '');
+    const entry         = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
+    shortLivedToken     = entry.access_token;
+    igUserId            = String(entry.user_id ?? '');
+    shortLivedExpiresIn = entry.expires_in ?? tokenData.expires_in ?? null;
 
     const rawPerms = entry.permissions ?? [];
     grantedScopes  = Array.isArray(rawPerms)
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
     // #region agent log
     console.log('[debug:449c25] short-lived-token-data rawKeys=%s expiresIn=%s tokenType=%s shortLivedTokenPresent=%s len=%d',
       Object.keys(tokenData).join(','),
-      entry.expires_in ?? tokenData.expires_in ?? 'undefined',
+      shortLivedExpiresIn ?? 'undefined',
       entry.token_type ?? tokenData.token_type ?? 'undefined',
       !!shortLivedToken, shortLivedToken?.length ?? 0);
     // #endregion
@@ -158,68 +159,60 @@ export default async function handler(req, res) {
     return redirectError(res, 'missing_scopes');
   }
 
-  // ── 6. Trocar short-lived → long-lived token (60 dias) ────────────────────
-  // Fluxo oficial Instagram Business Login: GET graph.instagram.com/access_token
-  // com grant_type=ig_exchange_token. Testa primeiro sem versão, depois v21.0.
+  // ── 6. Determinar token de longa duração ──────────────────────────────────
+  // Business Login (instagram_business_basic) emite tokens sem expires_in —
+  // o token retornado pelo OAuth já é válido por 60 dias (long-lived por padrão).
+  // Fluxo legado com expires_in: tenta ig_exchange_token (compatibilidade futura).
   let longLivedToken, expiresIn;
-  try {
-    // #region agent log — H-K: verificar app secret
-    console.log('[debug:449c25] H-K appSecretPresent=%s appSecretLength=%d appIdPresent=%s appIdLength=%d',
-      !!appSecret, appSecret?.length ?? 0, !!appId, appId?.length ?? 0);
+
+  const oauthTokenHasExpiresIn = shortLivedExpiresIn != null;
+
+  // #region agent log
+  console.log('[debug:449c25] step6-decision oauthTokenHasExpiresIn=%s shortLivedExpiresIn=%s',
+    oauthTokenHasExpiresIn, shortLivedExpiresIn ?? 'null');
+  // #endregion
+
+  if (oauthTokenHasExpiresIn) {
+    // ── Fluxo legado (Basic Display API): tentar ig_exchange_token ──────────
+    try {
+      const llUrl = new URL('https://graph.instagram.com/access_token');
+      llUrl.searchParams.set('grant_type',    'ig_exchange_token');
+      llUrl.searchParams.set('client_secret', appSecret);
+      llUrl.searchParams.set('access_token',  shortLivedToken);
+
+      // #region agent log
+      console.log('[debug:449c25] legacy-exchange-request endpoint=graph.instagram.com/access_token grant=ig_exchange_token');
+      // #endregion
+
+      const llRes  = await fetch(llUrl.toString());
+      const llData = await llRes.json();
+
+      // #region agent log
+      console.log('[debug:449c25] legacy-exchange-response status=%d ok=%s error_code=%s hasAccessToken=%s expiresIn=%s',
+        llRes.status, llRes.ok, llData?.error?.code ?? 'none', !!llData?.access_token, llData?.expires_in ?? 'undefined');
+      // #endregion
+
+      if (!llRes.ok || llData.error) {
+        console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
+        return redirectError(res, 'token_exchange_failed');
+      }
+
+      longLivedToken = llData.access_token;
+      expiresIn      = llData.expires_in;
+    } catch (err) {
+      console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
+      return redirectError(res, 'meta_api_unavailable');
+    }
+  } else {
+    // ── Business Login: token já é válido diretamente (60 dias) ─────────────
+    longLivedToken = shortLivedToken;
+    expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
+
+    const computedExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+    // #region agent log
+    console.log('[debug:449c25] usingDirectBusinessLoginToken=true tokenExpiresAt=%s', computedExpiresAt);
     // #endregion
-
-    // Passo 2 — tentativa 1: endpoint sem versão (documentado pela Meta)
-    const buildExchangeUrl = (base) => {
-      const u = new URL(base);
-      u.searchParams.set('grant_type',    'ig_exchange_token');
-      u.searchParams.set('client_secret', appSecret);
-      u.searchParams.set('access_token',  shortLivedToken);
-      return u.toString();
-    };
-
-    const ENDPOINTS = [
-      'https://graph.instagram.com/access_token',
-      'https://graph.instagram.com/v21.0/access_token',
-    ];
-
-    let llData = null;
-    let llRes  = null;
-
-    for (const endpoint of ENDPOINTS) {
-      const url = buildExchangeUrl(endpoint);
-
-      // #region agent log
-      console.log('[debug:449c25] ll-token-request endpoint=%s grant=ig_exchange_token client_secret_present=%s access_token_present=%s',
-        endpoint, !!appSecret, !!shortLivedToken);
-      // #endregion
-
-      // eslint-disable-next-line no-await-in-loop
-      llRes  = await fetch(url);
-      // eslint-disable-next-line no-await-in-loop
-      llData = await llRes.json();
-
-      // #region agent log
-      console.log('[debug:449c25] ll-token-response endpoint=%s status=%d ok=%s error_code=%s error_type=%s error_message=%s hasAccessToken=%s expiresIn=%s',
-        endpoint, llRes.status, llRes.ok,
-        llData?.error?.code ?? 'none',
-        llData?.error?.type ?? 'none',
-        llData?.error?.message ?? 'none',
-        !!llData?.access_token, llData?.expires_in ?? 'undefined');
-      // #endregion
-
-      if (llRes.ok && !llData?.error) break; // sucesso — sai do loop
-    }
-
-    if (!llRes.ok || llData?.error) {
-      console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
-      return redirectError(res, 'token_exchange_failed');
-    }
-
-    longLivedToken = llData.access_token;
-    expiresIn      = llData.expires_in; // segundos
-  } catch (err) {
-    console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
-    return redirectError(res, 'meta_api_unavailable');
   }
 
   // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
