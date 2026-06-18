@@ -136,6 +136,13 @@ export default async function handler(req, res) {
     grantedScopes  = Array.isArray(rawPerms)
       ? rawPerms.map((s) => String(s).trim()).filter(Boolean)
       : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
+
+    // #region agent log
+    console.log('[debug:449c25] short-lived-token-data H-F expiresIn=%s tokenType=%s rawKeys=%s',
+      entry.expires_in ?? tokenData.expires_in ?? 'undefined',
+      entry.token_type ?? tokenData.token_type ?? 'undefined',
+      Object.keys(tokenData).join(','));
+    // #endregion
   } catch (err) {
     console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
@@ -151,28 +158,26 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Trocar short-lived → long-lived token (60 dias) ────────────────────
-  // Business Login API exige POST com body urlencoded (GET retorna 400).
+  // Business Login usa graph.facebook.com com grant_type=fb_exchange_token (H-E).
   let longLivedToken, expiresIn;
   try {
+    const llUrl = new URL('https://graph.facebook.com/oauth/access_token');
+    llUrl.searchParams.set('grant_type',       'fb_exchange_token');
+    llUrl.searchParams.set('client_id',        appId);
+    llUrl.searchParams.set('client_secret',    appSecret);
+    llUrl.searchParams.set('fb_exchange_token', shortLivedToken);
+
     // #region agent log
-    console.log('[debug:449c25] ll-token-request POST shortLivedTokenPresent=%s len=%d',
+    console.log('[debug:449c25] ll-token-request H-E endpoint=graph.facebook.com/oauth/access_token grant=fb_exchange_token shortLivedTokenPresent=%s len=%d',
       !!shortLivedToken, shortLivedToken?.length ?? 0);
     // #endregion
 
-    const llRes  = await fetch('https://graph.instagram.com/access_token', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    new URLSearchParams({
-        grant_type:    'ig_exchange_token',
-        client_secret: appSecret,
-        access_token:  shortLivedToken,
-      }).toString(),
-    });
+    const llRes  = await fetch(llUrl.toString());
     const llData = await llRes.json();
 
     // #region agent log
-    console.log('[debug:449c25] ll-token-response status=%d ok=%s errorMessage=%s hasAccessToken=%s',
-      llRes.status, llRes.ok, llData?.error?.message, !!llData?.access_token);
+    console.log('[debug:449c25] ll-token-response H-E status=%d ok=%s errorMessage=%s hasAccessToken=%s expiresIn=%s',
+      llRes.status, llRes.ok, llData?.error?.message, !!llData?.access_token, llData?.expires_in);
     // #endregion
 
     if (!llRes.ok || llData.error) {
