@@ -117,6 +117,17 @@ export default async function handler(req, res) {
   }
 
   // ── 4. Trocar code → short-lived token ─────────────────────────────────────
+  // #region agent log — diagnóstico token exchange
+  console.log('[instagram-oauth-debug] step=token-exchange appIdValue=%s appIdLength=%d appSecretLength=%d redirectUriSent=%s codeLength=%d codePrefix=%s',
+    appId,
+    appId?.length ?? 0,
+    appSecret?.length ?? 0,
+    redirectUri,
+    code?.length ?? 0,
+    code?.slice(0, 6) ?? 'none'
+  );
+  // #endregion
+
   let shortLivedToken, igUserId, grantedScopes, shortLivedExpiresIn;
   try {
     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {

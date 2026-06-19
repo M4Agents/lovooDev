@@ -94,5 +94,14 @@ export default async function handler(req, res) {
 
   const authUrl = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
 
+  // #region agent log — diagnóstico authUrl
+  console.log('[instagram-oauth-debug] step=initiate-authurl appIdValue=%s appIdLength=%d redirectUriInUrl=%s scopesSent=%s',
+    appId,
+    appId?.length ?? 0,
+    redirectUri,
+    IG_SCOPES
+  );
+  // #endregion
+
   return res.status(200).json({ authUrl });
 }
