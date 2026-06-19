@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
   // ── 2. Validar HMAC (fail-closed: rejeitar imediatamente se inválido) ─────
   const signature = req.headers['x-hub-signature-256'] ?? '';
-  const appSecret = process.env.INSTAGRAM_APP_SECRET ?? '';
+  const appSecret = process.env.INSTAGRAM_WEBHOOK_SECRET ?? process.env.INSTAGRAM_APP_SECRET ?? '';
 
   // #region agent log — diagnóstico pré-validação
   const _ua          = req.headers['user-agent']   ?? '';
@@ -82,7 +82,8 @@ export default async function handler(req, res) {
   else if (_sigHexLen !== 64)     _reasonFor401 = 'signature_hex_length_unexpected_' + _sigHexLen;
   else                            _reasonFor401 = 'hmac_mismatch';
 
-  console.log('[instagram-webhook-debug] method=%s userAgent=%s contentType=%s hasXHubSignature=%s hasXHubSignature256=%s hasHubMode=%s hasHubChallenge=%s bodyLength=%d signatureValidationAttempted=%s isVerificationRequest=%s isWebhookEvent=%s reasonFor401=%s signatureHexLength=%d appSecretLength=%d',
+  const _secretSource = process.env.INSTAGRAM_WEBHOOK_SECRET ? 'INSTAGRAM_WEBHOOK_SECRET' : 'INSTAGRAM_APP_SECRET(fallback)';
+  console.log('[instagram-webhook-debug] method=%s userAgent=%s contentType=%s hasXHubSignature=%s hasXHubSignature256=%s hasHubMode=%s hasHubChallenge=%s bodyLength=%d signatureValidationAttempted=%s isVerificationRequest=%s isWebhookEvent=%s reasonFor401=%s signatureHexLength=%d appSecretLength=%d secretSource=%s',
     req.method,
     _ua,
     _ct,
@@ -96,7 +97,8 @@ export default async function handler(req, res) {
     true,
     _reasonFor401,
     _sigHexLen,
-    appSecret.length
+    appSecret.length,
+    _secretSource
   );
   // #endregion
 

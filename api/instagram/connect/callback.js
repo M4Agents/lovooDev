@@ -246,7 +246,7 @@ export default async function handler(req, res) {
   let igWebhookId = igUserId; // fallback: mesmo ID caso user_id não venha
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
-    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
+    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     // #region agent log
