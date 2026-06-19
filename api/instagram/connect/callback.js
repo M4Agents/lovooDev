@@ -99,6 +99,19 @@ export default async function handler(req, res) {
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI
     ?? 'https://app.lovoocrm.com/api/instagram/connect/callback';
 
+  // #region agent log — diagnóstico redirect_uri
+  const _fallback = 'https://app.lovoocrm.com/api/instagram/connect/callback';
+  console.log('[instagram-oauth-debug] step=callback callbackRedirectUri=%s envVarPresent=%s envVarLength=%d usingFallback=%s appIdPresent=%s appSecretPresent=%s areRedirectUrisEqual=%s',
+    redirectUri,
+    !!process.env.INSTAGRAM_REDIRECT_URI,
+    process.env.INSTAGRAM_REDIRECT_URI?.length ?? 0,
+    !process.env.INSTAGRAM_REDIRECT_URI,
+    !!appId,
+    !!appSecret,
+    redirectUri === _fallback
+  );
+  // #endregion
+
   if (!appId || !appSecret) {
     return redirectError(res, 'configuration_error');
   }

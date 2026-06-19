@@ -40,6 +40,16 @@ export default async function handler(req, res) {
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI
     ?? 'https://app.lovoocrm.com/api/instagram/connect/callback';
 
+  // #region agent log — diagnóstico redirect_uri
+  console.log('[instagram-oauth-debug] step=initiate initiateRedirectUri=%s envVarPresent=%s envVarLength=%d usingFallback=%s appIdPresent=%s',
+    redirectUri,
+    !!process.env.INSTAGRAM_REDIRECT_URI,
+    process.env.INSTAGRAM_REDIRECT_URI?.length ?? 0,
+    !process.env.INSTAGRAM_REDIRECT_URI,
+    !!appId
+  );
+  // #endregion
+
   if (!appId || !process.env.INSTAGRAM_STATE_SECRET) {
     return res.status(500).json({ error: 'Integração Instagram não configurada' });
   }
