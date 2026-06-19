@@ -245,12 +245,12 @@ export default async function handler(req, res) {
   let username = igUserId, displayName = '', profilePictureUrl = null;
   let igWebhookId = igUserId; // fallback: mesmo ID caso user_id não venha
   try {
-    const meUrl = new URL('https://graph.instagram.com/me');
+    const meUrl = new URL('https://graph.instagram.com/v21.0/me');
     meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     // #region agent log
-    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/me fields=id,username,name,profile_picture_url,user_id');
+    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/v21.0/me fields=id,username,name,profile_picture_url');
     // #endregion
 
     const meRes  = await fetch(meUrl.toString());
