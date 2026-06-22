@@ -239,39 +239,44 @@ export default async function handler(req, res) {
     // #endregion
   }
 
-  // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
-  // user_id retorna o Instagram Business Account ID (IGBID) — é o ID que a Meta
-  // usa nos webhooks (entry.id). Diferente de id (IGUID, usado no OAuth).
+  // ── 7. Buscar dados da conta Instagram via Facebook Graph API ─────────────
+  // Business Login tokens são tokens Facebook — o IGBID (usado nos webhooks
+  // como entry.id) é obtido via graph.facebook.com/v21.0/me com o campo
+  // instagram_business_account, não via graph.instagram.com (Basic Display).
   let username = igUserId, displayName = '', profilePictureUrl = null;
-  let igWebhookId = igUserId; // fallback: mesmo ID caso user_id não venha
+  let igWebhookId = igUserId; // fallback: mesmo ID caso IGBID não venha
   try {
-    const meUrl = new URL(`https://graph.instagram.com/v21.0/${igUserId}`);
-    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
+    const meUrl = new URL('https://graph.facebook.com/v21.0/me');
+    meUrl.searchParams.set('fields', 'instagram_business_account{id,username,name,profile_picture_url}');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     // #region agent log
-    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/v21.0/{igUserId} igUserId=%s fields=id,username,name,profile_picture_url', igUserId);
+    console.log('[debug:449c25] me-request endpoint=graph.facebook.com/v21.0/me fields=instagram_business_account{id,username,name,profile_picture_url}');
     // #endregion
 
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
 
     // #region agent log
-    console.log('[debug:449c25] me-response status=%d ok=%s rawKeys=%s error_code=%s error_type=%s error_message=%s',
+    console.log('[debug:449c25] me-response status=%d ok=%s rawKeys=%s error_code=%s error_type=%s error_message=%s hasIgAccount=%s',
       meRes.status, meRes.ok,
       Object.keys(meData).join(','),
-      meData?.error?.code   ?? 'none',
-      meData?.error?.type   ?? 'none',
-      meData?.error?.message ?? 'none');
+      meData?.error?.code    ?? 'none',
+      meData?.error?.type    ?? 'none',
+      meData?.error?.message ?? 'none',
+      !!(meData?.instagram_business_account));
     // #endregion
 
-    if (!meData.error) {
-      username          = meData.username            ?? igUserId;
-      displayName       = meData.name                ?? '';
-      profilePictureUrl = meData.profile_picture_url ?? null;
-      if (meData.id) igUserId = String(meData.id);
-      // user_id é o IGBID — usado pelo webhook para identificar a conta receptora
-      if (meData.user_id) igWebhookId = String(meData.user_id);
+    const igAccount = meData?.instagram_business_account ?? null;
+    if (!meData.error && igAccount) {
+      username          = igAccount.username            ?? igUserId;
+      displayName       = igAccount.name                ?? '';
+      profilePictureUrl = igAccount.profile_picture_url ?? null;
+      // IGBID: ID da conta Business no Instagram — é o entry.id dos webhooks
+      if (igAccount.id) {
+        igUserId    = String(igAccount.id);
+        igWebhookId = String(igAccount.id);
+      }
 
       // #region agent log
       console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s igWebhookId=%s',
