@@ -63,7 +63,7 @@ export default async function handler(req, res) {
   // ── 3. Buscar conexão ──────────────────────────────────────────────────────
   const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
-    .select('id, instagram_user_id, access_token_enc, status')
+    .select('id, instagram_user_id, ig_webhook_id, access_token_enc, status')
     .eq('id', conversation.connection_id)
     .maybeSingle();
 
@@ -90,7 +90,9 @@ export default async function handler(req, res) {
   }
 
   // ── 5. Enviar via Meta Graph API ───────────────────────────────────────────
-  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${connection.instagram_user_id}/messages`;
+  // Usar ig_webhook_id (IGBID) quando disponível — mesmo padrão do send.js
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
+  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
   let metaMessageId  = null;
 
