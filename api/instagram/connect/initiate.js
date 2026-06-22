@@ -22,13 +22,12 @@ import { validateInstagramCaller,
          CONNECT_ROLES }                from '../../lib/instagram/validateInstagramCaller.js';
 import { signState }                    from '../../lib/instagram/instagramState.js';
 
-// Scopes para MVP: DMs + comentários.
-// instagram_business_content_publish removido intencionalmente:
-//   não é necessário para mensagens/comentários e aumenta risco no App Review.
+// Scopes aprovados no App Review (Live mode).
+// instagram_business_manage_comments removido: Not approved no App Review atual.
+// Pode ser readicionado após nova submissão e aprovação pela Meta.
 const IG_SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_messages',
-  'instagram_business_manage_comments',
 ].join(',');
 
 export default async function handler(req, res) {
