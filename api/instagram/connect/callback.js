@@ -99,35 +99,11 @@ export default async function handler(req, res) {
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI
     ?? 'https://app.lovoocrm.com/api/instagram/connect/callback';
 
-  // #region agent log — diagnóstico redirect_uri
-  const _fallback = 'https://app.lovoocrm.com/api/instagram/connect/callback';
-  console.log('[instagram-oauth-debug] step=callback callbackRedirectUri=%s envVarPresent=%s envVarLength=%d usingFallback=%s appIdPresent=%s appSecretPresent=%s areRedirectUrisEqual=%s',
-    redirectUri,
-    !!process.env.INSTAGRAM_REDIRECT_URI,
-    process.env.INSTAGRAM_REDIRECT_URI?.length ?? 0,
-    !process.env.INSTAGRAM_REDIRECT_URI,
-    !!appId,
-    !!appSecret,
-    redirectUri === _fallback
-  );
-  // #endregion
-
   if (!appId || !appSecret) {
     return redirectError(res, 'configuration_error');
   }
 
   // ── 4. Trocar code → short-lived token ─────────────────────────────────────
-  // #region agent log — diagnóstico token exchange
-  console.log('[instagram-oauth-debug] step=token-exchange appIdValue=%s appIdLength=%d appSecretLength=%d redirectUriSent=%s codeLength=%d codePrefix=%s',
-    appId,
-    appId?.length ?? 0,
-    appSecret?.length ?? 0,
-    redirectUri,
-    code?.length ?? 0,
-    code?.slice(0, 6) ?? 'none'
-  );
-  // #endregion
-
   let shortLivedToken, igUserId, grantedScopes, shortLivedExpiresIn;
   try {
     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
@@ -162,13 +138,6 @@ export default async function handler(req, res) {
       ? rawPerms.map((s) => String(s).trim()).filter(Boolean)
       : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
 
-    // #region agent log
-    console.log('[debug:449c25] short-lived-token-data rawKeys=%s expiresIn=%s tokenType=%s shortLivedTokenPresent=%s len=%d',
-      Object.keys(tokenData).join(','),
-      shortLivedExpiresIn ?? 'undefined',
-      entry.token_type ?? tokenData.token_type ?? 'undefined',
-      !!shortLivedToken, shortLivedToken?.length ?? 0);
-    // #endregion
   } catch (err) {
     console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
@@ -183,45 +152,40 @@ export default async function handler(req, res) {
     return redirectError(res, 'missing_scopes');
   }
 
-  // ── 6. Trocar short-lived → long-lived token (ig_exchange_token) ──────────
-  // Tanto Basic Display quanto Business Login emitem tokens de curta duração (1h).
-  // Business Login não inclui expires_in na resposta, mas igualmente requer exchange.
+  // ── 6. Determinar token de longa duração ──────────────────────────────────
+  // Business Login (instagram_business_basic) emite tokens sem expires_in —
+  // o token retornado pelo OAuth já é válido por 60 dias (long-lived por padrão).
+  // Fluxo legado com expires_in: tenta ig_exchange_token (compatibilidade futura).
   let longLivedToken, expiresIn;
 
-  // #region agent log
-  console.log('[debug:449c25] step6-ll-exchange-start shortLivedExpiresIn=%s willExchange=true',
-    shortLivedExpiresIn ?? 'null');
-  // #endregion
+  const oauthTokenHasExpiresIn = shortLivedExpiresIn != null;
 
-  try {
-    const llUrl = new URL('https://graph.instagram.com/access_token');
-    llUrl.searchParams.set('grant_type',    'ig_exchange_token');
-    llUrl.searchParams.set('client_secret', appSecret);
-    llUrl.searchParams.set('access_token',  shortLivedToken);
+  if (oauthTokenHasExpiresIn) {
+    // ── Fluxo legado (Basic Display API): tentar ig_exchange_token ──────────
+    try {
+      const llUrl = new URL('https://graph.instagram.com/access_token');
+      llUrl.searchParams.set('grant_type',    'ig_exchange_token');
+      llUrl.searchParams.set('client_secret', appSecret);
+      llUrl.searchParams.set('access_token',  shortLivedToken);
 
-    // #region agent log
-    console.log('[debug:449c25] ll-exchange-request endpoint=graph.instagram.com/access_token appSecretLength=%d shortLivedLen=%d',
-      appSecret?.length ?? 0, shortLivedToken?.length ?? 0);
-    // #endregion
+      const llRes  = await fetch(llUrl.toString());
+      const llData = await llRes.json();
 
-    const llRes  = await fetch(llUrl.toString());
-    const llData = await llRes.json();
+      if (!llRes.ok || llData.error) {
+        console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
+        return redirectError(res, 'token_exchange_failed');
+      }
 
-    // #region agent log
-    console.log('[debug:449c25] ll-exchange-response status=%d ok=%s error_code=%s hasAccessToken=%s expiresIn=%s',
-      llRes.status, llRes.ok, llData?.error?.code ?? 'none', !!llData?.access_token, llData?.expires_in ?? 'undefined');
-    // #endregion
-
-    if (!llRes.ok || llData.error) {
-      console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
-      return redirectError(res, 'token_exchange_failed');
+      longLivedToken = llData.access_token;
+      expiresIn      = llData.expires_in;
+    } catch (err) {
+      console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
+      return redirectError(res, 'meta_api_unavailable');
     }
-
-    longLivedToken = llData.access_token;
-    expiresIn      = llData.expires_in;
-  } catch (err) {
-    console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
-    return redirectError(res, 'meta_api_unavailable');
+  } else {
+    // ── Business Login: token já é válido diretamente (60 dias) ─────────────
+    longLivedToken = shortLivedToken;
+    expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
   }
 
   // ── 7. Buscar dados da conta Instagram via Instagram Graph API ────────────
@@ -236,23 +200,8 @@ export default async function handler(req, res) {
     meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
     meUrl.searchParams.set('access_token', longLivedToken);
 
-    // #region agent log
-    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/v21.0/me fields=id,username,name,profile_picture_url');
-    // #endregion
-
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
-
-    // #region agent log
-    console.log('[debug:449c25] me-response status=%d ok=%s rawKeys=%s error_code=%s error_type=%s error_message=%s igId=%s igUsername=%s',
-      meRes.status, meRes.ok,
-      Object.keys(meData).join(','),
-      meData?.error?.code    ?? 'none',
-      meData?.error?.type    ?? 'none',
-      meData?.error?.message ?? 'none',
-      meData?.id             ?? 'none',
-      meData?.username       ?? 'none');
-    // #endregion
 
     if (!meData.error && meData.id) {
       username          = meData.username            ?? igUserId;
@@ -262,16 +211,8 @@ export default async function handler(req, res) {
       // O user_id do OAuth (igUserId) é o IGBID real usado como entry.id nos webhooks.
       // O id do /me em Business Login pode ser o IGSID (app-scoped), diferente do IGBID.
       // igWebhookId mantém o valor original do OAuth.
-
-      // #region agent log
-      console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s meDataId=%s',
-        username, !!displayName, !!profilePictureUrl, igUserId, meData.id);
-      // #endregion
     }
   } catch (meErr) {
-    // #region agent log
-    console.log('[debug:449c25] me-exception message=%s', meErr?.message ?? 'unknown');
-    // #endregion
     // Não-fatal: continua com igUserId como fallback de username
   }
 
