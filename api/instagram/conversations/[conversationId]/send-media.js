@@ -110,10 +110,6 @@ export default async function handler(req, res) {
         },
       };
 
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'send-media.js:113',message:'meta-request',data:{metaUrl,recipientId:conversation.ig_participant_id,media_type,media_url_length:media_url?.length,media_url_domain:media_url?.split('/')[2],metaBody:JSON.stringify(metaBody)},timestamp:Date.now(),hypothesisId:'H-A,H-B,H-C'})}).catch(()=>{});
-      // #endregion
-
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
         headers: {
@@ -124,10 +120,6 @@ export default async function handler(req, res) {
         signal: controller.signal,
       });
       metaData = await metaRes.json();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'send-media.js:130',message:'meta-response',data:{status:metaRes.status,ok:metaRes.ok,metaData,hasError:!!metaData?.error,messageId:metaData?.message_id},timestamp:Date.now(),hypothesisId:'H-B,H-C,H-D'})}).catch(()=>{});
-      // #endregion
     } finally {
       clearTimeout(timeout);
     }
