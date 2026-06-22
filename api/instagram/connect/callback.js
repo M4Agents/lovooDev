@@ -258,13 +258,14 @@ export default async function handler(req, res) {
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
-      // IGBID: o id do /me é o entry.id dos eventos de webhook
-      igUserId    = String(meData.id);
-      igWebhookId = String(meData.id);
+      // NÃO sobrescrever igUserId com meData.id:
+      // O user_id do OAuth (igUserId) é o IGBID real usado como entry.id nos webhooks.
+      // O id do /me em Business Login pode ser o IGSID (app-scoped), diferente do IGBID.
+      // igWebhookId mantém o valor original do OAuth.
 
       // #region agent log
-      console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s igWebhookId=%s',
-        username, !!displayName, !!profilePictureUrl, igUserId, igWebhookId);
+      console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s meDataId=%s',
+        username, !!displayName, !!profilePictureUrl, igUserId, meData.id);
       // #endregion
     }
   } catch (meErr) {
