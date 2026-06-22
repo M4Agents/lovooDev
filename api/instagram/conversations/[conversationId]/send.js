@@ -134,6 +134,14 @@ export default async function handler(req, res) {
   const igBusinessId = connection.instagram_user_id ?? connection.ig_webhook_id;
   const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
+  // #region agent log
+  try {
+    const meRes = await fetch(`https://graph.instagram.com/me?fields=id,username,user_id&access_token=${accessToken}`);
+    const meData = await meRes.json();
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'send.js:token-identity',message:'token-me-response',data:{meId:meData.id,meUsername:meData.username,meUserId:meData.user_id,meError:meData.error,dbInstagramUserId:connection.instagram_user_id,dbIgWebhookId:connection.ig_webhook_id,igBusinessId,participantId:conversation.ig_participant_id},timestamp:Date.now()})}).catch(()=>{});
+  } catch (_e) {}
+  // #endregion
+
   let metaMessageId   = null;
   let metaSendFailed  = false;
   let metaFailReason  = null;
