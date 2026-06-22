@@ -189,30 +189,35 @@ export default async function handler(req, res) {
   }
 
   // ── 7. Buscar dados da conta Instagram via Instagram Graph API ────────────
-  // Tokens do Business Login são Instagram User Access Tokens — válidos APENAS
-  // em graph.instagram.com, não em graph.facebook.com (que requer FB User Token).
-  // O `id` retornado pelo /me é o IGBID (Instagram Business Account ID),
-  // que é o mesmo entry.id usado nos eventos de webhook.
+  // graph.instagram.com/me retorna:
+  //   id       → IGBID (Business Account ID, usado pelo webhook entry.id)
+  //   user_id  → ID alternativo (page-backed accounts)
+  // O igWebhookId correto vem de meData.id ou meData.user_id — nunca do OAuth user_id.
   let username = igUserId, displayName = '', profilePictureUrl = null;
   let igWebhookId = igUserId; // fallback: mesmo ID caso /me falhe
   try {
-    const meUrl = new URL('https://graph.instagram.com/v21.0/me');
-    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
+    const meUrl = new URL('https://graph.instagram.com/me');
+    meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
     meUrl.searchParams.set('access_token', longLivedToken);
 
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
 
-    if (!meData.error && meData.id) {
+    if (!meData.error) {
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
-      // NÃO sobrescrever igUserId com meData.id:
-      // O user_id do OAuth (igUserId) é o IGBID real usado como entry.id nos webhooks.
-      // O id do /me em Business Login pode ser o IGSID (app-scoped), diferente do IGBID.
-      // igWebhookId mantém o valor original do OAuth.
+      // meData.id é o IGBID — sobrescreve o IGSID vindo do OAuth
+      if (meData.id) igUserId = String(meData.id);
+      // meData.user_id pode conter um ID adicional (ex: page-backed)
+      if (meData.user_id) igWebhookId = String(meData.user_id);
     }
+
+    console.log('[instagram/callback] me status=%d igId=%s username=%s hasPhoto=%s userId=%s',
+      meRes.status, meData?.id ?? 'none', meData?.username ?? 'none',
+      !!meData?.profile_picture_url, meData?.user_id ?? 'none');
   } catch (meErr) {
+    console.error('[instagram/callback] me-exception:', meErr?.message ?? meErr);
     // Não-fatal: continua com igUserId como fallback de username
   }
 
@@ -272,8 +277,8 @@ export default async function handler(req, res) {
 
   // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
   // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
-  // o nosso endpoint. Sem esta chamada a conta existe no banco mas a Meta não
-  // entrega webhooks para ela.
+  // o nosso endpoint. Usa igUserId (IGBID, vindo do meData.id) — nunca o IGSID
+  // do OAuth, que resulta em erro "Object does not exist".
   let subscribeOk = false;
   try {
     const subscribeUrl =
