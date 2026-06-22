@@ -199,6 +199,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onReply, onReact
   }
 
   const bubbleContent = () => {
+    // #region agent log
+    if (message.message_type !== 'text') {
+      console.log('[debug:449c25] bubble', { id: message.id, message_type: message.message_type, media_url: message.media_url, has_media_url: !!message.media_url })
+    }
+    // #endregion
     if (message.message_type === 'unsupported') {
       return <p className="text-sm italic opacity-70">Mídia não suportada</p>
     }
