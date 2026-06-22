@@ -90,9 +90,9 @@ export default async function handler(req, res) {
   }
 
   // ── 5. Enviar via Meta Graph API ───────────────────────────────────────────
-  // instagram_user_id armazena o IGBID real (meData.id do /me) para contas novas.
-  // Para a API de mensagens usar sempre o IGBID do Instagram (instagram_user_id).
-  const igBusinessId = connection.instagram_user_id ?? connection.ig_webhook_id;
+  // ig_webhook_id = IGBID real (meData.user_id para page-backed accounts).
+  // A API de mensagens exige o IGBID; usar ig_webhook_id como fonte primária.
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
   const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
   let metaMessageId  = null;

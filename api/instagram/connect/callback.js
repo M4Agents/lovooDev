@@ -277,12 +277,16 @@ export default async function handler(req, res) {
 
   // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
   // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
-  // o nosso endpoint. Usa igUserId (IGBID, vindo do meData.id) — nunca o IGSID
-  // do OAuth, que resulta em erro "Object does not exist".
+  // o nosso endpoint.
+  // igWebhookId = IGBID real (meData.user_id para page-backed accounts).
+  // igUserId    = IGSID app-scoped (meData.id). Usar o IGBID garante que a
+  // subscrição e a API de mensagens referenciam o mesmo account ID, evitando
+  // o erro "not the thread owner" nas respostas.
+  const subscribeAccountId = igWebhookId ?? igUserId;
   let subscribeOk = false;
   try {
     const subscribeUrl =
-      `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps` +
+      `https://graph.instagram.com/v21.0/${subscribeAccountId}/subscribed_apps` +
       `?subscribed_fields=messages,comments,message_reactions` +
       `&access_token=${longLivedToken}`;
 
@@ -291,8 +295,8 @@ export default async function handler(req, res) {
     subscribeOk = subscribeRes.ok && subscribeData.success === true;
 
     if (!subscribeOk) {
-      console.warn('[instagram/callback] subscribed_apps falhou igUserId=%s body=%s',
-        igUserId, JSON.stringify(subscribeData));
+      console.warn('[instagram/callback] subscribed_apps falhou subscribeAccountId=%s body=%s',
+        subscribeAccountId, JSON.stringify(subscribeData));
     }
   } catch (err) {
     console.warn('[instagram/callback] subscribed_apps threw:', err?.message);

@@ -127,11 +127,10 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Enviar via Meta Graph API ───────────────────────────────────────────
-  // instagram_user_id armazena o IGBID real (meData.id do /me) para contas novas.
-  // ig_webhook_id armazena o Facebook Page ID (meData.user_id) — usado para webhook matching.
-  // Para a API de mensagens usar sempre o IGBID do Instagram (instagram_user_id).
-  // Fallback para ig_webhook_id apenas em conexões antigas onde instagram_user_id = IGSID legado.
-  const igBusinessId = connection.instagram_user_id ?? connection.ig_webhook_id;
+  // ig_webhook_id = IGBID real (meData.user_id para page-backed accounts).
+  // instagram_user_id = IGSID app-scoped (meData.id) — não aceito pela API de mensagens.
+  // A API de mensagens exige o IGBID; usar ig_webhook_id como fonte primária.
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
   const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
   // #region agent log [449c25]
