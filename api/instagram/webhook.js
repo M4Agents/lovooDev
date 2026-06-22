@@ -153,12 +153,17 @@ async function processEntry(entry, svc) {
   // Resolver conexão ativa (company_id NUNCA vem do payload)
   // Tenta ig_webhook_id (IGBID) primeiro — contas novas têm IDs distintos.
   // Fallback para instagram_user_id para contas antigas onde os IDs coincidem.
-  const { data: connection } = await svc
+  const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
     .select('id, company_id, access_token_enc')
     .or(`ig_webhook_id.eq.${igUserId},instagram_user_id.eq.${igUserId}`)
     .eq('status', 'active')
     .maybeSingle();
+
+  // #region agent log
+  console.log('[debug:449c25] processEntry igUserId=%s connectionFound=%s companyId=%s connErr=%s',
+    igUserId, !!connection, connection?.company_id ?? 'null', connErr?.message ?? 'none');
+  // #endregion
 
   const companyId    = connection?.company_id ?? null;
   const connectionId = connection?.id ?? null;
@@ -179,10 +184,12 @@ async function processEntry(entry, svc) {
   }
 
   // Registrar eventos não tratados como skipped
+  // Constraint chk_igwhev_event_type aceita apenas: 'dm','comment','story_mention','unknown'
+  // Tipos como 'seen','postback','referral','other_messaging' → mapeados para 'unknown'
   for (const ev of parseSkippedMessagingEvents(entry)) {
     await saveWebhookEvent(svc, {
       instagramUserId:  ev.instagramUserId,
-      eventType:        ev.eventType,
+      eventType:        'unknown',
       igObjectId:       null,
       companyId,
       connectionId,
@@ -236,6 +243,12 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
     p_reply_to_content:       replyToContent,
     p_reply_to_direction:     replyToDirection,
   });
+
+  // #region agent log
+  console.log('[debug:449c25] processDmEvent eventId=%s rpcOk=%s rpcSkipped=%s rpcErr=%s rpcError=%s conversationId=%s',
+    eventId ?? 'null', rpc?.ok ?? 'undefined', rpc?.skipped ?? 'undefined',
+    rpcErr?.message ?? 'none', rpc?.error ?? 'none', rpc?.conversation_id ?? 'null');
+  // #endregion
 
   if (!eventId) return;
 
