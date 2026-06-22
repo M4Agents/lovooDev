@@ -179,7 +179,12 @@ export default async function handler(req, res) {
       const errCode = metaData.error?.code;
       const errMsg  = metaData.error?.message ?? '';
 
-      console.error('[ig/send] Meta error code:%s msg:%s igBusinessId=%s participantId=%s', errCode, errMsg, igBusinessId, conversation.ig_participant_id);
+      // #region agent log [449c25]
+      console.error('[ig/send] Meta error code:%s subcode:%s msg:%s igBusinessId=%s participantId=%s fbtrace=%s fullError=%s',
+        errCode, metaData.error?.error_subcode ?? 'none', errMsg, igBusinessId,
+        conversation.ig_participant_id, metaData.error?.fbtrace_id ?? 'none',
+        JSON.stringify(metaData.error));
+      // #endregion
 
       if (errCode === 10 || errMsg.toLowerCase().includes('outside the allowed window')) {
         return res.status(422).json({

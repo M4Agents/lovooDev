@@ -276,13 +276,23 @@ export default async function handler(req, res) {
   }
 
   // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
-  // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
-  // o nosso endpoint.
   // igWebhookId = IGBID real (meData.user_id para page-backed accounts).
-  // igUserId    = IGSID app-scoped (meData.id). Usar o IGBID garante que a
-  // subscrição e a API de mensagens referenciam o mesmo account ID, evitando
-  // o erro "not the thread owner" nas respostas.
+  // igUserId    = IGSID app-scoped (meData.id).
+  // Para page-backed accounts: primeiro remover subscrição pelo IGSID (se existir),
+  // depois criar subscrição pelo IGBID. Subscrições duplicadas (IGSID + IGBID)
+  // causam conflito de "thread owner" na API de mensagens.
   const subscribeAccountId = igWebhookId ?? igUserId;
+
+  // Remover subscrição IGSID stale (se IGBID for diferente)
+  if (igWebhookId && igWebhookId !== igUserId) {
+    try {
+      await fetch(
+        `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps?access_token=${longLivedToken}`,
+        { method: 'DELETE' }
+      );
+    } catch (_e) { /* não-fatal */ }
+  }
+
   let subscribeOk = false;
   try {
     const subscribeUrl =
