@@ -150,6 +150,28 @@ export default async function handler(req, res) {
   let metaSendFailed  = false;
   let metaFailReason  = null;
 
+  // Helper: tentar assumir controle da thread (Handover Protocol)
+  // Necessário quando outro app (ex: Manychat) é o Primary Receiver da Facebook Page.
+  // subcode 2534037 = "not the thread owner" — acontece quando outro app detém a thread.
+  async function tryTakeThreadControl(participantId) {
+    try {
+      const takeUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/take_thread_control`;
+      const takeRes = await fetch(takeUrl, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ recipient: { id: participantId } }),
+      });
+      const takeData = await takeRes.json();
+      const ok = takeRes.ok && takeData.success === true;
+      console.log('[ig/send] take_thread_control igBusinessId=%s participantId=%s ok=%s body=%s',
+        igBusinessId, participantId, ok, JSON.stringify(takeData));
+      return ok;
+    } catch (_e) {
+      console.warn('[ig/send] take_thread_control threw:', _e?.message);
+      return false;
+    }
+  }
+
   try {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), META_FETCH_TIMEOUT_MS);
@@ -175,16 +197,40 @@ export default async function handler(req, res) {
       clearTimeout(timeout);
     }
 
+    // Handover Protocol: se outro app é o dono da thread (subcode 2534037),
+    // tentar assumir controle e reenviar automaticamente.
+    if (metaData.error?.error_subcode === 2534037) {
+      const took = await tryTakeThreadControl(conversation.ig_participant_id);
+      if (took) {
+        try {
+          const retryController = new AbortController();
+          const retryTimeout    = setTimeout(() => retryController.abort(), META_FETCH_TIMEOUT_MS);
+          try {
+            const retryRes  = await fetch(metaUrl, {
+              method:  'POST',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ recipient: { id: conversation.ig_participant_id }, message: { text: textForMeta } }),
+              signal:  retryController.signal,
+            });
+            const retryData = await retryRes.json();
+            if (retryRes.ok && !retryData.error) {
+              metaRes  = retryRes;
+              metaData = retryData;
+            }
+          } finally {
+            clearTimeout(retryTimeout);
+          }
+        } catch (_e) { /* mantém o erro original se retry falhar */ }
+      }
+    }
+
     if (!metaRes.ok || metaData.error) {
       const errCode = metaData.error?.code;
       const errMsg  = metaData.error?.message ?? '';
 
-      // #region agent log [449c25]
-      console.error('[ig/send] Meta error code:%s subcode:%s msg:%s igBusinessId=%s participantId=%s fbtrace=%s fullError=%s',
+      console.error('[ig/send] Meta error code:%s subcode:%s msg:%s igBusinessId=%s participantId=%s fbtrace=%s',
         errCode, metaData.error?.error_subcode ?? 'none', errMsg, igBusinessId,
-        conversation.ig_participant_id, metaData.error?.fbtrace_id ?? 'none',
-        JSON.stringify(metaData.error));
-      // #endregion
+        conversation.ig_participant_id, metaData.error?.fbtrace_id ?? 'none');
 
       if (errCode === 10 || errMsg.toLowerCase().includes('outside the allowed window')) {
         return res.status(422).json({
