@@ -72,7 +72,7 @@ export default async function handler(req, res) {
   // ── 3. Buscar conexão ──────────────────────────────────────────────────────
   const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
-    .select('id, instagram_user_id, access_token_enc, status')
+    .select('id, instagram_user_id, ig_webhook_id, access_token_enc, status')
     .eq('id', conversation.connection_id)
     .maybeSingle();
 
@@ -127,7 +127,10 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Enviar via Meta Graph API ───────────────────────────────────────────
-  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${connection.instagram_user_id}/messages`;
+  // Usar ig_webhook_id (IGBID) quando disponível: a API de mensagens requer o
+  // Business Account ID (IGBID), não o IGSID (app-scoped) armazenado em instagram_user_id.
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
+  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
   let metaMessageId   = null;
   let metaSendFailed  = false;
@@ -162,7 +165,7 @@ export default async function handler(req, res) {
       const errCode = metaData.error?.code;
       const errMsg  = metaData.error?.message ?? '';
 
-      console.error('[ig/send] Meta error code:', errCode);
+      console.error('[ig/send] Meta error code:%s msg:%s igBusinessId=%s participantId=%s', errCode, errMsg, igBusinessId, conversation.ig_participant_id);
 
       if (errCode === 10 || errMsg.toLowerCase().includes('outside the allowed window')) {
         return res.status(422).json({
