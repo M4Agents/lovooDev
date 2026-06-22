@@ -104,8 +104,11 @@ export default async function handler(req, res) {
 
   const _sigValid = verifyWebhookSignature(rawBody, signature, appSecret);
 
-  // #region agent log — resultado da validação
-  console.log('[instagram-webhook-debug] signatureValidationPassed=%s', _sigValid);
+  // #region agent log — resultado da validação + teste comparativo de secrets
+  const _webhookSecretMatch  = verifyWebhookSignature(rawBody, signature, process.env.INSTAGRAM_WEBHOOK_SECRET ?? '');
+  const _appSecretMatch      = verifyWebhookSignature(rawBody, signature, process.env.INSTAGRAM_APP_SECRET ?? '');
+  console.log('[instagram-webhook-debug] signatureValidationPassed=%s webhookSecretMatch=%s appSecretMatch=%s',
+    _sigValid, _webhookSecretMatch, _appSecretMatch);
   // #endregion
 
   if (!_sigValid) {
