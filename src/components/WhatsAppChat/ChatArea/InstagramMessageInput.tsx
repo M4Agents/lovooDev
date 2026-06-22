@@ -57,13 +57,23 @@ export interface InstagramMessageInputProps {
 // HELPERS
 // =====================================================
 
+function sanitizeStorageKey(filename: string): string {
+  return filename
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // remove acentos
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // substitui caracteres inválidos
+    .replace(/_+/g, '_')               // colapsa underscores múltiplos
+    .replace(/^_|_$/g, '')             // remove underscore inicial/final
+}
+
 async function uploadToStorage(
   file: File | Blob,
   companyId: string,
   conversationId: string,
   filename: string
 ): Promise<string> {
-  const path = `${companyId}/${conversationId}/${Date.now()}_${filename}`
+  const safeFilename = sanitizeStorageKey(filename)
+  const path = `${companyId}/${conversationId}/${Date.now()}_${safeFilename}`
   const { data: uploadData, error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(path, file, { contentType: file.type, upsert: false })
