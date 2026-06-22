@@ -59,8 +59,11 @@ export default async function handler(req, res) {
   }
 
   // ── 2. Validar HMAC (fail-closed: rejeitar imediatamente se inválido) ─────
+  // A Meta assina com o secret do App que criou a subscrição (subscribed_apps).
+  // Subscrições via token do Instagram App usam INSTAGRAM_APP_SECRET.
+  // Manter INSTAGRAM_WEBHOOK_SECRET como fallback para subscrições legadas.
   const signature = req.headers['x-hub-signature-256'] ?? '';
-  const appSecret = process.env.INSTAGRAM_WEBHOOK_SECRET ?? process.env.INSTAGRAM_APP_SECRET ?? '';
+  const appSecret = process.env.INSTAGRAM_APP_SECRET ?? process.env.INSTAGRAM_WEBHOOK_SECRET ?? '';
 
   // #region agent log — diagnóstico pré-validação
   const _ua          = req.headers['user-agent']   ?? '';
