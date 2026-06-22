@@ -107,7 +107,7 @@ export default async function handler(req, res) {
         message: {
           attachment: {
             type:    media_type,
-            payload: { url: media_url, is_reusable: true },
+            payload: { url: media_url },
           },
         },
       };

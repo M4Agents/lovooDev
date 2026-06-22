@@ -209,8 +209,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onReply, onReact
         </p>
       )
     }
-    // Mídia
+    // Mídia — renderiza preview visual conforme o tipo
     if (message.media_url) {
+      if (message.message_type === 'image') {
+        return (
+          <a href={message.media_url} target="_blank" rel="noopener noreferrer">
+            <img
+              src={message.media_url}
+              alt="imagem"
+              className="max-w-[240px] max-h-[300px] rounded-xl object-cover cursor-pointer"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          </a>
+        )
+      }
+      if (message.message_type === 'video') {
+        return (
+          <video
+            src={message.media_url}
+            controls
+            className="max-w-[240px] max-h-[300px] rounded-xl"
+          />
+        )
+      }
+      if (message.message_type === 'audio') {
+        return (
+          <audio src={message.media_url} controls className="w-full min-w-[200px]" />
+        )
+      }
       return (
         <a
           href={message.media_url}
