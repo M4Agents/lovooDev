@@ -188,13 +188,21 @@ export default async function handler(req, res) {
     expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
   }
 
-  // ── 7. Buscar dados da conta Instagram via Instagram Graph API ────────────
-  // graph.instagram.com/me retorna:
-  //   id       → IGBID (Business Account ID, usado pelo webhook entry.id)
-  //   user_id  → ID alternativo (page-backed accounts)
-  // O igWebhookId correto vem de meData.id ou meData.user_id — nunca do OAuth user_id.
+  // ── 7. Buscar dados da conta Instagram ────────────────────────────────────
+  // Estratégia de dois endpoints (tokens Facebook vs. tokens Instagram):
+  //
+  // A) graph.instagram.com/me — para Instagram User Access Tokens (maioria dos casos).
+  //    Retorna: id (IGBID), username, name, profile_picture_url, user_id (legado).
+  //
+  // B) graph.facebook.com/me + instagram_business_account — para contas page-backed
+  //    que retornam um Facebook User Access Token no OAuth.
+  //    Ocorre quando: conta Instagram está vinculada a uma Página Facebook de modo que
+  //    o Meta OAuth emite um token Facebook ao invés de Instagram.
+  //    Sintoma: graph.instagram.com/me falha com code 100 "Unsupported request - method type: get".
+  const oauthIgUserId = igUserId; // preserva o user_id original do OAuth antes do /me
   let username = igUserId, displayName = '', profilePictureUrl = null;
   let igWebhookId = igUserId; // fallback: mesmo ID caso /me falhe
+  let meSource = 'none';
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
     meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
@@ -204,26 +212,61 @@ export default async function handler(req, res) {
     const meData = await meRes.json();
 
     if (!meData.error) {
+      meSource          = 'instagram';
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
-      // meData.id é o IGBID — sobrescreve o IGSID vindo do OAuth
-      if (meData.id) igUserId = String(meData.id);
-      // meData.user_id pode conter um ID adicional (ex: page-backed)
+      if (meData.id)      igUserId    = String(meData.id);
       if (meData.user_id) igWebhookId = String(meData.user_id);
+    } else if (meData.error?.code === 100) {
+      // Fallback: token Facebook — tentar graph.facebook.com/me + instagram_business_account
+      try {
+        const fbMeUrl = new URL('https://graph.facebook.com/me');
+        fbMeUrl.searchParams.set(
+          'fields',
+          'id,instagram_business_account{id,username,name,profile_picture_url}'
+        );
+        fbMeUrl.searchParams.set('access_token', longLivedToken);
+
+        const fbMeRes  = await fetch(fbMeUrl.toString());
+        const fbMeData = await fbMeRes.json();
+
+        if (!fbMeData.error && fbMeData.instagram_business_account) {
+          const igAcc   = fbMeData.instagram_business_account;
+          meSource          = 'facebook';
+          igUserId          = String(igAcc.id);
+          igWebhookId       = String(igAcc.id); // IGBID da conta Business
+          username          = igAcc.username            ?? igUserId;
+          displayName       = igAcc.name                ?? '';
+          profilePictureUrl = igAcc.profile_picture_url ?? null;
+
+          // #region agent log
+          console.log('[debug:449c25] fb-me-fallback fbUserId=%s igAccId=%s username=%s hasPhoto=%s',
+            fbMeData.id ?? 'none', igAcc.id, igAcc.username ?? 'none', !!igAcc.profile_picture_url);
+          // #endregion
+        } else {
+          // #region agent log
+          console.log('[debug:449c25] fb-me-fallback-failed fbError=%s hasIgAcc=%s',
+            fbMeData.error ? JSON.stringify(fbMeData.error) : 'none',
+            !!fbMeData.instagram_business_account);
+          // #endregion
+          console.error('[instagram/callback] fb-me fallback falhou:', JSON.stringify(fbMeData));
+        }
+      } catch (fbErr) {
+        console.error('[instagram/callback] fb-me fallback threw:', fbErr?.message ?? fbErr);
+      }
     }
 
     // #region agent log
-    console.log('[debug:449c25] me-fields igId=%s igUserId=%s igWebhookId=%s username=%s hasPhoto=%s meError=%s',
-      meData?.id ?? 'none', igUserId, igWebhookId, meData?.username ?? 'none',
-      !!meData?.profile_picture_url, meData?.error ? JSON.stringify(meData.error) : 'none');
+    console.log('[debug:449c25] me-fields meSource=%s igId=%s igUserId=%s igWebhookId=%s username=%s hasPhoto=%s meError=%s',
+      meSource, meData?.id ?? 'none', igUserId, igWebhookId, username,
+      !!profilePictureUrl, meData?.error ? JSON.stringify(meData.error) : 'none');
     // #endregion
-    console.log('[instagram/callback] me status=%d igId=%s username=%s hasPhoto=%s userId=%s',
-      meRes.status, meData?.id ?? 'none', meData?.username ?? 'none',
-      !!meData?.profile_picture_url, meData?.user_id ?? 'none');
+    console.log('[instagram/callback] me status=%d meSource=%s igId=%s username=%s hasPhoto=%s userId=%s',
+      meRes.status, meSource, meData?.id ?? 'none', username,
+      !!profilePictureUrl, meData?.user_id ?? 'none');
   } catch (meErr) {
     console.error('[instagram/callback] me-exception:', meErr?.message ?? meErr);
-    // Não-fatal: continua com igUserId como fallback de username
   }
 
   // ── 8. Criptografar token ──────────────────────────────────────────────────
@@ -268,9 +311,12 @@ export default async function handler(req, res) {
   let subscribeOk = false;
   let effectiveWebhookId = igWebhookId; // ID que funcionou para subscribed_apps
 
-  const candidateIds = igWebhookId && igWebhookId !== igUserId
+  // Quando meSource='facebook', igUserId = igWebhookId = IGBID da conta Business.
+  // Quando meSource='instagram', igWebhookId pode ser meData.user_id (ID alternativo).
+  // Em ambos os casos, candidateIds tem os IDs a tentar em ordem.
+  const candidateIds = (igWebhookId && igWebhookId !== igUserId)
     ? [igWebhookId, igUserId]   // tenta user_id (meData.user_id) primeiro, depois id (meData.id)
-    : [igUserId];               // sem user_id alternativo: usa apenas igUserId
+    : [igUserId];               // apenas um candidato
 
   for (const candidateId of candidateIds) {
     try {
