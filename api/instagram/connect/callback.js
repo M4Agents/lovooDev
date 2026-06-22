@@ -213,6 +213,11 @@ export default async function handler(req, res) {
       if (meData.user_id) igWebhookId = String(meData.user_id);
     }
 
+    // #region agent log
+    console.log('[debug:449c25] me-fields igId=%s igUserId=%s igWebhookId=%s username=%s hasPhoto=%s meError=%s',
+      meData?.id ?? 'none', igUserId, igWebhookId, meData?.username ?? 'none',
+      !!meData?.profile_picture_url, meData?.error ? JSON.stringify(meData.error) : 'none');
+    // #endregion
     console.log('[instagram/callback] me status=%d igId=%s username=%s hasPhoto=%s userId=%s',
       meRes.status, meData?.id ?? 'none', meData?.username ?? 'none',
       !!meData?.profile_picture_url, meData?.user_id ?? 'none');
@@ -244,15 +249,67 @@ export default async function handler(req, res) {
     if (permanentUrl) profilePictureUrl = permanentUrl;
   }
 
-  // ── 9. UPSERT instagram_connections ───────────────────────────────────────
+  // ── 9. Subscrever conta ao webhook Meta (antes do UPSERT para saber o effectiveWebhookId) ──
+  // Estratégia com fallback:
+  //   - Alguns accounts: meData.user_id é o ID funcional para subscribed_apps.
+  //   - Outros: meData.user_id não suporta POST; meData.id funciona.
+  // Tentamos igWebhookId primeiro; se falhar, tentamos igUserId.
+
+  // Remover subscrição stale pelo igUserId (se igWebhookId for diferente)
+  if (igWebhookId && igWebhookId !== igUserId) {
+    try {
+      await fetch(
+        `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps?access_token=${longLivedToken}`,
+        { method: 'DELETE' }
+      );
+    } catch (_e) { /* não-fatal */ }
+  }
+
+  let subscribeOk = false;
+  let effectiveWebhookId = igWebhookId; // ID que funcionou para subscribed_apps
+
+  const candidateIds = igWebhookId && igWebhookId !== igUserId
+    ? [igWebhookId, igUserId]   // tenta user_id (meData.user_id) primeiro, depois id (meData.id)
+    : [igUserId];               // sem user_id alternativo: usa apenas igUserId
+
+  for (const candidateId of candidateIds) {
+    try {
+      const subscribeUrl =
+        `https://graph.instagram.com/v21.0/${candidateId}/subscribed_apps` +
+        `?subscribed_fields=messages,comments,message_reactions` +
+        `&access_token=${longLivedToken}`;
+
+      const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
+      const subscribeData = await subscribeRes.json();
+
+      // #region agent log
+      console.log('[debug:449c25] subscribed_apps-attempt candidateId=%s ok=%s body=%s',
+        candidateId, subscribeRes.ok && subscribeData.success === true, JSON.stringify(subscribeData));
+      // #endregion
+
+      if (subscribeRes.ok && subscribeData.success === true) {
+        subscribeOk = true;
+        effectiveWebhookId = candidateId;
+        break;
+      }
+
+      console.warn('[instagram/callback] subscribed_apps falhou subscribeAccountId=%s body=%s',
+        candidateId, JSON.stringify(subscribeData));
+    } catch (err) {
+      console.warn('[instagram/callback] subscribed_apps threw candidateId=%s:', candidateId, err?.message);
+    }
+  }
+
+  // ── 10. UPSERT instagram_connections ──────────────────────────────────────
   // ON CONFLICT (company_id, instagram_user_id): atualiza token e status.
   // Suporta reconexão de conta já existente (revogada ou expirada).
+  // ig_webhook_id = effectiveWebhookId: ID confirmado pelo subscribed_apps (ou melhor candidato).
   const { data: connection, error: upsertErr } = await svc
     .from('instagram_connections')
     .upsert({
       company_id:         companyId,
       instagram_user_id:  igUserId,
-      ig_webhook_id:      igWebhookId !== igUserId ? igWebhookId : null,
+      ig_webhook_id:      effectiveWebhookId !== igUserId ? effectiveWebhookId : null,
       instagram_username: username,
       profile_picture_url: profilePictureUrl,
       access_token_enc:   accessTokenEnc,
@@ -275,43 +332,6 @@ export default async function handler(req, res) {
     return redirectError(res, 'connection_save_failed');
   }
 
-  // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
-  // igWebhookId = IGBID real (meData.user_id para page-backed accounts).
-  // igUserId    = IGSID app-scoped (meData.id).
-  // Para page-backed accounts: primeiro remover subscrição pelo IGSID (se existir),
-  // depois criar subscrição pelo IGBID. Subscrições duplicadas (IGSID + IGBID)
-  // causam conflito de "thread owner" na API de mensagens.
-  const subscribeAccountId = igWebhookId ?? igUserId;
-
-  // Remover subscrição IGSID stale (se IGBID for diferente)
-  if (igWebhookId && igWebhookId !== igUserId) {
-    try {
-      await fetch(
-        `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps?access_token=${longLivedToken}`,
-        { method: 'DELETE' }
-      );
-    } catch (_e) { /* não-fatal */ }
-  }
-
-  let subscribeOk = false;
-  try {
-    const subscribeUrl =
-      `https://graph.instagram.com/v21.0/${subscribeAccountId}/subscribed_apps` +
-      `?subscribed_fields=messages,comments,message_reactions` +
-      `&access_token=${longLivedToken}`;
-
-    const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
-    const subscribeData = await subscribeRes.json();
-    subscribeOk = subscribeRes.ok && subscribeData.success === true;
-
-    if (!subscribeOk) {
-      console.warn('[instagram/callback] subscribed_apps falhou subscribeAccountId=%s body=%s',
-        subscribeAccountId, JSON.stringify(subscribeData));
-    }
-  } catch (err) {
-    console.warn('[instagram/callback] subscribed_apps threw:', err?.message);
-  }
-
   // ── 11. Criar configurações padrão da empresa (idempotente) ───────────────
   await svc
     .from('instagram_company_settings')
@@ -325,7 +345,7 @@ export default async function handler(req, res) {
     performed_by:  userId,
     metadata: {
       instagram_user_id:  igUserId,
-      ig_webhook_id:      igWebhookId,
+      ig_webhook_id:      effectiveWebhookId,
       instagram_username: username,
       display_name:       displayName || undefined,
       scopes:             grantedScopes,
