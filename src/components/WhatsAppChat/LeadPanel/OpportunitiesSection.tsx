@@ -69,6 +69,10 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [updatingPosition, setUpdatingPosition] = useState<string | null>(null)
   const [deletingOpportunity, setDeletingOpportunity] = useState<string | null>(null)
+
+  // Estados pendentes: aguardam confirmação antes de salvar no banco
+  const [pendingFunnelIds, setPendingFunnelIds] = useState<Record<string, string>>({})
+  const [pendingStageIds, setPendingStageIds] = useState<Record<string, string>>({})
   
   // Buscar lead_id a partir do telefone (ou criar se não existir)
   // ✅ NOVO: Se lead_id foi passado como prop, usar diretamente (à prova de migração WhatsApp)
@@ -690,68 +694,118 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               </div>
 
               {/* Seletores de Funil e Etapa */}
-              {!loadingFunnels && funnels.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                  <div>
-                    <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                      <Target className="w-3 h-3" />
-                      Funil
-                    </label>
-                    <select
-                      value={positions[opportunity.id]?.funnel_id || ''}
-                      onChange={(e) => {
-                        const newFunnelId = e.target.value
-                        const firstStage = stagesByFunnel[newFunnelId]?.[0]
-                        if (firstStage) {
-                          handleUpdatePosition(opportunity.id, newFunnelId, firstStage.id)
-                        }
-                      }}
-                      disabled={updatingPosition === opportunity.id}
-                      className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="">Selecione um funil</option>
-                      {funnels.map(funnel => (
-                        <option key={funnel.id} value={funnel.id}>
-                          {funnel.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {!loadingFunnels && funnels.length > 0 && (() => {
+                const oppId = opportunity.id
+                const activeFunnelId = pendingFunnelIds[oppId] ?? positions[oppId]?.funnel_id ?? ''
+                const activeStageId  = pendingFunnelIds[oppId]
+                  ? (pendingStageIds[oppId] ?? '')
+                  : (pendingStageIds[oppId] ?? positions[oppId]?.stage_id ?? '')
+                const hasPending = !!(pendingFunnelIds[oppId] || pendingStageIds[oppId])
+                const canConfirm = hasPending && !!activeFunnelId && !!activeStageId
 
-                  {positions[opportunity.id]?.funnel_id && stagesByFunnel[positions[opportunity.id].funnel_id] && (
+                const handleCancelPending = () => {
+                  setPendingFunnelIds(prev => { const n = { ...prev }; delete n[oppId]; return n })
+                  setPendingStageIds(prev => { const n = { ...prev }; delete n[oppId]; return n })
+                }
+
+                const handleConfirmPending = () => {
+                  if (!canConfirm) return
+                  handleCancelPending()
+                  handleUpdatePosition(oppId, activeFunnelId, activeStageId)
+                }
+
+                return (
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                    {/* Funil */}
                     <div>
                       <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                        <MapPin className="w-3 h-3" />
-                        Etapa
+                        <Target className="w-3 h-3" />
+                        Funil
                       </label>
                       <select
-                        value={positions[opportunity.id]?.stage_id || ''}
+                        value={activeFunnelId}
                         onChange={(e) => {
-                          const newStageId = e.target.value
-                          const funnelId = positions[opportunity.id].funnel_id
-                          handleUpdatePosition(opportunity.id, funnelId, newStageId)
+                          const newFunnelId = e.target.value
+                          // Limpa etapa pendente ao trocar funil
+                          setPendingStageIds(prev => { const n = { ...prev }; delete n[oppId]; return n })
+                          if (newFunnelId === positions[oppId]?.funnel_id) {
+                            setPendingFunnelIds(prev => { const n = { ...prev }; delete n[oppId]; return n })
+                          } else {
+                            setPendingFunnelIds(prev => ({ ...prev, [oppId]: newFunnelId }))
+                          }
                         }}
-                        disabled={updatingPosition === opportunity.id}
+                        disabled={updatingPosition === oppId}
                         className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <option value="">Selecione uma etapa</option>
-                        {stagesByFunnel[positions[opportunity.id].funnel_id]?.map(stage => (
-                          <option key={stage.id} value={stage.id}>
-                            {stage.name}
-                          </option>
+                        <option value="">Selecione um funil</option>
+                        {funnels.map(funnel => (
+                          <option key={funnel.id} value={funnel.id}>{funnel.name}</option>
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  {updatingPosition === opportunity.id && (
-                    <div className="flex items-center gap-2 text-xs text-purple-600">
-                      <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                      Atualizando...
-                    </div>
-                  )}
-                </div>
-              )}
+                    {/* Etapa */}
+                    {activeFunnelId && stagesByFunnel[activeFunnelId] && (
+                      <div>
+                        <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                          <MapPin className="w-3 h-3" />
+                          Etapa
+                        </label>
+                        <select
+                          value={activeStageId}
+                          onChange={(e) => {
+                            const newStageId = e.target.value
+                            if (
+                              newStageId === positions[oppId]?.stage_id &&
+                              activeFunnelId === positions[oppId]?.funnel_id
+                            ) {
+                              setPendingStageIds(prev => { const n = { ...prev }; delete n[oppId]; return n })
+                            } else {
+                              setPendingStageIds(prev => ({ ...prev, [oppId]: newStageId }))
+                            }
+                          }}
+                          disabled={updatingPosition === oppId}
+                          className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <option value="">Selecione uma etapa</option>
+                          {stagesByFunnel[activeFunnelId]?.map(stage => (
+                            <option key={stage.id} value={stage.id}>{stage.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Botões de confirmação */}
+                    {hasPending && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleConfirmPending}
+                          disabled={!canConfirm || updatingPosition === oppId}
+                          className="flex-1 text-xs px-2 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelPending}
+                          disabled={updatingPosition === oppId}
+                          className="flex-1 text-xs px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+
+                    {updatingPosition === oppId && (
+                      <div className="flex items-center gap-2 text-xs text-purple-600">
+                        <div className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                        Atualizando...
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           ))}
         </div>
