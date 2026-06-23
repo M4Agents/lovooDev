@@ -443,8 +443,8 @@ export interface CloseOpportunityParams {
   loss_reason?: string
   closed_at: string
   company_id: string
-  /** Presente somente quando require_won_items=true e nenhum item existe na oportunidade. */
-  item_to_add?: WonItemPayload
+  /** Itens selecionados no modal de fechamento (require_won_items). Persistidos antes do close_opportunity. */
+  items_to_add?: WonItemPayload[]
 }
 
 export interface ReopenOpportunityParams {

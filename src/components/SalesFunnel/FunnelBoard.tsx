@@ -576,20 +576,20 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const handleConfirmClose = useCallback(async (params: CloseOpportunityParams) => {
     if (!pendingTransition) return
 
-    // Adicionar item antes de fechar (quando require_won_items = true e sem itens)
-    if (params.item_to_add) {
-      const { item_type, item_id, unit_price, quantity } = params.item_to_add
-      await funnelApi.opportunityAddItem({
-        companyId:     params.company_id,
-        opportunityId: params.opportunity_id,
-        productId:     item_type === 'product' ? item_id : null,
-        serviceId:     item_type === 'service' ? item_id : null,
-        quantity,
-        unitPrice:     unit_price,
-        discountType:  'fixed',
-        discountValue: 0,
-      })
-      // Atualizar contagem para refletir item adicionado
+    // Adicionar itens antes de fechar (quando require_won_items = true e sem itens)
+    if (params.items_to_add && params.items_to_add.length > 0) {
+      for (const item of params.items_to_add) {
+        await funnelApi.opportunityAddItem({
+          companyId:     params.company_id,
+          opportunityId: params.opportunity_id,
+          productId:     item.item_type === 'product' ? item.item_id : null,
+          serviceId:     item.item_type === 'service' ? item.item_id : null,
+          quantity:      item.quantity,
+          unitPrice:     item.unit_price,
+          discountType:  'fixed',
+          discountValue: 0,
+        })
+      }
       refetchWonCheck()
     }
 
