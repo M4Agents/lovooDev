@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Loader2, TrendingUp, TrendingDown,
   DollarSign, Calendar, MessageSquare, ShoppingBag, Plus, Trash2,
-  Tag, AlertCircle
+  Tag, AlertCircle, ChevronDown, Check
 } from 'lucide-react'
 import type { CloseOpportunityParams, WonItemPayload, SaleType } from '../../types/sales-funnel'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
@@ -51,6 +51,8 @@ interface WonSaleTypeSelectorProps {
   currencyCode: string
 }
 
+const CHIPS_VISIBLE = 2
+
 const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
   companyId,
   selectedIds,
@@ -60,7 +62,9 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
   const { t } = useTranslation('funnel')
   const [loadingTypes, setLoadingTypes] = useState(false)
   const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
+  const [open, setOpen] = useState(false)
   const loaded = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (loaded.current || !companyId) return
@@ -72,6 +76,18 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
       .finally(() => setLoadingTypes(false))
   }, [companyId])
 
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
   const toggle = (id: string) => {
     onChange(
       selectedIds.includes(id)
@@ -80,8 +96,12 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
     )
   }
 
+  const selectedTypes = saleTypes.filter(st => selectedIds.includes(st.id))
+  const visibleChips = selectedTypes.slice(0, CHIPS_VISIBLE)
+  const extraCount = selectedTypes.length - CHIPS_VISIBLE
+
   return (
-    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+    <div className="space-y-1.5">
       <div className="flex items-center gap-2">
         <Tag className="w-4 h-4 text-indigo-600 flex-shrink-0" />
         <span className="text-sm font-medium text-indigo-900">
@@ -90,37 +110,95 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
       </div>
 
       {loadingTypes ? (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-gray-500 px-1">
           <Loader2 className="w-4 h-4 animate-spin" />
           {t('closeOpportunity.wonSaleTypeLoadingList')}
         </div>
       ) : saleTypes.length === 0 ? (
-        <div className="flex items-start gap-2 text-sm text-amber-700">
+        <div className="flex items-start gap-2 text-sm text-amber-700 px-1">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           {t('closeOpportunity.wonSaleTypeEmptyList')}
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {saleTypes.map(st => (
-            <label
-              key={st.id}
-              className="flex items-center gap-2.5 p-2.5 bg-white border border-indigo-100 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors"
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(st.id)}
-                onChange={() => toggle(st.id)}
-                disabled={disabled}
-                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-              />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-gray-900">{st.name}</p>
-                {st.description && (
-                  <p className="text-xs text-gray-500 truncate">{st.description}</p>
-                )}
-              </div>
-            </label>
-          ))}
+        <div ref={containerRef} className="relative">
+          {/* Campo disparador */}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setOpen(prev => !prev)}
+            className={[
+              'w-full flex items-center gap-2 min-h-[40px] px-3 py-2 bg-white border rounded-lg text-left transition-colors',
+              open
+                ? 'border-indigo-400 ring-1 ring-indigo-400'
+                : 'border-gray-300 hover:border-indigo-300',
+              disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+            ].join(' ')}
+          >
+            <span className="flex-1 flex flex-wrap gap-1 min-w-0">
+              {selectedTypes.length === 0 ? (
+                <span className="text-sm text-gray-400">
+                  {t('closeOpportunity.wonSaleTypePlaceholder', 'Selecione o tipo de venda...')}
+                </span>
+              ) : (
+                <>
+                  {visibleChips.map(st => (
+                    <span
+                      key={st.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full"
+                    >
+                      {st.name}
+                      {!disabled && (
+                        <span
+                          role="button"
+                          aria-label={`Remover ${st.name}`}
+                          onMouseDown={e => { e.stopPropagation(); toggle(st.id) }}
+                          className="ml-0.5 text-indigo-500 hover:text-indigo-700"
+                        >
+                          <X className="w-3 h-3" />
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  {extraCount > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                      +{extraCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
+            <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Painel dropdown */}
+          {open && (
+            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+              {saleTypes.map(st => {
+                const checked = selectedIds.includes(st.id)
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); toggle(st.id) }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-indigo-50 transition-colors"
+                  >
+                    <span className={[
+                      'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center',
+                      checked ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 bg-white',
+                    ].join(' ')}>
+                      {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm text-gray-900">{st.name}</span>
+                      {st.description && (
+                        <span className="block text-xs text-gray-500 truncate">{st.description}</span>
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
