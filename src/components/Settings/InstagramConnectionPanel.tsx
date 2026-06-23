@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock, Trash2 } from 'lucide-react';
+import { Instagram, Plus, Unlink, RefreshCw, AlertCircle, Camera, Clock, Trash2, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInstagramConnections } from '../../hooks/useInstagramConnections';
 import type { InstagramConnection } from '../../types/instagram-chat';
 import { useAccessControl } from '../../hooks/useAccessControl';
@@ -69,6 +69,7 @@ export function InstagramConnectionPanel({ companyId }: Props) {
   const [syncingPhotoId, setSyncingPhotoId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [showHandoverTip, setShowHandoverTip] = useState(false);
 
   async function handleConnect() {
     setActionError(null);
@@ -167,6 +168,38 @@ export function InstagramConnectionPanel({ companyId }: Props) {
         <div className="flex items-start gap-2.5 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-400" />
           <p>{ig('connectHint')}</p>
+        </div>
+      )}
+
+      {/* Dica: Handover Protocol — Página do Facebook com outro app */}
+      {canConnectInstagram && (
+        <div className="border border-amber-200 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowHandoverTip(v => !v)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-amber-50 hover:bg-amber-100 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2 text-sm text-amber-800 font-medium">
+              <Info className="w-4 h-4 shrink-0 text-amber-500" />
+              Instagram vinculado a uma Página do Facebook com outro app de mensagens?
+            </div>
+            {showHandoverTip
+              ? <ChevronUp className="w-4 h-4 shrink-0 text-amber-500" />
+              : <ChevronDown className="w-4 h-4 shrink-0 text-amber-500" />
+            }
+          </button>
+
+          {showHandoverTip && (
+            <div className="px-4 py-3 bg-amber-50 border-t border-amber-100 text-sm text-amber-900 space-y-2">
+              <p>{ig('facebookPageHint')}</p>
+              <ol className="list-decimal list-inside space-y-1 pl-1">
+                <li>{ig('facebookPageStep1')}</li>
+                <li>{ig('facebookPageStep2')}</li>
+                <li className="font-medium">{ig('facebookPageStep3')}</li>
+              </ol>
+              <p className="text-xs text-amber-700 mt-2">{ig('facebookPageNote')}</p>
+            </div>
+          )}
         </div>
       )}
 

@@ -72,7 +72,7 @@ export default async function handler(req, res) {
   // ── 3. Buscar conexão ──────────────────────────────────────────────────────
   const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
-    .select('id, instagram_user_id, access_token_enc, status')
+    .select('id, instagram_user_id, ig_webhook_id, access_token_enc, status')
     .eq('id', conversation.connection_id)
     .maybeSingle();
 
@@ -127,11 +127,50 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Enviar via Meta Graph API ───────────────────────────────────────────
-  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${connection.instagram_user_id}/messages`;
+  // ig_webhook_id = IGBID real (meData.user_id para page-backed accounts).
+  // instagram_user_id = IGSID app-scoped (meData.id) — não aceito pela API de mensagens.
+  // A API de mensagens exige o IGBID; usar ig_webhook_id como fonte primária.
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
+  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
+
+  // #region agent log [449c25]
+  try {
+    const meRes  = await fetch(`https://graph.instagram.com/me?fields=id,username,user_id&access_token=${accessToken}`);
+    const meData = await meRes.json();
+    console.log('[debug:449c25] send-token-identity db_instagram_user_id=%s db_ig_webhook_id=%s igBusinessId=%s me_id=%s me_username=%s me_user_id=%s me_error=%s',
+      connection.instagram_user_id, connection.ig_webhook_id, igBusinessId,
+      meData.id, meData.username, meData.user_id,
+      meData.error ? JSON.stringify(meData.error) : 'none');
+  } catch (_e) {
+    console.log('[debug:449c25] send-token-identity /me call failed:', _e?.message);
+  }
+  // #endregion
 
   let metaMessageId   = null;
   let metaSendFailed  = false;
   let metaFailReason  = null;
+
+  // Helper: tentar assumir controle da thread (Handover Protocol)
+  // Necessário quando outro app (ex: Manychat) é o Primary Receiver da Facebook Page.
+  // subcode 2534037 = "not the thread owner" — acontece quando outro app detém a thread.
+  async function tryTakeThreadControl(participantId) {
+    try {
+      const takeUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/take_thread_control`;
+      const takeRes = await fetch(takeUrl, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ recipient: { id: participantId } }),
+      });
+      const takeData = await takeRes.json();
+      const ok = takeRes.ok && takeData.success === true;
+      console.log('[ig/send] take_thread_control igBusinessId=%s participantId=%s ok=%s body=%s',
+        igBusinessId, participantId, ok, JSON.stringify(takeData));
+      return ok;
+    } catch (_e) {
+      console.warn('[ig/send] take_thread_control threw:', _e?.message);
+      return false;
+    }
+  }
 
   try {
     const controller = new AbortController();
@@ -158,11 +197,40 @@ export default async function handler(req, res) {
       clearTimeout(timeout);
     }
 
+    // Handover Protocol: se outro app é o dono da thread (subcode 2534037),
+    // tentar assumir controle e reenviar automaticamente.
+    if (metaData.error?.error_subcode === 2534037) {
+      const took = await tryTakeThreadControl(conversation.ig_participant_id);
+      if (took) {
+        try {
+          const retryController = new AbortController();
+          const retryTimeout    = setTimeout(() => retryController.abort(), META_FETCH_TIMEOUT_MS);
+          try {
+            const retryRes  = await fetch(metaUrl, {
+              method:  'POST',
+              headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ recipient: { id: conversation.ig_participant_id }, message: { text: textForMeta } }),
+              signal:  retryController.signal,
+            });
+            const retryData = await retryRes.json();
+            if (retryRes.ok && !retryData.error) {
+              metaRes  = retryRes;
+              metaData = retryData;
+            }
+          } finally {
+            clearTimeout(retryTimeout);
+          }
+        } catch (_e) { /* mantém o erro original se retry falhar */ }
+      }
+    }
+
     if (!metaRes.ok || metaData.error) {
       const errCode = metaData.error?.code;
       const errMsg  = metaData.error?.message ?? '';
 
-      console.error('[ig/send] Meta error code:', errCode);
+      console.error('[ig/send] Meta error code:%s subcode:%s msg:%s igBusinessId=%s participantId=%s fbtrace=%s',
+        errCode, metaData.error?.error_subcode ?? 'none', errMsg, igBusinessId,
+        conversation.ig_participant_id, metaData.error?.fbtrace_id ?? 'none');
 
       if (errCode === 10 || errMsg.toLowerCase().includes('outside the allowed window')) {
         return res.status(422).json({

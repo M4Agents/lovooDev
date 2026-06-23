@@ -63,7 +63,7 @@ export default async function handler(req, res) {
   // ── 3. Buscar conexão ──────────────────────────────────────────────────────
   const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
-    .select('id, instagram_user_id, access_token_enc, status')
+    .select('id, instagram_user_id, ig_webhook_id, access_token_enc, status')
     .eq('id', conversation.connection_id)
     .maybeSingle();
 
@@ -90,26 +90,47 @@ export default async function handler(req, res) {
   }
 
   // ── 5. Enviar via Meta Graph API ───────────────────────────────────────────
-  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${connection.instagram_user_id}/messages`;
+  // ig_webhook_id = IGBID real (meData.user_id para page-backed accounts).
+  // A API de mensagens exige o IGBID; usar ig_webhook_id como fonte primária.
+  const igBusinessId = connection.ig_webhook_id ?? connection.instagram_user_id;
+  const metaUrl = `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/messages`;
 
   let metaMessageId  = null;
+
+  // Handover Protocol: assume controle da thread se outro app for o Primary Receiver.
+  async function tryTakeThreadControl(participantId) {
+    try {
+      const takeRes  = await fetch(
+        `https://graph.instagram.com/${GRAPH_API_VERSION}/${igBusinessId}/take_thread_control`,
+        {
+          method:  'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ recipient: { id: participantId } }),
+        }
+      );
+      const takeData = await takeRes.json();
+      const ok = takeRes.ok && takeData.success === true;
+      console.log('[ig/send-media] take_thread_control ok=%s', ok);
+      return ok;
+    } catch (_e) { return false; }
+  }
 
   try {
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), META_FETCH_TIMEOUT_MS);
 
+    const metaBody = {
+      recipient: { id: conversation.ig_participant_id },
+      message: {
+        attachment: {
+          type:    media_type,
+          payload: { url: media_url },
+        },
+      },
+    };
+
     let metaRes, metaData;
     try {
-      const metaBody = {
-        recipient: { id: conversation.ig_participant_id },
-        message: {
-          attachment: {
-            type:    media_type,
-            payload: { url: media_url },
-          },
-        },
-      };
-
       metaRes  = await fetch(metaUrl, {
         method:  'POST',
         headers: {
@@ -124,11 +145,27 @@ export default async function handler(req, res) {
       clearTimeout(timeout);
     }
 
+    // Se Handover Protocol bloqueou (subcode 2534037), tomar controle e reenviar.
+    if (metaData.error?.error_subcode === 2534037) {
+      const took = await tryTakeThreadControl(conversation.ig_participant_id);
+      if (took) {
+        try {
+          const r2 = await fetch(metaUrl, {
+            method:  'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify(metaBody),
+          });
+          const d2 = await r2.json();
+          if (r2.ok && !d2.error) { metaRes = r2; metaData = d2; }
+        } catch (_e) { /* mantém erro original */ }
+      }
+    }
+
     if (!metaRes.ok || metaData.error) {
       const errCode = metaData.error?.code;
       const errMsg  = metaData.error?.message ?? '';
 
-      console.error('[ig/send-media] Meta error code:', errCode, errMsg);
+      console.error('[ig/send-media] Meta error code:%s subcode:%s msg:%s', errCode, metaData.error?.error_subcode ?? 'none', errMsg);
 
       if (errCode === 10 || errMsg.toLowerCase().includes('outside the allowed window')) {
         return res.status(422).json({

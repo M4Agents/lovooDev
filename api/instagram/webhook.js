@@ -59,10 +59,62 @@ export default async function handler(req, res) {
   }
 
   // ── 2. Validar HMAC (fail-closed: rejeitar imediatamente se inválido) ─────
+  // A Meta assina com o secret do App que criou a subscrição (subscribed_apps).
+  // Subscrições via token do Instagram App usam INSTAGRAM_APP_SECRET.
+  // Manter INSTAGRAM_WEBHOOK_SECRET como fallback para subscrições legadas.
   const signature = req.headers['x-hub-signature-256'] ?? '';
-  const appSecret = process.env.INSTAGRAM_APP_SECRET ?? '';
+  const appSecret = process.env.INSTAGRAM_APP_SECRET ?? process.env.INSTAGRAM_WEBHOOK_SECRET ?? '';
 
-  if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+  // #region agent log — diagnóstico pré-validação
+  const _ua          = req.headers['user-agent']   ?? '';
+  const _ct          = req.headers['content-type'] ?? '';
+  const _sigRaw      = req.headers['x-hub-signature-256'] ?? '';
+  const _sigOld      = req.headers['x-hub-signature']     ?? '';
+  const _bodyLen     = rawBody?.length ?? 0;
+  const _sigPresent  = !!_sigRaw;
+  const _sigFmt      = _sigRaw.startsWith('sha256=');
+  const _sigHexLen   = _sigFmt ? _sigRaw.slice(7).length : 0;
+  const _secretOk    = !!appSecret && appSecret.length > 0;
+
+  // Inferir razão do 401 sem chamar a função real
+  let _reasonFor401 = 'unknown';
+  if (!_sigPresent)               _reasonFor401 = 'missing_x-hub-signature-256';
+  else if (!_secretOk)            _reasonFor401 = 'app_secret_empty';
+  else if (_bodyLen === 0)        _reasonFor401 = 'empty_raw_body';
+  else if (!_sigFmt)              _reasonFor401 = 'signature_missing_sha256_prefix';
+  else if (_sigHexLen !== 64)     _reasonFor401 = 'signature_hex_length_unexpected_' + _sigHexLen;
+  else                            _reasonFor401 = 'hmac_mismatch';
+
+  const _secretSource = process.env.INSTAGRAM_WEBHOOK_SECRET ? 'INSTAGRAM_WEBHOOK_SECRET' : 'INSTAGRAM_APP_SECRET(fallback)';
+  console.log('[instagram-webhook-debug] method=%s userAgent=%s contentType=%s hasXHubSignature=%s hasXHubSignature256=%s hasHubMode=%s hasHubChallenge=%s bodyLength=%d signatureValidationAttempted=%s isVerificationRequest=%s isWebhookEvent=%s reasonFor401=%s signatureHexLength=%d appSecretLength=%d secretSource=%s',
+    req.method,
+    _ua,
+    _ct,
+    !!_sigOld,
+    !!_sigRaw,
+    !!(req.query?.['hub.mode']),
+    !!(req.query?.['hub.challenge']),
+    _bodyLen,
+    true,
+    false,
+    true,
+    _reasonFor401,
+    _sigHexLen,
+    appSecret.length,
+    _secretSource
+  );
+  // #endregion
+
+  const _sigValid = verifyWebhookSignature(rawBody, signature, appSecret);
+
+  // #region agent log — resultado da validação + teste comparativo de secrets
+  const _webhookSecretMatch  = verifyWebhookSignature(rawBody, signature, process.env.INSTAGRAM_WEBHOOK_SECRET ?? '');
+  const _appSecretMatch      = verifyWebhookSignature(rawBody, signature, process.env.INSTAGRAM_APP_SECRET ?? '');
+  console.log('[instagram-webhook-debug] signatureValidationPassed=%s webhookSecretMatch=%s appSecretMatch=%s',
+    _sigValid, _webhookSecretMatch, _appSecretMatch);
+  // #endregion
+
+  if (!_sigValid) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
@@ -101,12 +153,17 @@ async function processEntry(entry, svc) {
   // Resolver conexão ativa (company_id NUNCA vem do payload)
   // Tenta ig_webhook_id (IGBID) primeiro — contas novas têm IDs distintos.
   // Fallback para instagram_user_id para contas antigas onde os IDs coincidem.
-  const { data: connection } = await svc
+  const { data: connection, error: connErr } = await svc
     .from('instagram_connections')
     .select('id, company_id, access_token_enc')
     .or(`ig_webhook_id.eq.${igUserId},instagram_user_id.eq.${igUserId}`)
     .eq('status', 'active')
     .maybeSingle();
+
+  // #region agent log
+  console.log('[debug:449c25] processEntry igUserId=%s connectionFound=%s companyId=%s connErr=%s',
+    igUserId, !!connection, connection?.company_id ?? 'null', connErr?.message ?? 'none');
+  // #endregion
 
   const companyId    = connection?.company_id ?? null;
   const connectionId = connection?.id ?? null;
@@ -127,10 +184,12 @@ async function processEntry(entry, svc) {
   }
 
   // Registrar eventos não tratados como skipped
+  // Constraint chk_igwhev_event_type aceita apenas: 'dm','comment','story_mention','unknown'
+  // Tipos como 'seen','postback','referral','other_messaging' → mapeados para 'unknown'
   for (const ev of parseSkippedMessagingEvents(entry)) {
     await saveWebhookEvent(svc, {
       instagramUserId:  ev.instagramUserId,
-      eventType:        ev.eventType,
+      eventType:        'unknown',
       igObjectId:       null,
       companyId,
       connectionId,
@@ -184,6 +243,12 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
     p_reply_to_content:       replyToContent,
     p_reply_to_direction:     replyToDirection,
   });
+
+  // #region agent log
+  console.log('[debug:449c25] processDmEvent eventId=%s rpcOk=%s rpcSkipped=%s rpcErr=%s rpcError=%s conversationId=%s',
+    eventId ?? 'null', rpc?.ok ?? 'undefined', rpc?.skipped ?? 'undefined',
+    rpcErr?.message ?? 'none', rpc?.error ?? 'none', rpc?.conversation_id ?? 'null');
+  // #endregion
 
   if (!eventId) return;
 

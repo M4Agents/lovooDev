@@ -22,13 +22,12 @@ import { validateInstagramCaller,
          CONNECT_ROLES }                from '../../lib/instagram/validateInstagramCaller.js';
 import { signState }                    from '../../lib/instagram/instagramState.js';
 
-// Scopes para MVP: DMs + comentários.
-// instagram_business_content_publish removido intencionalmente:
-//   não é necessário para mensagens/comentários e aumenta risco no App Review.
+// Scopes aprovados no App Review (Live mode).
+// instagram_business_manage_comments removido: Not approved no App Review atual.
+// Pode ser readicionado após nova submissão e aprovação pela Meta.
 const IG_SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_messages',
-  'instagram_business_manage_comments',
 ].join(',');
 
 export default async function handler(req, res) {
@@ -39,6 +38,16 @@ export default async function handler(req, res) {
   const appId = process.env.INSTAGRAM_APP_ID;
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI
     ?? 'https://app.lovoocrm.com/api/instagram/connect/callback';
+
+  // #region agent log — diagnóstico redirect_uri
+  console.log('[instagram-oauth-debug] step=initiate initiateRedirectUri=%s envVarPresent=%s envVarLength=%d usingFallback=%s appIdPresent=%s',
+    redirectUri,
+    !!process.env.INSTAGRAM_REDIRECT_URI,
+    process.env.INSTAGRAM_REDIRECT_URI?.length ?? 0,
+    !process.env.INSTAGRAM_REDIRECT_URI,
+    !!appId
+  );
+  // #endregion
 
   if (!appId || !process.env.INSTAGRAM_STATE_SECRET) {
     return res.status(500).json({ error: 'Integração Instagram não configurada' });
@@ -83,6 +92,15 @@ export default async function handler(req, res) {
   });
 
   const authUrl = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+
+  // #region agent log — diagnóstico authUrl
+  console.log('[instagram-oauth-debug] step=initiate-authurl appIdValue=%s appIdLength=%d redirectUriInUrl=%s scopesSent=%s',
+    appId,
+    appId?.length ?? 0,
+    redirectUri,
+    IG_SCOPES
+  );
+  // #endregion
 
   return res.status(200).json({ authUrl });
 }
