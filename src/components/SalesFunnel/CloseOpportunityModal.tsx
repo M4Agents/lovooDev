@@ -179,6 +179,12 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const showItemSelector = isWon && requireItems && !hasItems
   const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
 
+  // #region agent log
+  if (isOpen) {
+    console.log('[debug][CloseOpportunityModal] props on open', {isWon, stageType, requireSaleType, hasSaleTypes, showSaleTypeSelector, requireItems, hasItems, showItemSelector, opportunityId})
+  }
+  // #endregion
+
   // ── Formulário base ──
   const [closeDate, setCloseDate] = useState('')
   const [displayValue, setDisplayValue] = useState('')

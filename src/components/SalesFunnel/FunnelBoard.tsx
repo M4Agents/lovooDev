@@ -297,6 +297,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     enabled:                  !!wonOpportunityId,
   })
 
+  // #region agent log
+  if (wonOpportunityId) {
+    console.log('[debug][FunnelBoard] useSaleTypeCheck state on won transition', {wonOpportunityId, funnelRequireWonSaleType, requireSaleType, hasSaleTypes})
+  }
+  // #endregion
+
   // =====================================================
   // LEITURA DE DADOS POR COLUNA
   // Ordem vinda da RPC (position_in_stage ASC).

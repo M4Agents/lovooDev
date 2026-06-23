@@ -123,8 +123,16 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     try {
       await saleTypesApi.setFunnelRequireWonSaleType(companyId, funnel.id, value)
       setRequireWonSaleType(value)
+      // #region agent log
+      console.log('[debug][EditFunnelModal] require_won_sale_type saved, calling onUpdate', {value})
+      // #endregion
+      // Atualiza selectedFunnel no pai para que o novo valor persista ao reabrir o modal
+      onUpdate()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao atualizar configuração'
+      // #region agent log
+      console.log('[debug][EditFunnelModal] require_won_sale_type RPC error', {value, msg})
+      // #endregion
       if (msg.includes('NO_ACTIVE_SALE_TYPES')) {
         setSaleTypeError('Cadastre ou ative ao menos um tipo de venda antes de habilitar esta opção.')
       } else {

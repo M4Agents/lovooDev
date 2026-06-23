@@ -129,6 +129,13 @@ export default function SalesFunnel() {
     loadPreferences()
   }, [companyId, selectedFunnel])
 
+  // #region agent log
+  React.useEffect(() => {
+    if (!selectedFunnel) return
+    console.log('[debug][SalesFunnel] selectedFunnel updated', {id: selectedFunnel.id, name: selectedFunnel.name, require_won_sale_type: selectedFunnel.require_won_sale_type, require_won_items: selectedFunnel.require_won_items})
+  }, [selectedFunnel])
+  // #endregion
+
   const handleLeadClick = (leadId: number) => {
     setSelectedLeadId(leadId)
     setShowChatModal(true)
