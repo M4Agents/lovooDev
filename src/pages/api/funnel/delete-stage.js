@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     // Buscar etapa
     const { data: stage, error: stageError } = await supabase
       .from('funnel_stages')
-      .select('id, funnel_id, name, position, is_system_stage')
+      .select('id, funnel_id, name, position, is_system_stage, stage_type')
       .eq('id', stage_id)
       .single();
 
@@ -40,11 +40,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // Não permitir deletar etapa de sistema
+    // Não permitir deletar etapa de sistema ou etapas won/lost
     if (stage.is_system_stage) {
       return res.status(400).json({ 
         error: 'Não é possível deletar etapas do sistema',
-        message: 'A etapa "Lead Novo" é obrigatória e não pode ser removida'
+        message: 'A etapa de entrada é obrigatória e não pode ser removida'
+      });
+    }
+
+    if (stage.stage_type === 'won' || stage.stage_type === 'lost') {
+      return res.status(400).json({
+        error: 'Não é possível deletar etapas de fechamento',
+        message: 'As etapas "Venda Ganha" e "Venda Perdida" são obrigatórias e não podem ser removidas'
       });
     }
 

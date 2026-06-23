@@ -494,22 +494,29 @@ export const CreateFunnelWizard: React.FC<CreateFunnelWizardProps> = ({
                           </button>
                         </>
                       ) : (
-                        <>
-                          <button
-                            onClick={() => handleEditStage(stage.tempId)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          {!stage.is_system_stage && (
-                            <button
-                              onClick={() => handleDeleteStage(stage.tempId)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </>
+                        (() => {
+                          const isProtected = stage.is_system_stage || stage.stage_type === 'won' || stage.stage_type === 'lost'
+                          return (
+                            <>
+                              <button
+                                onClick={() => !isProtected && handleEditStage(stage.tempId)}
+                                disabled={isProtected}
+                                title={isProtected ? 'Esta etapa é protegida e não pode ser renomeada' : 'Editar'}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              {!isProtected && (
+                                <button
+                                  onClick={() => handleDeleteStage(stage.tempId)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </>
+                          )
+                        })()
                       )}
                     </div>
                   </div>
