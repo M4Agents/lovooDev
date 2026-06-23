@@ -169,23 +169,46 @@ export default async function handler(req, res) {
   }
 
   // ── 6. Determinar token de longa duração ──────────────────────────────────
-  // Business Login (instagram_business_basic) emite tokens sem expires_in —
-  // o token retornado pelo OAuth já é válido por 60 dias (long-lived por padrão).
-  // Fluxo legado com expires_in: tenta ig_exchange_token (compatibilidade futura).
+  // Dois formatos de token da Business Login API:
+  //
+  // A) Prefixo "EAA..." → token já long-lived (60 dias), não precisa de troca.
+  //    expires_in geralmente não está presente na resposta.
+  //
+  // B) Prefixo "IGAAT..." → novo formato (2024+). Requer troca via ig_exchange_token
+  //    para virar um token EAA válido para o Graph API. expires_in também pode
+  //    não estar presente, mas a troca é OBRIGATÓRIA.
+  //
+  // C) Fluxo legado Basic Display API: tem expires_in → troca obrigatória.
+  //
+  // Heurística: se o token começa com "IGAAT" OU tem expires_in → trocar.
   let longLivedToken, expiresIn;
 
-  const oauthTokenHasExpiresIn = shortLivedExpiresIn != null;
+  const tokenNeedsExchange = shortLivedExpiresIn != null || shortLivedToken.startsWith('IGAAT');
 
-  if (oauthTokenHasExpiresIn) {
-    // ── Fluxo legado (Basic Display API): tentar ig_exchange_token ──────────
+  // #region agent log
+  console.log('[debug:449c25] token-exchange-decision tokenPfx=%s hasExpiresIn=%s needsExchange=%s',
+    shortLivedToken.substring(0, 8), shortLivedExpiresIn != null, tokenNeedsExchange);
+  // #endregion
+
+  if (tokenNeedsExchange) {
+    // ── Trocar para long-lived token via ig_exchange_token (POST) ────────────
     try {
-      const llUrl = new URL('https://graph.instagram.com/access_token');
-      llUrl.searchParams.set('grant_type',    'ig_exchange_token');
-      llUrl.searchParams.set('client_secret', appSecret);
-      llUrl.searchParams.set('access_token',  shortLivedToken);
-
-      const llRes  = await fetch(llUrl.toString());
+      const llRes = await fetch('https://graph.instagram.com/access_token', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    new URLSearchParams({
+          grant_type:    'ig_exchange_token',
+          client_secret: appSecret,
+          access_token:  shortLivedToken,
+        }).toString(),
+      });
       const llData = await llRes.json();
+
+      // #region agent log
+      console.log('[debug:449c25] ll-exchange status=%d tokenPfx=%s expiresIn=%s error=%s',
+        llRes.status, llData.access_token ? llData.access_token.substring(0, 8) : 'none',
+        llData.expires_in ?? 'none', llData.error ? JSON.stringify(llData.error) : 'none');
+      // #endregion
 
       if (!llRes.ok || llData.error) {
         console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
@@ -199,7 +222,7 @@ export default async function handler(req, res) {
       return redirectError(res, 'meta_api_unavailable');
     }
   } else {
-    // ── Business Login: token já é válido diretamente (60 dias) ─────────────
+    // ── Business Login EAA: token já é válido diretamente (60 dias) ──────────
     longLivedToken = shortLivedToken;
     expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
   }
