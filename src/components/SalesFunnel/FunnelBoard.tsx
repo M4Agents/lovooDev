@@ -26,6 +26,7 @@ import { useStageCounts } from '../../hooks/useStageCounts'
 import { useMoveOpportunity } from '../../hooks/useMoveOpportunity'
 import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
 import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
+import { useWonItemCheck } from '../../hooks/useWonItemCheck'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { supabase } from '../../lib/supabase'
@@ -54,6 +55,8 @@ interface FunnelBoardProps {
   funnelId: string
   /** Nome do funil — exibido no modal de bulk move. */
   funnelName?: string
+  /** Quando true, exige produto/serviço ao fechar como ganho. */
+  funnelRequireWonItems?: boolean
   visibleFields?: string[]
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
@@ -66,6 +69,7 @@ interface FunnelBoardProps {
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelId,
   funnelName = '',
+  funnelRequireWonItems = false,
   visibleFields,
   onLeadClick,
   searchTerm = '',
@@ -271,6 +275,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   }
 
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null)
+
+  // ── Verificação de item obrigatório para won ──
+  const wonOpportunityId = pendingTransition?.toStageType === 'won'
+    ? pendingTransition.opportunityId
+    : ''
+  const { requireItems, hasItems, refetch: refetchWonCheck } = useWonItemCheck({
+    opportunityId:        wonOpportunityId,
+    companyId:            companyId ?? '',
+    funnelRequireWonItems,
+    enabled:              !!wonOpportunityId,
+  })
 
   // =====================================================
   // LEITURA DE DADOS POR COLUNA
@@ -561,6 +576,23 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const handleConfirmClose = useCallback(async (params: CloseOpportunityParams) => {
     if (!pendingTransition) return
 
+    // Adicionar item antes de fechar (quando require_won_items = true e sem itens)
+    if (params.item_to_add) {
+      const { item_type, item_id, unit_price, quantity } = params.item_to_add
+      await funnelApi.opportunityAddItem({
+        companyId:     params.company_id,
+        opportunityId: params.opportunity_id,
+        productId:     item_type === 'product' ? item_id : null,
+        serviceId:     item_type === 'service' ? item_id : null,
+        quantity,
+        unitPrice:     unit_price,
+        discountType:  'fixed',
+        discountValue: 0,
+      })
+      // Atualizar contagem para refletir item adicionado
+      refetchWonCheck()
+    }
+
     const { data, error } = await supabase.rpc('close_opportunity', {
       p_opportunity_id:    params.opportunity_id,
       p_funnel_id:         params.funnel_id,
@@ -843,6 +875,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           toStageId={pendingTransition.toStageId}
           positionInStage={pendingTransition.positionInStage}
           companyId={companyId ?? ''}
+          requireItems={requireItems}
+          hasItems={hasItems}
           onConfirm={handleConfirmClose}
           onCancel={handleCancelTransition}
         />

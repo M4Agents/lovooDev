@@ -5,11 +5,13 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check } from 'lucide-react'
+import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check, ShoppingBag } from 'lucide-react'
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
+import { catalogApi } from '../../services/catalogApi'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface EditFunnelModalProps {
   isOpen: boolean
@@ -26,6 +28,9 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   onUpdate,
   onDelete
 }) => {
+  const { company } = useAuth()
+  const companyId = company?.id ?? ''
+
   const [formData, setFormData] = useState<UpdateFunnelForm>({
     name: funnel.name,
     description: funnel.description || '',
@@ -39,6 +44,11 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [opportunityCount, setOpportunityCount] = useState(0)
   const [canDelete, setCanDelete] = useState(true)
+
+  // ── require_won_items ──
+  const [requireWonItems, setRequireWonItems] = useState<boolean>(funnel.require_won_items ?? false)
+  const [catalogEntitled, setCatalogEntitled] = useState(false)
+  const [savingRequireItems, setSavingRequireItems] = useState(false)
   
   // Estados para gerenciamento de etapas
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
@@ -53,13 +63,49 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [copiedStageId, setCopiedStageId] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
-  // Carregar etapas do funil e verificar se pode deletar
+  // Carregar etapas do funil, verificar se pode deletar e buscar entitlement
   useEffect(() => {
     if (isOpen && funnel.id) {
       loadStages()
       checkCanDelete()
+      checkCatalogEntitlement()
+      setRequireWonItems(funnel.require_won_items ?? false)
     }
   }, [isOpen, funnel.id])
+
+  const checkCatalogEntitlement = async () => {
+    if (!companyId) return
+    try {
+      const result = await catalogApi.getOpportunityItemsEntitlement(companyId)
+      setCatalogEntitled(result.allowed)
+    } catch {
+      setCatalogEntitled(false)
+    }
+  }
+
+  const handleToggleRequireWonItems = async (value: boolean) => {
+    if (!companyId) return
+    setSavingRequireItems(true)
+    setError(undefined)
+    try {
+      const { error: rpcError } = await supabase.rpc('set_funnel_require_won_items', {
+        p_funnel_id:  funnel.id,
+        p_company_id: companyId,
+        p_value:      value,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      setRequireWonItems(value)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar configuração'
+      if (msg.includes('REQUIRE_WON_ITEMS_NOT_ENTITLED')) {
+        setError('Recurso não disponível no seu plano ou catálogo não habilitado.')
+      } else {
+        setError(msg)
+      }
+    } finally {
+      setSavingRequireItems(false)
+    }
+  }
 
   const checkCanDelete = async () => {
     try {
@@ -516,6 +562,39 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                 />
                 <span className="text-sm text-gray-700">Funil ativo</span>
               </label>
+
+              {/* Toggle require_won_items — visível apenas com entitlement */}
+              {catalogEntitled && (
+                <div className="pt-2 border-t border-gray-100">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <div className="mt-0.5">
+                      {savingRequireItems
+                        ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                        : (
+                          <input
+                            type="checkbox"
+                            checked={requireWonItems}
+                            onChange={(e) => handleToggleRequireWonItems(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            disabled={loading || savingRequireItems}
+                          />
+                        )
+                      }
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-sm font-medium text-gray-700">
+                          Exigir produto/serviço ao fechar como Ganho
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Quando ativado, o vendedor deve selecionar ao menos um produto ou serviço antes de fechar a oportunidade como ganha.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Etapas */}

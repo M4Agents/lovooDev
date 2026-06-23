@@ -566,6 +566,7 @@ export default function SalesFunnel() {
           <FunnelBoard
             funnelId={selectedFunnel.id}
             funnelName={selectedFunnel.name}
+            funnelRequireWonItems={selectedFunnel.require_won_items ?? false}
             onLeadClick={handleLeadClick}
             visibleFields={visibleFields}
             searchTerm={debouncedSearch}

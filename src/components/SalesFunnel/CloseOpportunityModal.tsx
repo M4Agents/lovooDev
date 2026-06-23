@@ -4,12 +4,16 @@
 //           para etapa com stage_type = 'won' ou 'lost'.
 //           Coleta data/hora de fechamento, valor final
 //           (won) e motivo de perda (lost).
+//           Quando requireItems && !hasItems && won:
+//           exibe seletor de produto/serviço com lazy load.
 // =====================================================
 
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, MessageSquare } from 'lucide-react'
-import type { CloseOpportunityParams } from '../../types/sales-funnel'
+import { X, Loader2, TrendingUp, TrendingDown, DollarSign, Calendar, MessageSquare, ShoppingBag } from 'lucide-react'
+import type { CloseOpportunityParams, WonItemPayload } from '../../types/sales-funnel'
+import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
+import { catalogApi } from '../../services/catalogApi'
 
 // Converte centavos (inteiro) para string formatada em pt-BR (ex: 150050 → "1.500,50")
 const centsToBRL = (cents: number): string =>
@@ -31,6 +35,10 @@ interface CloseOpportunityModalProps {
   toStageId: string
   positionInStage: number
   companyId: string
+  /** Quando true e !hasItems, exibe seletor de produto/serviço */
+  requireItems?: boolean
+  /** Se a oportunidade já tem itens, o seletor não é exibido */
+  hasItems?: boolean
   onConfirm: (params: CloseOpportunityParams) => Promise<void>
   onCancel: () => void
 }
@@ -51,17 +59,31 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   toStageId,
   positionInStage,
   companyId,
+  requireItems = false,
+  hasItems = true,
   onConfirm,
   onCancel
 }) => {
   const { t } = useTranslation('funnel')
   const isWon = stageType === 'won'
 
+  // ── Formulário base ──
   const [closeDate, setCloseDate] = useState('')
   const [displayValue, setDisplayValue] = useState('')
   const [lossReason, setLossReason] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<string | undefined>()
+
+  // ── Seletor de item (lazy — só carrega quando necessário) ──
+  const needsItemSelector = isWon && requireItems && !hasItems
+  const [showItemSelector, setShowItemSelector] = useState(false)
+  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [products, setProducts] = useState<CatalogProduct[]>([])
+  const [services, setServices] = useState<CatalogService[]>([])
+
+  const [selectedItemType, setSelectedItemType] = useState<'product' | 'service'>('product')
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [selectedItemPrice, setSelectedItemPrice] = useState('')
 
   // Preencher valores padrão ao abrir
   useEffect(() => {
@@ -70,17 +92,84 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       setDisplayValue(currentValue > 0 ? centsToBRL(Math.round(currentValue * 100)) : '')
       setLossReason('')
       setError(undefined)
+      setSelectedItemId('')
+      setSelectedItemPrice('')
+      setSelectedItemType('product')
+
+      // Lazy load: carregar catálogo somente quando necessário
+      if (isWon && requireItems && !hasItems) {
+        setShowItemSelector(true)
+        loadCatalog()
+      } else {
+        setShowItemSelector(false)
+      }
     }
-  }, [isOpen, currentValue])
+  }, [isOpen, currentValue, isWon, requireItems, hasItems])
+
+  const loadCatalog = async () => {
+    if (!companyId) return
+    setLoadingCatalog(true)
+    try {
+      const [prods, svcs] = await Promise.all([
+        catalogApi.getProducts(companyId, { isActive: true }),
+        catalogApi.getServices(companyId, { isActive: true }),
+      ])
+      setProducts(prods)
+      setServices(svcs)
+      // Pré-selecionar primeiro item disponível
+      if (prods.length > 0) {
+        setSelectedItemType('product')
+        setSelectedItemId(prods[0].id)
+        setSelectedItemPrice(centsToBRL(Math.round(prods[0].default_price * 100)))
+      } else if (svcs.length > 0) {
+        setSelectedItemType('service')
+        setSelectedItemId(svcs[0].id)
+        setSelectedItemPrice(centsToBRL(Math.round(svcs[0].default_price * 100)))
+      }
+    } catch {
+      // Não bloquear modal por erro de catálogo
+    } finally {
+      setLoadingCatalog(false)
+    }
+  }
 
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const cents = parseInt(e.target.value.replace(/\D/g, '') || '0', 10)
     setDisplayValue(cents === 0 ? '' : centsToBRL(cents))
   }
 
+  const handleItemPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cents = parseInt(e.target.value.replace(/\D/g, '') || '0', 10)
+    setSelectedItemPrice(cents === 0 ? '' : centsToBRL(cents))
+  }
+
+  const handleItemTypeChange = (type: 'product' | 'service') => {
+    setSelectedItemType(type)
+    setSelectedItemId('')
+    setSelectedItemPrice('')
+  }
+
+  const handleItemSelect = (itemId: string) => {
+    setSelectedItemId(itemId)
+    const list = selectedItemType === 'product' ? products : services
+    const found = list.find(i => i.id === itemId)
+    if (found) {
+      setSelectedItemPrice(centsToBRL(Math.round(found.default_price * 100)))
+    }
+  }
+
   if (!isOpen) return null
 
+  const currentList = selectedItemType === 'product' ? products : services
+  const itemSelectionValid = !showItemSelector || (selectedItemId !== '' && brlToCents(selectedItemPrice) > 0)
+
   const handleConfirm = async () => {
+    // Validação frontend: item obrigatório
+    if (showItemSelector && !selectedItemId) {
+      setError(t('closeOpportunity.wonItemRequired'))
+      return
+    }
+
     setError(undefined)
     setLoading(true)
 
@@ -88,6 +177,16 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       const closedAtISO = closeDate
         ? new Date(closeDate).toISOString()
         : new Date().toISOString()
+
+      let itemToAdd: WonItemPayload | undefined
+      if (showItemSelector && selectedItemId) {
+        itemToAdd = {
+          item_type:  selectedItemType,
+          item_id:    selectedItemId,
+          unit_price: brlToCents(selectedItemPrice) / 100,
+          quantity:   1,
+        }
+      }
 
       await onConfirm({
         opportunity_id:    opportunityId,
@@ -98,10 +197,21 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         value:             brlToCents(displayValue) / 100 || currentValue,
         loss_reason:       lossReason.trim() || undefined,
         closed_at:         closedAtISO,
-        company_id:        companyId
+        company_id:        companyId,
+        item_to_add:       itemToAdd,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('closeOpportunity.errorGeneric'))
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('WON_ITEM_REQUIRED')) {
+        // Mostrar seletor retroativamente se ainda não estava visível
+        if (!showItemSelector) {
+          setShowItemSelector(true)
+          loadCatalog()
+        }
+        setError(t('closeOpportunity.errorWonItemRequired'))
+      } else {
+        setError(msg || t('closeOpportunity.errorGeneric'))
+      }
     } finally {
       setLoading(false)
     }
@@ -143,6 +253,95 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
 
         {/* Body */}
         <div className="p-5 space-y-4">
+
+          {/* Seletor de produto/serviço — lazy load */}
+          {showItemSelector && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span className="text-sm font-medium text-emerald-900">
+                  {t('closeOpportunity.wonItemTitle')}
+                </span>
+              </div>
+
+              {loadingCatalog ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t('closeOpportunity.wonItemLoadingCatalog')}
+                </div>
+              ) : products.length === 0 && services.length === 0 ? (
+                <p className="text-sm text-amber-700">{t('closeOpportunity.wonItemEmptyCatalog')}</p>
+              ) : (
+                <>
+                  {/* Tipo */}
+                  <div className="flex gap-2">
+                    {products.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleItemTypeChange('product')}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                          selectedItemType === 'product'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'
+                        }`}
+                      >
+                        {t('closeOpportunity.wonItemTypeProduct')}
+                      </button>
+                    )}
+                    {services.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleItemTypeChange('service')}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                          selectedItemType === 'service'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'
+                        }`}
+                      >
+                        {t('closeOpportunity.wonItemTypeService')}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Item */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t('closeOpportunity.wonItemSelectPlaceholder')}
+                    </label>
+                    <select
+                      value={selectedItemId}
+                      onChange={e => handleItemSelect(e.target.value)}
+                      disabled={loading}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                    >
+                      <option value="">{t('closeOpportunity.wonItemSelectPlaceholder')}</option>
+                      {currentList.map(item => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Preço */}
+                  {selectedItemId && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {t('closeOpportunity.wonItemPriceLabel')} ({currencyCode})
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={selectedItemPrice}
+                        onChange={handleItemPriceChange}
+                        disabled={loading}
+                        placeholder="0,00"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Data/hora de fechamento */}
           <div>
@@ -219,7 +418,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || !itemSelectionValid}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
               isWon
                 ? 'bg-emerald-600 hover:bg-emerald-700'
