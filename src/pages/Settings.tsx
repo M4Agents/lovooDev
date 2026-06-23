@@ -226,12 +226,13 @@ export const Settings: React.FC = () => {
       setTimeout(() => alert(msg), 300);
     } else if (igError) {
       const errorMessages: Record<string, string> = {
-        user_denied:           'Autorização negada pelo usuário.',
-        token_exchange_failed: 'Falha na troca de token com a Meta.',
-        missing_scopes:        'Permissões insuficientes concedidas.',
-        membership_revoked:    'Seu acesso foi revogado durante o processo.',
-        company_inactive:      'Empresa inativa.',
-        configuration_error:   'Erro de configuração do servidor.',
+        user_denied:              'Autorização negada pelo usuário.',
+        token_exchange_failed:    'Falha na troca de token com a Meta.',
+        missing_scopes:           'Permissões insuficientes concedidas.',
+        membership_revoked:       'Seu acesso foi revogado durante o processo.',
+        company_inactive:         'Empresa inativa.',
+        configuration_error:      'Erro de configuração do servidor.',
+        account_not_page_backed:  'Esta conta Instagram não está vinculada a uma Página do Facebook. Para conectar, acesse as configurações da conta no Instagram, converta para conta Profissional (Empresa ou Criador) e vincule a uma Página do Facebook.',
         meta_api_unavailable:  'API da Meta indisponível. Tente novamente.',
       };
       const msg = errorMessages[igError] ?? 'Erro ao conectar conta Instagram. Tente novamente.';

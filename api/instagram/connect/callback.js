@@ -1,20 +1,21 @@
 // =============================================================================
 // GET /api/instagram/connect/callback
 //
-// Callback OAuth Meta — substitui o stub anterior.
+// Callback OAuth Meta — fluxo completo de conexão de conta Instagram Business.
 //
-// Fluxo completo:
+// Fluxo:
 //   1. Receber code + state da Meta
 //   2. Verificar state JWT (anti-CSRF)
 //   3. Re-validar membership do usuário no banco
 //   4. Trocar code → short-lived token (POST api.instagram.com)
-//   5. Trocar short-lived → long-lived token (GET graph.instagram.com)
+//   5. Trocar short-lived → long-lived token quando necessário
 //   6. Buscar dados da conta Instagram (/me)
 //   7. Criptografar token com AES-256-GCM
-//   8. UPSERT instagram_connections (suporta reconexão)
-//   9. Criar instagram_company_settings se inexistente
-//  10. Registrar audit log
-//  11. Redirecionar frontend (sucesso ou erro)
+//   8. Subscrever ao webhook Meta (antes do UPSERT para determinar effectiveWebhookId)
+//   9. UPSERT instagram_connections (suporta reconexão)
+//  10. Criar instagram_company_settings se inexistente
+//  11. Registrar audit log
+//  12. Redirecionar frontend (sucesso ou erro)
 //
 // Segurança:
 //   - State nunca é aceito sem validação de assinatura
@@ -49,7 +50,6 @@ export default async function handler(req, res) {
 
   const { code, state, error: oauthError } = req.query;
 
-  // Usuário negou a autorização
   if (oauthError) {
     return redirectError(res, 'user_denied');
   }
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
 
   const svc = getSupabaseAdmin();
 
-  // ── 2. Re-validar membership (previne acesso após remoção durante OAuth) ──
+  // ── 2. Re-validar membership ────────────────────────────────────────────────
   const { data: membership } = await svc
     .from('company_users')
     .select('role, is_active')
@@ -79,11 +79,11 @@ export default async function handler(req, res) {
     .maybeSingle();
 
   if (!membership || !membership.is_active || !CONNECT_ROLES.includes(membership.role)) {
-    console.error('[instagram/callback] membership_revoked userId=%s companyId=%s membership=%o', userId, companyId, membership);
+    console.error('[instagram/callback] membership_revoked userId=%s companyId=%s', userId, companyId);
     return redirectError(res, 'membership_revoked');
   }
 
-  // ── 3. Validar empresa ainda ativa ─────────────────────────────────────────
+  // ── 3. Validar empresa ativa ────────────────────────────────────────────────
   const { data: company } = await svc
     .from('companies')
     .select('status')
@@ -110,10 +110,10 @@ export default async function handler(req, res) {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({
-        client_id:    appId,
+        client_id:     appId,
         client_secret: appSecret,
-        grant_type:   'authorization_code',
-        redirect_uri: redirectUri,
+        grant_type:    'authorization_code',
+        redirect_uri:  redirectUri,
         code,
       }).toString(),
     });
@@ -125,26 +125,22 @@ export default async function handler(req, res) {
       return redirectError(res, 'token_exchange_failed');
     }
 
-    // Business Login retorna { data: [{ access_token, user_id, permissions }] }
-    // ou diretamente { access_token, user_id, permissions }
-    // permissions pode ser array ["scope1","scope2"] OU string "scope1,scope2"
-    const entry         = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
-    shortLivedToken     = entry.access_token;
-    igUserId            = String(entry.user_id ?? '');
+    // Business Login retorna { access_token, user_id, permissions }
+    // ou { data: [{ access_token, user_id, permissions }] }
+    // Para formatos onde data[] não contém access_token, usamos tokenData.access_token (root).
+    const dataIsArray   = Array.isArray(tokenData.data);
+    const entry         = dataIsArray ? tokenData.data[0] : tokenData;
+    const entryToken    = entry.access_token ?? null;
+    const rootToken     = tokenData.access_token ?? null;
+    shortLivedToken     = entryToken ?? rootToken;
+    igUserId            = String(entry.user_id ?? tokenData.user_id ?? '');
     shortLivedExpiresIn = entry.expires_in ?? tokenData.expires_in ?? null;
 
-    const rawPerms = entry.permissions ?? [];
+    const rawPerms = entry.permissions ?? tokenData.permissions ?? [];
     grantedScopes  = Array.isArray(rawPerms)
       ? rawPerms.map((s) => String(s).trim()).filter(Boolean)
       : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
 
-    // #region agent log
-    console.log('[debug:449c25] short-lived-token-data rawKeys=%s expiresIn=%s tokenType=%s shortLivedTokenPresent=%s len=%d',
-      Object.keys(tokenData).join(','),
-      shortLivedExpiresIn ?? 'undefined',
-      entry.token_type ?? tokenData.token_type ?? 'undefined',
-      !!shortLivedToken, shortLivedToken?.length ?? 0);
-    // #endregion
   } catch (err) {
     console.error('[instagram/callback] fetch short-lived token threw:', err?.message ?? err);
     return redirectError(res, 'meta_api_unavailable');
@@ -154,111 +150,149 @@ export default async function handler(req, res) {
     return redirectError(res, 'token_exchange_failed');
   }
 
-  // ── 5. Verificar scopes mínimos concedidos ─────────────────────────────────
+  // ── 5. Verificar scopes mínimos ────────────────────────────────────────────
   if (!grantedScopes.includes('instagram_business_basic')) {
     return redirectError(res, 'missing_scopes');
   }
 
   // ── 6. Determinar token de longa duração ──────────────────────────────────
-  // Business Login (instagram_business_basic) emite tokens sem expires_in —
-  // o token retornado pelo OAuth já é válido por 60 dias (long-lived por padrão).
-  // Fluxo legado com expires_in: tenta ig_exchange_token (compatibilidade futura).
+  // Formatos de token da Business Login API:
+  //
+  // A) Prefixo "EAA..." → token já long-lived (60 dias), sem troca necessária.
+  //    Emitido para contas Business/Creator vinculadas a uma Página Facebook.
+  //
+  // B) Prefixo "IGAAT..." → novo formato (2024+), requer troca via ig_exchange_token.
+  //    Emitido quando a conta ainda não tem vinculação de Página Facebook adequada.
+  //    Se a troca falhar, a conta não é compatível com o Graph API → erro claro ao usuário.
+  //
+  // C) Fluxo legado Basic Display API: tem expires_in → troca obrigatória.
   let longLivedToken, expiresIn;
 
-  const oauthTokenHasExpiresIn = shortLivedExpiresIn != null;
+  const tokenNeedsExchange = shortLivedExpiresIn != null || shortLivedToken.startsWith('IGAAT');
 
-  // #region agent log
-  console.log('[debug:449c25] step6-decision oauthTokenHasExpiresIn=%s shortLivedExpiresIn=%s',
-    oauthTokenHasExpiresIn, shortLivedExpiresIn ?? 'null');
-  // #endregion
+  if (tokenNeedsExchange) {
+    let exchangeOk = false;
 
-  if (oauthTokenHasExpiresIn) {
-    // ── Fluxo legado (Basic Display API): tentar ig_exchange_token ──────────
+    // Tentativa 1: POST ig_exchange_token
     try {
-      const llUrl = new URL('https://graph.instagram.com/access_token');
-      llUrl.searchParams.set('grant_type',    'ig_exchange_token');
-      llUrl.searchParams.set('client_secret', appSecret);
-      llUrl.searchParams.set('access_token',  shortLivedToken);
-
-      // #region agent log
-      console.log('[debug:449c25] legacy-exchange-request endpoint=graph.instagram.com/access_token grant=ig_exchange_token');
-      // #endregion
-
-      const llRes  = await fetch(llUrl.toString());
+      const llRes = await fetch('https://graph.instagram.com/access_token', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    new URLSearchParams({
+          grant_type:    'ig_exchange_token',
+          client_secret: appSecret,
+          access_token:  shortLivedToken,
+        }).toString(),
+      });
       const llData = await llRes.json();
 
-      // #region agent log
-      console.log('[debug:449c25] legacy-exchange-response status=%d ok=%s error_code=%s hasAccessToken=%s expiresIn=%s',
-        llRes.status, llRes.ok, llData?.error?.code ?? 'none', !!llData?.access_token, llData?.expires_in ?? 'undefined');
-      // #endregion
+      if (llRes.ok && !llData.error && llData.access_token) {
+        longLivedToken = llData.access_token;
+        expiresIn      = llData.expires_in ?? (60 * 24 * 60 * 60);
+        exchangeOk     = true;
+      } else {
+        console.warn('[instagram/callback] ll-exchange POST falhou:', JSON.stringify(llData));
+      }
+    } catch (err) {
+      console.error('[instagram/callback] fetch ll-exchange POST threw:', err?.message ?? err);
+    }
 
-      if (!llRes.ok || llData.error) {
-        console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
+    // Tentativa 2: GET ig_exchange_token (forma legada)
+    if (!exchangeOk) {
+      try {
+        const llUrl = new URL('https://graph.instagram.com/access_token');
+        llUrl.searchParams.set('grant_type',    'ig_exchange_token');
+        llUrl.searchParams.set('client_secret', appSecret);
+        llUrl.searchParams.set('access_token',  shortLivedToken);
+
+        const llRes  = await fetch(llUrl.toString());
+        const llData = await llRes.json();
+
+        if (llRes.ok && !llData.error && llData.access_token) {
+          longLivedToken = llData.access_token;
+          expiresIn      = llData.expires_in ?? (60 * 24 * 60 * 60);
+          exchangeOk     = true;
+        } else {
+          console.warn('[instagram/callback] ll-exchange GET falhou:', JSON.stringify(llData));
+        }
+      } catch (err) {
+        console.error('[instagram/callback] fetch ll-exchange GET threw:', err?.message ?? err);
+      }
+    }
+
+    if (!exchangeOk) {
+      if (shortLivedExpiresIn != null) {
+        console.error('[instagram/callback] ll-exchange falhou para token com expires_in — abortando');
         return redirectError(res, 'token_exchange_failed');
       }
-
-      longLivedToken = llData.access_token;
-      expiresIn      = llData.expires_in;
-    } catch (err) {
-      console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
-      return redirectError(res, 'meta_api_unavailable');
+      // Token IGAAT sem troca possível: conta não vinculada a Página do Facebook.
+      // Sem a Página, o token não é compatível com o Graph API (recebimento de DMs etc.).
+      console.error('[instagram/callback] token IGAAT sem exchange válido — conta não vinculada a Página Facebook');
+      return redirectError(res, 'account_not_page_backed');
     }
   } else {
-    // ── Business Login: token já é válido diretamente (60 dias) ─────────────
+    // Token EAA Business Login: já é long-lived (60 dias).
     longLivedToken = shortLivedToken;
-    expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
-
-    const computedExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-    // #region agent log
-    console.log('[debug:449c25] usingDirectBusinessLoginToken=true tokenExpiresAt=%s', computedExpiresAt);
-    // #endregion
+    expiresIn      = 60 * 24 * 60 * 60;
   }
 
-  // ── 7. Buscar dados da conta Instagram ─────────────────────────────────────
-  // user_id retorna o Instagram Business Account ID (IGBID) — é o ID que a Meta
-  // usa nos webhooks (entry.id). Diferente de id (IGUID, usado no OAuth).
+  // ── 7. Buscar dados da conta Instagram ────────────────────────────────────
+  // Estratégia de dois endpoints:
+  //
+  // A) graph.instagram.com/me — funciona para tokens Instagram (EAA).
+  //    Retorna: id (IGBID), username, name, profile_picture_url, user_id (legado).
+  //
+  // B) graph.facebook.com/me + instagram_business_account — fallback para tokens
+  //    Facebook emitidos em fluxos page-backed alternativos.
+  const oauthIgUserId = igUserId;
   let username = igUserId, displayName = '', profilePictureUrl = null;
-  let igWebhookId = igUserId; // fallback: mesmo ID caso user_id não venha
+  let igWebhookId = igUserId;
   try {
     const meUrl = new URL('https://graph.instagram.com/me');
     meUrl.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
     meUrl.searchParams.set('access_token', longLivedToken);
 
-    // #region agent log
-    console.log('[debug:449c25] me-request endpoint=graph.instagram.com/me fields=id,username,name,profile_picture_url,user_id');
-    // #endregion
-
     const meRes  = await fetch(meUrl.toString());
     const meData = await meRes.json();
-
-    // #region agent log
-    console.log('[debug:449c25] me-response status=%d ok=%s rawKeys=%s error_code=%s error_type=%s error_message=%s',
-      meRes.status, meRes.ok,
-      Object.keys(meData).join(','),
-      meData?.error?.code   ?? 'none',
-      meData?.error?.type   ?? 'none',
-      meData?.error?.message ?? 'none');
-    // #endregion
 
     if (!meData.error) {
       username          = meData.username            ?? igUserId;
       displayName       = meData.name                ?? '';
       profilePictureUrl = meData.profile_picture_url ?? null;
-      if (meData.id) igUserId = String(meData.id);
-      // user_id é o IGBID — usado pelo webhook para identificar a conta receptora
+      if (meData.id)      igUserId    = String(meData.id);
       if (meData.user_id) igWebhookId = String(meData.user_id);
+    } else if (meData.error?.code === 100) {
+      // Fallback: token Facebook — tentar graph.facebook.com/me + instagram_business_account
+      try {
+        const fbMeUrl = new URL('https://graph.facebook.com/me');
+        fbMeUrl.searchParams.set(
+          'fields',
+          'id,instagram_business_account{id,username,name,profile_picture_url}'
+        );
+        fbMeUrl.searchParams.set('access_token', longLivedToken);
 
-      // #region agent log
-      console.log('[debug:449c25] me-extracted username=%s hasDisplayName=%s hasProfilePicture=%s igUserId=%s igWebhookId=%s',
-        username, !!displayName, !!profilePictureUrl, igUserId, igWebhookId);
-      // #endregion
+        const fbMeRes  = await fetch(fbMeUrl.toString());
+        const fbMeData = await fbMeRes.json();
+
+        if (!fbMeData.error && fbMeData.instagram_business_account) {
+          const igAcc   = fbMeData.instagram_business_account;
+          igUserId          = String(igAcc.id);
+          igWebhookId       = String(igAcc.id);
+          username          = igAcc.username            ?? igUserId;
+          displayName       = igAcc.name                ?? '';
+          profilePictureUrl = igAcc.profile_picture_url ?? null;
+        } else {
+          console.error('[instagram/callback] fb-me fallback falhou:', JSON.stringify(fbMeData));
+        }
+      } catch (fbErr) {
+        console.error('[instagram/callback] fb-me fallback threw:', fbErr?.message ?? fbErr);
+      }
     }
+
+    console.log('[instagram/callback] me status=%d igId=%s username=%s hasPhoto=%s',
+      meRes.status, igUserId, username, !!profilePictureUrl);
   } catch (meErr) {
-    // #region agent log
-    console.log('[debug:449c25] me-exception message=%s', meErr?.message ?? 'unknown');
-    // #endregion
-    // Não-fatal: continua com igUserId como fallback de username
+    console.error('[instagram/callback] me-exception:', meErr?.message ?? meErr);
   }
 
   // ── 8. Criptografar token ──────────────────────────────────────────────────
@@ -273,8 +307,7 @@ export default async function handler(req, res) {
     ? new Date(Date.now() + expiresIn * 1000).toISOString()
     : null;
 
-  // ── 8b. Fazer upload da foto para storage permanente ───────────────────────
-  // Fallback para URL temporária caso o upload falhe (não deve bloquear o OAuth)
+  // ── 8b. Upload da foto para storage permanente ────────────────────────────
   if (profilePictureUrl && companyId) {
     const permanentUrl = await uploadAvatarToStorage(svc, {
       cdnUrl:    profilePictureUrl,
@@ -284,26 +317,69 @@ export default async function handler(req, res) {
     if (permanentUrl) profilePictureUrl = permanentUrl;
   }
 
-  // ── 9. UPSERT instagram_connections ───────────────────────────────────────
-  // ON CONFLICT (company_id, instagram_user_id): atualiza token e status.
-  // Suporta reconexão de conta já existente (revogada ou expirada).
+  // ── 9. Subscrever ao webhook Meta ─────────────────────────────────────────
+  // effectiveWebhookId: ID confirmado que funcionou para subscribed_apps.
+  // Tentamos igWebhookId (meData.user_id) primeiro; se falhar, igUserId (meData.id).
+  // O ID que funcionar é salvo como ig_webhook_id e usado para envio de mensagens.
+
+  // Remover subscrição stale pelo igUserId (se igWebhookId for diferente)
+  if (igWebhookId && igWebhookId !== igUserId) {
+    try {
+      await fetch(
+        `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps?access_token=${longLivedToken}`,
+        { method: 'DELETE' }
+      );
+    } catch (_e) { /* não-fatal */ }
+  }
+
+  let subscribeOk = false;
+  let effectiveWebhookId = igWebhookId;
+
+  const candidateIds = (igWebhookId && igWebhookId !== igUserId)
+    ? [igWebhookId, igUserId]
+    : [igUserId];
+
+  for (const candidateId of candidateIds) {
+    try {
+      const subscribeUrl =
+        `https://graph.instagram.com/v21.0/${candidateId}/subscribed_apps` +
+        `?subscribed_fields=messages,comments,message_reactions` +
+        `&access_token=${longLivedToken}`;
+
+      const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
+      const subscribeData = await subscribeRes.json();
+
+      if (subscribeRes.ok && subscribeData.success === true) {
+        subscribeOk        = true;
+        effectiveWebhookId = candidateId;
+        break;
+      }
+
+      console.warn('[instagram/callback] subscribed_apps falhou candidateId=%s body=%s',
+        candidateId, JSON.stringify(subscribeData));
+    } catch (err) {
+      console.warn('[instagram/callback] subscribed_apps threw candidateId=%s:', candidateId, err?.message);
+    }
+  }
+
+  // ── 10. UPSERT instagram_connections ──────────────────────────────────────
   const { data: connection, error: upsertErr } = await svc
     .from('instagram_connections')
     .upsert({
-      company_id:         companyId,
-      instagram_user_id:  igUserId,
-      ig_webhook_id:      igWebhookId !== igUserId ? igWebhookId : null,
-      instagram_username: username,
+      company_id:          companyId,
+      instagram_user_id:   igUserId,
+      ig_webhook_id:       effectiveWebhookId !== igUserId ? effectiveWebhookId : null,
+      instagram_username:  username,
       profile_picture_url: profilePictureUrl,
-      access_token_enc:   accessTokenEnc,
-      encryption_version: 1,
-      token_expires_at:   tokenExpiresAt,
-      scopes:             grantedScopes,
-      status:             'active',
-      status_reason:      null,
-      connected_by:       userId,
-      disconnected_by:    null,
-      updated_at:         new Date().toISOString(),
+      access_token_enc:    accessTokenEnc,
+      encryption_version:  1,
+      token_expires_at:    tokenExpiresAt,
+      scopes:              grantedScopes,
+      status:              'active',
+      status_reason:       null,
+      connected_by:        userId,
+      disconnected_by:     null,
+      updated_at:          new Date().toISOString(),
     }, {
       onConflict:       'company_id,instagram_user_id',
       ignoreDuplicates: false,
@@ -313,29 +389,6 @@ export default async function handler(req, res) {
 
   if (upsertErr || !connection) {
     return redirectError(res, 'connection_save_failed');
-  }
-
-  // ── 10. Subscrever conta ao webhook Meta ───────────────────────────────────
-  // Obrigatório para que a Meta envie eventos (DMs, comentários, reações) para
-  // o nosso endpoint. Sem esta chamada a conta existe no banco mas a Meta não
-  // entrega webhooks para ela.
-  let subscribeOk = false;
-  try {
-    const subscribeUrl =
-      `https://graph.instagram.com/v21.0/${igUserId}/subscribed_apps` +
-      `?subscribed_fields=messages,comments,message_reactions` +
-      `&access_token=${longLivedToken}`;
-
-    const subscribeRes  = await fetch(subscribeUrl, { method: 'POST' });
-    const subscribeData = await subscribeRes.json();
-    subscribeOk = subscribeRes.ok && subscribeData.success === true;
-
-    if (!subscribeOk) {
-      console.warn('[instagram/callback] subscribed_apps falhou igUserId=%s body=%s',
-        igUserId, JSON.stringify(subscribeData));
-    }
-  } catch (err) {
-    console.warn('[instagram/callback] subscribed_apps threw:', err?.message);
   }
 
   // ── 11. Criar configurações padrão da empresa (idempotente) ───────────────
@@ -351,7 +404,7 @@ export default async function handler(req, res) {
     performed_by:  userId,
     metadata: {
       instagram_user_id:  igUserId,
-      ig_webhook_id:      igWebhookId,
+      ig_webhook_id:      effectiveWebhookId,
       instagram_username: username,
       display_name:       displayName || undefined,
       scopes:             grantedScopes,
