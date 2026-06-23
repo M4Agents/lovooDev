@@ -219,7 +219,8 @@ export default async function handler(req, res) {
       if (meData.id)      igUserId    = String(meData.id);
       if (meData.user_id) igWebhookId = String(meData.user_id);
     } else if (meData.error?.code === 100) {
-      // Fallback: token Facebook — tentar graph.facebook.com/me + instagram_business_account
+      // Fallback A: token Facebook — tentar graph.facebook.com/me + instagram_business_account
+      let fbFallbackUsed = false;
       try {
         const fbMeUrl = new URL('https://graph.facebook.com/me');
         fbMeUrl.searchParams.set(
@@ -234,8 +235,9 @@ export default async function handler(req, res) {
         if (!fbMeData.error && fbMeData.instagram_business_account) {
           const igAcc   = fbMeData.instagram_business_account;
           meSource          = 'facebook';
+          fbFallbackUsed    = true;
           igUserId          = String(igAcc.id);
-          igWebhookId       = String(igAcc.id); // IGBID da conta Business
+          igWebhookId       = String(igAcc.id);
           username          = igAcc.username            ?? igUserId;
           displayName       = igAcc.name                ?? '';
           profilePictureUrl = igAcc.profile_picture_url ?? null;
@@ -254,6 +256,55 @@ export default async function handler(req, res) {
         }
       } catch (fbErr) {
         console.error('[instagram/callback] fb-me fallback threw:', fbErr?.message ?? fbErr);
+      }
+
+      // Fallback B: tentar graph.instagram.com/{user_id} diretamente (alternativa ao /me)
+      if (!fbFallbackUsed) {
+        try {
+          const igDirectUrl = new URL(`https://graph.instagram.com/v21.0/${oauthIgUserId}`);
+          igDirectUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
+          igDirectUrl.searchParams.set('access_token', longLivedToken);
+
+          const igDirectRes  = await fetch(igDirectUrl.toString());
+          const igDirectData = await igDirectRes.json();
+
+          // #region agent log
+          console.log('[debug:449c25] ig-direct-fallback status=%d id=%s username=%s error=%s',
+            igDirectRes.status, igDirectData.id ?? 'none', igDirectData.username ?? 'none',
+            igDirectData.error ? JSON.stringify(igDirectData.error) : 'none');
+          // #endregion
+
+          if (!igDirectData.error && igDirectData.id) {
+            meSource          = 'ig-direct';
+            igUserId          = String(igDirectData.id);
+            igWebhookId       = String(igDirectData.id);
+            username          = igDirectData.username            ?? igUserId;
+            displayName       = igDirectData.name                ?? '';
+            profilePictureUrl = igDirectData.profile_picture_url ?? null;
+          }
+        } catch (igDErr) {
+          console.error('[instagram/callback] ig-direct fallback threw:', igDErr?.message ?? igDErr);
+        }
+      }
+
+      // Diagnóstico: debug_token para entender o tipo de token
+      try {
+        const dbgUrl = new URL('https://graph.facebook.com/debug_token');
+        dbgUrl.searchParams.set('input_token', longLivedToken);
+        dbgUrl.searchParams.set('access_token', `${appId}|${appSecret}`);
+
+        const dbgRes  = await fetch(dbgUrl.toString());
+        const dbgData = await dbgRes.json();
+
+        // #region agent log
+        console.log('[debug:449c25] token-debug type=%s appId=%s userId=%s valid=%s scopes=%s error=%s',
+          dbgData.data?.type ?? 'none', dbgData.data?.app_id ?? 'none',
+          dbgData.data?.user_id ?? 'none', dbgData.data?.is_valid ?? false,
+          JSON.stringify(dbgData.data?.scopes ?? []),
+          dbgData.error ? JSON.stringify(dbgData.error) : 'none');
+        // #endregion
+      } catch (dbgErr) {
+        console.error('[instagram/callback] debug_token threw:', dbgErr?.message ?? dbgErr);
       }
     }
 
