@@ -55,9 +55,6 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
         }
         // Refresh: substituir pelo objeto atualizado do banco (mesma id)
         const fresh = data.find(f => f.id === prev.id)
-        // #region agent log
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'useFunnels.ts:refresh',message:'selectedFunnel refresh',data:{prevId:prev.id,freshRequireWonSaleType:fresh?.require_won_sale_type??'not_found'},runId:'post-fix',hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{})
-        // #endregion
         return fresh || prev
       })
     } catch (err) {
