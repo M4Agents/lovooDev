@@ -257,17 +257,18 @@ export default async function handler(req, res) {
       }
     }
 
-    // Tentativa 3: usar token IGAAT direto (sem exchange) — pode já ser válido
+    // Nenhuma tentativa de exchange funcionou
     if (!exchangeOk) {
-      // Se o token tem expires_in, a troca é obrigatória (não devemos prosseguir sem ela)
       if (shortLivedExpiresIn != null) {
         console.error('[instagram/callback] ll-exchange falhou para token com expires_in — abortando');
         return redirectError(res, 'token_exchange_failed');
       }
-      // Tokens IGAAT sem expires_in: tentar usar diretamente (pode ser long-lived)
-      console.warn('[instagram/callback] ll-exchange falhou — usando IGAAT diretamente como fallback');
-      longLivedToken = shortLivedToken;
-      expiresIn      = 60 * 24 * 60 * 60;
+
+      // Token IGAAT sem exchange possível: conta provavelmente não vinculada a Página do Facebook.
+      // Tokens IGAAT sem Facebook Page linking não funcionam com nenhum endpoint do Graph API.
+      // Usar como fallback resultaria em conexão que nunca recebe DMs — melhor informar o usuário.
+      console.error('[instagram/callback] token IGAAT sem exchange válido — conta não vinculada a Página Facebook');
+      return redirectError(res, 'account_not_page_backed');
     }
   } else {
     // ── Business Login EAA: token já é válido diretamente (60 dias) ──────────
