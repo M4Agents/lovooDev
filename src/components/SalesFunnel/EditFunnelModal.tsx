@@ -77,7 +77,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     if (!companyId) return
     try {
       const result = await catalogApi.getOpportunityItemsEntitlement(companyId)
-      setCatalogEntitled(result.allowed)
+      // Exibir toggle para todos os planos — verifica apenas se o catálogo está habilitado
+      setCatalogEntitled(result.company_enabled === true)
     } catch {
       setCatalogEntitled(false)
     }
