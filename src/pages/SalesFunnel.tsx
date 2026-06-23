@@ -130,7 +130,7 @@ export default function SalesFunnel() {
   }, [companyId, selectedFunnel])
 
   // #region agent log
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedFunnel) return
     console.log('[debug][SalesFunnel] selectedFunnel updated', {id: selectedFunnel.id, name: selectedFunnel.name, require_won_sale_type: selectedFunnel.require_won_sale_type, require_won_items: selectedFunnel.require_won_items})
   }, [selectedFunnel])
