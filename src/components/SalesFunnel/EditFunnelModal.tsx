@@ -713,26 +713,39 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleEditStage(stage)}
-                            disabled={!!editingStageId || !!deletingStageId || !!stage.is_over_plan}
-                            title={stage.is_over_plan ? 'Etapa acima do limite do plano. Faça upgrade para editar.' : 'Editar'}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          {!stage.is_system_stage && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStage(stage.id)}
-                              disabled={!!editingStageId || !!deletingStageId}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                              title="Deletar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          {(() => {
+                            const isProtected = stage.is_system_stage || stage.stage_type === 'won' || stage.stage_type === 'lost'
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => !isProtected && handleEditStage(stage)}
+                                  disabled={!!editingStageId || !!deletingStageId || !!stage.is_over_plan || isProtected}
+                                  title={
+                                    isProtected
+                                      ? 'Esta etapa é protegida e não pode ser renomeada'
+                                      : stage.is_over_plan
+                                        ? 'Etapa acima do limite do plano. Faça upgrade para editar.'
+                                        : 'Editar'
+                                  }
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                {!isProtected && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteStage(stage.id)}
+                                    disabled={!!editingStageId || !!deletingStageId}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                                    title="Deletar"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            )
+                          })()}
                         </div>
                       )}
                     </div>

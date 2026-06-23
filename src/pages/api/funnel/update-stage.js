@@ -48,13 +48,30 @@ export default async function handler(req, res) {
     // Buscar etapa atual
     const { data: currentStage, error: fetchError } = await supabase
       .from('funnel_stages')
-      .select('id, funnel_id, name, is_system_stage')
+      .select('id, funnel_id, name, is_system_stage, stage_type')
       .eq('id', stage_id)
       .single();
 
     if (fetchError || !currentStage) {
       return res.status(404).json({ 
         error: 'Etapa não encontrada'
+      });
+    }
+
+    // Etapa protegida: is_system_stage=true OU stage_type won/lost
+    const isProtectedStage = currentStage.is_system_stage || currentStage.stage_type === 'won' || currentStage.stage_type === 'lost';
+
+    if (isProtectedStage && name !== undefined && name.trim() !== currentStage.name) {
+      return res.status(400).json({
+        error: 'Não é permitido renomear etapas do sistema (Nova Oportunidade, Venda Ganha, Venda Perdida)',
+        field: 'name'
+      });
+    }
+
+    if (isProtectedStage && stage_type !== undefined && stage_type !== currentStage.stage_type) {
+      return res.status(400).json({
+        error: 'Não é permitido alterar o tipo de etapas do sistema',
+        field: 'stage_type'
       });
     }
 

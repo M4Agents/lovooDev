@@ -37,6 +37,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
   const { currentRole } = useAuth()
   const isEditing = !!stage
   const canEditPlaybook = PLAYBOOK_ALLOWED_ROLES.includes(currentRole ?? '')
+  const isProtectedStage = !!(stage?.is_system_stage || stage?.stage_type === 'won' || stage?.stage_type === 'lost')
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
@@ -184,11 +185,11 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder={t('editStage.namePlaceholder')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={loading || stage?.is_system_stage}
+              disabled={loading || isProtectedStage}
               required
               maxLength={255}
             />
-            {stage?.is_system_stage && (
+            {isProtectedStage && (
               <p className="text-xs text-gray-500 mt-1">
                 {t('editStage.systemNameLocked')}
               </p>
@@ -263,8 +264,8 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
             <select
               value={formData.stage_type}
               onChange={(e) => setFormData({ ...formData, stage_type: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={loading}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              disabled={loading || isProtectedStage}
             >
               <option value="active">{t('editStage.stageTypeActive')}</option>
               <option value="won">{t('editStage.stageTypeWon')}</option>
@@ -353,7 +354,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-4">
-            {isEditing && !stage?.is_system_stage && onDelete && !showDeleteConfirm ? (
+            {isEditing && !isProtectedStage && onDelete && !showDeleteConfirm ? (
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
