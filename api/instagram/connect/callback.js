@@ -128,12 +128,28 @@ export default async function handler(req, res) {
     // Business Login retorna { data: [{ access_token, user_id, permissions }] }
     // ou diretamente { access_token, user_id, permissions }
     // permissions pode ser array ["scope1","scope2"] OU string "scope1,scope2"
-    const entry         = Array.isArray(tokenData.data) ? tokenData.data[0] : tokenData;
-    shortLivedToken     = entry.access_token;
-    igUserId            = String(entry.user_id ?? '');
+    const dataIsArray = Array.isArray(tokenData.data);
+    const entry         = dataIsArray ? tokenData.data[0] : tokenData;
+
+    // CRITICAL: para formatos onde data[] não contém access_token, usar tokenData.access_token
+    const entryToken    = entry.access_token ?? null;
+    const rootToken     = tokenData.access_token ?? null;
+    shortLivedToken     = entryToken ?? rootToken;
+    igUserId            = String(entry.user_id ?? tokenData.user_id ?? '');
     shortLivedExpiresIn = entry.expires_in ?? tokenData.expires_in ?? null;
 
-    const rawPerms = entry.permissions ?? [];
+    // #region agent log
+    console.log('[debug:449c25] token-exchange dataIsArray=%s rootKeys=%s entryKeys=%s entryTokenPfx=%s rootTokenPfx=%s igUserId=%s expiresIn=%s',
+      dataIsArray,
+      Object.keys(tokenData).join(','),
+      Object.keys(entry).join(','),
+      entryToken ? entryToken.substring(0, 8) : 'none',
+      rootToken  ? rootToken.substring(0, 8)  : 'none',
+      igUserId,
+      shortLivedExpiresIn ?? 'null');
+    // #endregion
+
+    const rawPerms = entry.permissions ?? tokenData.permissions ?? [];
     grantedScopes  = Array.isArray(rawPerms)
       ? rawPerms.map((s) => String(s).trim()).filter(Boolean)
       : String(rawPerms).split(',').map((s) => s.trim()).filter(Boolean);
