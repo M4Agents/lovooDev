@@ -4,7 +4,7 @@
 // Objetivo: Hook para gerenciar funis de vendas
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { funnelApi } from '../services/funnelApi'
 import { supabase } from '../lib/supabase'
 import type {
@@ -22,27 +22,52 @@ export const useFunnels = (companyId: string, filter?: FunnelFilter): UseFunnels
   const [error, setError] = useState<string | undefined>()
   const [planFunnelLimit, setPlanFunnelLimit] = useState<number | null>(null)
 
+  // Ref para saber se já houve ao menos uma carga inicial.
+  // setLoading(true) (que substitui a tela por um spinner) só ocorre nesse primeiro load.
+  // Refreshes subsequentes (ex: após toggle de campo) são silenciosos e não desmontam modais abertos.
+  const initializedRef = useRef(false)
+
   // Buscar funis
   const fetchFunnels = useCallback(async () => {
     try {
-      setLoading(true)
+      // Exibir spinner de tela cheia apenas na carga inicial
+      if (!initializedRef.current) {
+        setLoading(true)
+      }
       setError(undefined)
-      
+
       const data = await funnelApi.getFunnels(companyId, filter)
       setFunnels(data)
-      
-      // Se não tem funil selecionado, selecionar o padrão
-      if (!selectedFunnel && data.length > 0) {
-        const defaultFunnel = data.find(f => f.is_default) || data[0]
-        setSelectedFunnelState(defaultFunnel)
-      }
+
+      // Atualiza selectedFunnel via functional update:
+      // — evita incluir selectedFunnel nos deps (prevenindo loop infinito)
+      // — garante que o funil selecionado sempre reflita os dados mais recentes do banco
+      setSelectedFunnelState(prev => {
+        if (!prev) {
+          // Carga inicial: restaurar seleção salva ou usar padrão
+          if (data.length === 0) return undefined
+          const saved = localStorage.getItem('selected_funnel_id')
+          if (saved) {
+            const found = data.find(f => f.id === saved)
+            if (found) return found
+          }
+          return data.find(f => f.is_default) || data[0]
+        }
+        // Refresh: substituir pelo objeto atualizado do banco (mesma id)
+        const fresh = data.find(f => f.id === prev.id)
+        // #region agent log
+        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'useFunnels.ts:refresh',message:'selectedFunnel refresh',data:{prevId:prev.id,freshRequireWonSaleType:fresh?.require_won_sale_type??'not_found'},runId:'post-fix',hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
+        return fresh || prev
+      })
     } catch (err) {
       console.error('Error fetching funnels:', err)
       setError(err instanceof Error ? err.message : 'Erro ao buscar funis')
     } finally {
       setLoading(false)
+      initializedRef.current = true
     }
-  }, [companyId, filter, selectedFunnel])
+  }, [companyId, filter])
 
   // Buscar limite de funis do plano
   useEffect(() => {

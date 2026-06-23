@@ -115,12 +115,8 @@ export default function SalesFunnel() {
       if (!companyId) return
       try {
         const preferences = await funnelApi.getCardPreferences(companyId)
-        console.log('📊 Preferências carregadas:', preferences)
         if (preferences && preferences.visible_fields && preferences.visible_fields.length > 0) {
-          console.log('✅ Aplicando preferências:', preferences.visible_fields)
           setVisibleFields(preferences.visible_fields)
-        } else {
-          console.log('⚠️ Nenhuma preferência salva, usando padrão')
         }
       } catch (error) {
         console.error('Error loading preferences:', error)
@@ -128,13 +124,6 @@ export default function SalesFunnel() {
     }
     loadPreferences()
   }, [companyId, selectedFunnel])
-
-  // #region agent log
-  useEffect(() => {
-    if (!selectedFunnel) return
-    console.log('[debug][SalesFunnel] selectedFunnel updated', {id: selectedFunnel.id, name: selectedFunnel.name, require_won_sale_type: selectedFunnel.require_won_sale_type, require_won_items: selectedFunnel.require_won_items})
-  }, [selectedFunnel])
-  // #endregion
 
   const handleLeadClick = (leadId: number) => {
     setSelectedLeadId(leadId)
