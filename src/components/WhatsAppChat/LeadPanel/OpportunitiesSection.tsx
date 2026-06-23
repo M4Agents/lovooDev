@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
+import { useWonItemCheck } from '../../../hooks/useWonItemCheck'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
@@ -156,6 +157,21 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [detailOpportunity, setDetailOpportunity] = useState<Opportunity | null>(null)
 
   const [pendingStageTransition, setPendingStageTransition] = useState<PendingStageTransition | null>(null)
+
+  // ── Verificação de item obrigatório para won ──
+  const wonPendingOppId = pendingStageTransition?.toStageType === 'won'
+    ? pendingStageTransition.opportunityId
+    : ''
+  const wonPendingFunnelId = pendingStageTransition?.toStageType === 'won'
+    ? pendingStageTransition.funnelId
+    : ''
+  const wonPendingFunnel = funnels.find(f => f.id === wonPendingFunnelId)
+  const { requireItems: wonRequireItems, hasItems: wonHasItems, refetch: refetchWonCheck } = useWonItemCheck({
+    opportunityId:         wonPendingOppId,
+    companyId,
+    funnelRequireWonItems: wonPendingFunnel?.require_won_items ?? false,
+    enabled:               !!wonPendingOppId,
+  })
 
   // Buscar funis e posições das oportunidades
   useEffect(() => {
@@ -331,6 +347,23 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           await funnelApi.addOpportunityToFunnel(pt.opportunityId, pt.funnelId, pt.toStageId, leadId || undefined)
         }
 
+        // Adicionar itens antes de fechar (require_won_items)
+        if (params.items_to_add && params.items_to_add.length > 0) {
+          for (const item of params.items_to_add) {
+            await funnelApi.opportunityAddItem({
+              companyId:     params.company_id,
+              opportunityId: params.opportunity_id,
+              productId:     item.item_type === 'product' ? item.item_id : null,
+              serviceId:     item.item_type === 'service' ? item.item_id : null,
+              quantity:      item.quantity,
+              unitPrice:     item.unit_price,
+              discountType:  'fixed',
+              discountValue: 0,
+            })
+          }
+          refetchWonCheck()
+        }
+
         const { error } = await supabase.rpc('close_opportunity', {
           p_opportunity_id: params.opportunity_id,
           p_funnel_id: params.funnel_id,
@@ -386,12 +419,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         setPendingStageTransition(null)
       } catch (e) {
         console.error('Erro ao fechar oportunidade:', e)
-        alert(e instanceof Error ? e.message : 'Erro ao fechar oportunidade')
+        // Propagar o erro para que CloseOpportunityModal exiba inline
+        throw e
       } finally {
         setUpdatingPosition(null)
       }
     },
-    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId]
+    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId, refetchWonCheck]
   )
 
   const handleConfirmReopenOpportunity = useCallback(
@@ -948,6 +982,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             toStageId={pendingStageTransition.toStageId}
             positionInStage={pendingStageTransition.positionInStage}
             companyId={companyId}
+            requireItems={wonRequireItems}
+            hasItems={wonHasItems}
             onConfirm={handleConfirmCloseOpportunity}
             onCancel={handleCancelStageTransition}
           />

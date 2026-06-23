@@ -26,6 +26,8 @@ export interface SalesFunnel {
   total_value?: number
   /** TRUE quando o funil está acima do limite max_funnels do plano. */
   is_over_plan?: boolean
+  /** Quando true, exige ao menos um produto/serviço em opportunity_items antes de fechar como 'won'. */
+  require_won_items?: boolean
 }
 
 export interface FunnelStage {
@@ -420,6 +422,17 @@ export interface UpdateOpportunityOptions {
 // FORMS PARA FECHAMENTO/REABERTURA VIA RPC
 // =====================================================
 
+/**
+ * Item a ser adicionado via opportunity_add_item antes de fechar como 'won'.
+ * name_snapshot NÃO é enviado pelo frontend — gerado internamente pela RPC.
+ */
+export interface WonItemPayload {
+  item_type: 'product' | 'service'
+  item_id: string
+  unit_price: number
+  quantity: number
+}
+
 export interface CloseOpportunityParams {
   opportunity_id: string
   funnel_id: string
@@ -430,6 +443,8 @@ export interface CloseOpportunityParams {
   loss_reason?: string
   closed_at: string
   company_id: string
+  /** Itens selecionados no modal de fechamento (require_won_items). Persistidos antes do close_opportunity. */
+  items_to_add?: WonItemPayload[]
 }
 
 export interface ReopenOpportunityParams {

@@ -159,8 +159,19 @@
     "optional": "(opcional)",
     "lossReasonPlaceholder": "Ex: preço, concorrência, projeto cancelado...",
     "errorGeneric": "Erro ao fechar oportunidade",
+    "errorWonItemRequired": "É necessário selecionar ao menos um produto ou serviço para fechar como ganho.",
     "confirmWonBtn": "Confirmar Ganho",
-    "confirmLostBtn": "Confirmar Perda"
+    "confirmLostBtn": "Confirmar Perda",
+    "wonItemTitle": "Produto / Serviço da venda",
+    "wonItemTypeLabel": "Tipo",
+    "wonItemTypeProduct": "Produto",
+    "wonItemTypeService": "Serviço",
+    "wonItemSelectPlaceholder": "Selecione um item...",
+    "wonItemPriceLabel": "Valor unitário",
+    "wonItemQuantityLabel": "Quantidade",
+    "wonItemLoadingCatalog": "Carregando catálogo...",
+    "wonItemEmptyCatalog": "Nenhum produto ou serviço disponível. Cadastre-os em Configurações → Catálogo.",
+    "wonItemRequired": "Selecione um produto ou serviço para continuar."
   },
   "reopenOpportunity": {
     "title": "Reabrir Oportunidade",
