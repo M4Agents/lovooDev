@@ -2,20 +2,22 @@
 // COMPONENTE: CloseOpportunityModal
 // Objetivo: Modal de confirmação ao mover oportunidade
 //           para etapa com stage_type = 'won' ou 'lost'.
-//           Quando requireItems && !hasItems && won:
-//           exibe seletor multi-item com lazy load.
-//           O "Valor da venda" é o único campo de valor.
+//           Dois seletores opcionais (lazy load):
+//             - WonItemSelector: produtos/serviços
+//             - WonSaleTypeSelector: tipos de venda
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   X, Loader2, TrendingUp, TrendingDown,
-  DollarSign, Calendar, MessageSquare, ShoppingBag, Plus, Trash2
+  DollarSign, Calendar, MessageSquare, ShoppingBag, Plus, Trash2,
+  Tag, AlertCircle
 } from 'lucide-react'
-import type { CloseOpportunityParams, WonItemPayload } from '../../types/sales-funnel'
+import type { CloseOpportunityParams, WonItemPayload, SaleType } from '../../types/sales-funnel'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { catalogApi } from '../../services/catalogApi'
+import { saleTypesApi } from '../../services/saleTypesApi'
 
 // ── helpers de formatação monetária ──
 const centsToBRL = (cents: number): string =>
@@ -37,6 +39,97 @@ interface DraftItem {
   quantity: number
 }
 
+// ──────────────────────────────────────────────────────
+// Sub-componente: WonSaleTypeSelector
+// Responsável por lazy load e seleção de tipos de venda.
+// ──────────────────────────────────────────────────────
+interface WonSaleTypeSelectorProps {
+  companyId: string
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+  disabled: boolean
+  currencyCode: string
+}
+
+const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
+  companyId,
+  selectedIds,
+  onChange,
+  disabled,
+}) => {
+  const { t } = useTranslation('funnel')
+  const [loadingTypes, setLoadingTypes] = useState(false)
+  const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
+  const loaded = useRef(false)
+
+  useEffect(() => {
+    if (loaded.current || !companyId) return
+    loaded.current = true
+    setLoadingTypes(true)
+    saleTypesApi.getVisibleSaleTypes(companyId)
+      .then(data => setSaleTypes(data))
+      .catch(() => setSaleTypes([]))
+      .finally(() => setLoadingTypes(false))
+  }, [companyId])
+
+  const toggle = (id: string) => {
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter(x => x !== id)
+        : [...selectedIds, id]
+    )
+  }
+
+  return (
+    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+      <div className="flex items-center gap-2">
+        <Tag className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+        <span className="text-sm font-medium text-indigo-900">
+          {t('closeOpportunity.wonSaleTypeTitle')}
+        </span>
+      </div>
+
+      {loadingTypes ? (
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {t('closeOpportunity.wonSaleTypeLoadingList')}
+        </div>
+      ) : saleTypes.length === 0 ? (
+        <div className="flex items-start gap-2 text-sm text-amber-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          {t('closeOpportunity.wonSaleTypeEmptyList')}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {saleTypes.map(st => (
+            <label
+              key={st.id}
+              className="flex items-center gap-2.5 p-2.5 bg-white border border-indigo-100 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(st.id)}
+                onChange={() => toggle(st.id)}
+                disabled={disabled}
+                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-900">{st.name}</p>
+                {st.description && (
+                  <p className="text-xs text-gray-500 truncate">{st.description}</p>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────
+// Props do modal principal
+// ──────────────────────────────────────────────────────
 interface CloseOpportunityModalProps {
   isOpen: boolean
   stageType: 'won' | 'lost'
@@ -50,6 +143,8 @@ interface CloseOpportunityModalProps {
   companyId: string
   requireItems?: boolean
   hasItems?: boolean
+  requireSaleType?: boolean
+  hasSaleTypes?: boolean
   onConfirm: (params: CloseOpportunityParams) => Promise<void>
   onCancel: () => void
 }
@@ -72,12 +167,17 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   companyId,
   requireItems = false,
   hasItems = true,
+  requireSaleType = false,
+  hasSaleTypes = true,
   onConfirm,
   onCancel
 }) => {
   const { t } = useTranslation('funnel')
   const isWon = stageType === 'won'
+
+  // Determina se cada seletor deve aparecer
   const showItemSelector = isWon && requireItems && !hasItems
+  const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
 
   // ── Formulário base ──
   const [closeDate, setCloseDate] = useState('')
@@ -87,20 +187,23 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
-  // ── Catálogo (lazy) ──
+  // ── Catálogo (lazy para items) ──
   const [loadingCatalog, setLoadingCatalog] = useState(false)
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [services, setServices] = useState<CatalogService[]>([])
 
-  // ── Lista de rascunho (draft) ──
+  // ── Lista de rascunho de items ──
   const [draftItems, setDraftItems] = useState<DraftItem[]>([])
   const localIdRef = useRef(0)
 
-  // ── Add row ──
+  // ── Add row (items) ──
   const [addType, setAddType] = useState<'product' | 'service'>('product')
   const [addItemId, setAddItemId] = useState('')
   const [addPriceDisplay, setAddPriceDisplay] = useState('')
   const [addQty, setAddQty] = useState(1)
+
+  // ── Tipos de venda selecionados ──
+  const [selectedSaleTypeIds, setSelectedSaleTypeIds] = useState<string[]>([])
 
   // Subtotal dos rascunhos
   const draftSubtotal = draftItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
@@ -144,6 +247,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       setAddItemId('')
       setAddPriceDisplay('')
       setAddQty(1)
+      setSelectedSaleTypeIds([])
 
       if (showItemSelector) loadCatalog()
     }
@@ -161,7 +265,6 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       const filteredSvcs = svcs.filter(s => ['available', 'on_demand'].includes(s.availability_status))
       setProducts(filteredProds)
       setServices(filteredSvcs)
-      // Pré-selecionar primeiro item disponível
       if (filteredProds.length > 0) {
         setAddType('product')
         setAddItemId(filteredProds[0].id)
@@ -200,7 +303,6 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       quantity: qtyNum,
     }])
 
-    // Resetar add row (manter tipo e catálogo)
     setAddItemId('')
     setAddPriceDisplay('')
     setAddQty(1)
@@ -226,15 +328,18 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const hasAnyCatalogItem = products.length > 0 || services.length > 0
   const addRowValid = !!addItemId && brlToCents(addPriceDisplay) > 0
 
-  const canConfirm = !loading && !(showItemSelector && draftItems.length === 0 && !hasAnyCatalogItem === false && true)
-  // Se showItemSelector, deve ter ao menos 1 item no draft
   const itemSelectorBlocking = showItemSelector && draftItems.length === 0
+  const saleTypeSelectorBlocking = showSaleTypeSelector && selectedSaleTypeIds.length === 0
 
   const currentList = addType === 'product' ? products : services
 
   const handleConfirm = async () => {
     if (showItemSelector && draftItems.length === 0) {
       setError(t('closeOpportunity.wonItemRequired'))
+      return
+    }
+    if (showSaleTypeSelector && selectedSaleTypeIds.length === 0) {
+      setError(t('closeOpportunity.wonSaleTypeRequired'))
       return
     }
 
@@ -264,11 +369,16 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         closed_at:         closedAtISO,
         company_id:        companyId,
         items_to_add:      itemsToAdd.length > 0 ? itemsToAdd : undefined,
+        sale_types_to_add: selectedSaleTypeIds.length > 0 ? selectedSaleTypeIds : undefined,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
       if (msg.includes('WON_ITEM_REQUIRED')) {
         setError(t('closeOpportunity.errorWonItemRequired'))
+      } else if (msg.includes('WON_SALE_TYPE_REQUIRED')) {
+        setError(t('closeOpportunity.errorWonSaleTypeRequired'))
+      } else if (msg.includes('INVALID_FUNNEL_POSITION')) {
+        setError(t('closeOpportunity.errorInvalidFunnelPosition'))
       } else {
         setError(msg || t('closeOpportunity.errorGeneric'))
       }
@@ -312,7 +422,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         {/* Body — scrollável */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
-          {/* ── Seletor multi-item (somente quando requireItems && !hasItems && won) ── */}
+          {/* ── Seletor multi-item de produto/serviço ── */}
           {showItemSelector && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3">
               <div className="flex items-center gap-2">
@@ -333,7 +443,6 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                 <>
                   {/* Linha de adição */}
                   <div className="space-y-2">
-                    {/* Tipo + Item */}
                     <div className="flex gap-2">
                       <select
                         value={addType}
@@ -357,7 +466,6 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                       </select>
                     </div>
 
-                    {/* Preço + Qtd + Botão */}
                     <div className="flex gap-2 items-center">
                       <div className="flex-1">
                         <input
@@ -390,7 +498,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex-shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        {t('closeOpportunity.wonItemTypeProduct') === 'Produto' ? 'Add' : 'Add'}
+                        Add
                       </button>
                     </div>
                   </div>
@@ -424,8 +532,6 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                           </button>
                         </div>
                       ))}
-
-                      {/* Subtotal */}
                       <div className="flex justify-between items-center px-3 py-1.5 bg-emerald-100 rounded-lg">
                         <span className="text-xs font-medium text-emerald-800">Subtotal</span>
                         <span className="text-xs font-bold text-emerald-900">
@@ -437,6 +543,17 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                 </>
               )}
             </div>
+          )}
+
+          {/* ── Seletor de tipos de venda ── */}
+          {showSaleTypeSelector && (
+            <WonSaleTypeSelector
+              companyId={companyId}
+              selectedIds={selectedSaleTypeIds}
+              onChange={setSelectedSaleTypeIds}
+              disabled={loading}
+              currencyCode={currencyCode}
+            />
           )}
 
           {/* Data/hora de fechamento */}
@@ -493,9 +610,10 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             </div>
           )}
 
-          {/* Erro */}
+          {/* Erro inline */}
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
               <span className="text-red-600 text-sm">{error}</span>
             </div>
           )}
@@ -512,7 +630,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading || itemSelectorBlocking}
+            disabled={loading || itemSelectorBlocking || saleTypeSelectorBlocking}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
               isWon ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
             }`}

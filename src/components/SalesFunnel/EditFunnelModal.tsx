@@ -5,11 +5,12 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check, ShoppingBag } from 'lucide-react'
+import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check, ShoppingBag, Tag } from 'lucide-react'
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
+import { saleTypesApi } from '../../services/saleTypesApi'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -49,6 +50,11 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [requireWonItems, setRequireWonItems] = useState<boolean>(funnel.require_won_items ?? false)
   const [catalogEntitled, setCatalogEntitled] = useState(false)
   const [savingRequireItems, setSavingRequireItems] = useState(false)
+
+  // ── require_won_sale_type ──
+  const [requireWonSaleType, setRequireWonSaleType] = useState<boolean>(funnel.require_won_sale_type ?? false)
+  const [savingRequireSaleType, setSavingRequireSaleType] = useState(false)
+  const [saleTypeError, setSaleTypeError] = useState<string | undefined>(undefined)
   
   // Estados para gerenciamento de etapas
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
@@ -70,6 +76,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       checkCanDelete()
       checkCatalogEntitlement()
       setRequireWonItems(funnel.require_won_items ?? false)
+      setRequireWonSaleType(funnel.require_won_sale_type ?? false)
+      setSaleTypeError(undefined)
     }
   }, [isOpen, funnel.id])
 
@@ -105,6 +113,25 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       }
     } finally {
       setSavingRequireItems(false)
+    }
+  }
+
+  const handleToggleRequireWonSaleType = async (value: boolean) => {
+    if (!companyId) return
+    setSavingRequireSaleType(true)
+    setSaleTypeError(undefined)
+    try {
+      await saleTypesApi.setFunnelRequireWonSaleType(companyId, funnel.id, value)
+      setRequireWonSaleType(value)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar configuração'
+      if (msg.includes('NO_ACTIVE_SALE_TYPES')) {
+        setSaleTypeError('Cadastre ou ative ao menos um tipo de venda antes de habilitar esta opção.')
+      } else {
+        setSaleTypeError(msg)
+      }
+    } finally {
+      setSavingRequireSaleType(false)
     }
   }
 
@@ -596,6 +623,43 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                   </label>
                 </div>
               )}
+
+              {/* Toggle require_won_sale_type — sempre visível para admins */}
+              <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <div className="mt-0.5">
+                    {savingRequireSaleType
+                      ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      : (
+                        <input
+                          type="checkbox"
+                          checked={requireWonSaleType}
+                          onChange={(e) => handleToggleRequireWonSaleType(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          disabled={loading || savingRequireSaleType}
+                        />
+                      )
+                    }
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Exigir tipo de venda ao fechar como Ganho
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Quando ativado, o vendedor deve selecionar ao menos um tipo de venda antes de fechar a oportunidade como ganha.
+                    </p>
+                    {saleTypeError && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {saleTypeError}
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
             </div>
 
             {/* Etapas */}

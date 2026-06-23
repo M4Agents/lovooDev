@@ -171,7 +171,13 @@
     "wonItemQuantityLabel": "Quantidade",
     "wonItemLoadingCatalog": "Carregando catálogo...",
     "wonItemEmptyCatalog": "Nenhum produto ou serviço disponível. Cadastre-os em Configurações → Catálogo.",
-    "wonItemRequired": "Selecione um produto ou serviço para continuar."
+    "wonItemRequired": "Selecione um produto ou serviço para continuar.",
+    "wonSaleTypeTitle": "Tipo de Venda",
+    "wonSaleTypeLoadingList": "Carregando tipos de venda...",
+    "wonSaleTypeEmptyList": "Nenhum tipo de venda ativo disponível. Cadastre ou ative um tipo em Configurações → Tipos de Venda.",
+    "wonSaleTypeRequired": "Selecione ao menos um tipo de venda para continuar.",
+    "errorWonSaleTypeRequired": "É necessário selecionar ao menos um tipo de venda para fechar como ganho.",
+    "errorInvalidFunnelPosition": "Não foi possível validar o funil desta oportunidade. Atualize a página e tente novamente."
   },
   "reopenOpportunity": {
     "title": "Reabrir Oportunidade",

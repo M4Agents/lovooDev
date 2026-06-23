@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard, Building2, Crown, Bell, History, CheckCircle2, AlertCircle, Copy as CopyIcon, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Webhook, Save, Clock, Building, MapPin, Phone, Globe, Settings as SettingsIcon, Eye, EyeOff, Zap, Smartphone, Cloud, FileText, Users, GitBranch, Package, Sparkles, Mic2, Bot, CreditCard, Building2, Crown, Bell, History, CheckCircle2, AlertCircle, Copy as CopyIcon, RefreshCw, Search, ChevronLeft, ChevronRight, Tag } from 'lucide-react';
 import { WhatsAppLifeModule } from '../components/WhatsAppLife/WhatsAppLifeModule';
 import { ModernLandingPages } from './ModernLandingPages';
 import { UsersList, UsersListRef } from '../components/UserManagement/UsersList';
@@ -12,6 +12,7 @@ import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
+import { SaleTypesSettings } from '../components/Settings/SaleTypesSettings';
 import { MessageTemplatesPanel } from '../components/Settings/MessageTemplatesPanel';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
@@ -123,7 +124,7 @@ export const Settings: React.FC = () => {
   const [payloadModalOpen, setPayloadModalOpen] = useState(false);
   
   // Estados para abas principais - ESTRUTURA REORGANIZADA
-  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes' | 'gestao-empresas' | 'gestao-planos' | 'integracoes-globais' | 'notificacoes'>('integracoes');
+  const [activeTab, setActiveTab] = useState<'integracoes' | 'usuarios' | 'tracking' | 'empresas' | 'sistema' | 'catalogo' | 'tipos-venda' | 'agentes' | 'agentes-empresa' | 'ia-governance' | 'planos-uso' | 'automacoes' | 'gestao-empresas' | 'gestao-planos' | 'integracoes-globais' | 'notificacoes'>('integracoes');
   
   // NOVO: Estado para submenus de Usuários
   const [usuariosSubTab, setUsuariosSubTab] = useState<'gestao' | 'templates'>('gestao');
@@ -146,7 +147,7 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     const stateTab = (location.state as any)?.activeTab as string | undefined;
-    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais', 'notificacoes'] as const;
+    const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'tipos-venda', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais', 'notificacoes'] as const;
     if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
       setActiveTab(stateTab as typeof validTabs[number]);
     } else if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
@@ -1190,6 +1191,13 @@ export const Settings: React.FC = () => {
             <Package className="w-4 h-4 shrink-0" />
             Produtos e Serviços
           </button>
+
+          {canAccessSystemSettings && (
+            <button onClick={() => setActiveTab('tipos-venda')} className={navItemClass('tipos-venda')}>
+              <Tag className="w-4 h-4 shrink-0" />
+              {t('tabs.saleTypes')}
+            </button>
+          )}
 
           {canAccessSystemSettings && (
             <button onClick={() => setActiveTab('sistema')} className={navItemClass('sistema')}>
@@ -3983,6 +3991,13 @@ export const Settings: React.FC = () => {
             defaultCurrency={company.default_currency ?? 'BRL'}
             onCompanyFlagChange={() => refreshCompany?.()}
           />
+        </div>
+      )}
+
+      {/* Aba Tipos de Venda */}
+      {activeTab === 'tipos-venda' && canAccessSystemSettings && company?.id && (
+        <div className="space-y-6">
+          <SaleTypesSettings companyId={company.id} />
         </div>
       )}
 

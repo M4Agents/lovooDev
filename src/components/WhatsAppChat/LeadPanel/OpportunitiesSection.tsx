@@ -8,6 +8,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { useWonItemCheck } from '../../../hooks/useWonItemCheck'
+import { useSaleTypeCheck } from '../../../hooks/useSaleTypeCheck'
+import { saleTypesApi } from '../../../services/saleTypesApi'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
@@ -171,6 +173,12 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     companyId,
     funnelRequireWonItems: wonPendingFunnel?.require_won_items ?? false,
     enabled:               !!wonPendingOppId,
+  })
+  const { requireSaleType: wonRequireSaleType, hasSaleTypes: wonHasSaleTypes, refetch: refetchSaleTypeCheck } = useSaleTypeCheck({
+    opportunityId:            wonPendingOppId,
+    companyId,
+    funnelRequireWonSaleType: wonPendingFunnel?.require_won_sale_type ?? false,
+    enabled:                  !!wonPendingOppId,
   })
 
   // Buscar funis e posições das oportunidades
@@ -362,6 +370,18 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             })
           }
           refetchWonCheck()
+        }
+
+        // Vincular tipos de venda antes de fechar (require_won_sale_type)
+        if (params.sale_types_to_add && params.sale_types_to_add.length > 0) {
+          for (const saleTypeId of params.sale_types_to_add) {
+            await saleTypesApi.addOpportunitySaleType(
+              params.company_id,
+              params.opportunity_id,
+              saleTypeId,
+            )
+          }
+          refetchSaleTypeCheck()
         }
 
         const { error } = await supabase.rpc('close_opportunity', {
@@ -984,6 +1004,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             companyId={companyId}
             requireItems={wonRequireItems}
             hasItems={wonHasItems}
+            requireSaleType={wonRequireSaleType}
+            hasSaleTypes={wonHasSaleTypes}
             onConfirm={handleConfirmCloseOpportunity}
             onCancel={handleCancelStageTransition}
           />

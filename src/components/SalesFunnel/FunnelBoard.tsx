@@ -27,8 +27,10 @@ import { useMoveOpportunity } from '../../hooks/useMoveOpportunity'
 import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
 import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
 import { useWonItemCheck } from '../../hooks/useWonItemCheck'
+import { useSaleTypeCheck } from '../../hooks/useSaleTypeCheck'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
+import { saleTypesApi } from '../../services/saleTypesApi'
 import { supabase } from '../../lib/supabase'
 import { getCompanyUsers } from '../../services/userApi'
 import type {
@@ -57,6 +59,7 @@ interface FunnelBoardProps {
   funnelName?: string
   /** Quando true, exige produto/serviço ao fechar como ganho. */
   funnelRequireWonItems?: boolean
+  funnelRequireWonSaleType?: boolean
   visibleFields?: string[]
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
@@ -70,6 +73,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelId,
   funnelName = '',
   funnelRequireWonItems = false,
+  funnelRequireWonSaleType = false,
   visibleFields,
   onLeadClick,
   searchTerm = '',
@@ -276,7 +280,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null)
 
-  // ── Verificação de item obrigatório para won ──
+  // ── Verificação de item obrigatório / tipo de venda para won ──
   const wonOpportunityId = pendingTransition?.toStageType === 'won'
     ? pendingTransition.opportunityId
     : ''
@@ -285,6 +289,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     companyId:            companyId ?? '',
     funnelRequireWonItems,
     enabled:              !!wonOpportunityId,
+  })
+  const { requireSaleType, hasSaleTypes, refetch: refetchSaleTypeCheck } = useSaleTypeCheck({
+    opportunityId:            wonOpportunityId,
+    companyId:                companyId ?? '',
+    funnelRequireWonSaleType,
+    enabled:                  !!wonOpportunityId,
   })
 
   // =====================================================
@@ -576,7 +586,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const handleConfirmClose = useCallback(async (params: CloseOpportunityParams) => {
     if (!pendingTransition) return
 
-    // Adicionar itens antes de fechar (quando require_won_items = true e sem itens)
+    // Adicionar itens antes de fechar (require_won_items)
     if (params.items_to_add && params.items_to_add.length > 0) {
       for (const item of params.items_to_add) {
         await funnelApi.opportunityAddItem({
@@ -591,6 +601,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         })
       }
       refetchWonCheck()
+    }
+
+    // Vincular tipos de venda antes de fechar (require_won_sale_type)
+    if (params.sale_types_to_add && params.sale_types_to_add.length > 0) {
+      for (const saleTypeId of params.sale_types_to_add) {
+        await saleTypesApi.addOpportunitySaleType(
+          params.company_id,
+          params.opportunity_id,
+          saleTypeId,
+        )
+      }
+      refetchSaleTypeCheck()
     }
 
     const { data, error } = await supabase.rpc('close_opportunity', {
@@ -877,6 +899,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           companyId={companyId ?? ''}
           requireItems={requireItems}
           hasItems={hasItems}
+          requireSaleType={requireSaleType}
+          hasSaleTypes={hasSaleTypes}
           onConfirm={handleConfirmClose}
           onCancel={handleCancelTransition}
         />
