@@ -191,7 +191,14 @@ export default async function handler(req, res) {
   // #endregion
 
   if (tokenNeedsExchange) {
-    // ── Trocar para long-lived token via ig_exchange_token (POST) ────────────
+    // ── Trocar para long-lived token ──────────────────────────────────────────
+    // Para tokens IGAAT (novo formato 2024+), tentamos:
+    //   1. POST graph.instagram.com/access_token (ig_exchange_token)
+    //   2. GET  graph.instagram.com/access_token (ig_exchange_token, forma legada)
+    // Para tokens com expires_in, a troca é obrigatória (não cai no fallback direto).
+    let exchangeOk = false;
+
+    // Tentativa 1: POST ig_exchange_token (forma preferida para novo formato)
     try {
       const llRes = await fetch('https://graph.instagram.com/access_token', {
         method:  'POST',
@@ -205,26 +212,67 @@ export default async function handler(req, res) {
       const llData = await llRes.json();
 
       // #region agent log
-      console.log('[debug:449c25] ll-exchange status=%d tokenPfx=%s expiresIn=%s error=%s',
+      console.log('[debug:449c25] ll-exchange-post status=%d tokenPfx=%s expiresIn=%s error=%s',
         llRes.status, llData.access_token ? llData.access_token.substring(0, 8) : 'none',
         llData.expires_in ?? 'none', llData.error ? JSON.stringify(llData.error) : 'none');
       // #endregion
 
-      if (!llRes.ok || llData.error) {
-        console.error('[instagram/callback] long-lived token exchange error:', JSON.stringify(llData));
+      if (llRes.ok && !llData.error && llData.access_token) {
+        longLivedToken = llData.access_token;
+        expiresIn      = llData.expires_in ?? (60 * 24 * 60 * 60);
+        exchangeOk     = true;
+      } else {
+        console.warn('[instagram/callback] ll-exchange POST falhou:', JSON.stringify(llData));
+      }
+    } catch (err) {
+      console.error('[instagram/callback] fetch ll-exchange POST threw:', err?.message ?? err);
+    }
+
+    // Tentativa 2: GET ig_exchange_token (forma legada — pode funcionar para IGAAT)
+    if (!exchangeOk) {
+      try {
+        const llUrl = new URL('https://graph.instagram.com/access_token');
+        llUrl.searchParams.set('grant_type',    'ig_exchange_token');
+        llUrl.searchParams.set('client_secret', appSecret);
+        llUrl.searchParams.set('access_token',  shortLivedToken);
+
+        const llRes  = await fetch(llUrl.toString()); // GET
+        const llData = await llRes.json();
+
+        // #region agent log
+        console.log('[debug:449c25] ll-exchange-get status=%d tokenPfx=%s expiresIn=%s error=%s',
+          llRes.status, llData.access_token ? llData.access_token.substring(0, 8) : 'none',
+          llData.expires_in ?? 'none', llData.error ? JSON.stringify(llData.error) : 'none');
+        // #endregion
+
+        if (llRes.ok && !llData.error && llData.access_token) {
+          longLivedToken = llData.access_token;
+          expiresIn      = llData.expires_in ?? (60 * 24 * 60 * 60);
+          exchangeOk     = true;
+        } else {
+          console.warn('[instagram/callback] ll-exchange GET falhou:', JSON.stringify(llData));
+        }
+      } catch (err) {
+        console.error('[instagram/callback] fetch ll-exchange GET threw:', err?.message ?? err);
+      }
+    }
+
+    // Tentativa 3: usar token IGAAT direto (sem exchange) — pode já ser válido
+    if (!exchangeOk) {
+      // Se o token tem expires_in, a troca é obrigatória (não devemos prosseguir sem ela)
+      if (shortLivedExpiresIn != null) {
+        console.error('[instagram/callback] ll-exchange falhou para token com expires_in — abortando');
         return redirectError(res, 'token_exchange_failed');
       }
-
-      longLivedToken = llData.access_token;
-      expiresIn      = llData.expires_in;
-    } catch (err) {
-      console.error('[instagram/callback] fetch long-lived token threw:', err?.message ?? err);
-      return redirectError(res, 'meta_api_unavailable');
+      // Tokens IGAAT sem expires_in: tentar usar diretamente (pode ser long-lived)
+      console.warn('[instagram/callback] ll-exchange falhou — usando IGAAT diretamente como fallback');
+      longLivedToken = shortLivedToken;
+      expiresIn      = 60 * 24 * 60 * 60;
     }
   } else {
     // ── Business Login EAA: token já é válido diretamente (60 dias) ──────────
     longLivedToken = shortLivedToken;
-    expiresIn      = 60 * 24 * 60 * 60; // 60 dias em segundos
+    expiresIn      = 60 * 24 * 60 * 60;
   }
 
   // ── 7. Buscar dados da conta Instagram ────────────────────────────────────
@@ -297,7 +345,66 @@ export default async function handler(req, res) {
         console.error('[instagram/callback] fb-me fallback threw:', fbErr?.message ?? fbErr);
       }
 
-      // Fallback B: tentar graph.instagram.com/{user_id} diretamente (alternativa ao /me)
+      // Fallback B: tentar graph.instagram.com/v22.0/me (versão mais nova)
+      if (!fbFallbackUsed) {
+        try {
+          const igV22Url = new URL('https://graph.instagram.com/v22.0/me');
+          igV22Url.searchParams.set('fields', 'id,username,name,profile_picture_url,user_id');
+          igV22Url.searchParams.set('access_token', longLivedToken);
+
+          const igV22Res  = await fetch(igV22Url.toString());
+          const igV22Data = await igV22Res.json();
+
+          // #region agent log
+          console.log('[debug:449c25] ig-v22-fallback status=%d id=%s username=%s error=%s',
+            igV22Res.status, igV22Data.id ?? 'none', igV22Data.username ?? 'none',
+            igV22Data.error ? JSON.stringify(igV22Data.error) : 'none');
+          // #endregion
+
+          if (!igV22Data.error && igV22Data.id) {
+            meSource          = 'ig-v22';
+            igUserId          = String(igV22Data.id);
+            igWebhookId       = igV22Data.user_id ? String(igV22Data.user_id) : String(igV22Data.id);
+            username          = igV22Data.username            ?? igUserId;
+            displayName       = igV22Data.name                ?? '';
+            profilePictureUrl = igV22Data.profile_picture_url ?? null;
+            fbFallbackUsed    = true;
+          }
+        } catch (igV22Err) {
+          console.error('[instagram/callback] ig-v22 fallback threw:', igV22Err?.message ?? igV22Err);
+        }
+      }
+
+      // Fallback C: api.instagram.com/v1.0/me (endpoint alternativo)
+      if (!fbFallbackUsed) {
+        try {
+          const apiIgUrl = new URL('https://api.instagram.com/v1.0/me');
+          apiIgUrl.searchParams.set('fields', 'id,username,name,profile_picture_url');
+          apiIgUrl.searchParams.set('access_token', longLivedToken);
+
+          const apiIgRes  = await fetch(apiIgUrl.toString());
+          const apiIgData = await apiIgRes.json();
+
+          // #region agent log
+          console.log('[debug:449c25] api-ig-fallback status=%d id=%s username=%s error=%s',
+            apiIgRes.status, apiIgData.id ?? 'none', apiIgData.username ?? 'none',
+            apiIgData.error ? JSON.stringify(apiIgData.error) : 'none');
+          // #endregion
+
+          if (!apiIgData.error && apiIgData.id) {
+            meSource          = 'api-ig';
+            igUserId          = String(apiIgData.id);
+            igWebhookId       = String(apiIgData.id);
+            username          = apiIgData.username            ?? igUserId;
+            displayName       = apiIgData.name                ?? '';
+            profilePictureUrl = apiIgData.profile_picture_url ?? null;
+          }
+        } catch (apiIgErr) {
+          console.error('[instagram/callback] api-ig fallback threw:', apiIgErr?.message ?? apiIgErr);
+        }
+      }
+
+      // Fallback D: graph.instagram.com/{user_id} direto por ID
       if (!fbFallbackUsed) {
         try {
           const igDirectUrl = new URL(`https://graph.instagram.com/v21.0/${oauthIgUserId}`);
