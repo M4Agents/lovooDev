@@ -13,12 +13,13 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote
+  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
+import { saleTypesApi } from '../../services/saleTypesApi'
 import { getCompanyUsers } from '../../services/userApi'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { useAccessControl } from '../../hooks/useAccessControl'
@@ -26,7 +27,7 @@ import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHisto
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
 import { InternalNotes } from '../InternalNotes'
-import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm } from '../../types/sales-funnel'
+import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm, OpportunitySaleTypeLink } from '../../types/sales-funnel'
 import {
   parseOpportunityCompositionError,
   resolveOpportunityCompositionErrorMessage
@@ -194,6 +195,8 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const [loadingStatus, setLoadingStatus] = useState(false)
   const [detailOpportunity, setDetailOpportunity] = useState<Opportunity>(opportunity)
   const [compositionEntitled, setCompositionEntitled] = useState(false)
+  const [opportunitySaleTypes, setOpportunitySaleTypes] = useState<OpportunitySaleTypeLink[]>([])
+  const [loadingSaleTypes, setLoadingSaleTypes] = useState(false)
 
   // Edição geral
   const [editMode, setEditMode]       = useState(false)
@@ -327,6 +330,20 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       .then((e) => setCompositionEntitled(e.allowed))
       .catch(() => setCompositionEntitled(false))
   }, [isOpen, companyId])
+
+  // Carregar tipos de venda vinculados à oportunidade
+  useEffect(() => {
+    if (!isOpen || !companyId || opportunity.status !== 'won') {
+      setOpportunitySaleTypes([])
+      return
+    }
+    setLoadingSaleTypes(true)
+    saleTypesApi
+      .getOpportunitySaleTypes(companyId, opportunity.id)
+      .then(setOpportunitySaleTypes)
+      .catch(() => setOpportunitySaleTypes([]))
+      .finally(() => setLoadingSaleTypes(false))
+  }, [isOpen, companyId, opportunity.id, opportunity.status])
 
   // Carregar histórico de status ao abrir
   useEffect(() => {
@@ -589,6 +606,33 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                   }}
                 />
               </div>
+
+              {/* Tipos de venda (apenas oportunidades ganhas) */}
+              {opportunity.status === 'won' && (loadingSaleTypes || opportunitySaleTypes.length > 0) && (
+                <div className="w-full min-w-0 pt-1">
+                  <p className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
+                    <Tag className="w-3.5 h-3.5" />
+                    {t('opportunityDetail.fields.saleTypes', 'Tipos de Venda')}
+                  </p>
+                  {loadingSaleTypes ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {t('opportunityDetail.fields.loadingSaleTypes', 'Carregando...')}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {opportunitySaleTypes.map(link => (
+                        <span
+                          key={link.id}
+                          className="inline-flex items-center px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-medium rounded-full"
+                        >
+                          {link.sale_types?.name ?? '—'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Grid: Responsável + Previsão de fechamento */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
