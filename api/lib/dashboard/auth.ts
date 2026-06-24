@@ -2,6 +2,114 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 
 // ---------------------------------------------------------------------------
+// assertUserFunnelAccess — Fase 2: restrições de funis por usuário
+// ---------------------------------------------------------------------------
+
+/**
+ * Roles que NUNCA sofrem restrição por user_funnel_settings.
+ *
+ * - admin / super_admin / system_admin: acesso irrestrito a todos os funis.
+ * - partner: confia na validação já realizada por assertMembership
+ *   (partner_company_assignments). Não criar lógica adicional aqui.
+ */
+const FUNNEL_UNRESTRICTED_ROLES = new Set([
+  'admin', 'super_admin', 'system_admin', 'partner',
+])
+
+/**
+ * Resultado da verificação de acesso a funis.
+ *
+ * { ok: true,  allowedFunnelIds: null }      → sem restrição (acesso total)
+ * { ok: true,  allowedFunnelIds: string[] }  → restrito; lista de IDs permitidos
+ * { ok: false, status: 403 | 500, error }    → acesso negado ou erro interno
+ *
+ * IMPORTANTE: erros internos de BD retornam { ok: false, status: 500 }.
+ * Apenas estados de negócio explícitos (sem registro / disabled / lista vazia)
+ * liberam acesso. Não há fail-open para erros.
+ */
+export type FunnelAccessResult =
+  | { ok: true;  allowedFunnelIds: null }
+  | { ok: true;  allowedFunnelIds: string[] }
+  | { ok: false; status: 403 | 500; error: string }
+
+/**
+ * Verifica se o usuário tem permissão de acesso ao funil solicitado.
+ *
+ * Consultas realizadas (service_role — bypass de RLS):
+ *   1. user_funnel_settings  (company_id + user_id) — sempre
+ *   2. user_allowed_funnels  (company_id + user_id) — apenas quando is_enabled = true
+ *
+ * Regras de negócio:
+ *   - Sem registro em user_funnel_settings    → acesso total
+ *   - is_enabled = false                      → acesso total
+ *   - is_enabled = true + lista vazia         → acesso total
+ *   - is_enabled = true + lista de funis      → restrito à lista
+ *
+ * @param funnelId  UUID do funil solicitado, ou null para "todos os funis".
+ *                  Quando null, retorna { allowedFunnelIds } para uso pelo caller
+ *                  (ex.: filtrar listagem ou exigir seleção explícita).
+ */
+export async function assertUserFunnelAccess(params: {
+  svc:       SupabaseClient
+  userId:    string
+  companyId: string
+  role:      string
+  funnelId:  string | null
+}): Promise<FunnelAccessResult> {
+  const { svc, userId, companyId, role, funnelId } = params
+
+  // ── Bypass imediato para roles irrestritos ─────────────────────────────────
+  if (FUNNEL_UNRESTRICTED_ROLES.has(role)) {
+    return { ok: true, allowedFunnelIds: null }
+  }
+
+  // ── Consultar user_funnel_settings (company_id + user_id) ─────────────────
+  const { data: settings, error: settingsError } = await svc
+    .from('user_funnel_settings')
+    .select('is_enabled')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (settingsError) {
+    console.error('[assertUserFunnelAccess] Erro em user_funnel_settings:', settingsError.message)
+    return { ok: false, status: 500, error: 'Erro interno ao verificar permissões de funis.' }
+  }
+
+  // Sem registro ou is_enabled = false → acesso total
+  if (!settings || !settings.is_enabled) {
+    return { ok: true, allowedFunnelIds: null }
+  }
+
+  // ── Consultar user_allowed_funnels (company_id + user_id) ─────────────────
+  const { data: allowedRows, error: allowedError } = await svc
+    .from('user_allowed_funnels')
+    .select('funnel_id')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+
+  if (allowedError) {
+    console.error('[assertUserFunnelAccess] Erro em user_allowed_funnels:', allowedError.message)
+    return { ok: false, status: 500, error: 'Erro interno ao verificar funis permitidos.' }
+  }
+
+  const allowedFunnelIds = (allowedRows ?? []).map(r => r.funnel_id as string)
+
+  // is_enabled = true + lista vazia → acesso total
+  if (allowedFunnelIds.length === 0) {
+    return { ok: true, allowedFunnelIds: null }
+  }
+
+  // ── Validar funnelId específico (quando fornecido) ─────────────────────────
+  if (funnelId !== null && !allowedFunnelIds.includes(funnelId)) {
+    return { ok: false, status: 403, error: 'Acesso negado: funil não autorizado para este usuário.' }
+  }
+
+  // Restrito com lista válida (funnelId null ou funnelId permitido)
+  return { ok: true, allowedFunnelIds }
+}
+
+// ---------------------------------------------------------------------------
 // assertMembership
 // ---------------------------------------------------------------------------
 
@@ -30,10 +138,6 @@ export async function assertMembership(
     .eq('is_active', true)
     .maybeSingle()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail1',message:'Trilha 1 result',data:{userId,companyId,found:!!direct,role:direct?.role??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (direct) return direct
 
   // ── Trilha 2: super_admin / system_admin da empresa pai ──────────────────
@@ -46,10 +150,6 @@ export async function assertMembership(
     .eq('id', companyId)
     .maybeSingle()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail2_parent',message:'Trilha 2 parent lookup',data:{companyId,parentCompanyId:company?.parent_company_id??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (!company?.parent_company_id) return null
 
   const { data: parentMember } = await svc
@@ -60,10 +160,6 @@ export async function assertMembership(
     .eq('is_active', true)
     .in('role', ['super_admin', 'system_admin'])
     .maybeSingle()
-
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'auth.ts:assertMembership:trail2_result',message:'Trilha 2 result',data:{userId,parentCompanyId:company.parent_company_id,found:!!parentMember,role:parentMember?.role??null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   return parentMember ?? null
 }

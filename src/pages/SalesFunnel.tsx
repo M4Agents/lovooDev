@@ -46,7 +46,7 @@ export default function SalesFunnel() {
     reorderFunnels,
     refreshFunnels,
     isAtFunnelLimit,
-  } = useFunnels(companyId || '')
+  } = useFunnels(companyId || '', undefined, user?.id)
 
   const [showFilters, setShowFilters] = useState(false)
   const [showCreateFunnelModal, setShowCreateFunnelModal] = useState(false)

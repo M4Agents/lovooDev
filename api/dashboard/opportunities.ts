@@ -23,6 +23,7 @@ import {
   getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 
@@ -92,7 +93,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ------------------------------------------------------------------
     // 4. Filtros opcionais
     // ------------------------------------------------------------------
-    const funnelId     = typeof req.query.funnel_id       === 'string' ? req.query.funnel_id.trim()       : null
+    let funnelId       = typeof req.query.funnel_id       === 'string' ? req.query.funnel_id.trim()       : null
     const stageId      = typeof req.query.stage_id        === 'string' ? req.query.stage_id.trim()        : null
     const status       = typeof req.query.status          === 'string' ? req.query.status.trim()          : null
     const source       = typeof req.query.source          === 'string' ? req.query.source.trim()          : null
@@ -103,6 +104,24 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (funnelId) {
       const valid = await assertFunnelBelongsToCompany(svc, funnelId, companyId)
       if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
+    }
+
+    // ------------------------------------------------------------------
+    // 4b. Restrições pessoais de funis (Fase 2)
+    // ------------------------------------------------------------------
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: callerRole, funnelId: funnelId ?? null,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    if (funnelAccess.allowedFunnelIds !== null && !funnelId) {
+      const allowed = funnelAccess.allowedFunnelIds
+      if (allowed.length === 1) {
+        funnelId = allowed[0]
+      } else {
+        jsonError(res, 400, 'Selecione um funil permitido para visualizar o Dashboard.')
+        return
+      }
     }
 
     // ------------------------------------------------------------------

@@ -39,6 +39,7 @@ import {
   getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 import {
@@ -182,7 +183,13 @@ export default async function handler(req: any, res: any): Promise<void> {
       if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
     }
 
-    // 5. Modo de comparação + períodos históricos
+    // 5. Verificar restrições pessoais de funis (Fase 2)
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: membership.role, funnelId: effectiveFunnelId,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    // 6. Modo de comparação + períodos históricos
     const rawMode = typeof req.query.comparison_mode === 'string'
       ? req.query.comparison_mode.trim()
       : 'wow'

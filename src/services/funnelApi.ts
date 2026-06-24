@@ -1233,6 +1233,108 @@ class FunnelApiService {
     })
     if (error) throw error
   }
+
+  // ===================================================
+  // CONTROLE DE FUNIS POR USUÁRIO
+  // ===================================================
+
+  /**
+   * Buscar configuração de acesso a funis do usuário.
+   *
+   * Retorna null em dois casos:
+   *   1. Sem registro no banco (usuário nunca configurado) → comportamento atual preservado
+   *   2. RPC ainda não existe no banco (migrations pendentes) → fallback seguro
+   *
+   * Semântica:
+   *   null                              → is_enabled = false (sem restrição)
+   *   { isEnabled: false }              → sem restrição
+   *   { isEnabled: true, allowedFunnelIds: [] }   → sem restrição (lista vazia ≠ sem acesso)
+   *   { isEnabled: true, allowedFunnelIds: [ids] } → restrito à lista
+   *
+   * FALLBACK TEMPORÁRIO: quando a RPC get_user_funnel_settings não existir no banco
+   * (migrations M0–M6 ainda não aplicadas), retorna null silenciosamente.
+   * Este fallback deve ser removido após aplicação das migrations em produção.
+   */
+  async getUserFunnelSettings(
+    companyId: string,
+    userId: string
+  ): Promise<{
+    isEnabled: boolean
+    defaultFunnelId: string | null
+    allowedFunnelIds: string[]
+  } | null> {
+    try {
+      const { data, error } = await supabase.rpc('get_user_funnel_settings', {
+        p_company_id: companyId,
+        p_user_id: userId,
+      })
+
+      if (error) {
+        // FALLBACK TEMPORÁRIO: RPC ainda não existe (migration pendente) ou tabela ausente.
+        // Código PGRST202 = function not found; 42883 = undefined function.
+        // Manter comportamento atual: usuário vê todos os funis.
+        const errCode = (error as Record<string, unknown>)?.code as string | undefined
+        const isRpcMissing = errCode === 'PGRST202'
+          || errCode === '42883'
+          || String(error?.message ?? '').includes('get_user_funnel_settings')
+        if (isRpcMissing) {
+          console.warn('[funnelApi.getUserFunnelSettings] RPC não encontrada — migrations pendentes. Retornando null (todos os funis visíveis).')
+          return null
+        }
+        throw error
+      }
+
+      // 0 linhas = sem registro = sem restrição
+      if (!data || (Array.isArray(data) && data.length === 0)) return null
+
+      const row = Array.isArray(data) ? data[0] : data
+      return {
+        isEnabled: row.is_enabled ?? false,
+        defaultFunnelId: row.default_funnel_id ?? null,
+        allowedFunnelIds: (row.allowed_funnel_ids as string[]) ?? [],
+      }
+    } catch (error) {
+      console.error('[funnelApi.getUserFunnelSettings] Erro ao buscar settings:', error)
+      // Falha inesperada → retornar null (fallback seguro: usuário vê todos os funis)
+      return null
+    }
+  }
+
+  /**
+   * Criar ou atualizar configuração de acesso a funis de um usuário.
+   * Apenas admins da empresa podem chamar.
+   *
+   * FALLBACK TEMPORÁRIO: quando a RPC upsert_user_funnel_settings não existir,
+   * lança erro controlado informativo em vez de erro genérico.
+   * Este fallback deve ser removido após aplicação das migrations em produção.
+   */
+  async upsertUserFunnelSettings(params: {
+    companyId: string
+    userId: string
+    isEnabled: boolean
+    defaultFunnelId: string | null
+    allowedFunnelIds: string[] | null
+  }): Promise<void> {
+    const { error } = await supabase.rpc('upsert_user_funnel_settings', {
+      p_company_id:         params.companyId,
+      p_user_id:            params.userId,
+      p_is_enabled:         params.isEnabled,
+      p_default_funnel_id:  params.defaultFunnelId ?? null,
+      p_allowed_funnel_ids: params.allowedFunnelIds ?? null,
+    })
+
+    if (error) {
+      const errCode = (error as Record<string, unknown>)?.code as string | undefined
+      const isRpcMissing = errCode === 'PGRST202'
+        || errCode === '42883'
+        || String(error?.message ?? '').includes('upsert_user_funnel_settings')
+      if (isRpcMissing) {
+        // FALLBACK TEMPORÁRIO: informar que a feature ainda não está disponível no banco
+        throw new Error('A funcionalidade de controle de funis ainda não está disponível. Migrations pendentes.')
+      }
+      throw error
+    }
+  }
 }
 
 // =====================================================

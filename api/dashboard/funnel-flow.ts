@@ -29,6 +29,7 @@ import {
   getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 import { withTiming, logDashboardError } from '../lib/dashboard/observability.js'
@@ -72,7 +73,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
 
     // ------------------------------------------------------------------
-    // 4. Resolução do período
+    // 4. Verificar restrições pessoais de funis (Fase 2)
+    // ------------------------------------------------------------------
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: membership.role, funnelId,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    // ------------------------------------------------------------------
+    // 5. Resolução do período
     // ------------------------------------------------------------------
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
@@ -87,7 +96,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ------------------------------------------------------------------
-    // 5. Flow + Conversão em paralelo
+    // 6. Flow + Conversão em paralelo
     // ------------------------------------------------------------------
     const ctx = { companyId, period }
 

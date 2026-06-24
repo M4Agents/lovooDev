@@ -1516,10 +1516,6 @@ async function processMediaMessageRobust(message, supabase, originalUrl, rawMedi
       firstBytes: Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).padStart(2, '0'))
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c47bb3'},body:JSON.stringify({sessionId:'c47bb3',location:'uazapi-webhook-final.js:processMediaMessageRobust',message:'formato detectado para upload',data:{rawMediaType,extension,contentType,mediaKeyPresente:!!mediaKey,firstBytes:Array.from(bytes.slice(0,4)).map(b=>'0x'+b.toString(16).padStart(2,'0'))},hypothesisId:'DECRYPT_FIX',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     const fileName = `${rawMediaType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
     console.log('📁 Fazendo upload para Supabase Storage:', fileName);
 

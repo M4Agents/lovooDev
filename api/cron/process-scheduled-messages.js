@@ -10,11 +10,8 @@ const supabase = getSupabaseAdmin()
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
 export default async function handler(req, res) {
-  // #region agent log
   const runId = Math.random().toString(36).slice(2, 8)
   console.log(`[CRON-SCHED][${runId}] ▶ Invocation started at ${new Date().toISOString()}`)
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:handler-entry',message:'Cron invocation started',data:{runId,ts:new Date().toISOString()},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
-  // #endregion
 
   // Verificar se é chamada do cron do Vercel
   const authHeader = req.headers.authorization
@@ -32,10 +29,7 @@ export default async function handler(req, res) {
     const { data: messages, error: fetchError } = await supabase
       .rpc('get_pending_scheduled_messages')
 
-    // #region agent log
     console.log(`[CRON-SCHED][${runId}] RPC result: count=${messages?.length ?? 0} error=${fetchError?.message ?? 'none'} ids=${JSON.stringify(messages?.map(m => m.id))}`)
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:after-rpc',message:'get_pending_scheduled_messages result',data:{runId,count:messages?.length??0,ids:messages?.map(m=>m.id),error:fetchError?.message??null},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
-    // #endregion
 
     if (fetchError) {
       console.error('❌ Error fetching pending messages:', fetchError)
@@ -94,10 +88,7 @@ export default async function handler(req, res) {
             p_sent_message_id: null,
           })
 
-          // #region agent log
           console.log(`[CRON-SCHED][${runId}] mark_sent: messageId=${message.id} chatMessageId=${chatMessageId} uazapiId=${sendResult.message_id} markError=${markError?.message ?? 'none'}`)
-          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:mark-sent',message:'mark_sent result',data:{runId,messageId:message.id,chatMessageId,uazapiMessageId:sendResult.message_id,markError:markError?.message??null},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{})
-          // #endregion
 
           results.sent++
           console.log(`✅ Message ${message.id} sent successfully`)
@@ -190,10 +181,7 @@ async function createChatMessageRecord(message) {
     p_media_url:       message.media_url || null,
   })
 
-  // #region agent log
   console.log(`[CHAT-CREATE] result: success=${data?.success} messageId=${data?.message_id ?? 'null'} error=${error?.message ?? data?.error ?? 'none'}`)
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:createChatMessageRecord',message:'chat_create_message result',data:{convId:message.conversation_id,companyId:message.company_id,success:data?.success,messageId:data?.message_id??null,error:error?.message??data?.error??null},timestamp:Date.now(),hypothesisId:'H-F'})}).catch(()=>{})
-  // #endregion
 
   if (error || !data?.success) {
     console.error('[CRON-SCHED] chat_create_message error:', error?.message ?? data?.error)
@@ -248,10 +236,7 @@ async function sendMessageViaUAZAPI(message) {
 
     const result = await response.json()
 
-    // #region agent log
     console.log(`[CRON-SCHED] Uazapi response: status=${response.status} ok=${response.ok} messageid=${result?.messageid ?? result?.messageId ?? 'none'} keys=${JSON.stringify(Object.keys(result ?? {}))}`)
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'254195'},body:JSON.stringify({sessionId:'254195',location:'process-scheduled-messages.js:uazapi-response',message:'Uazapi send response',data:{status:response.status,ok:response.ok,messageid:result?.messageid??result?.messageId??null,resultKeys:Object.keys(result??{})},timestamp:Date.now(),hypothesisId:'H-B'})}).catch(()=>{})
-    // #endregion
 
     if (!response.ok) {
       // Detectar e registrar restrição WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)

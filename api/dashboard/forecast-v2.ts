@@ -43,6 +43,7 @@ import {
   getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 import {
@@ -108,12 +109,29 @@ export default async function handler(req: any, res: any): Promise<void> {
       return
     }
 
-    // 5. Validação de funnel_id (idêntico ao v1)
-    const funnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
+    // 5. Validação de funnel_id (opcional) + restrições pessoais de funis (Fase 2)
+    const rawFunnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
+    let funnelId = rawFunnelId
 
     if (funnelId) {
       const valid = await assertFunnelBelongsToCompany(svc, funnelId, companyId)
       if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
+    }
+
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: callerRole, funnelId,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    // Usuário restrito sem funnel_id: auto-selecionar se houver apenas 1 funil permitido
+    if (funnelAccess.allowedFunnelIds !== null && !funnelId) {
+      const allowed = funnelAccess.allowedFunnelIds
+      if (allowed.length === 1) {
+        funnelId = allowed[0]
+      } else {
+        jsonError(res, 400, 'Selecione um funil permitido para visualizar o Dashboard.')
+        return
+      }
     }
 
     // 5.5. Resolver stalled_days a partir das configurações da empresa
@@ -284,7 +302,10 @@ export default async function handler(req: any, res: any): Promise<void> {
       })
     }
 
-    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300')
+    res.setHeader(
+      'Cache-Control',
+      funnelAccess.allowedFunnelIds !== null ? 'no-store' : 's-maxage=120, stale-while-revalidate=300',
+    )
 
     logEndpointCall(svc, {
       companyId,

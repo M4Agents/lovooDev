@@ -928,6 +928,11 @@ export interface UseFunnelsReturn {
   planFunnelLimit: number | null
   /** TRUE quando funnels.length >= planFunnelLimit (e planFunnelLimit não é null). */
   isAtFunnelLimit: boolean
+  /**
+   * IDs dos funis visíveis para este usuário.
+   * null = controle não ativado (usuário vê todos os funis).
+   */
+  visibleFunnelIds: string[] | null
 }
 
 export interface UseFunnelStagesReturn {

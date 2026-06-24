@@ -24,6 +24,7 @@ import {
   getUserFromToken,
   assertMembership,
   assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 import { withTiming, logDashboardError } from '../lib/dashboard/observability.js'
@@ -96,7 +97,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ------------------------------------------------------------------
-    // 4. Snapshot
+    // 4. Verificar restrições pessoais de funis (Fase 2)
+    // ------------------------------------------------------------------
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: membership.role, funnelId: effectiveFunnelId,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    // ------------------------------------------------------------------
+    // 5. Snapshot
     // ------------------------------------------------------------------
     const snapshot = await withTiming(
       'dashboard.funnel_snapshot',

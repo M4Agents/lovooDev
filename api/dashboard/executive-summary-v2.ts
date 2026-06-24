@@ -37,6 +37,8 @@ import {
   extractToken,
   getUserFromToken,
   assertMembership,
+  assertFunnelBelongsToCompany,
+  assertUserFunnelAccess,
   jsonError,
 }                                   from '../lib/dashboard/auth.js'
 import {
@@ -170,7 +172,28 @@ export default async function handler(req: any, res: any): Promise<void> {
     const period     = typeof req.query.period     === 'string' ? req.query.period.trim()     : '30d'
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
-    const funnelId   = typeof req.query.funnel_id  === 'string' ? req.query.funnel_id.trim()  : null
+    let funnelId     = typeof req.query.funnel_id  === 'string' ? req.query.funnel_id.trim()  : null
+
+    // ── 4a. Validar funnel_id (se fornecido) + restrições pessoais (Fase 2) ──
+    if (funnelId) {
+      const valid = await assertFunnelBelongsToCompany(svc, funnelId, companyId)
+      if (!valid) { jsonError(res, 403, 'funnel_id não pertence à empresa'); return }
+    }
+
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: callerRole, funnelId,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    if (funnelAccess.allowedFunnelIds !== null && !funnelId) {
+      const allowed = funnelAccess.allowedFunnelIds
+      if (allowed.length === 1) {
+        funnelId = allowed[0]
+      } else {
+        jsonError(res, 400, 'Selecione um funil permitido para visualizar o Dashboard.')
+        return
+      }
+    }
 
     let resolvedRange: { start: string; end: string }
     try {

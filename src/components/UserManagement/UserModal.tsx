@@ -2,9 +2,9 @@
 // MODAL DE USUÁRIO - CRIAÇÃO/EDIÇÃO SEGURA
 // =====================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload } from 'lucide-react';
+import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload, GitBranch, Check } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions, getAssignableRoles } from '../../services/userApi';
 import { applyTemplateToPermissions, getDefaultTemplateForRole } from '../../services/userTemplates';
@@ -19,6 +19,8 @@ import { supabase } from '../../lib/supabase';
 import { generateMagicLink, updateDisplayName, changePassword } from '../../services/authAdmin';
 import { canAccessCriticalPermissions, CRITICAL_PERMISSIONS } from '../../utils/permissionUtils';
 import { Avatar } from '../Avatar';
+import { funnelApi } from '../../services/funnelApi';
+import type { SalesFunnel } from '../../types/sales-funnel';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -31,7 +33,7 @@ interface UserModalProps {
 export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, user, preSelectedProfileId }) => {
   const { t } = useTranslation('settings.app');
   const { company, currentRole } = useAuth();
-  const { isSaaSAdmin } = useAccessControl();
+  const { isSaaSAdmin, canEditUsers } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -77,6 +79,20 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   // NOVO SISTEMA - Perfis unificados
   const [availableProfiles, setAvailableProfiles] = useState<UserProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
+
+  // ── Funis de Venda ────────────────────────────────────────────────────────
+  // Controle de acesso por funil para manager/seller
+  const [companyFunnels, setCompanyFunnels] = useState<SalesFunnel[]>([]);
+  const [funnelControlEnabled, setFunnelControlEnabled] = useState(false);
+  const [funnelAccessMode, setFunnelAccessMode] = useState<'all' | 'specific'>('all');
+  const [selectedFunnelIds, setSelectedFunnelIds] = useState<string[]>([]);
+  const [defaultFunnelId, setDefaultFunnelId] = useState<string | null>(null);
+  const [funnelSettingsLoading, setFunnelSettingsLoading] = useState(false);
+  const [funnelSettingsSaving, setFunnelSettingsSaving] = useState(false);
+  const [funnelSettingsError, setFunnelSettingsError] = useState<string | null>(null);
+  // Roles que NÃO devem ter controle de funis (acesso total irrestrito)
+  const UNRESTRICTED_ROLES: UserRole[] = ['admin', 'super_admin', 'system_admin', 'partner'];
+  const canHaveFunnelControl = isEditing && user && !UNRESTRICTED_ROLES.includes(user.role);
 
   const isEditing = !!user;
 
@@ -215,6 +231,21 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   }, [isOpen, user, company?.id]);
 
+  // Carregar settings de funis quando o modal abre em modo edição
+  useEffect(() => {
+    if (isOpen && isEditing) {
+      loadFunnelSettings();
+    } else if (!isOpen) {
+      // Reset ao fechar
+      setFunnelControlEnabled(false);
+      setFunnelAccessMode('all');
+      setSelectedFunnelIds([]);
+      setDefaultFunnelId(null);
+      setFunnelSettingsError(null);
+      setCompanyFunnels([]);
+    }
+  }, [isOpen, isEditing, loadFunnelSettings]);
+
   // NOVO: Recarregar perfis quando role do formulário mudar
   useEffect(() => {
     if (isOpen && company?.id && formData.role && availableProfiles.length > 0) {
@@ -253,6 +284,70 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
     }
   }, [preSelectedProfileId, availableProfiles, isOpen, user]);
+
+  // NOVA FUNÇÃO: Carregar settings de funis do usuário (COM FALLBACK SEGURO)
+  const loadFunnelSettings = useCallback(async () => {
+    if (!company?.id || !user?.user_id || !canHaveFunnelControl) return;
+    setFunnelSettingsLoading(true);
+    setFunnelSettingsError(null);
+    try {
+      // Carregar todos os funis da empresa
+      const funnels = await funnelApi.getFunnels(company.id);
+      setCompanyFunnels(funnels);
+
+      // Carregar settings do usuário
+      // FALLBACK TEMPORÁRIO: se a RPC não existir (migrations pendentes),
+      // getUserFunnelSettings retorna null → seção aparece desabilitada
+      const settings = await funnelApi.getUserFunnelSettings(company.id, user.user_id);
+      if (!settings || !settings.isEnabled) {
+        setFunnelControlEnabled(false);
+        setFunnelAccessMode('all');
+        setSelectedFunnelIds([]);
+        setDefaultFunnelId(null);
+      } else {
+        setFunnelControlEnabled(true);
+        setDefaultFunnelId(settings.defaultFunnelId);
+        if (settings.allowedFunnelIds.length > 0) {
+          setFunnelAccessMode('specific');
+          setSelectedFunnelIds(settings.allowedFunnelIds);
+        } else {
+          setFunnelAccessMode('all');
+          setSelectedFunnelIds([]);
+        }
+      }
+    } catch (err) {
+      console.error('[UserModal] Erro ao carregar settings de funis:', err);
+      // Não exibir erro crítico — seção aparece em estado padrão (desabilitada)
+      setCompanyFunnels([]);
+      setFunnelControlEnabled(false);
+    } finally {
+      setFunnelSettingsLoading(false);
+    }
+  }, [company?.id, user?.user_id, canHaveFunnelControl]);
+
+  // Salvar settings de funis do usuário
+  const saveFunnelSettings = useCallback(async () => {
+    if (!company?.id || !user?.user_id) return;
+    setFunnelSettingsSaving(true);
+    setFunnelSettingsError(null);
+    try {
+      await funnelApi.upsertUserFunnelSettings({
+        companyId: company.id,
+        userId: user.user_id,
+        isEnabled: funnelControlEnabled,
+        defaultFunnelId: funnelControlEnabled ? defaultFunnelId : null,
+        allowedFunnelIds: funnelControlEnabled && funnelAccessMode === 'specific' && selectedFunnelIds.length > 0
+          ? selectedFunnelIds
+          : null,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar configuração de funis';
+      setFunnelSettingsError(msg);
+      throw err;
+    } finally {
+      setFunnelSettingsSaving(false);
+    }
+  }, [company?.id, user?.user_id, funnelControlEnabled, funnelAccessMode, selectedFunnelIds, defaultFunnelId]);
 
   // NOVA FUNÇÃO: Carregar perfis disponíveis (COM FALLBACK SEGURO)
   const loadAvailableProfiles = async () => {
@@ -435,6 +530,21 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           await updateCompanyUser(photoOnlyRequest);
         } else {
           await updateCompanyUser(updateRequest);
+        }
+
+        // Salvar configuração de funis (somente para manager/seller, quando admin edita)
+        // FALLBACK TEMPORÁRIO: se RPC não existir, erro é capturado e exibido, mas não bloqueia
+        if (canHaveFunnelControl && canEditUsers) {
+          try {
+            await saveFunnelSettings();
+          } catch (funnelErr) {
+            // Erro de funis não bloqueia o salvamento principal do usuário.
+            // Exibir aviso, não erro crítico.
+            const msg = funnelErr instanceof Error ? funnelErr.message : 'Erro ao salvar controle de funis';
+            console.warn('[UserModal] Aviso ao salvar funis:', msg);
+            setFunnelSettingsError(msg);
+            // Não fazer return — fluxo continua normalmente
+          }
         }
 
       } else {
@@ -1420,6 +1530,159 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     {passwordLoading ? t('users.userModal.sending') : t('users.userModal.resendInvite')}
                   </button>
                 </div>
+
+                {/* Funis de Venda — apenas em modo edição para manager/seller, se admin pode editar */}
+                {isEditing && canHaveFunnelControl && canEditUsers && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <GitBranch className="w-4 h-4 text-indigo-600" />
+                      <h5 className="text-sm font-medium text-indigo-900">Funis de Venda</h5>
+                    </div>
+
+                    {funnelSettingsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-indigo-600">
+                        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        Carregando configuração...
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {/* Toggle: ativar controle */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-indigo-900">Ativar controle de funis</p>
+                            <p className="text-xs text-indigo-700 mt-0.5">
+                              {funnelControlEnabled
+                                ? 'Controle ativo — configure abaixo quais funis este usuário pode acessar'
+                                : 'Desabilitado — usuário vê todos os funis da empresa'}
+                            </p>
+                          </div>
+                          <Toggle
+                            checked={funnelControlEnabled}
+                            onChange={(val) => {
+                              setFunnelControlEnabled(val);
+                              if (!val) {
+                                setFunnelAccessMode('all');
+                                setSelectedFunnelIds([]);
+                                setDefaultFunnelId(null);
+                              }
+                            }}
+                            disabled={funnelSettingsSaving}
+                          />
+                        </div>
+
+                        {/* Configurações quando controle ativo */}
+                        {funnelControlEnabled && (
+                          <>
+                            {/* Modo de acesso: todos ou específicos */}
+                            <div>
+                              <p className="text-xs font-medium text-indigo-800 mb-1.5">Funis acessíveis</p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setFunnelAccessMode('all'); setSelectedFunnelIds([]); }}
+                                  disabled={funnelSettingsSaving}
+                                  className={`flex-1 text-xs px-3 py-1.5 rounded border transition-colors ${
+                                    funnelAccessMode === 'all'
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50'
+                                  }`}
+                                >
+                                  Todos os funis
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFunnelAccessMode('specific')}
+                                  disabled={funnelSettingsSaving}
+                                  className={`flex-1 text-xs px-3 py-1.5 rounded border transition-colors ${
+                                    funnelAccessMode === 'specific'
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50'
+                                  }`}
+                                >
+                                  Funis específicos
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Lista de funis para seleção específica */}
+                            {funnelAccessMode === 'specific' && companyFunnels.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-indigo-800 mb-1.5">Selecionar funis permitidos</p>
+                                <div className="bg-white border border-indigo-200 rounded-md max-h-32 overflow-y-auto divide-y divide-indigo-100">
+                                  {companyFunnels.map(f => (
+                                    <label
+                                      key={f.id}
+                                      className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-indigo-50 transition-colors"
+                                    >
+                                      <div
+                                        className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                          selectedFunnelIds.includes(f.id)
+                                            ? 'bg-indigo-600 border-indigo-600'
+                                            : 'border-gray-300 bg-white'
+                                        }`}
+                                        onClick={() => {
+                                          setSelectedFunnelIds(prev =>
+                                            prev.includes(f.id)
+                                              ? prev.filter(id => id !== f.id)
+                                              : [...prev, f.id]
+                                          );
+                                          // Se o funil padrão foi desmarcado, anular
+                                          if (defaultFunnelId === f.id && selectedFunnelIds.includes(f.id)) {
+                                            setDefaultFunnelId(null);
+                                          }
+                                        }}
+                                      >
+                                        {selectedFunnelIds.includes(f.id) && (
+                                          <Check className="w-3 h-3 text-white" />
+                                        )}
+                                      </div>
+                                      <span className="text-xs text-gray-700 truncate">{f.name}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Funil padrão */}
+                            {companyFunnels.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-indigo-800 mb-1.5">Funil padrão (opcional)</p>
+                                <select
+                                  value={defaultFunnelId || ''}
+                                  onChange={(e) => setDefaultFunnelId(e.target.value || null)}
+                                  disabled={funnelSettingsSaving}
+                                  className="w-full text-xs px-2 py-1.5 border border-indigo-200 rounded bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                >
+                                  <option value="">Sem funil padrão</option>
+                                  {(funnelAccessMode === 'specific' && selectedFunnelIds.length > 0
+                                    ? companyFunnels.filter(f => selectedFunnelIds.includes(f.id))
+                                    : companyFunnels
+                                  ).map(f => (
+                                    <option key={f.id} value={f.id}>{f.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Aviso sobre migrations pendentes ou erro */}
+                        {funnelSettingsError && (
+                          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                            <strong>Aviso:</strong> {funnelSettingsError}
+                          </div>
+                        )}
+
+                        {/* Aviso quando não há funis na empresa */}
+                        {!funnelSettingsLoading && companyFunnels.length === 0 && (
+                          <p className="text-xs text-indigo-600 italic">
+                            Nenhum funil encontrado. Crie funis de venda para ativar o controle.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Informações do Usuário */}
                 {user && (

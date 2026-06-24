@@ -16,6 +16,7 @@ import {
   extractToken,
   getUserFromToken,
   assertMembership,
+  assertUserFunnelAccess,
   jsonError,
 } from '../lib/dashboard/auth.js'
 
@@ -46,15 +47,29 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ------------------------------------------------------------------
-    // 3. Consulta de funis ativos
+    // 3. Verificar restrições pessoais de funis (Fase 2)
     // ------------------------------------------------------------------
-    const { data, error } = await svc
+    const funnelAccess = await assertUserFunnelAccess({
+      svc, userId: user.id, companyId, role: membership.role, funnelId: null,
+    })
+    if (!funnelAccess.ok) { jsonError(res, funnelAccess.status, funnelAccess.error); return }
+
+    // ------------------------------------------------------------------
+    // 4. Consulta de funis ativos (filtrada quando usuário restrito)
+    // ------------------------------------------------------------------
+    let query = svc
       .from('sales_funnels')
       .select('id, name, is_default')
       .eq('company_id', companyId)
       .eq('is_active', true)
       .order('is_default', { ascending: false })
       .order('name')
+
+    if (funnelAccess.allowedFunnelIds !== null) {
+      query = query.in('id', funnelAccess.allowedFunnelIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('[dashboard/funnels] Erro na query:', error.message)
@@ -63,9 +78,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     // ------------------------------------------------------------------
-    // 4. Resposta com cache longo (funis mudam raramente)
+    // 5. Resposta (sem cache quando usuário está restrito — lista personalizada)
     // ------------------------------------------------------------------
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
+    // Usuários restritos recebem lista personalizada — não cachear no CDN
+    if (funnelAccess.allowedFunnelIds !== null) {
+      res.setHeader('Cache-Control', 'no-store')
+    } else {
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
+    }
 
     return res.status(200).json({
       data: data ?? [],
