@@ -29,6 +29,7 @@ import type {
   FunnelStage,
   LeadPositionFilter,
   OpportunityFunnelPosition,
+  SortOption,
   StagePositionState,
   BoardPositionsSnapshot
 } from '../types/sales-funnel'
@@ -58,7 +59,9 @@ export function useBoardPositions(
   stages: FunnelStage[],
   companyId: string | undefined,
   filter: LeadPositionFilter,
-  pageSize = 20
+  pageSize = 20,
+  /** Mapa de overrides de ordenação por etapa. Tem precedência sobre filter.sort_by. */
+  sortByStage?: Map<string, SortOption>
 ): UseBoardPositionsReturn {
   const [stageMap, setStageMap] = useState<Map<string, StagePositionState>>(new Map())
 
@@ -92,7 +95,9 @@ export function useBoardPositions(
             period_start: filter.period_start,
             period_end:   filter.period_end,
             tags:         filter.tags,
-            tags_mode:    filter.tags_mode
+            tags_mode:    filter.tags_mode,
+            // Override por etapa tem precedência sobre o sort global (filter.sort_by)
+            sort_by:      sortByStage?.get(stageId) ?? filter.sort_by
           },
           pageSize,
           offset
@@ -119,9 +124,9 @@ export function useBoardPositions(
         })
       }
     },
-    // fetchStage muda quando funnelId, companyId, filter ou pageSize mudam.
+    // fetchStage muda quando funnelId, companyId, filter, sortByStage ou pageSize mudam.
     // Intencionalmente não inclui `stages` — cada stage é passado como arg.
-    [funnelId, companyId, filter, pageSize]
+    [funnelId, companyId, filter, pageSize, sortByStage]
   )
 
   // --------------------------------------------------

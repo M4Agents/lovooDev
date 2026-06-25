@@ -20,7 +20,7 @@ import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { useAvailableTags } from '../hooks/useAvailableTags'
 import { funnelApi } from '../services/funnelApi'
-import type { CreateFunnelForm, FunnelStage } from '../types/sales-funnel'
+import type { CreateFunnelForm, FunnelStage, SortOption } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
 import { PREDEFINED_PERIODS } from '../types/analytics'
@@ -62,6 +62,7 @@ export default function SalesFunnel() {
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType | null>(null)
+  const [globalSort, setGlobalSort] = useState<SortOption | undefined>(undefined)
 
   const tagDropdownRef = useRef<HTMLDivElement>(null)
   const { tags: availableTags } = useAvailableTags(companyId)
@@ -552,6 +553,40 @@ export default function SalesFunnel() {
                 </div>
               </div>
             </div>
+
+            {/* Seção Ordenação Global */}
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium text-gray-700 flex-shrink-0">
+                  Ordenação global:
+                </span>
+                <p className="text-xs text-gray-400 flex-shrink-0">
+                  Aplica-se a todas as etapas (pode ser sobrescrita por etapa individualmente)
+                </p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {([
+                    { value: undefined,              label: 'Padrão'            },
+                    { value: 'entered_stage_at',     label: 'Entrada na Etapa'  },
+                    { value: 'entered_funnel_at',    label: 'Entrada no Funil'  },
+                    { value: 'lead_created_at',      label: 'Cadastro do Lead'  },
+                    { value: 'last_interaction_at',  label: 'Última Interação'  },
+                  ] as { value: SortOption | undefined; label: string }[]).map(opt => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setGlobalSort(opt.value)}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                        globalSort === opt.value
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -571,6 +606,7 @@ export default function SalesFunnel() {
             selectedPeriod={selectedPeriod}
             selectedTags={selectedTags}
             selectedTagsMode={selectedTagsMode}
+            globalSort={globalSort}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

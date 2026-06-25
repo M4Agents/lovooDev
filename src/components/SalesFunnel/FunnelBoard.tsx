@@ -36,6 +36,7 @@ import { getCompanyUsers } from '../../services/userApi'
 import type {
   LeadPositionFilter,
   FunnelStage,
+  SortOption,
   CreateStageForm,
   UpdateStageForm,
   CloseOpportunityParams,
@@ -67,6 +68,8 @@ interface FunnelBoardProps {
   selectedPeriod?: PeriodFilterType | null
   selectedTags?: string[]
   selectedTagsMode?: 'or' | 'and'
+  /** Ordenação global aplicada a todas as etapas (pode ser sobrescrita por etapa). */
+  globalSort?: SortOption
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -80,7 +83,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedOrigin = '',
   selectedPeriod = null,
   selectedTags = [],
-  selectedTagsMode = 'or'
+  selectedTagsMode = 'or',
+  globalSort
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -91,6 +95,49 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     if (!companyId) return
     getCompanyUsers(companyId).then(setCompanyUsers).catch(() => setCompanyUsers([]))
   }, [companyId])
+
+  // ── Ordenação por etapa ──────────────────────────────────────
+  // Map imutável: stageId → SortOption override.
+  // Quando um override existe, tem precedência sobre globalSort.
+  const [stageSortMap, setStageSortMap] = useState<Map<string, SortOption>>(new Map())
+
+  /** Retorna a ordenação efetiva para uma etapa (override ou global). */
+  const effectiveSort = useCallback(
+    (stageId: string): SortOption | undefined =>
+      stageSortMap.get(stageId) ?? globalSort,
+    [stageSortMap, globalSort]
+  )
+
+  /** True quando a etapa tem um override que difere do globalSort. */
+  const isOverride = useCallback(
+    (stageId: string): boolean =>
+      stageSortMap.has(stageId) && stageSortMap.get(stageId) !== globalSort,
+    [stageSortMap, globalSort]
+  )
+
+  /** True quando a etapa está ordenada por um critério diferente do padrão (position_in_stage).
+   *  Nesse caso, o reorder interno (arrastar dentro da coluna) é bloqueado. */
+  const isDragDisabledForStage = useCallback(
+    (stageId: string): boolean => effectiveSort(stageId) !== undefined,
+    [effectiveSort]
+  )
+
+  /** Atualiza o override de ordenação de uma etapa.
+   *  Passando undefined remove o override (volta ao globalSort). */
+  const handleStageSort = useCallback(
+    (stageId: string, sort: SortOption | undefined) => {
+      setStageSortMap(prev => {
+        const next = new Map(prev)
+        if (sort === undefined) {
+          next.delete(stageId)
+        } else {
+          next.set(stageId, sort)
+        }
+        return next
+      })
+    },
+    []
+  )
 
   const {
     stages,
@@ -110,8 +157,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     period_start: selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
     period_end:   selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
     tags:         selectedTags.length ? selectedTags : undefined,
-    tags_mode:    selectedTags.length ? selectedTagsMode : undefined
-  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode])
+    tags_mode:    selectedTags.length ? selectedTagsMode : undefined,
+    sort_by:      globalSort
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA
@@ -123,7 +171,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     refresh: boardRefresh,
     optimisticMove,
     rollback
-  } = useBoardPositions(funnelId, stages, companyId, filter)
+  } = useBoardPositions(funnelId, stages, companyId, filter, 20, stageSortMap)
 
   const { counts, refresh: refreshCounts } = useStageCounts(funnelId, companyId, filter)
 
@@ -519,6 +567,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const toStageId     = resolvedDroppableId
     const newPosition   = resolvedIndex
 
+    // Bloquear reorder interno quando sort ativo — mover entre colunas continua permitido.
+    if (fromStageId === toStageId && isDragDisabledForStage(fromStageId)) return
+
     const fromStage = stages.find(s => s.id === fromStageId)
     const toStage   = stages.find(s => s.id === toStageId)
     if (!fromStage || !toStage) return
@@ -844,6 +895,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onDetailClick={handleDetailClick}
                 companyUsers={companyUsers}
                 isDraggedOver={isDragging ? visualDragOverStageId === stage.id : undefined}
+                currentSort={effectiveSort(stage.id)}
+                onSortChange={(sort) => handleStageSort(stage.id, sort)}
+                isDragDisabled={isDragDisabledForStage(stage.id)}
+                isOverride={isOverride(stage.id)}
               />
             </div>
           ))}

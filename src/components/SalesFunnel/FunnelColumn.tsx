@@ -7,8 +7,8 @@
 import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen } from 'lucide-react'
-import type { FunnelStage, LeadFunnelPosition } from '../../types/sales-funnel'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, ArrowUpDown, Check } from 'lucide-react'
+import type { FunnelStage, LeadFunnelPosition, SortOption } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -78,6 +78,14 @@ interface FunnelColumnProps {
   companyUsers?: CompanyUser[]
   /** Override do indicador visual de drag-over — corrige cache estale do @hello-pangea/dnd durante scroll horizontal. */
   isDraggedOver?: boolean
+  /** Ordenação ativa nesta coluna (global ou override por etapa). */
+  currentSort?: SortOption
+  /** Callback para alterar a ordenação da coluna. undefined = remover override (voltar ao padrão). */
+  onSortChange?: (sort: SortOption | undefined) => void
+  /** Quando true, o reorder interno (arrastar dentro da coluna) está bloqueado. */
+  isDragDisabled?: boolean
+  /** Quando true, esta coluna tem uma ordenação própria diferente da global. */
+  isOverride?: boolean
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -99,11 +107,24 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   companyId,
   onDetailClick,
   companyUsers,
-  isDraggedOver
+  isDraggedOver,
+  currentSort,
+  onSortChange,
+  isDragDisabled = false,
+  isOverride = false
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const sortMenuRef = useRef<HTMLDivElement>(null)
+
+  const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+    { value: 'entered_stage_at',    label: 'Entrada na Etapa'    },
+    { value: 'entered_funnel_at',   label: 'Entrada no Funil'    },
+    { value: 'lead_created_at',     label: 'Cadastro do Lead'    },
+    { value: 'last_interaction_at', label: 'Última Interação'    },
+  ]
 
   // hasPlaybook usa a mesma lógica do PlaybookModal (trim + videoId válido)
   // para não exibir a ação quando não há conteúdo real
@@ -160,13 +181,26 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   Acima do limite
                 </span>
               )}
+              {isOverride && (
+                <span
+                  className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded font-medium flex-shrink-0 border border-blue-200"
+                  title="Esta etapa usa uma ordenação diferente da ordenação global"
+                >
+                  Personalizado
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-xs text-gray-500">
                 {displayCount === 1
                   ? t('board.column.opportunityCount_one', { count: displayCount })
                   : t('board.column.opportunityCount_other', { count: displayCount })}
               </p>
+              {currentSort && (
+                <p className="text-xs text-blue-500 font-medium" title="Ordenação ativa — arraste entre etapas funciona normalmente; reorder interno desabilitado">
+                  {SORT_OPTIONS.find(o => o.value === currentSort)?.label}
+                </p>
+              )}
               {(totalLabelFromLoaded || displayTotalValue > 0) && (
                 <>
                   <span className="text-xs text-gray-300">•</span>
@@ -182,6 +216,51 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Botão de ordenação da coluna */}
+          {onSortChange && (
+            <div className="relative" ref={sortMenuRef}>
+              <button
+                type="button"
+                onClick={() => setSortMenuOpen(prev => !prev)}
+                onBlur={() => setTimeout(() => setSortMenuOpen(false), 150)}
+                className={`p-1.5 rounded-md transition-colors ${currentSort ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-600 hover:bg-white'}`}
+                title="Reordenar oportunidades"
+              >
+                <ArrowUpDown className="w-4 h-4" />
+              </button>
+
+              {sortMenuOpen && (
+                <div className="absolute right-0 top-8 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                  <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Reordenar por
+                  </p>
+                  {/* Opção Padrão */}
+                  <button
+                    type="button"
+                    onClick={() => { setSortMenuOpen(false); onSortChange(undefined) }}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <span>Padrão (posição manual)</span>
+                    {!currentSort && <Check className="w-4 h-4 text-blue-500" />}
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  {/* Opções de ordenação */}
+                  {SORT_OPTIONS.map(opt => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => { setSortMenuOpen(false); onSortChange(opt.value) }}
+                      className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <span>{opt.label}</span>
+                      {currentSort === opt.value && <Check className="w-4 h-4 text-blue-500" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {onAddLead && (
             <button
               onClick={() => onAddLead(stage.id)}

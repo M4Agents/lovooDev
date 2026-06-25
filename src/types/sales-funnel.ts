@@ -597,6 +597,13 @@ export interface StageFilter {
   stage_type?: 'active' | 'won' | 'lost'
 }
 
+/** Critérios disponíveis para ordenação de oportunidades no Kanban. */
+export type SortOption =
+  | 'entered_stage_at'
+  | 'entered_funnel_at'
+  | 'lead_created_at'
+  | 'last_interaction_at'
+
 export interface LeadPositionFilter {
   funnel_id: string
   stage_id?: string
@@ -611,6 +618,8 @@ export interface LeadPositionFilter {
   tags_mode?: 'or' | 'and'
   min_value?: number
   max_value?: number
+  /** Ordenação dinâmica das oportunidades. NULL → comportamento padrão (position_in_stage). */
+  sort_by?: SortOption
 }
 
 // =====================================================

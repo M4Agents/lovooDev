@@ -1042,7 +1042,8 @@ class FunnelApiService {
         p_tag_ids:     filter?.tags?.length ? filter.tags      : null,
         p_tag_mode:    filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
         p_limit:       limit,
-        p_offset:      offset
+        p_offset:      offset,
+        p_sort_by:     filter?.sort_by                         ?? null
       })
 
       if (error) throw error
