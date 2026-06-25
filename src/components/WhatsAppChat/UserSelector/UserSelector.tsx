@@ -91,6 +91,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Botão Principal */}
       <button
+        type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={`w-full px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg hover:bg-white hover:border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 flex items-center justify-between ${
@@ -134,6 +135,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
           {/* Opção "Sem responsável" */}
           {showNoneOption && (
             <button
+              type="button"
               onClick={() => handleSelect('')}
               className={`
                 w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
@@ -169,6 +171,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
               const authUserId = user.user_id ?? user.id
               return (
                 <button
+                  type="button"
                   key={user.id}
                   onClick={() => handleSelect(authUserId)}
                   className={`
