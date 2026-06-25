@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check } from 'lucide-react'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check, ArrowUpDown, ChevronRight } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition, SortOption } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
@@ -115,6 +115,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sortSubOpen, setSortSubOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -254,32 +255,51 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                     </button>
                   )}
 
-                  {/* Reordenar por — logo após Editar etapa */}
+                  {/* Reordenar por — submenu flyout lateral */}
                   {onSortChange && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
-                      <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Reordenar por
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => { setMenuOpen(false); onSortChange(undefined) }}
-                        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      <div
+                        className="relative"
+                        onMouseEnter={() => setSortSubOpen(true)}
+                        onMouseLeave={() => setSortSubOpen(false)}
                       >
-                        <span>Padrão (posição manual)</span>
-                        {!currentSort && <Check className="w-4 h-4 text-blue-500" />}
-                      </button>
-                      {SORT_OPTIONS.map(opt => (
                         <button
                           type="button"
-                          key={opt.value}
-                          onClick={() => { setMenuOpen(false); onSortChange(opt.value) }}
-                          className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                          className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors ${sortSubOpen ? 'bg-gray-50 text-gray-900' : 'text-gray-700 hover:bg-gray-50'}`}
                         >
-                          <span>{opt.label}</span>
-                          {currentSort === opt.value && <Check className="w-4 h-4 text-blue-500" />}
+                          <div className="flex items-center gap-2.5">
+                            <ArrowUpDown className={`w-4 h-4 ${currentSort ? 'text-blue-500' : 'text-gray-400'}`} />
+                            <span>Reordenar por</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
                         </button>
-                      ))}
+
+                        {sortSubOpen && (
+                          <div className="absolute left-full top-0 w-52 bg-white border border-gray-200 rounded-lg shadow-lg py-1 -ml-px">
+                            <button
+                              type="button"
+                              onClick={() => { setSortSubOpen(false); setMenuOpen(false); onSortChange(undefined) }}
+                              className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <span>Padrão (posição manual)</span>
+                              {!currentSort && <Check className="w-4 h-4 text-blue-500" />}
+                            </button>
+                            <div className="border-t border-gray-100 my-1" />
+                            {SORT_OPTIONS.map(opt => (
+                              <button
+                                type="button"
+                                key={opt.value}
+                                onClick={() => { setSortSubOpen(false); setMenuOpen(false); onSortChange(opt.value) }}
+                                className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <span>{opt.label}</span>
+                                {currentSort === opt.value && <Check className="w-4 h-4 text-blue-500" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
 
