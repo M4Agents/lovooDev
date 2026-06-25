@@ -373,9 +373,10 @@ async function processCommentEvent(ev, companyId, connectionId, connection, svc)
   const detail = rpc?.skipped ? rpc.reason : (rpc?.ok ? null : (rpc?.error ?? 'rpc_returned_not_ok'));
   await updateWebhookEvent(svc, eventId, status, detail);
 
-  // Enriquecer foto do comentarista (fire-and-forget — não bloqueia resposta Meta)
+  // Enriquecer foto do comentarista (awaited — fire-and-forget não funciona em Vercel serverless,
+  // pois a função é encerrada logo após res.status(200). Meta permite até 20s para resposta.)
   if (rpc?.ok && connection?.access_token_enc) {
-    enrichCommentAvatar(ev.igCommentId, ev.igUserId, companyId, connection, svc).catch(() => {});
+    await enrichCommentAvatar(ev.igCommentId, ev.igUserId, companyId, connection, svc);
   }
 }
 
@@ -390,7 +391,10 @@ async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection,
     let accessToken;
     try {
       accessToken = decryptInstagramToken(connection.access_token_enc);
-    } catch {
+    } catch (decryptErr) {
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'decrypt_failed',data:{igCommentId,igUserId,err:decryptErr?.message},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -399,8 +403,16 @@ async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection,
     profileUrl.searchParams.set('fields',       'username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'fetching_profile',data:{igCommentId,igUserId,url:profileUrl.toString().replace(accessToken,'[TOKEN]')},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
     const profileData = await profileRes.json();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'profile_response',data:{igCommentId,status:profileRes.status,ok:profileRes.ok,hasError:!!profileData.error,errorMsg:profileData.error?.message,hasPic:!!profileData.profile_pic},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (profileData.error || !profileRes.ok) return;
 
@@ -414,16 +426,26 @@ async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection,
       filename:  `ig_comment_${igUserId}.jpg`,
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'storage_upload',data:{igCommentId,avatarUrl},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!avatarUrl) return;
 
     // Atualizar ig_user_avatar no registro do comentário
-    await svc
+    const { error: updateErr } = await svc
       .from('instagram_comments')
       .update({ ig_user_avatar: avatarUrl })
       .eq('ig_comment_id', igCommentId);
 
-  } catch {
-    // Silencioso — não impacta fluxo principal
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'db_update',data:{igCommentId,success:!updateErr,err:updateErr?.message},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'unexpected_error',data:{igCommentId,err:err?.message},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   }
 }
 
