@@ -22,12 +22,15 @@ import { validateInstagramCaller,
          CONNECT_ROLES }                from '../../lib/instagram/validateInstagramCaller.js';
 import { signState }                    from '../../lib/instagram/instagramState.js';
 
-// Scopes aprovados no App Review (Live mode).
-// instagram_business_manage_comments removido: Not approved no App Review atual.
-// Pode ser readicionado após nova submissão e aprovação pela Meta.
+// ATENÇÃO: esta configuração existe APENAS na branch meta-comments-review.
+// Finalidade: App Review da Meta — gravação do screencast de comentários.
+// NÃO fazer merge desta branch na main antes da aprovação definitiva de
+// instagram_business_manage_comments pela Meta.
+// Após aprovação, reintroduzir o scope na main via PR revisado.
 const IG_SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_messages',
+  'instagram_business_manage_comments',
 ].join(',');
 
 export default async function handler(req, res) {
