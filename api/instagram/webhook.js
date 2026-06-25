@@ -387,65 +387,64 @@ async function processCommentEvent(ev, companyId, connectionId, connection, svc)
 
 async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection, svc) {
   try {
-    // Descriptografar token
     let accessToken;
     try {
       accessToken = decryptInstagramToken(connection.access_token_enc);
     } catch (decryptErr) {
-      // #region agent log
-      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'decrypt_failed',data:{igCommentId,igUserId,err:decryptErr?.message},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+      console.error('[enrichCommentAvatar] decrypt_failed', { igCommentId, igUserId, err: decryptErr?.message });
       return;
     }
 
-    // Buscar perfil do comentarista na Graph API
+    // Solicitar profile_pic (messaging context) e profile_picture_url (business context)
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${igUserId}`);
-    profileUrl.searchParams.set('fields',       'username,profile_pic');
+    profileUrl.searchParams.set('fields',       'username,profile_pic,profile_picture_url');
     profileUrl.searchParams.set('access_token', accessToken);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'fetching_profile',data:{igCommentId,igUserId,url:profileUrl.toString().replace(accessToken,'[TOKEN]')},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    console.log('[enrichCommentAvatar] fetching_profile', { igCommentId, igUserId });
 
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
     const profileData = await profileRes.json();
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'profile_response',data:{igCommentId,status:profileRes.status,ok:profileRes.ok,hasError:!!profileData.error,errorMsg:profileData.error?.message,hasPic:!!profileData.profile_pic},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    console.log('[enrichCommentAvatar] profile_response', {
+      igCommentId,
+      status:              profileRes.status,
+      ok:                  profileRes.ok,
+      hasError:            !!profileData.error,
+      errorMsg:            profileData.error?.message  ?? null,
+      errorCode:           profileData.error?.code     ?? null,
+      profile_pic:         profileData.profile_pic         ?? 'NOT_PRESENT',
+      profile_picture_url: profileData.profile_picture_url ?? 'NOT_PRESENT',
+      username:            profileData.username             ?? 'NOT_PRESENT',
+    });
 
     if (profileData.error || !profileRes.ok) return;
 
-    const picUrl = profileData.profile_pic ?? null;
-    if (!picUrl) return;
+    // Tentar profile_pic (DM context) e profile_picture_url (Business API) como fallback
+    const picUrl = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
+    if (!picUrl) {
+      console.warn('[enrichCommentAvatar] no_pic_url — ambos os campos ausentes', { igCommentId, igUserId });
+      return;
+    }
 
-    // Upload permanente no Supabase Storage
     const avatarUrl = await uploadAvatarToStorage(svc, {
       cdnUrl:    picUrl,
       companyId,
       filename:  `ig_comment_${igUserId}.jpg`,
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'storage_upload',data:{igCommentId,avatarUrl},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    console.log('[enrichCommentAvatar] storage_upload', { igCommentId, avatarUrl });
 
     if (!avatarUrl) return;
 
-    // Atualizar ig_user_avatar no registro do comentário
     const { error: updateErr } = await svc
       .from('instagram_comments')
       .update({ ig_user_avatar: avatarUrl })
       .eq('ig_comment_id', igCommentId);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'db_update',data:{igCommentId,success:!updateErr,err:updateErr?.message},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    console.log('[enrichCommentAvatar] db_update', { igCommentId, success: !updateErr, err: updateErr?.message ?? null });
 
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'449c25'},body:JSON.stringify({sessionId:'449c25',location:'webhook.js:enrichCommentAvatar',message:'unexpected_error',data:{igCommentId,err:err?.message},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
+    console.error('[enrichCommentAvatar] unexpected_error', { igCommentId, err: err?.message });
   }
 }
 
