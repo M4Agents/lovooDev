@@ -24,9 +24,14 @@ export default async function handler(req, res) {
 }
 
 async function processVisitorData(params) {
-  const apiUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-  const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
-  
+  const apiUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const apiKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!apiUrl || !apiKey) {
+    console.error('[tracking] Missing Supabase environment variables');
+    return null;
+  }
+
   try {
     console.log('Processing visitor data via server-side:', params);
     

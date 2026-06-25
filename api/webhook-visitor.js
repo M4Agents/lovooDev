@@ -61,10 +61,15 @@ async function createVisitorDirectSQL(params) {
   try {
     // Use the Supabase client with direct SQL execution
     const { createClient } = await import('@supabase/supabase-js');
-    
-    const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0emRzeXd1bmxwYmd4a3BodWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxOTIzMDMsImV4cCI6MjA2Mzc2ODMwM30.Y_h7mr36VPO1yX_rYB4IvY2C3oFodQsl-ncr0_kVO8E';
-    
+
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[tracking] Missing Supabase environment variables');
+      return { success: false, error: 'Server configuration error' };
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Generate UUID for session_id if not valid
