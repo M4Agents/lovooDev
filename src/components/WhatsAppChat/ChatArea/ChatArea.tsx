@@ -623,6 +623,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   }, [messages, isUserAtBottom])
 
+  // Intervalo do polling de fallback.
+  // O mecanismo principal de atualização é o Supabase Realtime (useChatRealtime).
+  // Este polling existe apenas como segurança: garante sincronização caso o Realtime
+  // sofra queda silenciosa ou latência elevada. O valor foi aumentado de 3 s para 10 s
+  // para reduzir a carga sobre o PostgREST e aliviar a pressão no pool de conexões
+  // do Supabase, sem impacto funcional observável enquanto o Realtime estiver saudável.
+  const CHAT_FALLBACK_POLLING_INTERVAL = 10000
+
   // 🔧 BACKUP: Polling para mensagens recebidas (fallback do realtime)
   useEffect(() => {
     if (!conversationId || !companyId) return
@@ -658,7 +666,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       } catch (error) {
         console.warn('Erro no polling backup:', error)
       }
-    }, 3000) // Polling a cada 3 segundos
+    }, CHAT_FALLBACK_POLLING_INTERVAL)
 
     // Cleanup
     return () => {
