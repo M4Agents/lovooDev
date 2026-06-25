@@ -25,7 +25,9 @@ import {
   List,
   MapPin,
   Globe,
-  Share2
+  Share2,
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 
 interface Lead {
@@ -111,7 +113,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   onSave
 }) => {
   const { company } = useAuth();
-  const { canAssignLead, currentUserId } = useLeadPermissions();
+  const { canAssignLead, currentUserId, isRestrictedToOwnLeads } = useLeadPermissions();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
@@ -172,6 +174,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [cepLoading, setCepLoading] = useState(false);
+
+  // ── Detecção de duplicatas ──────────────────────────────────────────────
+  type DuplicateAlertState = {
+    type: 'restricted' | 'unrestricted';
+    existingLead: { id: number; name: string; phone?: string; email?: string; responsible_user_id?: string | null };
+    responsibleName: string;
+    matchedBy: 'phone' | 'email';
+  };
+  const [duplicateAlert, setDuplicateAlert] = useState<DuplicateAlertState | null>(null);
+  // Lead existente carregado quando o usuário confirma "editar duplicata"
+  const [internalEditLead, setInternalEditLead] = useState<Lead | null>(null);
+
+  // Lead ativo: prioriza modo edição interno (duplicata confirmada) sobre prop externa
+  const activeLead = internalEditLead ?? lead;
 
   // Função para carregar tags do lead
   const loadLeadTags = async (leadId: number) => {
@@ -274,11 +290,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           customValues[value.field_id] = value.value;
         });
         setCustomFieldValues(customValues);
-        console.log('✅ LEADMODAL - FORM DATA PREENCHIDO:', {
-          name: lead.name,
-          email: lead.email,
-          phone: lead.phone
-        });
       } else {
         // Criação - limpar formulário
         setFormData({
@@ -349,12 +360,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   // O guard `prev.responsible_user_id || currentUserId` preserva qualquer valor
   // já definido no estado antes do currentUserId carregar.
   useEffect(() => {
-    if (!isOpen || lead || !currentUserId) return;
+    if (!isOpen || activeLead || !currentUserId) return;
     setFormData(prev => ({
       ...prev,
       responsible_user_id: prev.responsible_user_id || currentUserId,
     }));
-  }, [isOpen, lead, currentUserId]);
+  }, [isOpen, activeLead, currentUserId]);
+
+  // Limpar estados de duplicata ao fechar o modal
+  useEffect(() => {
+    if (!isOpen) {
+      setDuplicateAlert(null);
+      setInternalEditLead(null);
+    }
+  }, [isOpen]);
 
 
   // NOVO: Função para buscar CEP
@@ -392,6 +411,137 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
   };
 
+  // ── Verifica se já existe lead com mesmo telefone ou e-mail na empresa ──
+  const checkDuplicateLead = async (): Promise<boolean> => {
+    if (!company?.id) return false;
+
+    const phoneRaw = formData.phone.replace(/\D/g, '');
+    const email = formData.email.trim().toLowerCase();
+
+    // Normaliza telefone (mesma lógica de api.createLead)
+    let phoneNorm = '';
+    if (phoneRaw.length === 10 || phoneRaw.length === 11) {
+      phoneNorm = '55' + phoneRaw;
+    } else if (phoneRaw.length > 0) {
+      phoneNorm = phoneRaw;
+    }
+    const right11 = phoneNorm.slice(-11);
+    const lookupValues = phoneNorm.length >= 10 ? [...new Set([phoneNorm, right11])] : [];
+
+    const conditions: string[] = [];
+    if (lookupValues.length > 0) {
+      conditions.push(`phone_normalized.in.(${lookupValues.join(',')})`);
+    }
+    if (email && email.includes('@')) {
+      conditions.push(`email.ilike.${email}`);
+    }
+    if (conditions.length === 0) return false;
+
+    const { data: found } = await supabase
+      .from('leads')
+      .select('id, name, phone, email, responsible_user_id')
+      .eq('company_id', company.id)
+      .is('deleted_at', null)
+      .or(conditions.join(','))
+      .limit(1)
+      .maybeSingle();
+
+    if (!found) return false;
+
+    const responsible = companyUsers.find(
+      u => (u.user_id ?? u.id) === found.responsible_user_id
+    );
+    const responsibleName = responsible
+      ? (responsible.display_name || responsible.email)
+      : found.responsible_user_id
+        ? 'usuário não identificado'
+        : null;
+
+    const matchedBy: 'phone' | 'email' =
+      lookupValues.length > 0 && found.phone ? 'phone' : 'email';
+
+    setDuplicateAlert({
+      type: isRestrictedToOwnLeads() ? 'restricted' : 'unrestricted',
+      existingLead: found,
+      responsibleName: responsibleName ?? '',
+      matchedBy,
+    });
+    return true;
+  };
+
+  // ── Confirma edição de lead duplicado (usuário sem restrição) ───────────
+  const handleEditDuplicate = async () => {
+    if (!duplicateAlert) return;
+    setLoading(true);
+    try {
+      const { data: fullLead } = await supabase
+        .from('leads')
+        .select('*, lead_custom_values(*)')
+        .eq('id', duplicateAlert.existingLead.id)
+        .single();
+      if (!fullLead) return;
+
+      // Popula o formulário com os dados do lead existente
+      setFormData({
+        name: fullLead.name || '',
+        email: fullLead.email || '',
+        phone: fullLead.phone || '',
+        origin: fullLead.origin || 'manual',
+        status: fullLead.status || 'novo',
+        interest: fullLead.interest || '',
+        responsible_user_id: fullLead.responsible_user_id || '',
+        visitor_id: fullLead.visitor_id || '',
+        record_type: fullLead.record_type || 'Lead',
+      });
+      setSocialData({
+        instagram: extractInstagramUsername(fullLead.instagram || ''),
+        linkedin: extractLinkedInUsername(fullLead.linkedin || ''),
+        tiktok: extractTikTokUsername(fullLead.tiktok || ''),
+        cargo: fullLead.cargo || '',
+        poder_investimento: fullLead.poder_investimento || '',
+        data_nascimento: fullLead.data_nascimento || '',
+      });
+      setAddressData({
+        cep: fullLead.cep || '',
+        estado: fullLead.estado || '',
+        cidade: fullLead.cidade || '',
+        endereco: fullLead.endereco || '',
+        numero: fullLead.numero || '',
+        bairro: fullLead.bairro || '',
+        complemento: fullLead.complemento || '',
+      });
+      setAdData({
+        campanha: fullLead.campanha || '',
+        conjunto_anuncio: fullLead.conjunto_anuncio || '',
+        anuncio: fullLead.anuncio || '',
+      });
+      setCompanyData({
+        company_name: fullLead.company_name || '',
+        company_cnpj: fullLead.company_cnpj || '',
+        company_razao_social: fullLead.company_razao_social || '',
+        company_nome_fantasia: fullLead.company_nome_fantasia || '',
+        company_cep: fullLead.company_cep || '',
+        company_cidade: fullLead.company_cidade || '',
+        company_estado: fullLead.company_estado || '',
+        company_endereco: fullLead.company_endereco || '',
+        company_telefone: fullLead.company_telefone || '',
+        company_email: fullLead.company_email || '',
+        company_site: fullLead.company_site || '',
+      });
+      const customValues: Record<string, any> = {};
+      fullLead.lead_custom_values?.forEach((v: any) => {
+        customValues[v.field_id] = v.value;
+      });
+      setCustomFieldValues(customValues);
+      if (fullLead.id) loadLeadTags(fullLead.id);
+
+      setInternalEditLead(fullLead as Lead);
+      setDuplicateAlert(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company?.id) return;
@@ -418,7 +568,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (companyData.company_telefone && !validatePhone(companyData.company_telefone)) {
       errors.company_telefone = 'Telefone inválido';
     }
-    if (!lead?.id && formData.phone && !validatePhone(formData.phone)) {
+    if (!activeLead?.id && formData.phone && !validatePhone(formData.phone)) {
       errors.phone = 'Telefone inválido. Informe DDD + número (10 ou 11 dígitos).';
     }
 
@@ -428,26 +578,28 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
 
     // Verificar se company está disponível
-    console.log('🔍 LEADMODAL - COMPANY CONTEXT:', company);
-    console.log('🔍 LEADMODAL - COMPANY ID:', company?.id);
-    
     if (!company?.id) {
-      console.error('❌ LEADMODAL - COMPANY ID MISSING:', { company, companyId: company?.id });
       alert('Erro: Empresa não identificada. Recarregue a página e tente novamente.');
       return;
     }
 
+    // ── Verificação de duplicata (somente em criação) ────────────────────
+    if (!activeLead?.id) {
+      setLoading(true);
+      try {
+        const isDuplicate = await checkDuplicateLead();
+        if (isDuplicate) {
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // Se a verificação falhar, prossegue com a criação normalmente
+        setLoading(false);
+      }
+    }
+
     setLoading(true);
     try {
-      console.log('🔍 LEADMODAL - FORM DATA:', formData);
-      console.log('🔍 LEADMODAL - FORM DATA COMPANY_ID:', (formData as any).company_id);
-      console.log('🔍 LEADMODAL - FORM DATA EMAIL:', formData.email);
-      console.log('🔍 LEADMODAL - EMAIL TIPO:', typeof formData.email);
-      console.log('🔍 LEADMODAL - EMAIL VAZIO?:', formData.email === '');
-      console.log('🔍 LEADMODAL - COMPANY DATA:', companyData);
-      console.log('🔍 LEADMODAL - COMPANY DATA COMPANY_ID:', (companyData as any).company_id);
-      console.log('🔍 LEADMODAL - CUSTOM FIELDS:', customFieldValues);
-      
       const leadData = {
         ...formData,
         ...companyData,
@@ -457,7 +609,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         // - Criação com canAssignLead: usa a escolha do formulário.
         // - Criação sem canAssignLead (seller): força currentUserId, independente do estado do form.
         responsible_user_id: (() => {
-          if (lead?.id) return formData.responsible_user_id || null;
+          if (activeLead?.id) return formData.responsible_user_id || null;
           if (canAssignLead()) return formData.responsible_user_id || null;
           return currentUserId || null;
         })(),
@@ -489,26 +641,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         anuncio: adData.anuncio || undefined
       };
       
-      // #region agent log
-      const _dbgLMPhone = (leadData as any).phone;
-      const _dbgLMDigits = _dbgLMPhone?.replace(/\D/g, '');
-      console.log(`[DEBUG-449c25][LeadModal] phone="${_dbgLMPhone}" (antes da normalização em api.ts) digits="${_dbgLMDigits}" len=${_dbgLMDigits?.length}`);
-      // #endregion
-      console.log('🔍 LEADMODAL - LEAD DATA FINAL:', leadData);
-      console.log('🔍 LEADMODAL - COMPANY_ID FINAL:', leadData.company_id);
-      console.log('🔍 LEADMODAL - VERIFICAR SE COMPANY_ID FOI SOBRESCRITO:', {
-        formDataCompanyId: (formData as any).company_id,
-        companyDataCompanyId: (companyData as any).company_id,
-        contextCompanyId: company?.id,
-        finalCompanyId: leadData.company_id
-      });
-
       let savedLeadId: number;
       
-      if (lead?.id) {
+      if (activeLead?.id) {
         // Edição
-        await api.updateLead(lead.id, leadData);
-        savedLeadId = lead.id;
+        await api.updateLead(activeLead.id, leadData);
+        savedLeadId = activeLead.id;
 
         // [chat-sync] Fire-and-forget: propagar responsável para conversas do lead.
         // Não bloqueia UX, nunca lança erro, nunca chega ao catch principal.
@@ -517,14 +655,14 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             ? formData.responsible_user_id
             : null
 
-        if (lead.id) {
+        if (activeLead.id) {
           supabase.auth.getSession().then(({ data: sessionData }) => {
             const syncToken = sessionData.session?.access_token
             if (!syncToken) return
             fetch('/api/leads/sync-chat-assignment', {
               method:  'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
-              body:    JSON.stringify({ leadId: lead.id, responsibleUserId: normalizedResponsibleId ?? null }),
+              body:    JSON.stringify({ leadId: activeLead.id, responsibleUserId: normalizedResponsibleId ?? null }),
             }).catch(() => {})
           }).catch(() => {})
         }
@@ -540,16 +678,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         await tagsApi.updateLeadTags(savedLeadId, tagIds);
       }
 
-      console.log('✅ LEADMODAL - SUCESSO:', 'Lead e tags salvos com sucesso');
       onSave();
       onClose();
     } catch (error) {
-      console.error('❌ LEADMODAL - ERRO GERAL:', error);
-      console.error('❌ LEADMODAL - DETALHES:', {
-        message: (error as any)?.message,
-        code: (error as any)?.code,
-        details: (error as any)?.details
-      });
       alert('Erro ao salvar lead. Tente novamente.');
     } finally {
       setLoading(false);
@@ -767,7 +898,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {lead ? 'Editar Lead' : 'Novo Lead'}
+            {activeLead ? 'Editar Lead' : 'Novo Lead'}
           </h2>
           <button
             onClick={onClose}
@@ -805,7 +936,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 <Building className="w-4 h-4 inline mr-2" />
                 Empresa
               </button>
-              {lead?.id && (
+              {activeLead?.id && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('entries')}
@@ -1522,7 +1653,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Histórico de Entradas */}
-          {activeTab === 'entries' && lead?.id && company?.id && (
+          {activeTab === 'entries' && activeLead?.id && company?.id && (
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Histórico de Entradas
@@ -1530,7 +1661,73 @@ export const LeadModal: React.FC<LeadModalProps> = ({
               <p className="text-sm text-gray-500">
                 Registro de cada vez que este lead chegou ao sistema, por qualquer canal.
               </p>
-              <LeadEntriesSection leadId={lead.id} companyId={company.id} />
+              <LeadEntriesSection leadId={activeLead.id} companyId={company.id} />
+            </div>
+          )}
+
+          {/* ── Alerta de Lead Duplicado ─────────────────────────────────── */}
+          {duplicateAlert && (
+            <div className={`rounded-lg border p-4 ${
+              duplicateAlert.type === 'restricted'
+                ? 'bg-red-50 border-red-200'
+                : 'bg-amber-50 border-amber-200'
+            }`}>
+              <div className="flex gap-3">
+                {duplicateAlert.type === 'restricted' ? (
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${
+                    duplicateAlert.type === 'restricted' ? 'text-red-800' : 'text-amber-800'
+                  }`}>
+                    Lead já cadastrado
+                  </p>
+                  <p className={`text-sm mt-1 ${
+                    duplicateAlert.type === 'restricted' ? 'text-red-700' : 'text-amber-700'
+                  }`}>
+                    Já existe o lead <strong>"{duplicateAlert.existingLead.name}"</strong> com
+                    este {duplicateAlert.matchedBy === 'phone' ? 'telefone' : 'e-mail'}.
+                    {duplicateAlert.responsibleName
+                      ? <> Atribuído a <strong>{duplicateAlert.responsibleName}</strong>.</>
+                      : ' Sem responsável definido.'
+                    }
+                  </p>
+                  {duplicateAlert.type === 'restricted' ? (
+                    <p className="text-sm text-red-700 mt-1">
+                      Você não tem acesso a este lead. Entre em contato com o administrador do sistema para obter autorização ou solicitar a atribuição.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-700 mt-1">
+                      Deseja abrir o cadastro existente para edição?
+                    </p>
+                  )}
+                  <div className="flex gap-2 mt-3">
+                    {duplicateAlert.type === 'unrestricted' && (
+                      <button
+                        type="button"
+                        onClick={handleEditDuplicate}
+                        disabled={loading}
+                        className="px-3 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50"
+                      >
+                        {loading ? 'Carregando...' : 'Sim, abrir para edição'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateAlert(null)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        duplicateAlert.type === 'restricted'
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                      }`}
+                    >
+                      {duplicateAlert.type === 'restricted' ? 'Entendi' : 'Não, cancelar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

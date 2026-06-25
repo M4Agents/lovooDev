@@ -848,19 +848,10 @@ export const api = {
             .maybeSingle();
 
           if (existingLead) {
-            // #region agent log
-            console.log(`[DEBUG-449c25][api.createLead] DEDUP HIT — lead existente id=${existingLead.id} phone="${existingLead.phone}" origin="${existingLead.origin}"`);
-            // #endregion
             return existingLead;
           }
         }
       }
-
-      // #region agent log
-      const _dbgPhone = (leadData as any).phone;
-      const _dbgDigits = _dbgPhone?.replace(/\D/g, '');
-      console.log(`[DEBUG-449c25][api.createLead] INSERTING phone="${_dbgPhone}" digits="${_dbgDigits}" len=${_dbgDigits?.length} origin="${(leadData as any).origin}"`);
-      // #endregion
 
       // Verificar sessão ativa antes do INSERT.
       // Se o refresh token expirou, o cliente Supabase limpa a sessão e a
@@ -944,12 +935,6 @@ export const api = {
               .in('id', orphanIds)
               .eq('company_id', lead.company_id)
 
-            // #region agent log
-            console.log(`[debug-449c25][createLead] re-vínculo de conversas órfãs`, {
-              new_lead_id: lead.id, phone: (leadData as any).phone,
-              orphanIds, relinkError: relinkError?.message ?? null,
-            })
-            // #endregion
           } catch (relinkErr) {
             // Nunca bloqueia a criação do lead — apenas loga
             console.error('[api.createLead] relink orphan conversations failed:', relinkErr)
