@@ -105,9 +105,17 @@ export const InstagramCommentDetail: React.FC<InstagramCommentDetailProps> = ({
       {/* Header */}
       <div className="px-6 py-4 border-b border-slate-100">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
-            {(comment.ig_username ?? '?').slice(0, 2).toUpperCase()}
-          </div>
+          {comment.ig_user_avatar ? (
+            <img
+              src={comment.ig_user_avatar}
+              alt={comment.ig_username ?? 'avatar'}
+              className="flex-shrink-0 w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+              {(comment.ig_username ?? '?').slice(0, 2).toUpperCase()}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800">
               @{comment.ig_username ?? t('instagram.participantUnknown')}

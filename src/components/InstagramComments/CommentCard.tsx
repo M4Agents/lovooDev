@@ -36,9 +36,17 @@ export const CommentCard: React.FC<CommentCardProps> = ({ comment, isSelected, o
     >
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
-          {initials}
-        </div>
+        {comment.ig_user_avatar ? (
+          <img
+            src={comment.ig_user_avatar}
+            alt={comment.ig_username ?? 'avatar'}
+            className="flex-shrink-0 w-9 h-9 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+            {initials}
+          </div>
+        )}
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">

@@ -31,6 +31,8 @@ export interface InstagramComment {
   ig_media_type: string | null
   ig_user_id: string
   ig_username: string | null
+  /** URL permanente da foto de perfil do comentarista (Supabase Storage). Null enquanto não carregada. */
+  ig_user_avatar: string | null
   content: string
   parent_comment_id: string | null
   lead_id: number | null

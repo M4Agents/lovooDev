@@ -175,7 +175,7 @@ async function processEntry(entry, svc) {
 
   // Processar comentários
   for (const ev of parseCommentEvents(entry)) {
-    await processCommentEvent(ev, companyId, connectionId, svc);
+    await processCommentEvent(ev, companyId, connectionId, connection, svc);
   }
 
   // Processar reações inbound
@@ -336,10 +336,10 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 }
 
 // =============================================================================
-// Comentário: salvar event log + chamar RPC
+// Comentário: salvar event log + chamar RPC + enriquecer foto (fire-and-forget)
 // =============================================================================
 
-async function processCommentEvent(ev, companyId, connectionId, svc) {
+async function processCommentEvent(ev, companyId, connectionId, connection, svc) {
   const eventId = await saveWebhookEvent(svc, {
     instagramUserId:  ev.instagramUserId,
     eventType:        'comment',
@@ -372,6 +372,59 @@ async function processCommentEvent(ev, companyId, connectionId, svc) {
   const status = rpc?.skipped ? 'skipped' : (rpc?.ok ? 'processed' : 'failed');
   const detail = rpc?.skipped ? rpc.reason : (rpc?.ok ? null : (rpc?.error ?? 'rpc_returned_not_ok'));
   await updateWebhookEvent(svc, eventId, status, detail);
+
+  // Enriquecer foto do comentarista (fire-and-forget — não bloqueia resposta Meta)
+  if (rpc?.ok && connection?.access_token_enc) {
+    enrichCommentAvatar(ev.igCommentId, ev.igUserId, companyId, connection, svc).catch(() => {});
+  }
+}
+
+// =============================================================================
+// Enriquecimento de foto de perfil do comentarista (fire-and-forget)
+// Busca profile_pic na Graph API e persiste permanentemente no Storage.
+// =============================================================================
+
+async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection, svc) {
+  try {
+    // Descriptografar token
+    let accessToken;
+    try {
+      accessToken = decryptInstagramToken(connection.access_token_enc);
+    } catch {
+      return;
+    }
+
+    // Buscar perfil do comentarista na Graph API
+    const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${igUserId}`);
+    profileUrl.searchParams.set('fields',       'username,profile_pic');
+    profileUrl.searchParams.set('access_token', accessToken);
+
+    const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
+    const profileData = await profileRes.json();
+
+    if (profileData.error || !profileRes.ok) return;
+
+    const picUrl = profileData.profile_pic ?? null;
+    if (!picUrl) return;
+
+    // Upload permanente no Supabase Storage
+    const avatarUrl = await uploadAvatarToStorage(svc, {
+      cdnUrl:    picUrl,
+      companyId,
+      filename:  `ig_comment_${igUserId}.jpg`,
+    });
+
+    if (!avatarUrl) return;
+
+    // Atualizar ig_user_avatar no registro do comentário
+    await svc
+      .from('instagram_comments')
+      .update({ ig_user_avatar: avatarUrl })
+      .eq('ig_comment_id', igCommentId);
+
+  } catch {
+    // Silencioso — não impacta fluxo principal
+  }
 }
 
 // =============================================================================
