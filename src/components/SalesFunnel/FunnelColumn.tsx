@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, ArrowUpDown, Check } from 'lucide-react'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition, SortOption } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
@@ -115,9 +115,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const sortMenuRef = useRef<HTMLDivElement>(null)
 
   const SORT_OPTIONS: { value: SortOption; label: string }[] = [
     { value: 'entered_stage_at',    label: 'Entrada na Etapa'    },
@@ -216,51 +214,6 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Botão de ordenação da coluna */}
-          {onSortChange && (
-            <div className="relative" ref={sortMenuRef}>
-              <button
-                type="button"
-                onClick={() => setSortMenuOpen(prev => !prev)}
-                onBlur={() => setTimeout(() => setSortMenuOpen(false), 150)}
-                className={`p-1.5 rounded-md transition-colors ${currentSort ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-600 hover:bg-white'}`}
-                title="Reordenar oportunidades"
-              >
-                <ArrowUpDown className="w-4 h-4" />
-              </button>
-
-              {sortMenuOpen && (
-                <div className="absolute right-0 top-8 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Reordenar por
-                  </p>
-                  {/* Opção Padrão */}
-                  <button
-                    type="button"
-                    onClick={() => { setSortMenuOpen(false); onSortChange(undefined) }}
-                    className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <span>Padrão (posição manual)</span>
-                    {!currentSort && <Check className="w-4 h-4 text-blue-500" />}
-                  </button>
-                  <div className="border-t border-gray-100 my-1" />
-                  {/* Opções de ordenação */}
-                  {SORT_OPTIONS.map(opt => (
-                    <button
-                      type="button"
-                      key={opt.value}
-                      onClick={() => { setSortMenuOpen(false); onSortChange(opt.value) }}
-                      className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <span>{opt.label}</span>
-                      {currentSort === opt.value && <Check className="w-4 h-4 text-blue-500" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {onAddLead && (
             <button
               onClick={() => onAddLead(stage.id)}
@@ -272,7 +225,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
           )}
           
           {/* Bloco 1: ações administrativas — bloqueadas em system stages */}
-          {(onEditStage || onBulkMoveRequest) && !stage.is_system_stage && (
+          {(onEditStage || onBulkMoveRequest || onSortChange) && !stage.is_system_stage && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen(prev => !prev)}
@@ -301,7 +254,36 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                     </button>
                   )}
 
-                  {/* Playbook — segunda opção, acima de Mover oportunidades */}
+                  {/* Reordenar por — logo após Editar etapa */}
+                  {onSortChange && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <p className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Reordenar por
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setMenuOpen(false); onSortChange(undefined) }}
+                        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <span>Padrão (posição manual)</span>
+                        {!currentSort && <Check className="w-4 h-4 text-blue-500" />}
+                      </button>
+                      {SORT_OPTIONS.map(opt => (
+                        <button
+                          type="button"
+                          key={opt.value}
+                          onClick={() => { setMenuOpen(false); onSortChange(opt.value) }}
+                          className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <span>{opt.label}</span>
+                          {currentSort === opt.value && <Check className="w-4 h-4 text-blue-500" />}
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Playbook — terceira opção, acima de Mover oportunidades */}
                   {hasPlaybook && onViewPlaybook && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
