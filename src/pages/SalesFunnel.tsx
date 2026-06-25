@@ -20,6 +20,7 @@ import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { useAvailableTags } from '../hooks/useAvailableTags'
 import { funnelApi } from '../services/funnelApi'
+import { supabase } from '../lib/supabase'
 import type { CreateFunnelForm, FunnelStage, SortOption } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
@@ -63,9 +64,24 @@ export default function SalesFunnel() {
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType | null>(null)
   const [globalSort, setGlobalSort] = useState<SortOption | undefined>(undefined)
+  const [selectedOwner, setSelectedOwner] = useState<string>('')
+  const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
 
   const tagDropdownRef = useRef<HTMLDivElement>(null)
   const { tags: availableTags } = useAvailableTags(companyId)
+
+  // Carregar usuários atribuíveis para o dropdown de responsável.
+  // Usa get_assignable_users (exige apenas membership ativa) em vez de
+  // get_company_users_with_details (exige permissão 'users') para evitar
+  // dropdown vazio para sellers e managers sem essa permissão.
+  // Padrão idêntico ao usado em LeadPanel.tsx e WhatsAppLifeModule.tsx.
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .rpc('get_assignable_users', { p_company_id: companyId })
+      .then(({ data }) => setOwnerOptions(data || []))
+      .catch(() => setOwnerOptions([]))
+  }, [companyId])
 
   // Debounce na busca textual: evita requisições a cada tecla (300ms)
   const debouncedSearch = useDebounce(searchTerm, 300)
@@ -552,6 +568,23 @@ export default function SalesFunnel() {
                   )}
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Responsável
+                </label>
+                <select
+                  value={selectedOwner}
+                  onChange={(e) => setSelectedOwner(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Todos os responsáveis</option>
+                  {ownerOptions.map(u => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.display_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Seção Ordenação Global */}
@@ -607,6 +640,7 @@ export default function SalesFunnel() {
             selectedTags={selectedTags}
             selectedTagsMode={selectedTagsMode}
             globalSort={globalSort}
+            selectedOwner={selectedOwner || undefined}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

@@ -70,6 +70,8 @@ interface FunnelBoardProps {
   selectedTagsMode?: 'or' | 'and'
   /** Ordenação global aplicada a todas as etapas (pode ser sobrescrita por etapa). */
   globalSort?: SortOption
+  /** UUID do responsável selecionado no filtro. Undefined = sem filtro. */
+  selectedOwner?: string
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -84,7 +86,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedPeriod = null,
   selectedTags = [],
   selectedTagsMode = 'or',
-  globalSort
+  globalSort,
+  selectedOwner
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -156,10 +159,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     origin:       selectedOrigin || undefined,
     period_start: selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
     period_end:   selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
-    tags:         selectedTags.length ? selectedTags : undefined,
-    tags_mode:    selectedTags.length ? selectedTagsMode : undefined,
-    sort_by:      globalSort
-  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort])
+    tags:           selectedTags.length ? selectedTags : undefined,
+    tags_mode:      selectedTags.length ? selectedTagsMode : undefined,
+    sort_by:        globalSort,
+    owner_user_id:  selectedOwner || undefined
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort, selectedOwner])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA

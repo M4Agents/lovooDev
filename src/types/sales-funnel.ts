@@ -620,6 +620,8 @@ export interface LeadPositionFilter {
   max_value?: number
   /** Ordenação dinâmica das oportunidades. NULL → comportamento padrão (position_in_stage). */
   sort_by?: SortOption
+  /** UUID do responsável da oportunidade (opportunities.owner_user_id). NULL = sem filtro. */
+  owner_user_id?: string
 }
 
 // =====================================================

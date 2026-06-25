@@ -90,14 +90,15 @@ export function useBoardPositions(
           stageId,
           companyId,
           {
-            search:       filter.search,
-            origin:       filter.origin,
-            period_start: filter.period_start,
-            period_end:   filter.period_end,
-            tags:         filter.tags,
-            tags_mode:    filter.tags_mode,
+            search:         filter.search,
+            origin:         filter.origin,
+            period_start:   filter.period_start,
+            period_end:     filter.period_end,
+            tags:           filter.tags,
+            tags_mode:      filter.tags_mode,
             // Override por etapa tem precedência sobre o sort global (filter.sort_by)
-            sort_by:      sortByStage?.get(stageId) ?? filter.sort_by
+            sort_by:        sortByStage?.get(stageId) ?? filter.sort_by,
+            owner_user_id:  filter.owner_user_id
           },
           pageSize,
           offset
