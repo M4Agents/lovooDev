@@ -90,11 +90,11 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [funnelSettingsLoading, setFunnelSettingsLoading] = useState(false);
   const [funnelSettingsSaving, setFunnelSettingsSaving] = useState(false);
   const [funnelSettingsError, setFunnelSettingsError] = useState<string | null>(null);
+  const isEditing = !!user;
+
   // Roles que NÃO devem ter controle de funis (acesso total irrestrito)
   const UNRESTRICTED_ROLES: UserRole[] = ['admin', 'super_admin', 'system_admin', 'partner'];
   const canHaveFunnelControl = isEditing && user && !UNRESTRICTED_ROLES.includes(user.role);
-
-  const isEditing = !!user;
 
   // 🔧 NOVO: Função para upload de foto de perfil
   const uploadProfilePicture = async (file: File, userId: string): Promise<string | null> => {
