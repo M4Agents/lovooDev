@@ -231,10 +231,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   }, [isOpen, user, company?.id]);
 
-  // #region agent log
-  console.log('[DEBUG post-fix2] UserModal: isEditing e canHaveFunnelControl inicializados sem TDZ', { isEditing, canHaveFunnelControl });
-  // #endregion
-
   // NOVA FUNÇÃO: Carregar settings de funis do usuário (COM FALLBACK SEGURO)
   const loadFunnelSettings = useCallback(async () => {
     if (!company?.id || !user?.user_id || !canHaveFunnelControl) return;
