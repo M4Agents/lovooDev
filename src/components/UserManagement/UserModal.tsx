@@ -231,6 +231,50 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     }
   }, [isOpen, user, company?.id]);
 
+  // #region agent log
+  console.log('[DEBUG post-fix2] UserModal: isEditing e canHaveFunnelControl inicializados sem TDZ', { isEditing, canHaveFunnelControl });
+  // #endregion
+
+  // NOVA FUNÇÃO: Carregar settings de funis do usuário (COM FALLBACK SEGURO)
+  const loadFunnelSettings = useCallback(async () => {
+    if (!company?.id || !user?.user_id || !canHaveFunnelControl) return;
+    setFunnelSettingsLoading(true);
+    setFunnelSettingsError(null);
+    try {
+      // Carregar todos os funis da empresa
+      const funnels = await funnelApi.getFunnels(company.id);
+      setCompanyFunnels(funnels);
+
+      // Carregar settings do usuário
+      // FALLBACK TEMPORÁRIO: se a RPC não existir (migrations pendentes),
+      // getUserFunnelSettings retorna null → seção aparece desabilitada
+      const settings = await funnelApi.getUserFunnelSettings(company.id, user.user_id);
+      if (!settings || !settings.isEnabled) {
+        setFunnelControlEnabled(false);
+        setFunnelAccessMode('all');
+        setSelectedFunnelIds([]);
+        setDefaultFunnelId(null);
+      } else {
+        setFunnelControlEnabled(true);
+        setDefaultFunnelId(settings.defaultFunnelId);
+        if (settings.allowedFunnelIds.length > 0) {
+          setFunnelAccessMode('specific');
+          setSelectedFunnelIds(settings.allowedFunnelIds);
+        } else {
+          setFunnelAccessMode('all');
+          setSelectedFunnelIds([]);
+        }
+      }
+    } catch (err) {
+      console.error('[UserModal] Erro ao carregar settings de funis:', err);
+      // Não exibir erro crítico — seção aparece em estado padrão (desabilitada)
+      setCompanyFunnels([]);
+      setFunnelControlEnabled(false);
+    } finally {
+      setFunnelSettingsLoading(false);
+    }
+  }, [company?.id, user?.user_id, canHaveFunnelControl]);
+
   // Carregar settings de funis quando o modal abre em modo edição
   useEffect(() => {
     if (isOpen && isEditing) {
@@ -284,46 +328,6 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       }
     }
   }, [preSelectedProfileId, availableProfiles, isOpen, user]);
-
-  // NOVA FUNÇÃO: Carregar settings de funis do usuário (COM FALLBACK SEGURO)
-  const loadFunnelSettings = useCallback(async () => {
-    if (!company?.id || !user?.user_id || !canHaveFunnelControl) return;
-    setFunnelSettingsLoading(true);
-    setFunnelSettingsError(null);
-    try {
-      // Carregar todos os funis da empresa
-      const funnels = await funnelApi.getFunnels(company.id);
-      setCompanyFunnels(funnels);
-
-      // Carregar settings do usuário
-      // FALLBACK TEMPORÁRIO: se a RPC não existir (migrations pendentes),
-      // getUserFunnelSettings retorna null → seção aparece desabilitada
-      const settings = await funnelApi.getUserFunnelSettings(company.id, user.user_id);
-      if (!settings || !settings.isEnabled) {
-        setFunnelControlEnabled(false);
-        setFunnelAccessMode('all');
-        setSelectedFunnelIds([]);
-        setDefaultFunnelId(null);
-      } else {
-        setFunnelControlEnabled(true);
-        setDefaultFunnelId(settings.defaultFunnelId);
-        if (settings.allowedFunnelIds.length > 0) {
-          setFunnelAccessMode('specific');
-          setSelectedFunnelIds(settings.allowedFunnelIds);
-        } else {
-          setFunnelAccessMode('all');
-          setSelectedFunnelIds([]);
-        }
-      }
-    } catch (err) {
-      console.error('[UserModal] Erro ao carregar settings de funis:', err);
-      // Não exibir erro crítico — seção aparece em estado padrão (desabilitada)
-      setCompanyFunnels([]);
-      setFunnelControlEnabled(false);
-    } finally {
-      setFunnelSettingsLoading(false);
-    }
-  }, [company?.id, user?.user_id, canHaveFunnelControl]);
 
   // Salvar settings de funis do usuário
   const saveFunnelSettings = useCallback(async () => {
