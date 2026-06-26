@@ -77,13 +77,10 @@ export default async function handler(req, res) {
 
     let metaRes, metaData;
     try {
-      metaRes  = await fetch(metaUrl, {
-        method:  'POST',
-        headers: {
-          Authorization:  `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body:   JSON.stringify({ hide: true }),
+      // Meta Graph API exige hide como query param ou form-encoded — não aceita JSON body
+      const hideUrl = `${metaUrl}?hide=true&access_token=${encodeURIComponent(accessToken)}`;
+      metaRes  = await fetch(hideUrl, {
+        method: 'POST',
         signal: controller.signal,
       });
       metaData = await metaRes.json();
