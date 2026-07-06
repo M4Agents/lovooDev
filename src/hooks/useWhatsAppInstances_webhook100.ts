@@ -46,6 +46,10 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
       }
 
       setInstances(data || []);
+
+      // #region agent log
+      console.log('[DBG:H-A+H-C] fetchInstances concluiu', {total:(data||[]).length,fotos:(data||[]).map((i:any)=>({id:i.id,nome:i.instance_name,status:i.status,photo:i.profile_picture_url||null}))});
+      // #endregion
       
       // 🎯 SINCRONIZAÇÃO AUTOMÁTICA DE PERFIS SEM FOTO
       // Será implementada via useEffect no componente para evitar dependência circular
@@ -435,6 +439,10 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
       }
 
       console.log('[syncProfileData] Resultado:', data);
+
+      // #region agent log
+      console.log('[DBG:H-B+H-C] RPC sync_instance_profile_data resultado', {instanceId,success:data?.success,data:data?.data,debugInfo:data?.debug_info,error:data?.error});
+      // #endregion
 
       // Recarregar lista após sincronização bem-sucedida
       if (data?.success) {
