@@ -101,6 +101,15 @@ export async function executeDistribution(node, context, supabase) {
     }
   )
 
+  // #region agent log
+  console.log('[DBG:DIST-RPC] automation_distribution_next_user resultado', {
+    companyId: context.companyId,
+    userCount: eligibleUsers.length,
+    rpcResult,
+    rpcError: rpcError?.message ?? null,
+  })
+  // #endregion
+
   if (rpcError) {
     return { skipped: true, reason: `erro na RPC de round-robin: ${rpcError.message}` }
   }
