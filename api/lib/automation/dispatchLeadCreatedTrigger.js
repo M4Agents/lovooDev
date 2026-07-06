@@ -61,20 +61,6 @@ export async function dispatchLeadCreatedTrigger({ companyId, leadId, source = '
       data: { lead_id: leadId, source },
     }
 
-    // #region agent log
-    for (const flow of flows) {
-      const startNode = (flow.nodes || []).find(n => n.type === 'start' || n.type === 'trigger')
-      const triggers = startNode?.data?.triggers || []
-      console.log(`[DBG:TRIGGER-EVAL] flow=${flow.id} name="${flow.name}"`, {
-        startNodeType: startNode?.type ?? null,
-        triggerCount: triggers.length,
-        triggers: triggers.map(t => ({ type: t.type, enabled: t.enabled, source: t.config?.source ?? null })),
-        eventType: event.type,
-        eventSource: source,
-      })
-    }
-    // #endregion
-
     const matchedFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
 
     if (matchedFlows.length === 0) {
