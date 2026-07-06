@@ -81,7 +81,7 @@ export function DistributionForm({ config, setConfig }: DistributionFormProps) {
       
       // Transformar dados para formato esperado
       const formattedUsers = data?.map((user: any) => ({
-        id: user.id,
+        id: user.user_id,
         name: user.display_name || user.email,
         email: user.email
       })) || []
