@@ -4,7 +4,7 @@
 // Objetivo: Página principal do funil de vendas
 // =====================================================
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -25,6 +25,11 @@ import type { CreateFunnelForm, FunnelStage, SortOption } from '../types/sales-f
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
 import { PREDEFINED_PERIODS } from '../types/analytics'
+import {
+  useFunnelFilterPreferences,
+  type FunnelFilterSnapshot,
+  DEFAULT_FILTER_SNAPSHOT,
+} from '../hooks/useFunnelFilterPreferences'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -49,7 +54,21 @@ export default function SalesFunnel() {
     isAtFunnelLimit,
   } = useFunnels(companyId || '', undefined, user?.id)
 
+  // ─── Persistência de filtros ────────────────────────────────────────────────
+  const {
+    savedFilters,
+    isLoaded: filtersLoaded,
+    loadedFunnelId: filtersLoadedForFunnelId,
+    saveFilters,
+    clearFilters,
+    hasUnsavedChanges,
+  } = useFunnelFilterPreferences(companyId, user?.id, selectedFunnel?.id)
+
   const [showFilters, setShowFilters] = useState(false)
+  const [showSaveBanner, setShowSaveBanner] = useState(false)
+  const [hasSavedFilters, setHasSavedFilters] = useState(false)
+  const hasRestoredRef = useRef<string | null>(null)
+
   const [showCreateFunnelModal, setShowCreateFunnelModal] = useState(false)
   const [showEditFunnelModal, setShowEditFunnelModal] = useState(false)
   const [showCardCustomizer, setShowCardCustomizer] = useState(false)
@@ -82,6 +101,57 @@ export default function SalesFunnel() {
       .then(({ data }) => setOwnerOptions(data || []))
       .catch(() => setOwnerOptions([]))
   }, [companyId])
+
+  // ─── Restauração das preferências salvas ────────────────────────────────────
+  // Executa uma vez por funil assim que companyId, userId, funnelId e
+  // savedFilters estiverem disponíveis. selectedOwner é restaurado imediatamente
+  // e validado em um efeito separado quando ownerOptions carregar.
+  //
+  // SINCRONIZAÇÃO: filtersLoadedForFunnelId garante que savedFilters corresponde
+  // exatamente ao funil selecionado. Sem essa guarda, haveria uma race condition
+  // na troca de funil: o efeito rodaria com savedFilters do funil anterior antes
+  // do hook terminar de ler o localStorage do novo funil.
+  useEffect(() => {
+    if (!filtersLoaded) return
+    if (!companyId || !user?.id || !selectedFunnel?.id) return
+    // Aguarda o hook carregar os dados do funil correto antes de restaurar
+    if (filtersLoadedForFunnelId !== selectedFunnel.id) return
+    if (hasRestoredRef.current === selectedFunnel.id) return
+
+    hasRestoredRef.current = selectedFunnel.id
+    setShowSaveBanner(false)
+
+    if (!savedFilters) {
+      setSearchTerm(DEFAULT_FILTER_SNAPSHOT.searchTerm)
+      setSelectedTags(DEFAULT_FILTER_SNAPSHOT.selectedTags)
+      setSelectedTagsMode(DEFAULT_FILTER_SNAPSHOT.selectedTagsMode)
+      setSelectedOrigin(DEFAULT_FILTER_SNAPSHOT.selectedOrigin)
+      setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
+      setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
+      setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
+      setHasSavedFilters(false)
+      return
+    }
+
+    setSearchTerm(savedFilters.searchTerm)
+    setSelectedTags(savedFilters.selectedTags)
+    setSelectedTagsMode(savedFilters.selectedTagsMode)
+    setSelectedOrigin(savedFilters.selectedOrigin)
+    setSelectedPeriod(savedFilters.selectedPeriod)
+    setGlobalSort(savedFilters.globalSort)
+    // selectedOwner é restaurado aqui e revalidado quando ownerOptions carregar
+    setSelectedOwner(savedFilters.selectedOwner)
+    setHasSavedFilters(true)
+  }, [filtersLoaded, filtersLoadedForFunnelId, companyId, user?.id, selectedFunnel?.id, savedFilters])
+
+  // ─── Validação de selectedOwner contra ownerOptions ─────────────────────────
+  // Só atua quando ownerOptions já carregou. Se o owner salvo não existir mais,
+  // limpa silenciosamente sem bloquear a restauração dos demais filtros.
+  useEffect(() => {
+    if (ownerOptions.length === 0 || !selectedOwner) return
+    const isValid = ownerOptions.some(o => o.user_id === selectedOwner)
+    if (!isValid) setSelectedOwner('')
+  }, [ownerOptions, selectedOwner])
 
   // Debounce na busca textual: evita requisições a cada tecla (300ms)
   const debouncedSearch = useDebounce(searchTerm, 300)
@@ -141,6 +211,61 @@ export default function SalesFunnel() {
     }
     loadPreferences()
   }, [companyId, selectedFunnel])
+
+  // ─── Helper: snapshot do estado atual de filtros ────────────────────────────
+  const buildCurrentSnapshot = useCallback((): FunnelFilterSnapshot => ({
+    version: 1,
+    searchTerm,
+    selectedTags,
+    selectedTagsMode,
+    selectedOrigin,
+    selectedPeriod,
+    globalSort,
+    selectedOwner,
+  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, globalSort, selectedOwner])
+
+  // ─── Controle do painel de filtros ──────────────────────────────────────────
+  // Ao tentar fechar, verifica se há alterações não salvas. Se houver, mantém
+  // o painel aberto e exibe o banner de decisão.
+  const handleToggleFilters = useCallback(() => {
+    if (showFilters) {
+      if (hasUnsavedChanges(buildCurrentSnapshot())) {
+        setShowSaveBanner(true)
+      } else {
+        setShowFilters(false)
+        setShowSaveBanner(false)
+      }
+    } else {
+      setShowFilters(true)
+      setShowSaveBanner(false)
+    }
+  }, [showFilters, hasUnsavedChanges, buildCurrentSnapshot])
+
+  const handleSaveBannerSave = useCallback(() => {
+    if (!selectedFunnel?.id) return
+    saveFilters(buildCurrentSnapshot())
+    setHasSavedFilters(true)
+    setShowSaveBanner(false)
+    setShowFilters(false)
+  }, [selectedFunnel?.id, saveFilters, buildCurrentSnapshot])
+
+  const handleSaveBannerDismiss = useCallback(() => {
+    setShowSaveBanner(false)
+    setShowFilters(false)
+  }, [])
+
+  const handleClearSavedFilters = useCallback(() => {
+    clearFilters()
+    setSearchTerm(DEFAULT_FILTER_SNAPSHOT.searchTerm)
+    setSelectedTags(DEFAULT_FILTER_SNAPSHOT.selectedTags)
+    setSelectedTagsMode(DEFAULT_FILTER_SNAPSHOT.selectedTagsMode)
+    setSelectedOrigin(DEFAULT_FILTER_SNAPSHOT.selectedOrigin)
+    setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
+    setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
+    setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
+    setHasSavedFilters(false)
+    setShowSaveBanner(false)
+  }, [clearFilters])
 
   const handleLeadClick = (leadId: number) => {
     setSelectedLeadId(leadId)
@@ -343,7 +468,7 @@ export default function SalesFunnel() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFilters(!showFilters)}
+              onClick={handleToggleFilters}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg transition-colors
                 ${showFilters 
@@ -354,6 +479,9 @@ export default function SalesFunnel() {
             >
               <Filter className="w-4 h-4" />
               <span className="text-sm font-medium">{t('actions.filters')}</span>
+              {hasSavedFilters && !showFilters && (
+                <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Filtros salvos aplicados" />
+              )}
             </button>
 
             {/* Menu de Opções (...) */}
@@ -416,6 +544,19 @@ export default function SalesFunnel() {
             </button>
           </div>
         </div>
+
+        {/* Indicador de filtros salvos aplicados */}
+        {hasSavedFilters && !showFilters && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-blue-600 font-medium">Filtros salvos aplicados</span>
+            <button
+              onClick={handleClearSavedFilters}
+              className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
+            >
+              Limpar
+            </button>
+          </div>
+        )}
 
         {/* Filtros (quando ativo) */}
         {showFilters && (
@@ -620,6 +761,29 @@ export default function SalesFunnel() {
                 </div>
               </div>
             </div>
+
+            {/* Banner de decisão: exibido ao tentar fechar com alterações não salvas */}
+            {showSaveBanner && (
+              <div className="mt-3 pt-3 border-t border-blue-200 flex items-center justify-between gap-4 bg-blue-50 rounded-lg px-4 py-3">
+                <span className="text-sm text-blue-700">
+                  Salvar estes filtros como preferência para este funil?
+                </span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleSaveBannerSave}
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    onClick={handleSaveBannerDismiss}
+                    className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Não salvar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
