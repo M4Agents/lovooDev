@@ -251,29 +251,15 @@ export const WhatsAppLifeModule: React.FC = () => {
       !syncedInstancesRef.current.has(instance.id)
     );
 
-    // #region agent log
-    console.log('[DBG:H-A+H-B] useEffect autosync disparou', {total:instances.length,semFoto:instancesWithoutPhoto.length,fotos:instances.map(i=>({id:i.id,nome:i.instance_name,status:i.status,photo:i.profile_picture_url||null}))});
-    // #endregion
-
     if (instancesWithoutPhoto.length > 0) {
-      console.log(`[WhatsAppLifeModule] 📸 Sincronizando ${instancesWithoutPhoto.length} perfis sem foto...`);
-      
       // Sincronizar perfis em background (sem aguardar)
       instancesWithoutPhoto.forEach(async (instance) => {
         // Marca antes de tentar para evitar re-tentativas causadas por re-renders
         syncedInstancesRef.current.add(instance.id);
         try {
-          const result = await syncProfileData(instance.id);
-
-          // #region agent log
-          console.log('[DBG:H-B] syncProfileData retornou', {id:instance.id,nome:instance.instance_name,success:result?.success,data:result?.data,error:result?.error});
-          // #endregion
-
-          if (result.success) {
-            console.log(`[WhatsAppLifeModule] ✅ Perfil sincronizado: ${instance.instance_name}`);
-          }
-        } catch (error) {
-          console.log(`[WhatsAppLifeModule] ⚠️ Erro ao sincronizar ${instance.instance_name}:`, error);
+          await syncProfileData(instance.id);
+        } catch {
+          // falha silenciosa — será retentada na próxima sessão
         }
       });
     }
