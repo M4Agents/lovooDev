@@ -87,6 +87,11 @@ export function DistributionForm({ config, setConfig }: DistributionFormProps) {
       })) || []
       
       setUsers(formattedUsers)
+
+      // Limpar IDs obsoletos do config (formato antigo usava company_users.id
+      // em vez de user_id). Mantém apenas IDs que existem na lista carregada.
+      const validIds = new Set(formattedUsers.map((u) => u.id))
+      setSelectedUsers((prev) => prev.filter((id) => validIds.has(id)))
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
     } finally {
