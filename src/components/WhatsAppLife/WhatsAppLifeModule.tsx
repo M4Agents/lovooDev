@@ -3,7 +3,7 @@
 // =====================================================
 // Módulo principal isolado para gerenciar instâncias WhatsApp
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Smartphone, Plus, Crown } from 'lucide-react';
 import { useWhatsAppInstancesWebhook100 } from '../../hooks/useWhatsAppInstances_webhook100';
 import { usePlanLimits } from '../../hooks/usePlanLimits';
