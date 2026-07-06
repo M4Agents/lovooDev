@@ -409,6 +409,16 @@ async function executeNodeAction(node, context, supabase) {
     }
 
     case 'distribution': {
+      // #region agent log
+      console.log('[DBG:EXEC-DIST] nó distribution alcançado pelo executor', {
+        nodeId: node.id,
+        executionId: context.executionId,
+        leadId: context.leadId,
+        opportunityId: context.opportunityId,
+        companyId: context.companyId,
+        config: node.data?.config,
+      })
+      // #endregion
       const { executeDistribution } = await import('./distributionHandler.js')
       return await executeDistribution(node, context, supabase)
     }

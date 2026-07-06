@@ -23,6 +23,17 @@
 export async function executeDistribution(node, context, supabase) {
   const config = node?.data?.config ?? {}
 
+  // #region agent log
+  console.log('[DBG:DIST-ENTRY] executeDistribution chamado', {
+    nodeId: node?.id,
+    companyId: context?.companyId,
+    leadId: context?.leadId,
+    opportunityId: context?.opportunityId,
+    method: config?.method,
+    configUsers: config?.users,
+  })
+  // #endregion
+
   // ----------------------------------------------------------------
   // A. Validação de contexto obrigatório
   // ----------------------------------------------------------------
@@ -59,6 +70,15 @@ export async function executeDistribution(node, context, supabase) {
     .eq('company_id', context.companyId)
     .eq('is_active', true)
     .in('user_id', configUsers)
+
+  // #region agent log
+  console.log('[DBG:DIST-USERS] busca de usuários elegíveis', {
+    companyId: context.companyId,
+    configUsers,
+    activeUsers,
+    usersError: usersError?.message ?? null,
+  })
+  // #endregion
 
   if (usersError) {
     return { skipped: true, reason: `erro ao buscar usuários elegíveis: ${usersError.message}` }
@@ -115,6 +135,16 @@ export async function executeDistribution(node, context, supabase) {
       .is('responsible_user_id', null)
       .select('id')
 
+    // #region agent log
+    console.log('[DBG:DIST-UPDATE] resultado do UPDATE no lead', {
+      leadId: context.leadId,
+      selectedUserId,
+      updatedLeads,
+      leadError: leadError?.message ?? null,
+      linhasAfetadas: updatedLeads?.length ?? 0,
+    })
+    // #endregion
+
     if (leadError) {
       assignmentErrors.push(`lead ${context.leadId}: ${leadError.message}`)
     } else if (updatedLeads && updatedLeads.length > 0) {
@@ -166,7 +196,7 @@ export async function executeDistribution(node, context, supabase) {
   // ----------------------------------------------------------------
   // I. Resultado rico — sempre estruturado para o createLog do executor
   // ----------------------------------------------------------------
-  return {
+  const finalResult = {
     executed:            true,
     method:              'round_robin',
     selectedUserId,
@@ -176,4 +206,10 @@ export async function executeDistribution(node, context, supabase) {
     assignedOpportunity,
     ...(assignmentErrors.length > 0 && { assignmentErrors }),
   }
+
+  // #region agent log
+  console.log('[DBG:DIST-RESULT] resultado final da distribuição', finalResult)
+  // #endregion
+
+  return finalResult
 }
