@@ -232,17 +232,23 @@ export const WhatsAppLifeModule: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<any>(null);
 
+  // Rastreia IDs de instâncias já tentadas nesta sessão para evitar loop
+  // infinito: syncProfileData → fetchInstances → instances muda → useEffect
+  // dispara novamente com profile_picture_url ainda vazio/nulo.
+  const syncedInstancesRef = useRef<Set<string>>(new Set());
+
   // =====================================================
   // SINCRONIZAÇÃO AUTOMÁTICA DE PERFIS SEM FOTO
   // =====================================================
   useEffect(() => {
     if (!instances || instances.length === 0) return;
 
-    // Buscar instâncias conectadas sem foto de perfil
+    // Buscar instâncias conectadas sem foto de perfil que ainda não foram tentadas
     const instancesWithoutPhoto = instances.filter(instance => 
       instance.status === 'connected' && 
       instance.provider_type === 'uazapi' &&
-      (!instance.profile_picture_url || instance.profile_picture_url.trim() === '')
+      (!instance.profile_picture_url || instance.profile_picture_url.trim() === '') &&
+      !syncedInstancesRef.current.has(instance.id)
     );
 
     // #region agent log
@@ -254,6 +260,8 @@ export const WhatsAppLifeModule: React.FC = () => {
       
       // Sincronizar perfis em background (sem aguardar)
       instancesWithoutPhoto.forEach(async (instance) => {
+        // Marca antes de tentar para evitar re-tentativas causadas por re-renders
+        syncedInstancesRef.current.add(instance.id);
         try {
           const result = await syncProfileData(instance.id);
 
