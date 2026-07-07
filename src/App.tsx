@@ -28,6 +28,7 @@ import { ChangePasswordRequired } from './pages/ChangePasswordRequired';
 import { DeletedInstances } from './pages/DeletedInstances';
 import Reports from './pages/Reports';
 import { startTrackingQueueProcessor } from './services/api';
+import { TrialExpiredGate } from './components/TrialExpiredGate';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -44,7 +45,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/" replace />;
   }
 
-  return <ModernLayout>{children}</ModernLayout>;
+  return (
+    <TrialExpiredGate>
+      <ModernLayout>{children}</ModernLayout>
+    </TrialExpiredGate>
+  );
 };
 
 /**

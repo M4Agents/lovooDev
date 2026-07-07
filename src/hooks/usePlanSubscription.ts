@@ -14,8 +14,14 @@ export interface PlanSubscription {
   status:               SubscriptionStatus
   // true quando status='trialing' e stripe_subscription_id IS NULL (trial interno, não Stripe)
   is_internal_trial:    boolean
-  // calculado no backend: dias até current_period_end (ceil, mín 0); null se não for trial interno
+  // calculado no backend: dias até current_period_end (ceil, mín 0); null se trial não ativo
   days_remaining:       number | null
+  // true quando trial interno expirou (trialEndDate < now)
+  is_trial_expired:     boolean
+  // dias restantes dentro do grace period de 5 dias; null se bloqueado ou não aplicável
+  grace_days_remaining: number | null
+  // true quando grace period também expirou — acesso deve ser bloqueado na UX
+  is_blocked:           boolean
   plan_name:            string | null
   billing_cycle:        'monthly' | 'yearly' | null
   current_period_end:   string | null
@@ -29,6 +35,9 @@ const DEFAULT_EMPTY: PlanSubscription = {
   status:               null,
   is_internal_trial:    false,
   days_remaining:       null,
+  is_trial_expired:     false,
+  grace_days_remaining: null,
+  is_blocked:           false,
   plan_name:            null,
   billing_cycle:        null,
   current_period_end:   null,
@@ -69,7 +78,15 @@ export function usePlanSubscription(companyId: string | null | undefined) {
         return
       }
 
-      setData(json)
+      // Defaults seguros para campos novos — garante retrocompatibilidade
+      // caso a API retorne resposta sem esses campos (rollback parcial, etc.)
+      setData({
+        ...DEFAULT_EMPTY,
+        ...json,
+        is_trial_expired:     json.is_trial_expired     ?? false,
+        grace_days_remaining: json.grace_days_remaining ?? null,
+        is_blocked:           json.is_blocked           ?? false,
+      })
     } catch {
       setError('Erro de conexão ao carregar assinatura')
     } finally {

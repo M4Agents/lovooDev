@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       .from('company_subscriptions')
       .select(
         'status, billing_cycle, current_period_end, cancel_at_period_end,' +
-        'last_invoice_url, scheduled_plan_id, stripe_subscription_id,' +
+        'trial_end, last_invoice_url, scheduled_plan_id, stripe_subscription_id,' +
         'plans!company_subscriptions_plan_id_fkey(name)'
       )
       .eq('company_id', effectiveCompanyId)
@@ -95,11 +95,39 @@ export default async function handler(req, res) {
     // Ações como change, cancel e customer-portal são bloqueadas no backend.
     const isInternalTrial = sub.status === 'trialing' && !sub.stripe_subscription_id
 
-    // Dias restantes do trial interno — calculado no backend para evitar drift de fuso.
+    // ── Cálculo de expiração e grace period (exclusivo para trial interno) ──
+    // Não atualiza nenhum campo no banco — apenas leitura.
+    // is_blocked calculado por comparação de datas, nunca por graceDaysRemaining === 0.
+    const GRACE_PERIOD_DAYS = 5
+    const now = new Date()
+
+    // Para trials internos sem current_period_end, usar trial_end como referência
+    const trialEndDate      = sub.trial_end ? new Date(sub.trial_end) : null
+    const effectivePeriodEnd = sub.current_period_end ?? sub.trial_end ?? null
+
+    const isTrialExpired =
+      isInternalTrial &&
+      trialEndDate !== null &&
+      trialEndDate < now
+
+    const gracePeriodEnd =
+      isTrialExpired
+        ? new Date(trialEndDate.getTime() + GRACE_PERIOD_DAYS * 86_400_000)
+        : null
+
+    // Bloqueio determinado por comparação de datas — nunca por graceDaysRemaining
+    const isBlocked = gracePeriodEnd !== null && now >= gracePeriodEnd
+
+    const graceDaysRemaining =
+      gracePeriodEnd !== null && !isBlocked
+        ? Math.max(1, Math.ceil((gracePeriodEnd.getTime() - now.getTime()) / 86_400_000))
+        : null
+
+    // Dias restantes do trial ativo (não expirado) — calculado no backend para evitar drift de fuso.
     // Arredondamento para cima (ceil): trial que termina hoje à noite ainda conta como 1 dia.
     let daysRemaining = null
-    if (isInternalTrial && sub.current_period_end) {
-      const diffMs = new Date(sub.current_period_end).getTime() - Date.now()
+    if (isInternalTrial && effectivePeriodEnd && !isTrialExpired) {
+      const diffMs = new Date(effectivePeriodEnd).getTime() - now.getTime()
       daysRemaining = Math.max(0, Math.ceil(diffMs / 86_400_000))
     }
 
@@ -113,9 +141,12 @@ export default async function handler(req, res) {
       status:               sub.status,
       is_internal_trial:    isInternalTrial,
       days_remaining:       daysRemaining,
+      is_trial_expired:     isTrialExpired,
+      grace_days_remaining: graceDaysRemaining,
+      is_blocked:           isBlocked,
       plan_name:            planName,
       billing_cycle:        sub.billing_cycle,
-      current_period_end:   sub.current_period_end,
+      current_period_end:   effectivePeriodEnd,
       cancel_at_period_end: sub.cancel_at_period_end ?? false,
       scheduled_plan_name:  scheduledPlanName,
       last_invoice_url:     sub.last_invoice_url ?? null,

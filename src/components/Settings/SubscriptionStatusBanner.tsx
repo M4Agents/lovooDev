@@ -124,9 +124,13 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
 
   if (!subscription.has_subscription) return null
 
+  // Quando bloqueado, o TrialExpiredGate assume o controle da UX — banner não é necessário
+  if (subscription.is_blocked) return null
+
   const { status, plan_name, current_period_end, cancel_at_period_end,
           scheduled_plan_name, last_invoice_url, billing_cycle,
-          is_internal_trial, days_remaining } = subscription
+          is_internal_trial, days_remaining,
+          is_trial_expired, grace_days_remaining } = subscription
 
   // days_remaining é calculado no backend (evita drift de fuso no cliente)
   const trialDaysRemaining = days_remaining
@@ -258,8 +262,48 @@ export const SubscriptionStatusBanner: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Trial interno: banner com urgência e CTA secundário */}
-          {is_internal_trial && current_period_end && (
+          {/* Trial interno EXPIRADO — último dia de carência */}
+          {is_internal_trial && is_trial_expired && grace_days_remaining === 1 && (
+            <div className="flex items-start gap-3 text-sm rounded-lg px-3 py-3 border text-red-800 bg-red-50 border-red-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+              <div className="flex-1">
+                <p className="font-medium">Seu acesso será bloqueado hoje.</p>
+                <p className="mt-0.5">Contrate um plano agora para não perder o acesso ao sistema.</p>
+              </div>
+              {onHirePlan && (
+                <button
+                  onClick={onHirePlan}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-white bg-red-600 hover:bg-red-700"
+                >
+                  Contratar plano
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Trial interno EXPIRADO — dentro do grace period (> 1 dia restante) */}
+          {is_internal_trial && is_trial_expired && grace_days_remaining !== null && grace_days_remaining > 1 && (
+            <div className="flex items-start gap-3 text-sm rounded-lg px-3 py-3 border text-amber-800 bg-amber-50 border-amber-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <div className="flex-1">
+                <p className="font-medium">Seu período de teste expirou.</p>
+                <p className="mt-0.5">
+                  Você possui <strong>{grace_days_remaining} dias</strong> para contratar um plano antes do bloqueio.
+                </p>
+              </div>
+              {onHirePlan && (
+                <button
+                  onClick={onHirePlan}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-white bg-amber-600 hover:bg-amber-700"
+                >
+                  Contratar plano
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Trial interno ATIVO (não expirado): banner com urgência e CTA secundário */}
+          {is_internal_trial && !is_trial_expired && current_period_end && (
             <div className={`flex items-start gap-3 text-sm rounded-lg px-3 py-3 border ${
               isTrialUrgent
                 ? 'text-red-800 bg-red-50 border-red-200'

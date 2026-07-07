@@ -57,6 +57,9 @@ type AuthContextType = {
   checkPasswordRequirements: () => { requiresPasswordChange: boolean; expiresAt?: string };
   // 🔧 NOVO: Método para reenvio de email de confirmação
   resendConfirmationEmail: (email: string) => Promise<{ success: boolean }>;
+  // Estado de bloqueio por trial expirado — calculado no backend (grace period 5 dias)
+  subscriptionBlocked: boolean;
+  graceDaysRemaining: number | null;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,6 +95,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 🔧 FLAG PARA EVITAR MÚLTIPLAS CHAMADAS SIMULTÂNEAS
   const [isFetchingCompany, setIsFetchingCompany] = useState(false);
 
+  // Estado de bloqueio por trial expirado — fonte de verdade: backend /api/plans/subscription
+  // Em caso de erro no fetch, defaults seguros: acesso liberado (fail-open para não derrubar app)
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
+  const [graceDaysRemaining, setGraceDaysRemaining]   = useState<number | null>(null);
+
   // Ref para distinguir logout intencional de expiração de sessão.
   // true = usuário clicou em "Sair"; false = sessão expirou inesperadamente.
   const isSigningOutRef = React.useRef(false);
@@ -110,6 +118,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUserPermissions(null);
     }
   }, [company?.id, userRoles]);
+
+  // Busca o estado de bloqueio de assinatura após cada troca de empresa.
+  // Falha silenciosa: nunca bloqueia o app por problema de rede — assume acesso liberado.
+  useEffect(() => {
+    if (!company?.id) {
+      setSubscriptionBlocked(false);
+      setGraceDaysRemaining(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchSubscriptionStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token || cancelled) return;
+
+        const resp = await fetch(
+          `/api/plans/subscription?company_id=${encodeURIComponent(company.id)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+
+        if (cancelled) return;
+
+        if (!resp.ok) {
+          setSubscriptionBlocked(false);
+          setGraceDaysRemaining(null);
+          return;
+        }
+
+        const json = await resp.json();
+        if (!cancelled) {
+          setSubscriptionBlocked(json.is_blocked ?? false);
+          setGraceDaysRemaining(json.grace_days_remaining ?? null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[AuthContext] Falha ao verificar assinatura — assumindo acesso liberado:', err);
+          setSubscriptionBlocked(false);
+          setGraceDaysRemaining(null);
+        }
+      }
+    };
+
+    fetchSubscriptionStatus();
+    return () => { cancelled = true; };
+  }, [company?.id]);
 
   // 🔧 FUNÇÃO DE LIMPEZA DE DADOS DE IMPERSONAÇÃO INVÁLIDOS
   const cleanupInvalidImpersonationData = () => {
@@ -974,7 +1030,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshUserRoles,
       checkPasswordRequirements,
       // 🔧 NOVO: Função de reenvio de confirmação
-      resendConfirmationEmail
+      resendConfirmationEmail,
+      // Estado de bloqueio por trial expirado
+      subscriptionBlocked,
+      graceDaysRemaining,
     }}>
       {children}
     </AuthContext.Provider>
