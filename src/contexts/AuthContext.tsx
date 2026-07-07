@@ -164,7 +164,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     fetchSubscriptionStatus();
-    return () => { cancelled = true; };
+
+    // Re-fetch quando o usuário retorna ao tab (ex: após finalizar checkout no Stripe).
+    // Sem polling — dispara apenas na transição de hidden → visible.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchSubscriptionStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [company?.id]);
 
   // 🔧 FUNÇÃO DE LIMPEZA DE DADOS DE IMPERSONAÇÃO INVÁLIDOS

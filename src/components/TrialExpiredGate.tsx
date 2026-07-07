@@ -1,6 +1,7 @@
 import React from 'react'
 import { Lock, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { SubscriptionRecoveryPanel } from './Billing/SubscriptionRecoveryPanel'
 
 // TODO: Este gate é apenas uma camada de UX (bloqueio de interface).
 // Ele NÃO substitui validação no backend.
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export const TrialExpiredGate: React.FC<Props> = ({ children }) => {
-  const { subscriptionBlocked, userRoles, signOut } = useAuth()
+  const { subscriptionBlocked, userRoles, signOut, company } = useAuth()
 
   // Bypass seguro: verifica se o usuário autenticado possui um papel privilegiado
   // (super_admin ou system_admin) em qualquer empresa da plataforma.
@@ -42,12 +43,13 @@ export const TrialExpiredGate: React.FC<Props> = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-        {/* Cabeçalho */}
-        <div className="px-8 pt-10 pb-6 text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
-            <Lock className="w-8 h-8 text-red-600" />
+    <div className="min-h-screen bg-slate-50 overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-4 py-10">
+
+        {/* Cabeçalho de bloqueio */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-8 py-8 mb-6 text-center">
+          <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-red-600" />
           </div>
           <h1 className="text-xl font-semibold text-slate-900 mb-2">
             Seu período de trial encerrou.
@@ -57,16 +59,24 @@ export const TrialExpiredGate: React.FC<Props> = ({ children }) => {
           </p>
         </div>
 
-        {/* Ações */}
-        <div className="px-8 pb-10">
+        {/* Painel de contratação — lógica de planos e checkout isolada aqui */}
+        {company?.id && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-6 py-6 mb-6">
+            <SubscriptionRecoveryPanel companyId={company.id} />
+          </div>
+        )}
+
+        {/* Logout — sempre disponível */}
+        <div className="text-center">
           <button
             onClick={handleSignOut}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm text-slate-500 hover:text-slate-700 transition-colors rounded-xl hover:bg-slate-50 border border-slate-200"
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors rounded-xl hover:bg-white border border-slate-200"
           >
             <LogOut className="w-4 h-4" />
             Sair da conta
           </button>
         </div>
+
       </div>
     </div>
   )
