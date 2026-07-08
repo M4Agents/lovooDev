@@ -64,9 +64,13 @@ async function apiFetch<T>(
  * Retorna null se ainda não foi criada.
  */
 async function getConfig(companyId: string): Promise<ContactCycleConfig | null> {
-  return apiFetch<ContactCycleConfig | null>(
+  // #region agent log
+  const __rawCfg = await apiFetch<{ config: ContactCycleConfig | null }>(
     `/api/contact-cycles/config?company_id=${encodeURIComponent(companyId)}`,
   )
+  console.log('[DEBUG:CONFIG POST-FIX] getConfig unwrapped', { type: typeof __rawCfg, keys: __rawCfg && typeof __rawCfg === 'object' ? Object.keys(__rawCfg as object) : null, hasConfig: 'config' in (__rawCfg as object), value: __rawCfg })
+  return (__rawCfg as { config: ContactCycleConfig | null }).config ?? null
+  // #endregion
 }
 
 /**
@@ -77,7 +81,8 @@ async function updateConfig(
   companyId: string,
   form: ContactCycleConfigForm,
 ): Promise<ContactCycleConfig> {
-  return apiFetch<ContactCycleConfig>('/api/contact-cycles/config', {
+  // #region agent log
+  const __rawUpd = await apiFetch<{ config: ContactCycleConfig }>('/api/contact-cycles/config', {
     method: 'PUT',
     body: JSON.stringify({
       company_id: companyId,
@@ -87,6 +92,9 @@ async function updateConfig(
       show_extra_questions: form.show_extra_questions,
     }),
   })
+  console.log('[DEBUG:CONFIG POST-FIX] updateConfig unwrapped', { keys: __rawUpd && typeof __rawUpd === 'object' ? Object.keys(__rawUpd as object) : null })
+  return (__rawUpd as { config: ContactCycleConfig }).config
+  // #endregion
 }
 
 // ── Motivos ──────────────────────────────────────────────────────
