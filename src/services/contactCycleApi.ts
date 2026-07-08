@@ -101,7 +101,11 @@ async function listReasons(
 ): Promise<ContactAttemptReason[]> {
   const params = new URLSearchParams({ company_id: companyId })
   if (includeInactive) params.set('include_inactive', 'true')
-  return apiFetch<ContactAttemptReason[]>(`/api/contact-cycles/reasons?${params}`)
+  // #region agent log
+  const __raw = await apiFetch<unknown>(`/api/contact-cycles/reasons?${params}`)
+  console.log('[DEBUG:H-A] listReasons raw result', { type: typeof __raw, isArray: Array.isArray(__raw), keys: __raw && typeof __raw === 'object' ? Object.keys(__raw as object) : null, value: __raw })
+  return __raw as ContactAttemptReason[]
+  // #endregion
 }
 
 /**
