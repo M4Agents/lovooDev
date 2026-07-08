@@ -5,6 +5,7 @@
 // Atualizado: 06/03/2026 - Suporte para is_hidden
 // Atualizado: 2026-05-12 - Suporte para playbook_text e video_link
 //   com validação explícita de JWT + role para campos de playbook
+// Atualizado: 2026-07-08 - Suporte para track_contact_attempts (admin+)
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -21,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { stage_id, name, color, stage_type, is_hidden, playbook_text, video_link } = req.body;
+    const { stage_id, name, color, stage_type, is_hidden, playbook_text, video_link, track_contact_attempts } = req.body;
 
     // Validações básicas
     if (!stage_id) {
@@ -62,10 +63,13 @@ export default async function handler(req, res) {
       });
     }
 
-    // ─── Validação de permissão para campos de playbook ──────────────────────
-    // Campos playbook_text e video_link exigem autenticação JWT + role explícito
-    // em company_users. NÃO confiar apenas no RLS — validação dupla obrigatória.
-    const isEditingPlaybook = playbook_text !== undefined || video_link !== undefined;
+    // ─── Validação de permissão para campos de playbook e rastreamento ────────
+    // Campos playbook_text, video_link e track_contact_attempts exigem autenticação
+    // JWT + role explícito em company_users. NÃO confiar apenas no RLS — validação
+    // dupla obrigatória.
+    const isEditingPlaybook = playbook_text !== undefined
+      || video_link !== undefined
+      || track_contact_attempts !== undefined;
 
     if (isEditingPlaybook) {
       const authHeader = req.headers['authorization'] || '';
@@ -136,6 +140,15 @@ export default async function handler(req, res) {
     if (is_hidden    !== undefined) updateData.is_hidden    = is_hidden;
     if (playbook_text !== undefined) updateData.playbook_text = playbook_text;
     if (video_link   !== undefined) updateData.video_link   = video_link;
+    if (track_contact_attempts !== undefined) {
+      if (typeof track_contact_attempts !== 'boolean') {
+        return res.status(400).json({
+          error: 'track_contact_attempts deve ser um booleano (true ou false)',
+          field: 'track_contact_attempts',
+        });
+      }
+      updateData.track_contact_attempts = track_contact_attempts;
+    }
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ 

@@ -25,6 +25,15 @@
     "countryPlaceholder": "Ex.: BR",
     "countryHintInvalid": "Duas letras maiúsculas ou vazio."
   },
+  "contactCycle": {
+    "sectionTitle": "Motor de Ciclos de Contato",
+    "sectionDescription": "Configure como as tentativas de contato são registradas e controladas por ciclo.",
+    "tabs": {
+      "config": "Configuração",
+      "reasons": "Motivos",
+      "questions": "Perguntas"
+    }
+  },
   "actions": {
     "save": "Salvar Configurações",
     "saving": "Salvando...",

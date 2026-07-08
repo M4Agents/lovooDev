@@ -214,6 +214,17 @@ export function useAccessControl() {
   // Seller: somente leitura. Manager+: leitura e escrita.
   const canWriteCatalog = _settingsManagerOrAdmin
 
+  // ── Motor de Ciclos de Contato ──────────────────────────────
+  // Visualizar estado de ciclos: qualquer membro ativo (seller+).
+  const canViewContactCycles = !!currentRole
+
+  // Gerenciar configuração, motivos e perguntas: admin+.
+  // Manager fecha ciclos (validado no backend) mas não configura o módulo.
+  const canManageContactCycles =
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'
+
   // ── Leads ───────────────────────────────────────────────────
   const canViewLeads    = hasPermission('leads')
   const canViewAllLeads = hasPermission('view_all_leads')
@@ -326,5 +337,9 @@ export function useAccessControl() {
     canAccessTrackingSite,
     canAccessCompanyData,
     canWriteCatalog,
+
+    // Motor de Ciclos de Contato
+    canViewContactCycles,
+    canManageContactCycles,
   }
 }

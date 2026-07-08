@@ -30,6 +30,8 @@ import { supabase } from '../../../lib/supabase'
 import toast from 'react-hot-toast'
 import { useAudioRecorder } from '../../../hooks/useAudioRecorder'
 import { AudioPreviewBar } from './AudioPreviewBar'
+import { useContactCycleState } from '../../../hooks/useContactCycleState'
+import { ContactAttemptModal } from '../ContactAttemptModal'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -54,6 +56,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   const [leadId, setLeadId] = useState<number | null>(null)
+  // Hook de ciclos de contato — avalia elegibilidade após envio de mensagem
+  const { modalState, triggerCheck, dismiss } = useContactCycleState(companyId)
   // Estados para modal de atividades
   const [showActivityModal, setShowActivityModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState<any>(null)
@@ -471,6 +475,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       // 2. Enviar para o banco
       const messageId = await chatApi.sendMessage(conversationId, companyId, formWithReply, userId)
       // Mensagem enviada com sucesso
+
+      // Avaliar elegibilidade para tentativa de contato (fire-and-forget — nunca bloqueia o chat)
+      if (leadId) {
+        void triggerCheck(leadId, messageId)
+      }
 
       // Reordenação otimista imediata da lista — sem aguardar o ciclo Realtime/banco
       ChatEventBus.emitConversationMessageSent(companyId, conversationId, sentContent, sentAt)
@@ -1586,6 +1595,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           }}
         />
       )}
+
+      {/* Modal de Tentativa de Contato — exibido após envio bem-sucedido quando elegível */}
+      <ContactAttemptModal
+        companyId={companyId}
+        modalState={modalState}
+        onClose={dismiss}
+      />
     </div>
   )
 }

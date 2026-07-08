@@ -51,6 +51,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
     position: stage?.position ?? existingStages.length,
     playbook_text: stage?.playbook_text || '',
     video_link: stage?.video_link || '',
+    track_contact_attempts: stage?.track_contact_attempts ?? false,
   })
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
         position: stage.position,
         playbook_text: stage.playbook_text || '',
         video_link: stage.video_link || '',
+        track_contact_attempts: stage.track_contact_attempts ?? false,
       })
     }
   }, [stage])
@@ -96,8 +98,9 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
           stage_type: formData.stage_type,
         }
         if (canEditPlaybook) {
-          updatePayload.playbook_text = formData.playbook_text
-          updatePayload.video_link    = formData.video_link
+          updatePayload.playbook_text         = formData.playbook_text
+          updatePayload.video_link            = formData.video_link
+          updatePayload.track_contact_attempts = formData.track_contact_attempts
         }
         await onSubmit(updatePayload)
       } else {
@@ -145,6 +148,7 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
         position: existingStages.length,
         playbook_text: '',
         video_link: '',
+        track_contact_attempts: false,
       })
       setError(undefined)
       setShowDeleteConfirm(false)
@@ -313,6 +317,36 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                 <p className="text-xs text-gray-400 mt-1">
                   Vídeo exibido no modal de Playbook da etapa.
                 </p>
+              </div>
+
+              {/* Rastreamento de tentativas de contato */}
+              <div className="flex items-start justify-between gap-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-indigo-900">
+                    Rastrear tentativas de contato
+                  </p>
+                  <p className="text-xs text-indigo-600 mt-0.5">
+                    Ativa o motor de ciclos de contato para oportunidades nesta etapa.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formData.track_contact_attempts}
+                  onClick={() => setFormData({ ...formData, track_contact_attempts: !formData.track_contact_attempts })}
+                  disabled={loading}
+                  className={[
+                    'relative flex-shrink-0 h-6 w-11 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:opacity-50',
+                    formData.track_contact_attempts ? 'bg-indigo-600' : 'bg-gray-300',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-1',
+                      formData.track_contact_attempts ? 'translate-x-6' : 'translate-x-1',
+                    ].join(' ')}
+                  />
+                </button>
               </div>
             </>
           )}

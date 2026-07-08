@@ -83,6 +83,8 @@ export interface FunnelStage {
   playbook_text?: string
   /** URL do vídeo YouTube associado à etapa. Editável somente por admin, super_admin e system_admin. */
   video_link?: string
+  /** Habilita rastreamento de tentativas de contato. Editável somente por admin+. DEFAULT false. */
+  track_contact_attempts: boolean
 }
 
 // =====================================================
@@ -403,6 +405,8 @@ export interface UpdateStageForm {
   stage_type?: 'active' | 'won' | 'lost'
   playbook_text?: string
   video_link?: string
+  /** Habilita rastreamento de tentativas de contato. Editável somente por admin+. */
+  track_contact_attempts?: boolean
 }
 
 export interface MoveLeadForm {
