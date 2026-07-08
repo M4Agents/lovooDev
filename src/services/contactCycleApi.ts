@@ -102,9 +102,9 @@ async function listReasons(
   const params = new URLSearchParams({ company_id: companyId })
   if (includeInactive) params.set('include_inactive', 'true')
   // #region agent log
-  const __raw = await apiFetch<unknown>(`/api/contact-cycles/reasons?${params}`)
-  console.log('[DEBUG:H-A] listReasons raw result', { type: typeof __raw, isArray: Array.isArray(__raw), keys: __raw && typeof __raw === 'object' ? Object.keys(__raw as object) : null, value: __raw })
-  return __raw as ContactAttemptReason[]
+  const __raw = await apiFetch<{ reasons: ContactAttemptReason[] }>(`/api/contact-cycles/reasons?${params}`)
+  console.log('[DEBUG:H-A POST-FIX] listReasons unwrapped', { isArray: Array.isArray(__raw.reasons), length: __raw.reasons?.length })
+  return __raw.reasons ?? []
   // #endregion
 }
 
@@ -154,7 +154,11 @@ async function listQuestions(
 ): Promise<ContactAttemptQuestion[]> {
   const params = new URLSearchParams({ company_id: companyId })
   if (includeInactive) params.set('include_inactive', 'true')
-  return apiFetch<ContactAttemptQuestion[]>(`/api/contact-cycles/questions?${params}`)
+  // #region agent log
+  const __rawQ = await apiFetch<{ questions: ContactAttemptQuestion[] }>(`/api/contact-cycles/questions?${params}`)
+  console.log('[DEBUG:H-A POST-FIX] listQuestions unwrapped', { isArray: Array.isArray(__rawQ.questions), length: __rawQ.questions?.length })
+  return __rawQ.questions ?? []
+  // #endregion
 }
 
 /**
