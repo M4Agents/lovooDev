@@ -53,14 +53,8 @@ export function useContactCycleReasons(
     try {
       // Admin+ vê inativos para poder reativá-los; seller vê apenas ativos
       const data = await contactCycleApi.listReasons(companyId, canManage)
-      // #region agent log
-      console.log('[DEBUG:H-A/C] setReasons data', { type: typeof data, isArray: Array.isArray(data), keys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data as object) : null, length: Array.isArray(data) ? (data as unknown[]).length : null })
-      // #endregion
       setReasons(data)
     } catch (err) {
-      // #region agent log
-      console.log('[DEBUG:H-B/D] listReasons catch', { err: String(err) })
-      // #endregion
       setError(err instanceof Error ? err.message : 'Erro ao carregar motivos de contato')
     } finally {
       setLoading(false)
