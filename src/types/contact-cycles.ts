@@ -118,7 +118,7 @@ export interface ContactCycleHistoryItem {
 
 // ── Estado de ciclo da oportunidade ────────────────────────────
 
-export type ContactAttemptsState = 'none' | 'cycle_open' | 'waiting'
+export type ContactAttemptsState = 'none' | 'cycle_open' | 'waiting' | 'eligible'
 
 export interface ContactCycleState {
   eligibility: string

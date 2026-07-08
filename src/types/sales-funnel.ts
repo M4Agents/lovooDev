@@ -5,6 +5,7 @@
 // =====================================================
 
 import { formatMoney } from '../lib/formatMoney'
+import type { ContactAttemptsState } from './contact-cycles'
 
 // =====================================================
 // INTERFACES PRINCIPAIS
@@ -279,6 +280,15 @@ export interface OpportunityFunnelPosition {
   stage?: FunnelStage
   days_in_stage?: number
   reentry_count?: number  // count de eventos lead_reentry — fornecido por get_funnel_positions_with_photos
+
+  // Campos de ciclo de contato — populados por get_stage_positions_paged (Fase 5)
+  contact_attempts_state?: ContactAttemptsState | null
+  current_contact_cycle_id?: string | null
+  contact_cycle_opened_at?: string | null
+  total_contact_attempts?: number | null
+  last_contact_attempt_at?: string | null
+  last_cycle_close_reason?: string | null
+  eligible_for_new_cycle_at?: string | null
 }
 
 // Alias para compatibilidade (DEPRECATED)

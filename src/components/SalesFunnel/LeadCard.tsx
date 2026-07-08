@@ -15,6 +15,7 @@ import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 import { resolvePhotoUrl } from '../../utils/imageUtils'
+import { CycleStatusBadge } from './CycleStatusBadge'
 
 function getOwnerInitials(user?: CompanyUser): string {
   const name = user?.display_name || user?.email || ''
@@ -271,7 +272,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             </div>
           )}
 
-          {/* Footer com tempo na etapa + owner */}
+          {/* Footer com tempo na etapa + badge de ciclo + owner */}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
               {position.days_in_stage !== undefined && (
@@ -280,6 +281,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   <span>{formatDaysInStage(position.days_in_stage)}</span>
                 </>
               )}
+              <CycleStatusBadge state={position.contact_attempts_state} />
             </div>
 
             <div className="flex items-center gap-2">
