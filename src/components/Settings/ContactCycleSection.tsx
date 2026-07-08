@@ -11,12 +11,13 @@
 // =====================================================
 
 import React, { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, HelpCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { ContactCycleConfigPanel } from './ContactCycleConfigPanel'
 import { ContactCycleReasonsPanel } from './ContactCycleReasonsPanel'
 import { ContactCycleQuestionsPanel } from './ContactCycleQuestionsPanel'
+import { ContactCycleHelpModal } from './ContactCycleHelpModal'
 
 type SubTab = 'config' | 'reasons' | 'questions'
 
@@ -30,7 +31,8 @@ export const ContactCycleSection: React.FC = () => {
   const { company } = useAuth()
   const { canViewContactCycles, canManageContactCycles } = useAccessControl()
 
-  const [activeTab, setActiveTab] = useState<SubTab>('config')
+  const [activeTab,  setActiveTab]  = useState<SubTab>('config')
+  const [showHelp,   setShowHelp]   = useState(false)
 
   // Guard — seller sem membership ativo ou contexto de empresa ausente
   if (!canViewContactCycles || !company?.id) return null
@@ -39,6 +41,9 @@ export const ContactCycleSection: React.FC = () => {
 
   return (
     <div className="border-t border-gray-200 pt-6 space-y-5">
+
+      {/* Modal de ajuda */}
+      {showHelp && <ContactCycleHelpModal onClose={() => setShowHelp(false)} />}
 
       {/* Cabeçalho da seção */}
       <div className="flex items-center justify-between">
@@ -53,6 +58,14 @@ export const ContactCycleSection: React.FC = () => {
             </p>
           </div>
         </div>
+        <button
+          onClick={() => setShowHelp(true)}
+          title="Como funciona o Motor de Ciclos de Contato"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200"
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+          Como funciona
+        </button>
       </div>
 
       {/* Sub-navegação */}
