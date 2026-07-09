@@ -4,6 +4,7 @@ import { XCircle, Loader2 } from 'lucide-react'
 import { contactCycleApi } from '../../services/contactCycleApi'
 import { getTriggerReasonKey } from '../../utils/cycleLabels'
 import { AnswersList } from './AnswersList'
+import { useAuth } from '../../contexts/AuthContext'
 import type { ContactAttemptDetail } from '../../types/contact-cycles'
 
 interface AttemptRowProps {
@@ -14,14 +15,6 @@ interface AttemptRowProps {
   refresh:       () => void
 }
 
-const fmtDate = (iso?: string | null): string => {
-  if (!iso) return '—'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(iso))
-}
-
 export function AttemptRow({
   attempt,
   canOperate,
@@ -30,10 +23,20 @@ export function AttemptRow({
   refresh,
 }: AttemptRowProps) {
   const { t } = useTranslation('funnel')
+  const { companyTimezone } = useAuth()
   const [showConfirm, setShowConfirm] = useState(false)
   const [cancelling,  setCancelling]  = useState(false)
 
   const isCancelled = Boolean(attempt.cancelled_at)
+
+  const fmtDate = (iso?: string | null): string => {
+    if (!iso) return '—'
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: companyTimezone,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso))
+  }
 
   const handleCancel = async () => {
     setCancelling(true)
@@ -53,19 +56,16 @@ export function AttemptRow({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* trigger_reason */}
             <span className="font-medium text-gray-800">
               {t(getTriggerReasonKey(attempt.trigger_reason))}
             </span>
 
-            {/* reason_label — motivo comercial */}
             {attempt.reason_label && (
               <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
                 {attempt.reason_label}
               </span>
             )}
 
-            {/* badge cancelada */}
             {isCancelled && (
               <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
                 {t('contactCycle.attemptCancelledBadge')}
@@ -73,16 +73,13 @@ export function AttemptRow({
             )}
           </div>
 
-          {/* notas */}
           {attempt.notes && (
             <p className="text-xs text-gray-500 mt-1 italic">{attempt.notes}</p>
           )}
 
-          {/* data */}
           <p className="text-xs text-gray-400 mt-1">{fmtDate(attempt.created_at)}</p>
         </div>
 
-        {/* ação de cancelar — somente se ativa e com permissão */}
         {canOperate && !isCancelled && (
           <div className="flex-shrink-0">
             {!showConfirm ? (

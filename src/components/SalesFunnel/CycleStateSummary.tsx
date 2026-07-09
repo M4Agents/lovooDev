@@ -4,6 +4,7 @@ import { Loader2, XCircle } from 'lucide-react'
 import { contactCycleApi } from '../../services/contactCycleApi'
 import { CycleStatusBadge } from './CycleStatusBadge'
 import { getCloseReasonKey, CLOSE_REASON_OPTIONS } from '../../utils/cycleLabels'
+import { useAuth } from '../../contexts/AuthContext'
 import type { ContactCycleState } from '../../types/contact-cycles'
 
 interface CycleStateSummaryProps {
@@ -15,14 +16,6 @@ interface CycleStateSummaryProps {
   refresh:         () => void
 }
 
-const fmtDate = (iso?: string | null): string => {
-  if (!iso) return '—'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(iso))
-}
-
 export function CycleStateSummary({
   state,
   lastCloseReason,
@@ -32,11 +25,21 @@ export function CycleStateSummary({
   refresh,
 }: CycleStateSummaryProps) {
   const { t } = useTranslation('funnel')
+  const { companyTimezone } = useAuth()
 
   const [showClose,   setShowClose]   = useState(false)
   const [closeReason, setCloseReason] = useState<'manual' | 'goal_reached' | 'no_response' | 'duplicate'>('manual')
   const [closing,     setClosing]     = useState(false)
   const [closeError,  setCloseError]  = useState<string | null>(null)
+
+  const fmtDate = (iso?: string | null): string => {
+    if (!iso) return '—'
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: companyTimezone,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso))
+  }
 
   const canClose = canOperate && state.contact_attempts_state === 'cycle_open'
 

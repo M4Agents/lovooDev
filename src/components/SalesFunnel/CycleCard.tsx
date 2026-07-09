@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { getCloseReasonKey } from '../../utils/cycleLabels'
 import { AttemptRow } from './AttemptRow'
+import { useAuth } from '../../contexts/AuthContext'
 import type { ContactCycleHistoryItem, ContactAttemptDetail } from '../../types/contact-cycles'
 
 interface CycleCardProps {
@@ -14,14 +15,6 @@ interface CycleCardProps {
   refresh:       () => void
 }
 
-const fmtDate = (iso?: string | null): string => {
-  if (!iso) return '—'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(iso))
-}
-
 export function CycleCard({
   cycle,
   attempts,
@@ -31,10 +24,20 @@ export function CycleCard({
   refresh,
 }: CycleCardProps) {
   const { t } = useTranslation('funnel')
+  const { companyTimezone } = useAuth()
   // Ciclo aberto: expandido por padrão; fechado: recolhido por padrão
   const [expanded, setExpanded] = useState(cycle.status === 'open')
 
   const isOpen = cycle.status === 'open'
+
+  const fmtDate = (iso?: string | null): string => {
+    if (!iso) return '—'
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: companyTimezone,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso))
+  }
 
   return (
     <div className={`rounded-lg border ${isOpen ? 'border-indigo-200 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
