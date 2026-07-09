@@ -32,6 +32,9 @@ export function CycleCard({
 
   const fmtDate = (iso?: string | null): string => {
     if (!iso) return '—'
+    // #region agent log
+    console.log('[debug-cycles][CycleCard]', { iso, companyTimezone, parsedUTC: new Date(iso).toISOString() })
+    // #endregion
     return new Intl.DateTimeFormat('pt-BR', {
       timeZone: companyTimezone,
       day: '2-digit', month: '2-digit', year: 'numeric',
