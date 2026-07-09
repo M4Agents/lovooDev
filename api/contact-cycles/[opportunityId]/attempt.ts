@@ -278,7 +278,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       p_funnel_stage_id:     funnelStageId,
       p_whatsapp_message_id: whatsappMessageId,
       p_notes:               notes,
-      p_answers:             answers.length > 0 ? JSON.stringify(answers) : null,
+      p_answers:             answers.length > 0 ? answers : null,
     })
 
     if (rpcError) {
@@ -302,9 +302,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         return
       }
 
-      // #region agent log H-A — debug: expose rpcError details temporarily
-      jsonError(res, 500, `[DEBUG] rpcErr code=${(rpcError as any).code} details=${(rpcError as any).details} hint=${(rpcError as any).hint} msg=${msg}`)
-      // #endregion
+      jsonError(res, 500, 'Erro ao registrar tentativa de contato')
       return
     }
 
