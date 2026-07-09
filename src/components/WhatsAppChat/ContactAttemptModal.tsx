@@ -201,6 +201,19 @@ export function ContactAttemptModal({
         .filter(q => answers[q.id] !== undefined && answers[q.id] !== '')
         .map(q => ({ question_id: q.id, value: answers[q.id] }))
 
+      // #region agent log H-A H-B H-C H-D
+      console.log('[DEBUG b9caa6] attempt payload:', {
+        opportunityId: modalState.opportunityId,
+        companyId,
+        triggerReason,
+        reason_id: selectedReasonId || null,
+        whatsapp_message_id: triggerReason === 'manual' ? null : modalState.whatsappMessageId,
+        notes: notes.trim() || null,
+        answers: answersArray,
+      })
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'ContactAttemptModal.tsx:200',message:'attempt payload',hypothesisId:'all',data:{opportunityId:modalState.opportunityId,companyId,triggerReason,reasonId:selectedReasonId||null,answersCount:answersArray.length},timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
+
       await contactCycleApi.registerAttempt(
         modalState.opportunityId,
         companyId,
@@ -217,6 +230,10 @@ export function ContactAttemptModal({
       onClose()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao registrar tentativa'
+      // #region agent log H-A H-B H-C H-D
+      console.error('[DEBUG b9caa6] registerAttempt error:', msg, err)
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'ContactAttemptModal.tsx:230',message:'registerAttempt error',hypothesisId:'all',data:{errorMsg:msg},timestamp:Date.now()})}).catch(()=>{})
+      // #endregion
       setError(msg)
     } finally {
       setSubmitting(false)
