@@ -342,7 +342,7 @@
     "totalAttempts": "{{count}} attempt(s)",
     "lastAgentContact": "Last attempt",
     "lastClientReply": "Last reply",
-    "eligibleAt": "Eligible at",
+    "eligibleAt": "Next attempt allowed from",
     "lastCloseReason": "Last close reason",
     "noAttempts": "No attempts in this cycle.",
     "answersTitle": "Answers",

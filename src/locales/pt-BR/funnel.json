@@ -359,7 +359,7 @@
     "totalAttempts": "{{count}} tentativa(s)",
     "lastAgentContact": "Última tentativa",
     "lastClientReply": "Última resposta",
-    "eligibleAt": "Elegível em",
+    "eligibleAt": "Próxima tentativa permitida em",
     "lastCloseReason": "Último fechamento",
     "noAttempts": "Nenhuma tentativa neste ciclo.",
     "answersTitle": "Respostas",
