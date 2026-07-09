@@ -210,7 +210,8 @@
     "tabs": {
       "details": "Detalles",
       "journey": "Recorrido",
-      "status": "Estado"
+      "status": "Estado",
+      "cycles": "Ciclos"
     },
     "badge": {
       "open": "Abierta",
@@ -329,6 +330,53 @@
       "showHidden_one": "Ver {{count}} evento oculto",
       "showHidden_other": "Ver {{count}} eventos ocultos",
       "collapse": "Contraer"
+    }
+  },
+  "contactCycle": {
+    "tabTitle": "Ciclos de Contacto",
+    "loading": "Cargando ciclos...",
+    "error": "Error al cargar los ciclos de contacto.",
+    "empty": "No hay ciclos de contacto registrados.",
+    "stateTitle": "Estado actual",
+    "historyTitle": "Historial de ciclos",
+    "totalAttempts": "{{count}} intento(s)",
+    "lastAgentContact": "Último intento",
+    "lastClientReply": "Última respuesta",
+    "eligibleAt": "Elegible el",
+    "lastCloseReason": "Último cierre",
+    "noAttempts": "Sin intentos en este ciclo.",
+    "answersTitle": "Respuestas",
+    "closeCycleBtn": "Cerrar ciclo",
+    "closeCycleTitle": "Cerrar ciclo de contacto",
+    "closeCycleReason": "Motivo del cierre",
+    "closeCycleConfirm": "Confirmar",
+    "closeCycleCancel": "Cancelar",
+    "closeCycleLoading": "Cerrando...",
+    "closeError": "Error al cerrar el ciclo. Inténtelo de nuevo.",
+    "cancelAttemptBtn": "Cancelar",
+    "cancelAttemptConfirm": "¿Confirmar cancelación?",
+    "cancelAttemptConfirmYes": "Sí, cancelar",
+    "cancelAttemptCancel": "No",
+    "cancelAttemptLoading": "Cancelando...",
+    "attemptCancelledBadge": "Cancelado",
+    "cycleStatus": {
+      "open": "Abierto",
+      "closed": "Cerrado"
+    },
+    "closeReasons": {
+      "manual": "Cierre manual",
+      "goalReached": "Objetivo alcanzado",
+      "noResponse": "Sin respuesta",
+      "duplicate": "Duplicado",
+      "inboundReceived": "Respuesta del cliente",
+      "unknown": "Desconocido"
+    },
+    "triggerReasons": {
+      "manual": "Manual",
+      "whatsappSent": "WhatsApp enviado",
+      "whatsappReceived": "WhatsApp recibido",
+      "system": "Sistema",
+      "unknown": "Desconocido"
     }
   }
 }

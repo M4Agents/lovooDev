@@ -172,8 +172,33 @@ export interface ContactCycleByLeadState {
   reason: string
 }
 
-// ── Respostas de API ────────────────────────────────────────────
+// ── Detalhes de tentativa (GET /attempts) ───────────────────────
 
+/** Resposta de uma pergunta dinâmica, com label resolvido. */
+export interface ContactAttemptAnswerDetail {
+  question_id:    string
+  question_label: string
+  value:          string
+}
+
+/**
+ * Tentativa de contato com todos os dados resolvidos.
+ * Retornada por GET /api/contact-cycles/[opportunityId]/attempts.
+ * Inclui tentativas canceladas (cancelled_at não-nulo).
+ */
+export interface ContactAttemptDetail {
+  attempt_id:     string
+  cycle_id:       string
+  trigger_reason: 'manual' | 'whatsapp_sent' | 'whatsapp_received' | 'system'
+  reason_label:   string | null
+  notes:          string | null
+  created_at:     string
+  cancelled_at:   string | null
+  actor_id:       string
+  answers:        ContactAttemptAnswerDetail[]
+}
+
+// ── Respostas de API ────────────────────────────────────────────
 export interface ContactCycleApiSuccess<T> {
   ok: true
   data: T

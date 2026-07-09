@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2
+  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2, RefreshCw
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -24,9 +24,11 @@ import { getCompanyUsers } from '../../services/userApi'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
+import { useContactCyclePanel } from '../../hooks/useContactCyclePanel'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
 import { InternalNotes } from '../InternalNotes'
+import { ContactCyclePanel } from './ContactCyclePanel'
 import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm, OpportunitySaleTypeLink } from '../../types/sales-funnel'
 import {
   parseOpportunityCompositionError,
@@ -34,7 +36,7 @@ import {
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
 
-type TabType = 'details' | 'journey' | 'status' | 'notes'
+type TabType = 'details' | 'journey' | 'status' | 'notes' | 'cycles'
 
 interface OpportunityDetailModalProps {
   isOpen: boolean
@@ -187,7 +189,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   onUpdate
 }) => {
   const { t } = useTranslation('funnel')
-  const { hasPlatformElevatedRole, canViewAllLeads } = useAccessControl()
+  const { hasPlatformElevatedRole, canViewAllLeads, canViewContactCycles, canOperateContactCycles } = useAccessControl()
   const isManager = canViewAllLeads || hasPlatformElevatedRole
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
@@ -298,6 +300,12 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     companyId
   )
 
+  // Hook de ciclos de contato — lazy: carrega apenas quando a aba 'cycles' está ativa
+  const cyclePanel = useContactCyclePanel(
+    isOpen && activeTab === 'cycles' ? opportunity.id : null,
+    companyId,
+  )
+
   // Reset de aba / modo edição: só ao abrir, mudar oportunidade (id) ou initialTab — não a cada atualização do objeto `opportunity` (mesmo id).
   useEffect(() => {
     if (!isOpen) return
@@ -386,6 +394,9 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     { key: 'journey', label: t('opportunityDetail.tabs.journey'), icon: <Route className="w-3.5 h-3.5" /> },
     { key: 'status', label: t('opportunityDetail.tabs.status'), icon: <Clock className="w-3.5 h-3.5" /> },
     { key: 'notes', label: 'Notas', icon: <StickyNote className="w-3.5 h-3.5" /> },
+    ...(canViewContactCycles
+      ? [{ key: 'cycles' as TabType, label: t('opportunityDetail.tabs.cycles'), icon: <RefreshCw className="w-3.5 h-3.5" /> }]
+      : []),
   ]
 
   if (!isOpen) return null
@@ -811,6 +822,16 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* ABA: Ciclos de Contato */}
+          {activeTab === 'cycles' && (
+            <ContactCyclePanel
+              {...cyclePanel}
+              opportunityId={opportunity.id}
+              companyId={companyId}
+              canOperate={canOperateContactCycles}
+            />
           )}
         </div>
 

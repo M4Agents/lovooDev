@@ -225,6 +225,14 @@ export function useAccessControl() {
     currentRole === 'system_admin' ||
     currentRole === 'super_admin'
 
+  // Operações sobre ciclos ativos: fechar ciclo e cancelar tentativa.
+  // Manager incluído — ação operacional, não de configuração.
+  const canOperateContactCycles =
+    currentRole === 'manager'      ||
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'
+
   // ── Leads ───────────────────────────────────────────────────
   const canViewLeads    = hasPermission('leads')
   const canViewAllLeads = hasPermission('view_all_leads')
@@ -340,6 +348,7 @@ export function useAccessControl() {
 
     // Motor de Ciclos de Contato
     canViewContactCycles,
+    canOperateContactCycles,
     canManageContactCycles,
   }
 }

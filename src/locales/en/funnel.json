@@ -210,7 +210,8 @@
     "tabs": {
       "details": "Details",
       "journey": "Journey",
-      "status": "Status"
+      "status": "Status",
+      "cycles": "Cycles"
     },
     "badge": {
       "open": "Open",
@@ -329,6 +330,53 @@
       "showHidden_one": "Show {{count}} hidden event",
       "showHidden_other": "Show {{count}} hidden events",
       "collapse": "Collapse"
+    }
+  },
+  "contactCycle": {
+    "tabTitle": "Contact Cycles",
+    "loading": "Loading cycles...",
+    "error": "Error loading contact cycles.",
+    "empty": "No contact cycles recorded.",
+    "stateTitle": "Current state",
+    "historyTitle": "Cycle history",
+    "totalAttempts": "{{count}} attempt(s)",
+    "lastAgentContact": "Last attempt",
+    "lastClientReply": "Last reply",
+    "eligibleAt": "Eligible at",
+    "lastCloseReason": "Last close reason",
+    "noAttempts": "No attempts in this cycle.",
+    "answersTitle": "Answers",
+    "closeCycleBtn": "Close cycle",
+    "closeCycleTitle": "Close contact cycle",
+    "closeCycleReason": "Close reason",
+    "closeCycleConfirm": "Confirm",
+    "closeCycleCancel": "Cancel",
+    "closeCycleLoading": "Closing...",
+    "closeError": "Error closing cycle. Please try again.",
+    "cancelAttemptBtn": "Cancel",
+    "cancelAttemptConfirm": "Confirm cancellation?",
+    "cancelAttemptConfirmYes": "Yes, cancel",
+    "cancelAttemptCancel": "No",
+    "cancelAttemptLoading": "Cancelling...",
+    "attemptCancelledBadge": "Cancelled",
+    "cycleStatus": {
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "closeReasons": {
+      "manual": "Manual close",
+      "goalReached": "Goal reached",
+      "noResponse": "No response",
+      "duplicate": "Duplicate",
+      "inboundReceived": "Customer replied",
+      "unknown": "Unknown"
+    },
+    "triggerReasons": {
+      "manual": "Manual",
+      "whatsappSent": "WhatsApp sent",
+      "whatsappReceived": "WhatsApp received",
+      "system": "System",
+      "unknown": "Unknown"
     }
   }
 }

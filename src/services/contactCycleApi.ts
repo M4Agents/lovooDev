@@ -23,6 +23,7 @@ import type {
   ContactCycleState,
   ContactCycleByLeadState,
   ContactAttemptForm,
+  ContactAttemptDetail,
 } from '../types/contact-cycles'
 
 // ── Helper interno ──────────────────────────────────────────────
@@ -272,6 +273,61 @@ async function registerAttempt(
   )
 }
 
+// ── Operações manuais sobre ciclos ──────────────────────────────
+
+/**
+ * Fecha o ciclo de contato aberto de uma oportunidade manualmente.
+ * RBAC: manager+ (validado no backend)
+ */
+async function closeCycle(
+  opportunityId: string,
+  companyId: string,
+  closeReason: 'manual' | 'goal_reached' | 'no_response' | 'duplicate' = 'manual',
+): Promise<{ closed: boolean; close_reason: string }> {
+  return apiFetch<{ closed: boolean; close_reason: string }>(
+    `/api/contact-cycles/${encodeURIComponent(opportunityId)}/close`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ company_id: companyId, close_reason: closeReason }),
+    },
+  )
+}
+
+/**
+ * Cancela/invalida uma tentativa de contato.
+ * RBAC: manager+ (validado no backend)
+ */
+async function cancelAttempt(
+  opportunityId: string,
+  attemptId: string,
+  companyId: string,
+): Promise<{ cancelled: boolean; attempt_id: string }> {
+  const params = new URLSearchParams({ company_id: companyId })
+  return apiFetch<{ cancelled: boolean; attempt_id: string }>(
+    `/api/contact-cycles/${encodeURIComponent(opportunityId)}/attempt/${encodeURIComponent(attemptId)}?${params}`,
+    { method: 'DELETE' },
+  )
+}
+
+/**
+ * Lista tentativas de contato de uma oportunidade.
+ * Inclui tentativas canceladas.
+ * RBAC: seller+
+ * @param cycleId — opcional; sem filtro retorna todas as tentativas da oportunidade
+ */
+async function listAttempts(
+  opportunityId: string,
+  companyId: string,
+  cycleId?: string,
+): Promise<ContactAttemptDetail[]> {
+  const params = new URLSearchParams({ company_id: companyId })
+  if (cycleId) params.set('cycle_id', cycleId)
+  const result = await apiFetch<{ attempts: ContactAttemptDetail[] }>(
+    `/api/contact-cycles/${encodeURIComponent(opportunityId)}/attempts?${params}`,
+  )
+  return result.attempts
+}
+
 // ── Export ──────────────────────────────────────────────────────
 
 export const contactCycleApi = {
@@ -289,9 +345,14 @@ export const contactCycleApi = {
   createQuestion,
   updateQuestion,
 
-  // Oportunidade
+  // Oportunidade — leitura
   getOpportunityState,
   getCycleHistory,
+  listAttempts,
+
+  // Oportunidade — operações (manager+)
+  closeCycle,
+  cancelAttempt,
 
   // Chat flow
   getStateByLead,

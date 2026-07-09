@@ -33,6 +33,7 @@ const NEUTRAL_POSITION = {
   last_contact_attempt_at:      null,
   last_cycle_close_reason:      null,
   eligible_for_new_cycle_at:    null,
+  last_customer_reply_at:       null,
 }
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -103,7 +104,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       .select(
         'contact_attempts_state, current_contact_cycle_id, contact_cycle_opened_at, ' +
         'total_contact_attempts, last_contact_attempt_at, last_cycle_close_reason, ' +
-        'eligible_for_new_cycle_at',
+        'eligible_for_new_cycle_at, last_customer_reply_at',
       )
       .eq('opportunity_id', opportunityId)
       .maybeSingle()
@@ -165,7 +166,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         total_contact_attempts_count: pos.total_contact_attempts ?? 0,
         next_attempt_eligible_at:     pos.eligible_for_new_cycle_at,
         last_agent_contact_at:        pos.last_contact_attempt_at,
-        last_customer_reply_at:       null, // não disponível no schema atual
+        last_customer_reply_at:       pos.last_customer_reply_at ?? null,
       },
     })
 

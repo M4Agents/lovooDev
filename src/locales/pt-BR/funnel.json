@@ -227,7 +227,8 @@
     "tabs": {
       "details": "Detalhes",
       "journey": "Jornada",
-      "status": "Status"
+      "status": "Status",
+      "cycles": "Ciclos"
     },
     "badge": {
       "open": "Em Aberto",
@@ -346,6 +347,53 @@
       "showHidden_one": "Ver {{count}} evento oculto",
       "showHidden_other": "Ver {{count}} eventos ocultos",
       "collapse": "Recolher"
+    }
+  },
+  "contactCycle": {
+    "tabTitle": "Ciclos de Contato",
+    "loading": "Carregando ciclos...",
+    "error": "Erro ao carregar ciclos de contato.",
+    "empty": "Nenhum ciclo de contato registrado.",
+    "stateTitle": "Estado atual",
+    "historyTitle": "Histórico de ciclos",
+    "totalAttempts": "{{count}} tentativa(s)",
+    "lastAgentContact": "Última tentativa",
+    "lastClientReply": "Última resposta",
+    "eligibleAt": "Elegível em",
+    "lastCloseReason": "Último fechamento",
+    "noAttempts": "Nenhuma tentativa neste ciclo.",
+    "answersTitle": "Respostas",
+    "closeCycleBtn": "Fechar ciclo",
+    "closeCycleTitle": "Fechar ciclo de contato",
+    "closeCycleReason": "Motivo do fechamento",
+    "closeCycleConfirm": "Confirmar",
+    "closeCycleCancel": "Cancelar",
+    "closeCycleLoading": "Fechando...",
+    "closeError": "Erro ao fechar ciclo. Tente novamente.",
+    "cancelAttemptBtn": "Cancelar",
+    "cancelAttemptConfirm": "Confirmar cancelamento?",
+    "cancelAttemptConfirmYes": "Sim, cancelar",
+    "cancelAttemptCancel": "Não",
+    "cancelAttemptLoading": "Cancelando...",
+    "attemptCancelledBadge": "Cancelada",
+    "cycleStatus": {
+      "open": "Em aberto",
+      "closed": "Fechado"
+    },
+    "closeReasons": {
+      "manual": "Fechamento manual",
+      "goalReached": "Objetivo atingido",
+      "noResponse": "Sem resposta",
+      "duplicate": "Duplicata",
+      "inboundReceived": "Resposta do cliente",
+      "unknown": "Desconhecido"
+    },
+    "triggerReasons": {
+      "manual": "Manual",
+      "whatsappSent": "WhatsApp enviado",
+      "whatsappReceived": "WhatsApp recebido",
+      "system": "Sistema",
+      "unknown": "Desconhecido"
     }
   }
 }
