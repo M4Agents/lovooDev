@@ -1091,6 +1091,21 @@ async function processMessage(payload) {
         // Não falhar o webhook por causa disso - apenas log
       }
 
+      // Motor de Ciclos: fechar ciclo aberto quando cliente responder via inbound
+      if (inboundLeadId) {
+        try {
+          const svcCycle = getSupabaseAdmin();
+          await svcCycle.rpc('handle_inbound_for_contact_cycle', {
+            p_lead_id:             Number(inboundLeadId),
+            p_company_id:          company.id,
+            p_whatsapp_message_id: messageId || null,
+          });
+          console.log('[contact-cycle] inbound handled for lead', inboundLeadId);
+        } catch (cycleErr) {
+          console.warn('[contact-cycle] handle_inbound_for_contact_cycle failed (non-blocking):', cycleErr?.message);
+        }
+      }
+
       // 🔔 CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS
       // Quando lead responde, cancelar mensagens agendadas se configurado
       // 🔥 WEBHOOK VERSION: 2026-03-02-17:40 - AUTO-CANCEL ENABLED
