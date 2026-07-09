@@ -377,6 +377,9 @@
       "whatsappReceived": "WhatsApp received",
       "system": "System",
       "unknown": "Unknown"
-    }
+    },
+    "registerAttemptBtn": "Register attempt",
+    "registerAttemptManualTitle": "Register manual attempt",
+    "registerAttemptWaiting": "Cooldown in progress — next attempt allowed from {{date}}"
   }
 }

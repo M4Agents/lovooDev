@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, XCircle } from 'lucide-react'
+import { Loader2, XCircle, Phone } from 'lucide-react'
 import { contactCycleApi } from '../../services/contactCycleApi'
 import { CycleStatusBadge } from './CycleStatusBadge'
 import { getCloseReasonKey, CLOSE_REASON_OPTIONS } from '../../utils/cycleLabels'
 import { useAuth } from '../../contexts/AuthContext'
+import { ContactAttemptModal } from '../WhatsAppChat/ContactAttemptModal'
+import type { ContactAttemptModalState } from '../../hooks/useContactCycleState'
 import type { ContactCycleState } from '../../types/contact-cycles'
 
 interface CycleStateSummaryProps {
@@ -32,6 +34,32 @@ export function CycleStateSummary({
   const [closing,     setClosing]     = useState(false)
   const [closeError,  setCloseError]  = useState<string | null>(null)
 
+  // ── Modal de tentativa manual ─────────────────────────────────
+  const [attemptModalState, setAttemptModalState] = useState<ContactAttemptModalState | null>(null)
+
+  const canRegisterAttempt =
+    canOperate &&
+    (state.contact_attempts_state === 'cycle_open' || state.eligibility === 'eligible')
+
+  const handleOpenAttemptModal = () => {
+    setAttemptModalState({
+      opportunityId:     opportunityId,
+      whatsappMessageId: null,
+      cycleState: {
+        opportunity_id:               opportunityId,
+        eligibility:                  state.eligibility,
+        eligible_for_attempt:         true,
+        contact_attempts_state:       state.contact_attempts_state,
+        current_contact_cycle_id:     state.current_contact_cycle_id,
+        current_cycle_attempts_count: state.current_cycle_attempts_count,
+        total_contact_attempts_count: state.total_contact_attempts_count,
+        last_contact_attempt_at:      null,
+        eligible_for_new_cycle_at:    state.next_attempt_eligible_at,
+        reason:                       '',
+      },
+    })
+  }
+
   const fmtDate = (iso?: string | null): string => {
     if (!iso) return '—'
     return new Intl.DateTimeFormat('pt-BR', {
@@ -58,8 +86,9 @@ export function CycleStateSummary({
   }
 
   return (
+    <>
     <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 mb-4">
-      {/* Linha superior: badge + total tentativas */}
+      {/* Linha superior: badge + total tentativas + ações */}
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <CycleStatusBadge state={state.contact_attempts_state} />
@@ -68,15 +97,28 @@ export function CycleStateSummary({
           </span>
         </div>
 
-        {canClose && !showClose && (
-          <button
-            onClick={() => setShowClose(true)}
-            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors"
-          >
-            <XCircle className="w-3.5 h-3.5" />
-            {t('contactCycle.closeCycleBtn')}
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {canRegisterAttempt && (
+            <button
+              onClick={handleOpenAttemptModal}
+              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
+              title={t('contactCycle.registerAttemptBtn')}
+            >
+              <Phone className="w-3.5 h-3.5" />
+              {t('contactCycle.registerAttemptBtn')}
+            </button>
+          )}
+
+          {canClose && !showClose && (
+            <button
+              onClick={() => setShowClose(true)}
+              className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              {t('contactCycle.closeCycleBtn')}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grade de metadados */}
@@ -151,5 +193,14 @@ export function CycleStateSummary({
         </div>
       )}
     </div>
+
+    <ContactAttemptModal
+      companyId={companyId}
+      modalState={attemptModalState}
+      onClose={() => setAttemptModalState(null)}
+      triggerReason="manual"
+      onSuccess={refresh}
+    />
+    </>
   )
 }

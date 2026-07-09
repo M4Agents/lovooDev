@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route } from 'lucide-react'
+import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route, Phone } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { useWonItemCheck } from '../../../hooks/useWonItemCheck'
 import { useSaleTypeCheck } from '../../../hooks/useSaleTypeCheck'
@@ -14,6 +14,8 @@ import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
 import { ReopenOpportunityModal } from '../../SalesFunnel/ReopenOpportunityModal'
+import { ContactAttemptModal } from '../ContactAttemptModal'
+import type { ContactAttemptModalState } from '../../../hooks/useContactCycleState'
 import { formatCurrency } from '../../../types/sales-funnel'
 import type {
   SalesFunnel,
@@ -72,6 +74,9 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [loadingFunnels, setLoadingFunnels] = useState(false)
   const [updatingPosition, setUpdatingPosition] = useState<string | null>(null)
   const [deletingOpportunity, setDeletingOpportunity] = useState<string | null>(null)
+
+  // ── Tentativa manual (ligação) ────────────────────────────────
+  const [attemptModalState, setAttemptModalState] = useState<ContactAttemptModalState | null>(null)
 
   // Estados pendentes: aguardam confirmação antes de salvar no banco
   const [pendingFunnelIds, setPendingFunnelIds] = useState<Record<string, string>>({})
@@ -270,8 +275,29 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     }
   }
 
-  const fireAutomationAfterStageChange = async (
-    opportunityId: string,
+  // Abre modal de tentativa manual para uma oportunidade específica
+  const handleRegisterAttempt = (opportunityId: string) => {
+    const pos = positions[opportunityId]
+    if (!pos) return
+    setAttemptModalState({
+      opportunityId,
+      whatsappMessageId: null,
+      cycleState: {
+        opportunity_id:               opportunityId,
+        eligibility:                  pos.contact_attempts_state === 'cycle_open' ? 'cycle_open' : 'eligible',
+        eligible_for_attempt:         true,
+        contact_attempts_state:       pos.contact_attempts_state ?? 'eligible',
+        current_contact_cycle_id:     pos.current_contact_cycle_id ?? null,
+        current_cycle_attempts_count: 0,
+        total_contact_attempts_count: pos.total_contact_attempts ?? 0,
+        last_contact_attempt_at:      pos.last_contact_attempt_at ?? null,
+        eligible_for_new_cycle_at:    pos.eligible_for_new_cycle_at ?? null,
+        reason:                       '',
+      },
+    })
+  }
+
+  const fireAutomationAfterStageChange = async (    opportunityId: string,
     oldStageId: string,
     newStageId: string,
     newFunnelId: string
@@ -710,6 +736,21 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                   >
                     <Route className="w-4 h-4" />
                   </button>
+                  {positions[opportunity.id]?.contact_attempts_state &&
+                    positions[opportunity.id].contact_attempts_state !== 'none' && (
+                    <button
+                      onClick={() => handleRegisterAttempt(opportunity.id)}
+                      disabled={positions[opportunity.id].contact_attempts_state === 'waiting'}
+                      className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={
+                        positions[opportunity.id].contact_attempts_state === 'waiting'
+                          ? 'Aguardando cooldown — nova tentativa não permitida ainda'
+                          : 'Registrar tentativa de contato (ligação ou outro canal)'
+                      }
+                    >
+                      <Phone className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEditOpportunity(opportunity)}
                     className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -1031,6 +1072,14 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           onCancel={handleCancelStageTransition}
         />
       )}
+
+      {/* Modal de tentativa manual (ligação ou outro canal) */}
+      <ContactAttemptModal
+        companyId={companyId}
+        modalState={attemptModalState}
+        onClose={() => setAttemptModalState(null)}
+        triggerReason="manual"
+      />
     </div>
   )
 }

@@ -1,17 +1,19 @@
 // =====================================================
 // ContactAttemptModal
 //
-// Modal exibido após envio bem-sucedido de mensagem WhatsApp
-// quando a oportunidade é elegível para registro de tentativa.
+// Modal para registro de tentativa de contato.
+// Suporta dois fluxos:
+//   - Automático: disparado após envio de mensagem WhatsApp (trigger_reason: 'whatsapp_sent')
+//   - Manual: disparado pelo vendedor após ligação ou contato fora do WhatsApp (trigger_reason: 'manual')
 //
-// Fluxo:
+// Fluxo automático:
 //   1. ChatArea chama triggerCheck → useContactCycleState preenche modalState
 //   2. Este modal lê modalState e se torna visível
-//   3. Carrega motivos ativos e perguntas ativas da empresa
-//   4. Usuário preenche o form e confirma
-//   5. Chama POST /api/contact-cycles/[opportunityId]/attempt
-//      (o backend abre o ciclo automaticamente se necessário)
-//   6. Fecha modal em caso de sucesso
+//
+// Fluxo manual:
+//   1. Vendedor clica em "Registrar tentativa" em OpportunitiesSection ou CycleStateSummary
+//   2. Componente pai monta modalState com opportunityId e cycleState
+//   3. Passa triggerReason='manual' e onSuccess=refresh
 //
 // Garantias:
 //   - "Agora não" e X sempre funcionam (nunca bloqueados)
@@ -34,6 +36,13 @@ interface ContactAttemptModalProps {
   modalState: ContactAttemptModalState | null
   /** Chamar para fechar sem registrar (dismiss ou sucesso) */
   onClose: () => void
+  /**
+   * Razão do trigger. Default: 'whatsapp_sent' (fluxo automático do chat).
+   * Passar 'manual' para ligações e contatos fora do WhatsApp.
+   */
+  triggerReason?: 'whatsapp_sent' | 'manual'
+  /** Callback executado após registro bem-sucedido (ex: refresh do painel de ciclos) */
+  onSuccess?: () => void
 }
 
 // ── Renderizador de campo por field_type ─────────────────────────
@@ -123,6 +132,8 @@ export function ContactAttemptModal({
   companyId,
   modalState,
   onClose,
+  triggerReason = 'whatsapp_sent',
+  onSuccess,
 }: ContactAttemptModalProps) {
   const isOpen = modalState !== null
 
@@ -194,14 +205,15 @@ export function ContactAttemptModal({
         modalState.opportunityId,
         companyId,
         {
-          trigger_reason:       'whatsapp_sent',
+          trigger_reason:       triggerReason,
           reason_id:            selectedReasonId || null,
-          whatsapp_message_id:  modalState.whatsappMessageId,
+          whatsapp_message_id:  triggerReason === 'manual' ? null : modalState.whatsappMessageId,
           notes:                notes.trim() || null,
           answers:              answersArray,
         },
       )
 
+      onSuccess?.()
       onClose()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao registrar tentativa'
@@ -236,10 +248,14 @@ export function ContactAttemptModal({
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-semibold text-indigo-900">
-              Registrar tentativa de contato
+              {triggerReason === 'manual'
+                ? 'Registrar tentativa manual'
+                : 'Registrar tentativa de contato'}
             </h2>
             <p className="text-xs text-indigo-600 mt-0.5">
-              Tentativa nº {attemptNum} neste ciclo
+              {triggerReason === 'manual'
+                ? 'Ligação telefônica ou contato fora do WhatsApp'
+                : `Tentativa nº ${attemptNum} neste ciclo`}
             </p>
           </div>
           <button
