@@ -282,7 +282,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     })
 
     if (rpcError) {
-      console.error('[contact-cycles/attempt] register_contact_attempt error:', rpcError)
+      // #region agent log H-A
+      console.error('[contact-cycles/attempt] register_contact_attempt error:', JSON.stringify(rpcError))
+      // #endregion
 
       // Erros de negócio da RPC — mensagem controlada ao frontend
       const msg = rpcError.message ?? ''
@@ -300,7 +302,9 @@ export default async function handler(req: any, res: any): Promise<void> {
         return
       }
 
-      jsonError(res, 500, 'Erro ao registrar tentativa de contato')
+      // #region agent log H-A — debug: expose rpcError details temporarily
+      jsonError(res, 500, `[DEBUG] rpcErr code=${(rpcError as any).code} details=${(rpcError as any).details} hint=${(rpcError as any).hint} msg=${msg}`)
+      // #endregion
       return
     }
 
