@@ -23,7 +23,7 @@ const ELIGIBILITY_OPTIONS: Array<{ value: EligibilityRule; label: string; hint: 
   {
     value: 'hours',
     label: 'Intervalo em horas',
-    hint: 'Novo ciclo permitido após X horas sem resposta do cliente.',
+    hint: 'Após o fechamento de um ciclo (por qualquer motivo, inclusive quando o lead responde), um novo ciclo de tentativas só poderá ser aberto após o intervalo definido. O envio de mensagens pelo WhatsApp continua funcionando normalmente durante esse período.',
   },
   {
     value: 'day_change',
@@ -204,7 +204,7 @@ export const ContactCycleConfigPanel: React.FC<Props> = ({ companyId, canManage 
               className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-slate-50"
             />
             <p className="text-xs text-slate-500">
-              Mínimo: 1 hora. Recomendado: 24h para a maioria dos casos.
+              Mínimo: 1 hora. Ex: <strong>4h</strong> = após o fechamento do ciclo (inclusive quando o lead responder), o vendedor só poderá abrir um novo ciclo de tentativas depois de 4h. Durante esse período, o envio de mensagens pelo WhatsApp continua funcionando normalmente.
             </p>
           </div>
         )}

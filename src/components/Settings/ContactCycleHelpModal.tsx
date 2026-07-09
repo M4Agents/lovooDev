@@ -152,7 +152,19 @@ export const ContactCycleHelpModal: React.FC<Props> = ({ onClose }) => {
                     <span className="font-semibold text-slate-800">Intervalo mínimo (horas)</span>
                     <Tag color="bg-blue-50 text-blue-700">número</Tag>
                   </div>
-                  <p>Visível quando a regra usa horas. Mínimo 1h. Exemplo: <strong>4h</strong> significa que só é possível iniciar um novo ciclo 4 horas após o fechamento do anterior.</p>
+                  <p className="mb-2">
+                    Visível quando a regra usa horas. Mínimo 1h. Exemplo: <strong>4h</strong> significa que,
+                    após o fechamento do ciclo anterior (por qualquer motivo — incluindo quando o lead responder),
+                    o vendedor só poderá registrar um novo ciclo de tentativas depois de 4 horas.
+                  </p>
+                  <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-lg p-2.5 text-xs text-emerald-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      <strong>O envio de mensagens pelo WhatsApp não é bloqueado.</strong> O vendedor continua
+                      com acesso total ao chat durante o período de espera. O que é controlado é apenas
+                      o registro de uma nova tentativa de contato via Motor de Ciclos.
+                    </span>
+                  </div>
                 </div>
 
                 <div className="px-4 py-3">
@@ -282,7 +294,7 @@ export const ContactCycleHelpModal: React.FC<Props> = ({ onClose }) => {
               {[
                 { label: 'Lead movido para etapa sem rastreamento', result: 'Ciclo fechado automaticamente', color: 'text-amber-600 bg-amber-50 border-amber-100' },
                 { label: 'Lead movido para etapa Ganhou ou Perdeu', result: 'Ciclo fechado automaticamente', color: 'text-amber-600 bg-amber-50 border-amber-100' },
-                { label: 'Lead responde a mensagem (webhook)', result: 'Ciclo fechado — lead respondeu', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                { label: 'Lead responde a mensagem (webhook)', result: 'Ciclo fechado — cooldown inicia (chat segue livre)', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
               ].map(item => (
                 <div key={item.label} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-2 ${item.color}`}>
                   <span>{item.label}</span>
