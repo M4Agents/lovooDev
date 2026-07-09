@@ -426,6 +426,11 @@
     "cycleOpenSince": "Em andamento há {{duration}}",
     "collapseShowHidden_one": "Ver mais {{count}} evento",
     "collapseShowHidden_other": "Ver mais {{count}} eventos",
-    "collapseHide": "Recolher"
+    "collapseHide": "Recolher",
+    "filterLabel": "Estado do ciclo:",
+    "filterAll": "Todos",
+    "filterCycleOpen": "Em ciclo",
+    "filterWaiting": "Aguardando",
+    "filterEligible": "Elegível"
   }
 }

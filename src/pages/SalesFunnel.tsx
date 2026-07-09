@@ -19,10 +19,13 @@ import { PeriodFilter } from '../components/PeriodFilter'
 import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { useAvailableTags } from '../hooks/useAvailableTags'
+import { useAccessControl } from '../hooks/useAccessControl'
+import { useContactCycleConfig } from '../hooks/useContactCycleConfig'
 import { funnelApi } from '../services/funnelApi'
 import { supabase } from '../lib/supabase'
 import type { CreateFunnelForm, FunnelStage, SortOption } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
+import type { ContactAttemptsState } from '../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
 import { PREDEFINED_PERIODS } from '../types/analytics'
 import {
@@ -85,6 +88,11 @@ export default function SalesFunnel() {
   const [globalSort, setGlobalSort] = useState<SortOption | undefined>(undefined)
   const [selectedOwner, setSelectedOwner] = useState<string>('')
   const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
+  const [selectedCycleState, setSelectedCycleState] = useState<ContactAttemptsState | null>(null)
+
+  const { canViewContactCycles } = useAccessControl()
+  const { config: cycleConfig } = useContactCycleConfig(companyId ?? null)
+  const showCycleFilter = canViewContactCycles && cycleConfig?.enabled === true
 
   const tagDropdownRef = useRef<HTMLDivElement>(null)
   const { tags: availableTags } = useAvailableTags(companyId)
@@ -129,6 +137,7 @@ export default function SalesFunnel() {
       setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
       setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
       setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
+      setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
       setHasSavedFilters(false)
       return
     }
@@ -141,6 +150,7 @@ export default function SalesFunnel() {
     setGlobalSort(savedFilters.globalSort)
     // selectedOwner é restaurado aqui e revalidado quando ownerOptions carregar
     setSelectedOwner(savedFilters.selectedOwner)
+    setSelectedCycleState(savedFilters.selectedCycleState ?? null)
     setHasSavedFilters(true)
   }, [filtersLoaded, filtersLoadedForFunnelId, companyId, user?.id, selectedFunnel?.id, savedFilters])
 
@@ -222,7 +232,8 @@ export default function SalesFunnel() {
     selectedPeriod,
     globalSort,
     selectedOwner,
-  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, globalSort, selectedOwner])
+    selectedCycleState,
+  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, globalSort, selectedOwner, selectedCycleState])
 
   // ─── Controle do painel de filtros ──────────────────────────────────────────
   // Ao tentar fechar, verifica se há alterações não salvas. Se houver, mantém
@@ -263,6 +274,7 @@ export default function SalesFunnel() {
     setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
     setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
     setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
+    setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
     setHasSavedFilters(false)
     setShowSaveBanner(false)
   }, [clearFilters])
@@ -728,6 +740,38 @@ export default function SalesFunnel() {
               </div>
             </div>
 
+            {/* Filtro por Estado do Ciclo de Contato (Fase 10) */}
+            {showCycleFilter && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-medium text-gray-700 flex-shrink-0">
+                    {t('contactCycle.filterLabel')}
+                  </span>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {([
+                      { value: null,          label: t('contactCycle.filterAll')       },
+                      { value: 'cycle_open',  label: t('contactCycle.filterCycleOpen') },
+                      { value: 'waiting',     label: t('contactCycle.filterWaiting')   },
+                      { value: 'eligible',    label: t('contactCycle.filterEligible')  },
+                    ] as { value: ContactAttemptsState | null; label: string }[]).map(opt => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setSelectedCycleState(opt.value)}
+                        className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                          selectedCycleState === opt.value
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Seção Ordenação Global */}
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex items-center gap-3 flex-wrap">
@@ -805,6 +849,7 @@ export default function SalesFunnel() {
             selectedTagsMode={selectedTagsMode}
             globalSort={globalSort}
             selectedOwner={selectedOwner || undefined}
+            selectedCycleState={selectedCycleState}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

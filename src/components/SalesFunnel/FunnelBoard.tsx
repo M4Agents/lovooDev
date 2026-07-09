@@ -43,6 +43,7 @@ import type {
   ReopenOpportunityParams,
   Opportunity
 } from '../../types/sales-funnel'
+import type { ContactAttemptsState } from '../../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../../types/analytics'
 import type { BulkMoveRequest } from './FunnelColumn'
 import type { CompanyUser } from '../../types/user'
@@ -72,6 +73,8 @@ interface FunnelBoardProps {
   globalSort?: SortOption
   /** UUID do responsável selecionado no filtro. Undefined = sem filtro. */
   selectedOwner?: string
+  /** Filtro por estado do ciclo de contato. Null = todos. */
+  selectedCycleState?: ContactAttemptsState | null
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -87,7 +90,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedTags = [],
   selectedTagsMode = 'or',
   globalSort,
-  selectedOwner
+  selectedOwner,
+  selectedCycleState = null,
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -154,16 +158,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   // Objeto de filtro estável: memoizado para evitar re-fetches desnecessários
   const filter = useMemo<LeadPositionFilter>(() => ({
-    funnel_id:    funnelId,
-    search:       searchTerm     || undefined,
-    origin:       selectedOrigin || undefined,
-    period_start: selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
-    period_end:   selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
-    tags:           selectedTags.length ? selectedTags : undefined,
-    tags_mode:      selectedTags.length ? selectedTagsMode : undefined,
-    sort_by:        globalSort,
-    owner_user_id:  selectedOwner || undefined
-  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort, selectedOwner])
+    funnel_id:               funnelId,
+    search:                  searchTerm     || undefined,
+    origin:                  selectedOrigin || undefined,
+    period_start:            selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
+    period_end:              selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
+    tags:                    selectedTags.length ? selectedTags : undefined,
+    tags_mode:               selectedTags.length ? selectedTagsMode : undefined,
+    sort_by:                 globalSort,
+    owner_user_id:           selectedOwner || undefined,
+    contact_attempts_state:  selectedCycleState || undefined,
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA

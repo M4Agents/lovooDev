@@ -1025,26 +1025,27 @@ class FunnelApiService {
     funnelId: string,
     stageId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id'>,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id' | 'contact_attempts_state'>,
     limit = 20,
     offset = 0
   ): Promise<OpportunityFunnelPosition[]> {
     try {
       const { data, error } = await supabase.rpc('get_stage_positions_paged', {
-        p_funnel_id:      funnelId,
-        p_stage_id:       stageId,
-        p_company_id:     companyId,
-        p_search:         filter?.search                          ?? null,
-        p_origin:         filter?.origin                          ?? null,
-        p_period_days:    null,
-        p_start_date:     filter?.period_start                   ?? null,
-        p_end_date:       filter?.period_end                     ?? null,
-        p_tag_ids:        filter?.tags?.length ? filter.tags      : null,
-        p_tag_mode:       filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
-        p_limit:          limit,
-        p_offset:         offset,
-        p_sort_by:        filter?.sort_by                         ?? null,
-        p_owner_user_id:  filter?.owner_user_id                  ?? null
+        p_funnel_id:                funnelId,
+        p_stage_id:                 stageId,
+        p_company_id:               companyId,
+        p_search:                   filter?.search                          ?? null,
+        p_origin:                   filter?.origin                          ?? null,
+        p_period_days:              null,
+        p_start_date:               filter?.period_start                   ?? null,
+        p_end_date:                 filter?.period_end                     ?? null,
+        p_tag_ids:                  filter?.tags?.length ? filter.tags      : null,
+        p_tag_mode:                 filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
+        p_limit:                    limit,
+        p_offset:                   offset,
+        p_sort_by:                  filter?.sort_by                         ?? null,
+        p_owner_user_id:            filter?.owner_user_id                  ?? null,
+        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null
       })
 
       if (error) throw error
@@ -1068,20 +1069,21 @@ class FunnelApiService {
   async getStageCounts(
     funnelId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'owner_user_id'>
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'owner_user_id' | 'contact_attempts_state'>
   ): Promise<StageCount[]> {
     try {
       const { data, error } = await supabase.rpc('get_funnel_stage_counts', {
-        p_funnel_id:      funnelId,
-        p_company_id:     companyId,
-        p_search:         filter?.search                          ?? null,
-        p_origin:         filter?.origin                          ?? null,
-        p_period_days:    null,
-        p_start_date:     filter?.period_start                   ?? null,
-        p_end_date:       filter?.period_end                     ?? null,
-        p_tag_ids:        filter?.tags?.length ? filter.tags      : null,
-        p_tag_mode:       filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
-        p_owner_user_id:  filter?.owner_user_id                  ?? null
+        p_funnel_id:                funnelId,
+        p_company_id:               companyId,
+        p_search:                   filter?.search                          ?? null,
+        p_origin:                   filter?.origin                          ?? null,
+        p_period_days:              null,
+        p_start_date:               filter?.period_start                   ?? null,
+        p_end_date:                 filter?.period_end                     ?? null,
+        p_tag_ids:                  filter?.tags?.length ? filter.tags      : null,
+        p_tag_mode:                 filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
+        p_owner_user_id:            filter?.owner_user_id                  ?? null,
+        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null
       })
 
       if (error) throw error

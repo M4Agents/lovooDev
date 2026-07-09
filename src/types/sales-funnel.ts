@@ -636,6 +636,8 @@ export interface LeadPositionFilter {
   sort_by?: SortOption
   /** UUID do responsável da oportunidade (opportunities.owner_user_id). NULL = sem filtro. */
   owner_user_id?: string
+  /** Estado do ciclo de contato. NULL = sem filtro. Fase 10. */
+  contact_attempts_state?: ContactAttemptsState | null
 }
 
 // =====================================================

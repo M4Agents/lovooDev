@@ -409,6 +409,11 @@
     "cycleOpenSince": "Running for {{duration}}",
     "collapseShowHidden_one": "Show {{count}} more event",
     "collapseShowHidden_other": "Show {{count}} more events",
-    "collapseHide": "Collapse"
+    "collapseHide": "Collapse",
+    "filterLabel": "Cycle state:",
+    "filterAll": "All",
+    "filterCycleOpen": "In cycle",
+    "filterWaiting": "Waiting",
+    "filterEligible": "Eligible"
   }
 }

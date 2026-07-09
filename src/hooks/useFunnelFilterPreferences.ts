@@ -23,6 +23,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { SortOption } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType, PeriodType } from '../types/analytics'
+import type { ContactAttemptsState } from '../types/contact-cycles'
 
 // =====================================================
 // Tipos públicos
@@ -37,6 +38,7 @@ export interface FunnelFilterSnapshot {
   selectedPeriod: PeriodFilterType | null
   globalSort: SortOption | undefined
   selectedOwner: string
+  selectedCycleState: ContactAttemptsState | null
 }
 
 // =====================================================
@@ -59,6 +61,7 @@ interface StoredSnapshot {
   selectedPeriod: StoredPeriod | null
   globalSort?: SortOption
   selectedOwner: string
+  selectedCycleState?: ContactAttemptsState
 }
 
 // =====================================================
@@ -81,6 +84,10 @@ const VALID_PERIOD_TYPES = new Set<string>([
   '90days', 'this_quarter', 'this_year', 'custom',
 ])
 
+const VALID_CYCLE_STATES = new Set<string>([
+  'none', 'cycle_open', 'waiting', 'eligible',
+])
+
 export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   version: 1,
   searchTerm: '',
@@ -90,6 +97,7 @@ export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   selectedPeriod: null,
   globalSort: undefined,
   selectedOwner: '',
+  selectedCycleState: null,
 }
 
 // =====================================================
@@ -154,6 +162,12 @@ function isValidStoredSnapshot(raw: unknown): raw is StoredSnapshot {
   if (s.globalSort !== undefined && !VALID_SORT_OPTIONS.has(String(s.globalSort))) return false
   if (typeof s.selectedOwner !== 'string') return false
 
+  if (
+    s.selectedCycleState !== undefined &&
+    s.selectedCycleState !== null &&
+    !VALID_CYCLE_STATES.has(String(s.selectedCycleState))
+  ) return false
+
   return true
 }
 
@@ -176,6 +190,7 @@ export function normalizeForStorage(s: FunnelFilterSnapshot): FunnelFilterSnapsh
     selectedPeriod: s.selectedPeriod ?? null,
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
+    selectedCycleState: s.selectedCycleState ?? null,
   }
 }
 
@@ -202,6 +217,7 @@ export function normalizeForCompare(s: FunnelFilterSnapshot): string {
       : null,
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
+    selectedCycleState: s.selectedCycleState ?? null,
   }
   return JSON.stringify(comparable)
 }
@@ -242,6 +258,7 @@ function readFromStorage(key: string | null): FunnelFilterSnapshot | null {
       selectedPeriod: parsed.selectedPeriod ? deserializePeriod(parsed.selectedPeriod) : null,
       globalSort: parsed.globalSort,
       selectedOwner: parsed.selectedOwner,
+      selectedCycleState: parsed.selectedCycleState ?? null,
     }
   } catch {
     try { localStorage.removeItem(key) } catch { /* quota ou bloqueio — ignora */ }
@@ -264,6 +281,7 @@ function writeToStorage(key: string, snapshot: FunnelFilterSnapshot): void {
     selectedPeriod: normalized.selectedPeriod ? serializePeriod(normalized.selectedPeriod) : null,
     globalSort: normalized.globalSort,
     selectedOwner: normalized.selectedOwner,
+    ...(normalized.selectedCycleState ? { selectedCycleState: normalized.selectedCycleState } : {}),
   }
   try {
     localStorage.setItem(key, JSON.stringify(stored))
