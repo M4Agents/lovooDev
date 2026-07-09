@@ -85,22 +85,24 @@ export function CycleCard({
         </div>
       </button>
 
-      {/* Lista de tentativas */}
+      {/* Lista de tentativas — mais recente primeiro */}
       {expanded && (
         <div className="px-3 pb-3 space-y-2">
           {attempts.length === 0 ? (
             <p className="text-xs text-gray-400 py-1">{t('contactCycle.noAttempts')}</p>
           ) : (
-            attempts.map(attempt => (
-              <AttemptRow
-                key={attempt.attempt_id}
-                attempt={attempt}
-                canOperate={canOperate}
-                opportunityId={opportunityId}
-                companyId={companyId}
-                refresh={refresh}
-              />
-            ))
+            [...attempts]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map(attempt => (
+                <AttemptRow
+                  key={attempt.attempt_id}
+                  attempt={attempt}
+                  canOperate={canOperate}
+                  opportunityId={opportunityId}
+                  companyId={companyId}
+                  refresh={refresh}
+                />
+              ))
           )}
         </div>
       )}

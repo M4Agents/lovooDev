@@ -54,18 +54,10 @@ async function apiFetch<T>(
   try {
     json = JSON.parse(text)
   } catch {
-    // #region agent log H-D
-    console.error('[DEBUG b9caa6] apiFetch non-JSON response:', path, res.status, text.slice(0, 300))
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'contactCycleApi.ts:53',message:'non-JSON response',hypothesisId:'H-D',data:{path,status:res.status,body:text.slice(0,300)},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     throw new Error(`Erro ${res.status}: resposta inválida do servidor`)
   }
 
   if (!json.ok) {
-    // #region agent log H-A H-B H-C
-    console.error('[DEBUG b9caa6] apiFetch error response:', path, res.status, json)
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'contactCycleApi.ts:60',message:'API error response',hypothesisId:'H-A H-B H-C',data:{path,status:res.status,error:json.error},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     throw new Error((json.error as string) ?? `Erro ${res.status}`)
   }
 

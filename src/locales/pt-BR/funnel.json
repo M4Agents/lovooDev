@@ -397,6 +397,8 @@
     },
     "registerAttemptBtn": "Registrar tentativa",
     "registerAttemptManualTitle": "Registrar tentativa manual",
-    "registerAttemptWaiting": "Aguardando cooldown — nova tentativa permitida em {{date}}"
+    "registerAttemptWaiting": "Aguardando cooldown — nova tentativa permitida em {{date}}",
+    "boolTrue": "Sim",
+    "boolFalse": "Não"
   }
 }

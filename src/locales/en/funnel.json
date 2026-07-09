@@ -380,6 +380,8 @@
     },
     "registerAttemptBtn": "Register attempt",
     "registerAttemptManualTitle": "Register manual attempt",
-    "registerAttemptWaiting": "Cooldown in progress — next attempt allowed from {{date}}"
+    "registerAttemptWaiting": "Cooldown in progress — next attempt allowed from {{date}}",
+    "boolTrue": "Yes",
+    "boolFalse": "No"
   }
 }
