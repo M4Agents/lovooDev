@@ -382,6 +382,23 @@
     "registerAttemptManualTitle": "Register manual attempt",
     "registerAttemptWaiting": "Cooldown in progress — next attempt allowed from {{date}}",
     "boolTrue": "Yes",
-    "boolFalse": "No"
+    "boolFalse": "No",
+    "timelineSectionTitle": "TIMELINE",
+    "cycleLabel": "Cycle #{{number}}",
+    "currentCycleLabel": "Active cycle",
+    "cycleOpenedEvent": "Cycle opened",
+    "cycleClosedEvent": "Cycle closed",
+    "attemptEvent": "Contact attempt",
+    "summaryTitle": "SUMMARY",
+    "summaryTotalCycles": "Total cycles",
+    "summaryClosedCycles": "Closed cycles",
+    "summaryTotalAttempts": "Total attempts",
+    "summaryAvgAttempts": "Avg per cycle",
+    "currentCycleTitle": "CURRENT CYCLE",
+    "noCycleYet": "No cycle started",
+    "cycleOpenSince": "Running for {{duration}}",
+    "collapseShowHidden_one": "Show {{count}} more event",
+    "collapseShowHidden_other": "Show {{count}} more events",
+    "collapseHide": "Collapse"
   }
 }

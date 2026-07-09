@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
 import { CycleStateSummary } from './CycleStateSummary'
-import { CycleHistorySection } from './CycleHistorySection'
+import { ContactCycleTimeline } from './ContactCycleTimeline'
 import type { ContactCycleState, ContactCycleHistoryItem } from '../../types/contact-cycles'
 import type { AttemptsByCycle } from '../../hooks/useContactCyclePanel'
 
@@ -30,17 +30,23 @@ export function ContactCyclePanel({
 }: ContactCyclePanelProps) {
   const { t } = useTranslation('funnel')
 
-  // estado: carregando
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        {t('contactCycle.loading')}
+      <div className="space-y-3">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="flex gap-3 animate-pulse">
+            <div className="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0" />
+            <div className="flex-1 space-y-1.5 pb-4">
+              <div className="h-3 bg-gray-200 rounded w-3/4" />
+              <div className="h-2 bg-gray-100 rounded w-1/2" />
+              <div className="h-2 bg-gray-100 rounded w-1/3" />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }
 
-  // estado: erro
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -57,7 +63,6 @@ export function ContactCyclePanel({
     )
   }
 
-  // estado: sem dados (módulo desabilitado ou oportunidade sem histórico)
   if (!state && cycles.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center text-gray-400">
@@ -67,16 +72,11 @@ export function ContactCyclePanel({
     )
   }
 
-  // motivo do último fechamento — do ciclo mais recente fechado
   const lastCloseReason =
     cycles.find(c => c.status === 'closed')?.close_reason ?? null
 
   return (
     <div className="space-y-4">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-        {t('contactCycle.tabTitle')}
-      </p>
-
       {/* Resumo do estado atual */}
       {state && (
         <CycleStateSummary
@@ -89,8 +89,8 @@ export function ContactCyclePanel({
         />
       )}
 
-      {/* Histórico de ciclos */}
-      <CycleHistorySection
+      {/* Timeline visual de ciclos */}
+      <ContactCycleTimeline
         cycles={cycles}
         attemptsByCycle={attemptsByCycle}
         canOperate={canOperate}

@@ -382,6 +382,23 @@
     "registerAttemptManualTitle": "Registrar intento manual",
     "registerAttemptWaiting": "Cooldown activo — próximo intento permitido desde {{date}}",
     "boolTrue": "Sí",
-    "boolFalse": "No"
+    "boolFalse": "No",
+    "timelineSectionTitle": "LÍNEA DE TIEMPO",
+    "cycleLabel": "Ciclo #{{number}}",
+    "currentCycleLabel": "Ciclo activo",
+    "cycleOpenedEvent": "Ciclo abierto",
+    "cycleClosedEvent": "Ciclo cerrado",
+    "attemptEvent": "Intento de contacto",
+    "summaryTitle": "RESUMEN",
+    "summaryTotalCycles": "Total de ciclos",
+    "summaryClosedCycles": "Ciclos cerrados",
+    "summaryTotalAttempts": "Total intentos",
+    "summaryAvgAttempts": "Promedio por ciclo",
+    "currentCycleTitle": "CICLO ACTUAL",
+    "noCycleYet": "Ningún ciclo iniciado",
+    "cycleOpenSince": "En curso hace {{duration}}",
+    "collapseShowHidden_one": "Ver {{count}} evento más",
+    "collapseShowHidden_other": "Ver {{count}} eventos más",
+    "collapseHide": "Contraer"
   }
 }

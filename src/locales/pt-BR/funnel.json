@@ -399,6 +399,23 @@
     "registerAttemptManualTitle": "Registrar tentativa manual",
     "registerAttemptWaiting": "Aguardando cooldown — nova tentativa permitida em {{date}}",
     "boolTrue": "Sim",
-    "boolFalse": "Não"
+    "boolFalse": "Não",
+    "timelineSectionTitle": "LINHA DO TEMPO",
+    "cycleLabel": "Ciclo #{{number}}",
+    "currentCycleLabel": "Ciclo ativo",
+    "cycleOpenedEvent": "Ciclo aberto",
+    "cycleClosedEvent": "Ciclo encerrado",
+    "attemptEvent": "Tentativa de contato",
+    "summaryTitle": "RESUMO",
+    "summaryTotalCycles": "Total de ciclos",
+    "summaryClosedCycles": "Ciclos encerrados",
+    "summaryTotalAttempts": "Total de tentativas",
+    "summaryAvgAttempts": "Média por ciclo",
+    "currentCycleTitle": "CICLO ATUAL",
+    "noCycleYet": "Nenhum ciclo iniciado",
+    "cycleOpenSince": "Em andamento há {{duration}}",
+    "collapseShowHidden_one": "Ver mais {{count}} evento",
+    "collapseShowHidden_other": "Ver mais {{count}} eventos",
+    "collapseHide": "Recolher"
   }
 }
