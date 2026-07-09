@@ -395,6 +395,16 @@
       "system": "Sistema",
       "unknown": "Desconhecido"
     },
+    "attemptsState": {
+      "cycle_open": "Em ciclo",
+      "waiting": "Aguardando",
+      "eligible": "Elegível"
+    },
+    "attemptsStateTooltip": {
+      "cycle_open": "Ciclo de contato em andamento",
+      "waiting": "Aguardando cooldown — nova tentativa ainda não permitida",
+      "eligible": "Apto para nova tentativa de contato"
+    },
     "registerAttemptBtn": "Registrar tentativa",
     "registerAttemptManualTitle": "Registrar tentativa manual",
     "registerAttemptWaiting": "Aguardando cooldown — nova tentativa permitida em {{date}}",

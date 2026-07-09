@@ -378,6 +378,16 @@
       "system": "Sistema",
       "unknown": "Desconocido"
     },
+    "attemptsState": {
+      "cycle_open": "En ciclo",
+      "waiting": "En espera",
+      "eligible": "Elegible"
+    },
+    "attemptsStateTooltip": {
+      "cycle_open": "Ciclo de contacto en curso",
+      "waiting": "Cooldown activo — próximo intento aún no permitido",
+      "eligible": "Listo para un nuevo intento de contacto"
+    },
     "registerAttemptBtn": "Registrar intento",
     "registerAttemptManualTitle": "Registrar intento manual",
     "registerAttemptWaiting": "Cooldown activo — próximo intento permitido desde {{date}}",

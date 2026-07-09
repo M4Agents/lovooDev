@@ -281,7 +281,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   <span>{formatDaysInStage(position.days_in_stage)}</span>
                 </>
               )}
-              <CycleStatusBadge state={position.contact_attempts_state} />
+              <CycleStatusBadge
+                state={position.contact_attempts_state}
+                attemptCount={position.total_contact_attempts}
+              />
             </div>
 
             <div className="flex items-center gap-2">
