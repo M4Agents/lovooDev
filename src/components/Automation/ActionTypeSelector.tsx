@@ -14,10 +14,6 @@ import {
 // Não usar comingSoon como separação de ambiente.
 const ENABLE_UPDATE_OPPORTUNITY = import.meta.env.VITE_ENABLE_AUTOMATION_UPDATE_OPPORTUNITY === 'true'
 
-// #region agent log
-console.log('[debug-b9caa6] ActionTypeSelector flag', {ENABLE_UPDATE_OPPORTUNITY, raw: import.meta.env.VITE_ENABLE_AUTOMATION_UPDATE_OPPORTUNITY, mode: import.meta.env.MODE});
-// #endregion
-
 export interface ActionType {
   id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent' | 'update_opportunity'
   label: string
