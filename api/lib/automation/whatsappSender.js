@@ -139,27 +139,44 @@ async function resolveConversation(phone, leadName, instanceId, companyId, supab
 }
 
 async function resolveInstance(conversationId, contextInstanceId, supabase) {
-  // Busca instanceId na conversa (sobrepõe o do contexto se existir)
   const { data: conv } = await supabase
     .from('chat_conversations')
     .select('instance_id')
     .eq('id', conversationId)
     .maybeSingle()
 
-  const instanceId = conv?.instance_id || contextInstanceId
-  if (!instanceId) return null
+  // Tenta instâncias em ordem de prioridade:
+  // 1. instance_id da conversa (vínculo histórico)
+  // 2. contextInstanceId (configurado no nó da automação) — fallback quando a instância da conversa está inválida
+  const candidateIds = []
+  if (conv?.instance_id) candidateIds.push(conv.instance_id)
+  if (contextInstanceId && contextInstanceId !== conv?.instance_id) {
+    candidateIds.push(contextInstanceId)
+  }
 
-  const { data: inst } = await supabase
-    .from('whatsapp_life_instances')
-    .select('id, provider_token, status, deleted_at')
-    .eq('id', instanceId)
-    .maybeSingle()
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'whatsappSender.js:resolveInstance',message:'candidatos de instância',data:{conversationId,convInstanceId:conv?.instance_id,contextInstanceId,candidateIds},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
-  if (!inst) return null
-  if (inst.deleted_at !== null) return null
-  if (inst.status !== 'connected') return null
+  for (const instanceId of candidateIds) {
+    const { data: inst } = await supabase
+      .from('whatsapp_life_instances')
+      .select('id, provider_token, status, deleted_at')
+      .eq('id', instanceId)
+      .maybeSingle()
 
-  return inst
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b9caa6'},body:JSON.stringify({sessionId:'b9caa6',location:'whatsappSender.js:resolveInstance:loop',message:'verificando instância',data:{instanceId,status:inst?.status,deleted_at:inst?.deleted_at,valid:!!(inst && inst.deleted_at===null && inst.status==='connected')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (!inst) continue
+    if (inst.deleted_at !== null) continue
+    if (inst.status !== 'connected') continue
+
+    return inst
+  }
+
+  return null
 }
 
 async function resolveUserId(companyId, supabase) {
