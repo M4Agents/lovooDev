@@ -1249,13 +1249,15 @@ export class ChatApi {
       const cleanPhone = lead.phone.replace(/\D/g, '')
 
       // 2. Buscar conversa diretamente via telefone (chat_conversations usa contact_phone)
+      // Ordena por updated_at DESC para priorizar a conversa com atividade mais recente,
+      // evitando que conversas recém-criadas (mas inativas) sobreponham conversas com histórico.
       const { data: conversation, error: conversationError } = await supabase
         .from('chat_conversations')
         .select('id')
         .eq('contact_phone', cleanPhone)
         .eq('company_id', companyId)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(1)
         .single()
 
