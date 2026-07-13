@@ -72,7 +72,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
   useEffect(() => {
     const actionType = config.actionType || selectedNode?.data?.config?.actionType
     
-    if (selectedNode?.type === 'action' && company?.id && (actionType === 'move_opportunity' || actionType === 'create_opportunity')) {
+    if (selectedNode?.type === 'action' && company?.id && (actionType === 'move_opportunity' || actionType === 'create_opportunity' || actionType === 'change_opportunity_funnel')) {
       loadFunnels()
     }
   }, [selectedNode?.type, selectedNode?.data?.config?.actionType, config.actionType, company?.id])
@@ -432,7 +432,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
               <DistributionForm config={config} setConfig={setConfig} />
             )}
 
-            {/* MOVER OPORTUNIDADE */}
+            {/* MOVER OPORTUNIDADE (dentro do mesmo funil) */}
             {config.actionType === 'move_opportunity' && (
               <>
                 <div>
@@ -468,6 +468,55 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                         className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       >
                         <option value="">-- Selecione uma etapa --</option>
+                        {stages.map(stage => (
+                          <option key={stage.id} value={stage.id}>{stage.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* MOVER PARA OUTRO FUNIL */}
+            {config.actionType === 'change_opportunity_funnel' && (
+              <>
+                <p className="text-xs text-gray-500 bg-blue-50 border border-blue-200 rounded-md p-2">
+                  A oportunidade será <strong>removida do funil atual</strong> e inserida no funil selecionado abaixo.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Funil Destino
+                  </label>
+                  {loadingFunnels ? (
+                    <div className="text-sm text-gray-500">Carregando funis...</div>
+                  ) : (
+                    <select
+                      value={config.funnelId || ''}
+                      onChange={(e) => setConfig({ ...config, funnelId: e.target.value, stageId: '' })}
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">-- Selecione o funil destino --</option>
+                      {funnels.map(funnel => (
+                        <option key={funnel.id} value={funnel.id}>{funnel.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {config.funnelId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Etapa de Entrada
+                    </label>
+                    {loadingStages ? (
+                      <div className="text-sm text-gray-500">Carregando etapas...</div>
+                    ) : (
+                      <select
+                        value={config.stageId || ''}
+                        onChange={(e) => setConfig({ ...config, stageId: e.target.value })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        <option value="">-- Selecione a etapa de entrada --</option>
                         {stages.map(stage => (
                           <option key={stage.id} value={stage.id}>{stage.name}</option>
                         ))}
@@ -933,7 +982,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                 )}
 
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent', 'update_opportunity'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent', 'update_opportunity', 'change_opportunity_funnel'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

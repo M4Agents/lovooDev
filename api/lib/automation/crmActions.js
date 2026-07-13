@@ -874,6 +874,108 @@ async function updateOpportunity(config, context, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// Ação: mover oportunidade para outro funil (Opção A — remove do atual e insere no destino)
+// Não usa RPC move_opportunity (que só move dentro do mesmo funil).
+// Operações diretas via service_role: DELETE posição atual + INSERT nova posição.
+// O trigger record_opportunity_funnel_entry registra o histórico automaticamente.
+// ---------------------------------------------------------------------------
+
+async function changeFunnel(config, context, supabase) {
+  const opportunityId = await resolveOpportunityId(context, supabase)
+  const targetFunnelId = config.funnelId
+  const targetStageId  = config.stageId
+
+  if (!opportunityId)  throw new Error('opportunityId ausente no contexto e nenhuma oportunidade ativa encontrada para o lead')
+  if (!targetFunnelId) throw new Error('funnelId não configurado na ação change_opportunity_funnel')
+  if (!targetStageId)  throw new Error('stageId não configurado na ação change_opportunity_funnel')
+
+  // 1. Validar que targetStageId pertence ao targetFunnelId (evita incoerência silenciosa)
+  const { data: stage, error: stageError } = await supabase
+    .from('funnel_stages')
+    .select('id, name')
+    .eq('id', targetStageId)
+    .eq('funnel_id', targetFunnelId)
+    .maybeSingle()
+
+  if (stageError) throw new Error(`Erro ao validar etapa de destino: ${stageError.message}`)
+  if (!stage)     throw new Error(`Etapa ${targetStageId} não pertence ao funil ${targetFunnelId} — configuração inválida`)
+
+  // 2. Buscar posição atual da oportunidade (pode estar em qualquer funil)
+  const { data: currentPos, error: posError } = await supabase
+    .from('opportunity_funnel_positions')
+    .select('id, funnel_id, stage_id, lead_id')
+    .eq('opportunity_id', opportunityId)
+    .maybeSingle()
+
+  if (posError) throw new Error(`Erro ao buscar posição atual da oportunidade: ${posError.message}`)
+
+  // 3. Se já está no funil destino na etapa correta — sem-op
+  if (currentPos?.funnel_id === targetFunnelId && currentPos?.stage_id === targetStageId) {
+    return { executed: false, skipped: true, reason: 'Oportunidade já está no funil e etapa de destino', opportunityId, targetFunnelId, targetStageId }
+  }
+
+  // 4. Se já está no funil destino mas em etapa diferente — usar RPC move_opportunity
+  if (currentPos?.funnel_id === targetFunnelId) {
+    const { error: moveError } = await supabase.rpc('move_opportunity', {
+      p_opportunity_id:    opportunityId,
+      p_funnel_id:         targetFunnelId,
+      p_from_stage_id:     currentPos.stage_id,
+      p_to_stage_id:       targetStageId,
+      p_position_in_stage: 0,
+    })
+    if (moveError) throw new Error(`Erro ao mover etapa no mesmo funil: ${moveError.message}`)
+    return { executed: true, action: 'change_opportunity_funnel', opportunityId, targetFunnelId, targetStageId, sameFunnel: true }
+  }
+
+  // 5. lead_id necessário para o INSERT (campo NOT NULL na tabela)
+  const leadId = currentPos?.lead_id
+  if (!leadId) {
+    // Fallback: buscar lead_id diretamente na oportunidade
+    const { data: opp } = await supabase
+      .from('opportunities')
+      .select('lead_id')
+      .eq('id', opportunityId)
+      .maybeSingle()
+    if (!opp?.lead_id) throw new Error('lead_id ausente — não é possível inserir a oportunidade no funil destino')
+  }
+  const resolvedLeadId = leadId || (await supabase.from('opportunities').select('lead_id').eq('id', opportunityId).maybeSingle()).data?.lead_id
+
+  // 6. Remover do funil atual (Opção A — move, não duplica)
+  if (currentPos) {
+    const { error: deleteError } = await supabase
+      .from('opportunity_funnel_positions')
+      .delete()
+      .eq('id', currentPos.id)
+
+    if (deleteError) throw new Error(`Erro ao remover oportunidade do funil atual: ${deleteError.message}`)
+  }
+
+  // 7. Inserir no funil destino na etapa configurada
+  // O trigger record_opportunity_funnel_entry registra o histórico automaticamente
+  const { error: insertError } = await supabase
+    .from('opportunity_funnel_positions')
+    .insert({
+      opportunity_id:    opportunityId,
+      funnel_id:         targetFunnelId,
+      stage_id:          targetStageId,
+      lead_id:           resolvedLeadId,
+      position_in_stage: 0,
+    })
+
+  if (insertError) throw new Error(`Erro ao inserir oportunidade no funil destino: ${insertError.message}`)
+
+  return {
+    executed:       true,
+    action:         'change_opportunity_funnel',
+    opportunityId,
+    fromFunnelId:   currentPos?.funnel_id || null,
+    targetFunnelId,
+    targetStageId,
+    stageName:      stage.name,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Entry point principal — chamado pelo executor.js
 // ---------------------------------------------------------------------------
 
@@ -928,6 +1030,9 @@ export async function executeCrmAction(node, context, supabase) {
 
       case 'update_opportunity':
         return await updateOpportunity(config, context, supabase)
+
+      case 'change_opportunity_funnel':
+        return await changeFunnel(config, context, supabase)
 
       default:
         console.log(`[crmActions] ação não suportada nesta etapa: ${actionType} — skipped`)

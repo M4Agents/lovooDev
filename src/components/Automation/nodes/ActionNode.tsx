@@ -53,6 +53,7 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'update_lead': return <UserPlus className="w-4 h-4 text-white" />
       case 'assign_owner': return <User className="w-4 h-4 text-white" />
       case 'move_opportunity': return <ArrowRight className="w-4 h-4 text-white" />
+      case 'change_opportunity_funnel': return <ArrowRight className="w-4 h-4 text-white" />
       case 'win_opportunity': return <TrendingUp className="w-4 h-4 text-white" />
       case 'lose_opportunity': return <TrendingDown className="w-4 h-4 text-white" />
       case 'update_opportunity': return <PenSquare className="w-4 h-4 text-white" />
@@ -67,6 +68,7 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'update_lead': return 'Atualizar Lead'
       case 'assign_owner': return 'Atribuir Responsável'
       case 'move_opportunity': return 'Mover Oportunidade'
+      case 'change_opportunity_funnel': return 'Mover para outro Funil'
       case 'win_opportunity': return 'Ganhar Oportunidade'
       case 'lose_opportunity': return 'Perder Oportunidade'
       case 'update_opportunity': return 'Atualizar Oportunidade'
@@ -91,6 +93,8 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
         return `👤 ${data.config.userId ? 'Responsável configurado' : '(usuário)'}`
       case 'move_opportunity':
         return `➡️ ${data.config.stageId ? 'Etapa configurada' : '(etapa)'}`
+      case 'change_opportunity_funnel':
+        return `🔀 ${data.config.funnelId ? 'Funil configurado' : '(funil destino)'}`
       case 'win_opportunity':
         return `📈 Marcar como ganha`
       case 'lose_opportunity':

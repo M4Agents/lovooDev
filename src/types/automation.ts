@@ -535,7 +535,7 @@ export interface MessageConfig {
 }
 
 export interface ActionConfig {
-  action_type: 'create_opportunity' | 'move_opportunity' | 'create_activity' | 'update_lead' | 'add_tag' | 'remove_tag' | 'assign_owner' | 'update_opportunity'
+  action_type: 'create_opportunity' | 'move_opportunity' | 'change_opportunity_funnel' | 'create_activity' | 'update_lead' | 'add_tag' | 'remove_tag' | 'assign_owner' | 'update_opportunity'
   params: Record<string, any>
 }
 

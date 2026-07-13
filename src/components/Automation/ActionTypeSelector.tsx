@@ -15,7 +15,7 @@ import {
 const ENABLE_UPDATE_OPPORTUNITY = import.meta.env.VITE_ENABLE_AUTOMATION_UPDATE_OPPORTUNITY === 'true'
 
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent' | 'update_opportunity'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent' | 'update_opportunity' | 'change_opportunity_funnel'
   label: string
   icon: React.ReactNode
   description?: string
@@ -218,6 +218,13 @@ export const ACTION_TYPES: ActionType[] = [
     description: 'Atualiza título, descrição, probabilidade ou gerencia itens',
     category: 'opportunity' as const,
   }] : []),
+  {
+    id: 'change_opportunity_funnel' as const,
+    label: 'Mover para outro funil',
+    icon: <ArrowRight className="w-4 h-4" />,
+    description: 'Move a oportunidade para um funil diferente em uma etapa específica',
+    category: 'opportunity' as const,
+  },
 ]
 
 interface ActionTypeSelectorProps {
