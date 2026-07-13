@@ -10,7 +10,7 @@ import { api } from '../services/api'
 export interface Variable {
   key: string
   label: string
-  category: 'lead' | 'empresa' | 'custom' | 'sistema'
+  category: 'lead' | 'oportunidade' | 'empresa' | 'custom' | 'sistema'
   description?: string
 }
 
@@ -115,6 +115,50 @@ function getStaticVariables(): Variable[] {
       description: 'Origem do lead (WhatsApp, site, etc)'
     },
 
+    // VARIÁVEIS DE OPORTUNIDADE
+    {
+      key: 'oportunidade.titulo',
+      label: 'Título da Oportunidade',
+      category: 'oportunidade',
+      description: 'Título/nome da oportunidade vinculada'
+    },
+    {
+      key: 'oportunidade.valor',
+      label: 'Valor da Oportunidade',
+      category: 'oportunidade',
+      description: 'Valor total formatado (ex: R$ 1.500,00)'
+    },
+    {
+      key: 'oportunidade.etapa',
+      label: 'Etapa Atual',
+      category: 'oportunidade',
+      description: 'Nome da etapa atual no funil'
+    },
+    {
+      key: 'oportunidade.status',
+      label: 'Status da Oportunidade',
+      category: 'oportunidade',
+      description: 'Status atual (Aberta, Ganha, Perdida)'
+    },
+    {
+      key: 'oportunidade.probabilidade',
+      label: 'Probabilidade (%)',
+      category: 'oportunidade',
+      description: 'Probabilidade de fechamento (ex: 75%)'
+    },
+    {
+      key: 'oportunidade.previsao',
+      label: 'Previsão de Fechamento',
+      category: 'oportunidade',
+      description: 'Data prevista de fechamento (DD/MM/AAAA)'
+    },
+    {
+      key: 'oportunidade.descricao',
+      label: 'Descrição da Oportunidade',
+      category: 'oportunidade',
+      description: 'Descrição detalhada da oportunidade'
+    },
+
     // VARIÁVEIS DE EMPRESA
     {
       key: 'empresa.nome',
@@ -173,11 +217,12 @@ function getStaticVariables(): Variable[] {
  * Retorna ícone para cada categoria
  */
 export function getCategoryIcon(category: Variable['category']): string {
-  const icons = {
-    lead: '📊',
-    empresa: '🏢',
-    custom: '⚙️',
-    sistema: '📅'
+  const icons: Record<Variable['category'], string> = {
+    lead:        '📊',
+    oportunidade:'💼',
+    empresa:     '🏢',
+    custom:      '⚙️',
+    sistema:     '📅',
   }
   return icons[category] || '📝'
 }
@@ -186,11 +231,12 @@ export function getCategoryIcon(category: Variable['category']): string {
  * Retorna label para cada categoria
  */
 export function getCategoryLabel(category: Variable['category']): string {
-  const labels = {
-    lead: 'LEAD',
-    empresa: 'EMPRESA',
-    custom: 'CAMPOS PERSONALIZADOS',
-    sistema: 'SISTEMA'
+  const labels: Record<Variable['category'], string> = {
+    lead:        'LEAD',
+    oportunidade:'OPORTUNIDADE',
+    empresa:     'EMPRESA',
+    custom:      'CAMPOS PERSONALIZADOS',
+    sistema:     'SISTEMA',
   }
   return labels[category] || 'OUTROS'
 }

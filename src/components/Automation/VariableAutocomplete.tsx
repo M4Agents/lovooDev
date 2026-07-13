@@ -34,7 +34,7 @@ export default function VariableAutocomplete({
   }, {} as Record<string, Variable[]>)
 
   // Ordem das categorias
-  const categoryOrder: Variable['category'][] = ['lead', 'empresa', 'custom', 'sistema']
+  const categoryOrder: Variable['category'][] = ['lead', 'oportunidade', 'empresa', 'custom', 'sistema']
 
   if (filteredVariables.length === 0) {
     return (

@@ -75,6 +75,41 @@ async function resolveLead(opportunityId, companyId, supabase, leadId) {
   return null
 }
 
+/**
+ * Resolve dados da oportunidade para interpolação de variáveis em mensagens.
+ * Busca título, valor, status, probabilidade, previsão de fechamento e etapa atual.
+ * Retorna null se não houver opportunityId ou em caso de erro (não bloqueia o envio).
+ */
+async function resolveOpportunity(opportunityId, companyId, supabase) {
+  if (!opportunityId) return null
+
+  const { data: opp, error } = await supabase
+    .from('opportunities')
+    .select('id, title, description, value, currency, status, probability, expected_close_date')
+    .eq('id', opportunityId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (error) {
+    console.error(`[whatsappSender] erro ao buscar oportunidade ${opportunityId}:`, error?.message)
+    return null
+  }
+
+  if (!opp) return null
+
+  // Buscar nome da etapa atual via opportunity_funnel_positions
+  const { data: pos } = await supabase
+    .from('opportunity_funnel_positions')
+    .select('funnel_stages(name)')
+    .eq('opportunity_id', opportunityId)
+    .maybeSingle()
+
+  return {
+    ...opp,
+    stage_name: pos?.funnel_stages?.name || '',
+  }
+}
+
 async function resolveConversation(phone, leadName, instanceId, companyId, supabase) {
   const cleanPhone = cleanPhoneNumber(phone)
 
@@ -148,7 +183,34 @@ function cleanPhoneNumber(phone) {
   return clean
 }
 
-function replaceVariables(message, lead, contextVariables) {
+function formatCurrency(value, currency) {
+  if (value == null || value === '') return ''
+  const curr = currency || 'BRL'
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: curr }).format(Number(value))
+  } catch {
+    return String(value)
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('pt-BR')
+  } catch {
+    return ''
+  }
+}
+
+const OPPORTUNITY_STATUS_LABELS = {
+  open:   'Aberta',
+  won:    'Ganha',
+  lost:   'Perdida',
+}
+
+function replaceVariables(message, lead, opportunity, contextVariables) {
   if (!message) return ''
   let result = message
   const now = new Date()
@@ -160,6 +222,15 @@ function replaceVariables(message, lead, contextVariables) {
   result = result.replace(/\{\{lead\.empresa\}\}/g,  lead?.company_name || '')
   result = result.replace(/\{\{lead\.cidade\}\}/g,   lead?.cidade       || '')
   result = result.replace(/\{\{lead\.estado\}\}/g,   lead?.estado       || '')
+
+  // Variáveis de oportunidade
+  result = result.replace(/\{\{oportunidade\.titulo\}\}/g,       opportunity?.title       || '')
+  result = result.replace(/\{\{oportunidade\.descricao\}\}/g,    opportunity?.description || '')
+  result = result.replace(/\{\{oportunidade\.valor\}\}/g,        formatCurrency(opportunity?.value, opportunity?.currency))
+  result = result.replace(/\{\{oportunidade\.etapa\}\}/g,        opportunity?.stage_name  || '')
+  result = result.replace(/\{\{oportunidade\.status\}\}/g,       OPPORTUNITY_STATUS_LABELS[opportunity?.status] || opportunity?.status || '')
+  result = result.replace(/\{\{oportunidade\.probabilidade\}\}/g, opportunity?.probability != null ? `${opportunity.probability}%` : '')
+  result = result.replace(/\{\{oportunidade\.previsao\}\}/g,     formatDate(opportunity?.expected_close_date))
 
   // Variáveis de data/hora
   result = result.replace(/\{\{data\.hoje\}\}/g, now.toLocaleDateString('pt-BR'))
@@ -283,8 +354,11 @@ export async function sendMessageNode(node, context, supabase) {
     }
   }
 
+  // 1b. Resolver oportunidade para interpolação de variáveis (não bloqueia envio se ausente)
+  const opportunity = await resolveOpportunity(context.opportunityId, context.companyId, supabase)
+
   // 2. Substituir variáveis na mensagem
-  const message = replaceVariables(rawMessage, lead, context.variables)
+  const message = replaceVariables(rawMessage, lead, opportunity, context.variables)
   if (!message && !mediaUrl) {
     return { skipped: true, reason: 'Mensagem vazia e sem mídia' }
   }
