@@ -9,6 +9,7 @@ import { ConditionForm } from './ConditionForm'
 import KeywordRouterForm from './KeywordRouterForm'
 import { DistributionForm } from './DistributionForm'
 import ExecuteAgentForm from './forms/ExecuteAgentForm'
+import UpdateOpportunityForm from './forms/UpdateOpportunityForm'
 import NodeExecutionStatus from './NodeExecutionStatus'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
@@ -926,8 +927,13 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                   </div>
                 )}
 
+                {/* ATUALIZAR OPORTUNIDADE — controlado por feature flag */}
+                {config.actionType === 'update_opportunity' && (
+                  <UpdateOpportunityForm config={config} setConfig={setConfig} />
+                )}
+
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent', 'update_opportunity'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

@@ -5,7 +5,7 @@
 // =====================================================
 
 import { Handle, Position, NodeProps } from 'reactflow'
-import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2, ArrowRight, TrendingUp, TrendingDown, User } from 'lucide-react'
+import { Target, CheckCircle, AlertTriangle, Tag, UserPlus, Trash2, ArrowRight, TrendingUp, TrendingDown, User, PenSquare } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
 import NodeDebugBadge from './NodeDebugBadge'
@@ -55,6 +55,7 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'move_opportunity': return <ArrowRight className="w-4 h-4 text-white" />
       case 'win_opportunity': return <TrendingUp className="w-4 h-4 text-white" />
       case 'lose_opportunity': return <TrendingDown className="w-4 h-4 text-white" />
+      case 'update_opportunity': return <PenSquare className="w-4 h-4 text-white" />
       default: return <Target className="w-4 h-4 text-white" />
     }
   }
@@ -68,6 +69,7 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
       case 'move_opportunity': return 'Mover Oportunidade'
       case 'win_opportunity': return 'Ganhar Oportunidade'
       case 'lose_opportunity': return 'Perder Oportunidade'
+      case 'update_opportunity': return 'Atualizar Oportunidade'
       default: return 'Ação CRM'
     }
   }
@@ -93,6 +95,27 @@ const ActionNode = ({ data, selected, id }: NodeProps) => {
         return `📈 Marcar como ganha`
       case 'lose_opportunity':
         return `📉 Marcar como perdida`
+      case 'update_opportunity': {
+        const cfg = data.config
+        const parts: string[] = []
+        const fieldKeys = Object.keys(cfg.fields ?? {})
+        if (fieldKeys.length > 0) {
+          const labels: Record<string, string> = { title: 'Título', description: 'Descrição', probability: 'Probabilidade' }
+          parts.push(fieldKeys.map((k: string) => labels[k] ?? k).join(', '))
+        }
+        if (cfg.manageItems) {
+          const mode = cfg.itemsMode === 'replace' ? 'Substituir' : 'Adicionar'
+          const count = Array.isArray(cfg.items) ? cfg.items.length : 0
+          if (cfg.itemsMode === 'replace' && count === 0) {
+            parts.push('Remover todos os itens')
+          } else {
+            parts.push(`${mode} ${count} ${count === 1 ? 'item' : 'itens'}`)
+          }
+        }
+        return parts.length > 0
+          ? `✏️ ${parts.join(' · ')}`
+          : '✏️ Atualizar oportunidade'
+      }
       default:
         return 'Ação configurada'
     }

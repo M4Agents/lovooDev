@@ -7,11 +7,15 @@
 import { 
   Plus, Edit, Tag, Minus, UserPlus, 
   ArrowRight, Trophy, XCircle, User, Briefcase, Settings, Webhook, 
-  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle, Bot, PowerOff
+  Calendar, CalendarCheck, CalendarX, CalendarClock, Bell, Zap, Shuffle, Bot, PowerOff, PenSquare
 } from 'lucide-react'
 
+// Feature flag: exibe 'update_opportunity' somente no LovooDev quando a variável estiver configurada.
+// Não usar comingSoon como separação de ambiente.
+const ENABLE_UPDATE_OPPORTUNITY = import.meta.env.VITE_ENABLE_AUTOMATION_UPDATE_OPPORTUNITY === 'true'
+
 export interface ActionType {
-  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent'
+  id: 'add_tag' | 'remove_tag' | 'assign_owner' | 'distribute_lead' | 'move_opportunity' | 'win_opportunity' | 'lose_opportunity' | 'create_opportunity' | 'update_lead' | 'set_custom_field' | 'send_webhook' | 'create_activity' | 'update_activity' | 'complete_activity' | 'cancel_activity' | 'reschedule_activity' | 'send_notification' | 'trigger_automation' | 'attach_agent' | 'detach_agent' | 'update_opportunity'
   label: string
   icon: React.ReactNode
   description?: string
@@ -203,7 +207,17 @@ export const ACTION_TYPES: ActionType[] = [
     icon: <PowerOff className="w-4 h-4" />,
     description: 'Remove o agente de IA da conversa em andamento',
     category: 'system'
-  }
+  },
+  // Controlado pela feature flag VITE_ENABLE_AUTOMATION_UPDATE_OPPORTUNITY.
+  // Visível apenas no LovooDev onde a variável estiver configurada.
+  // O backend valida o payload independentemente da flag.
+  ...(ENABLE_UPDATE_OPPORTUNITY ? [{
+    id: 'update_opportunity' as const,
+    label: 'Atualizar oportunidade',
+    icon: <PenSquare className="w-4 h-4" />,
+    description: 'Atualiza título, descrição, probabilidade ou gerencia itens',
+    category: 'opportunity' as const,
+  }] : []),
 ]
 
 interface ActionTypeSelectorProps {

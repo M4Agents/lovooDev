@@ -15,6 +15,8 @@
 //   set_custom_field        — upsert em lead_custom_values
 //   attach_agent            — ativa agente de IA na conversa (ai_state = ai_active)
 //   detach_agent            — desativa agente de IA na conversa (ai_state = ai_inactive)
+//   update_opportunity      — atualiza título/descrição/probabilidade e gerencia itens
+//                             via automation_manage_opportunity_items_v1 (strategy A)
 //
 // resolveLeadId centralizado em contextUtils.js
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
@@ -655,6 +657,223 @@ async function detachAgent(config, context, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// Ação: atualizar oportunidade (título, descrição, probabilidade, itens)
+//
+// ARQUITETURA (Estratégia A):
+//   - Campos simples (title, description, probability): UPDATE direto com whitelist
+//   - Itens: delegados à RPC automation_manage_opportunity_items_v1
+//     (SECURITY DEFINER / service_role / sem company_user_has_access)
+//
+// RISCO RESIDUAL DOCUMENTADO:
+//   - Campos e itens NÃO estão na mesma transação.
+//   - Se UPDATE de campos ok e RPC falhar → campos ficam gravados, nó falha.
+//   - Atomicidade é garantida APENAS dentro da operação de itens (pela RPC).
+//
+// IDEMPOTÊNCIA:
+//   - Modo replace: idempotente por estado final.
+//   - Modo add em retry: pode duplicar itens (risco residual / dívida técnica).
+// ---------------------------------------------------------------------------
+
+async function updateOpportunity(config, context, supabase) {
+  // 1. Validar configuração
+  const fields      = (config.fields && typeof config.fields === 'object') ? config.fields : null
+  const manageItems = config.manageItems === true
+  const itemsMode   = config.itemsMode
+  const items       = Array.isArray(config.items) ? config.items : []
+
+  const hasFieldUpdates   = fields !== null && Object.keys(fields).length > 0
+  const hasItemManagement = manageItems
+
+  if (!hasFieldUpdates && !hasItemManagement) {
+    return { skipped: true, reason: 'nenhuma atualização configurada' }
+  }
+
+  // 2. Resolver oportunidade (rastrear método de resolução para diagnóstico)
+  const opportunityResolution = context.opportunityId ? 'context' : 'latest_open_by_lead'
+  const opportunityId = await resolveOpportunityId(context, supabase)
+  if (!opportunityId) {
+    return { skipped: true, reason: 'nenhuma oportunidade encontrada para o lead' }
+  }
+
+  // 3. Validar e construir whitelist de campos simples
+  const updates      = {}
+  const updatedFields = []
+
+  if (hasFieldUpdates) {
+    if ('title' in fields) {
+      const t = fields.title
+      if (typeof t !== 'string' || t.trim().length === 0) {
+        throw new Error('[update_opportunity] title inválido: deve ser string não-vazia')
+      }
+      updates.title = t.trim()
+      updatedFields.push('title')
+    }
+
+    if ('description' in fields) {
+      const d = fields.description
+      if (d !== null && typeof d !== 'string') {
+        throw new Error('[update_opportunity] description inválido: deve ser string ou null')
+      }
+      updates.description = d
+      updatedFields.push('description')
+    }
+
+    if ('probability' in fields) {
+      const raw = fields.probability
+      const p   = Number(raw)
+      if (!Number.isInteger(p) || p < 0 || p > 100) {
+        throw new Error(
+          `[update_opportunity] probability inválido: deve ser inteiro entre 0 e 100, recebido: ${JSON.stringify(raw)}`
+        )
+      }
+      updates.probability = p
+      updatedFields.push('probability')
+    }
+  }
+
+  // 4. Validar configuração de itens (antes de qualquer operação no banco)
+  if (manageItems) {
+    if (!itemsMode || !['add', 'replace'].includes(itemsMode)) {
+      throw new Error('[update_opportunity] itemsMode inválido: deve ser "add" ou "replace"')
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (!item || typeof item !== 'object') {
+        throw new Error(`[update_opportunity] item[${i}] inválido: deve ser objeto`)
+      }
+
+      const hasProduct = typeof item.productId === 'string' && item.productId.trim() !== ''
+      const hasService = typeof item.serviceId === 'string' && item.serviceId.trim() !== ''
+      if (hasProduct === hasService) {
+        throw new Error(`[update_opportunity] item[${i}]: informe exatamente um entre productId e serviceId`)
+      }
+
+      const qty = Number(item.quantity)
+      if (!isFinite(qty) || qty <= 0) {
+        throw new Error(`[update_opportunity] item[${i}]: quantity deve ser número positivo`)
+      }
+
+      if (item.unitPrice !== null && item.unitPrice !== undefined) {
+        const price = Number(item.unitPrice)
+        if (!isFinite(price) || price < 0) {
+          throw new Error(`[update_opportunity] item[${i}]: unitPrice deve ser null ou número >= 0`)
+        }
+      }
+
+      const discType = item.discountType
+      if (!discType || !['fixed', 'percent'].includes(discType)) {
+        throw new Error(`[update_opportunity] item[${i}]: discountType deve ser "fixed" ou "percent"`)
+      }
+
+      const discValue = Number(item.discountValue)
+      if (!isFinite(discValue) || discValue < 0) {
+        throw new Error(`[update_opportunity] item[${i}]: discountValue deve ser >= 0`)
+      }
+
+      if (discType === 'percent' && discValue > 100) {
+        throw new Error(`[update_opportunity] item[${i}]: desconto percentual não pode exceder 100%`)
+      }
+    }
+  }
+
+  // 5. UPDATE de campos simples (whitelist explícita: title, description, probability)
+  //    Utiliza .maybeSingle() para distinguir: sucesso / oportunidade não encontrada / erro.
+  //    Se o UPDATE falhar → lança exception e NÃO chama a RPC de itens.
+  //    Se o UPDATE funcionar e a RPC falhar → campos gravados, nó falha (risco residual documentado).
+  if (Object.keys(updates).length > 0) {
+    updates.updated_at = new Date().toISOString()
+
+    const { data: row, error: updateError } = await supabase
+      .from('opportunities')
+      .update(updates)
+      .eq('id', opportunityId)
+      .eq('company_id', context.companyId)
+      .select('id')
+      .maybeSingle()
+
+    if (updateError) {
+      throw new Error(`[update_opportunity] erro ao atualizar campos: ${updateError.message}`)
+    }
+
+    if (!row) {
+      throw new Error(
+        `[update_opportunity] oportunidade ${opportunityId} não encontrada ou não pertence à empresa ${context.companyId}`
+      )
+    }
+  }
+
+  // 6. Gerenciar itens via RPC transacional
+  //    RISCO RESIDUAL: se campos foram atualizados e RPC falhar, os campos
+  //    já foram gravados. O nó falha, mas as alterações de campos persistem.
+  let itemsResult = null
+
+  if (manageItems) {
+    if (itemsMode === 'add' && items.length === 0) {
+      itemsResult = { skipped: true, reason: 'modo add com lista vazia — nenhum item adicionado' }
+    } else {
+      const rpcItems = items.map(item => ({
+        productId:     item.productId  || null,
+        serviceId:     item.serviceId  || null,
+        quantity:      Number(item.quantity),
+        unitPrice:     (item.unitPrice !== undefined && item.unitPrice !== null)
+                         ? Number(item.unitPrice)
+                         : null,
+        discountType:  item.discountType,
+        discountValue: Number(item.discountValue ?? 0),
+      }))
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'automation_manage_opportunity_items_v1',
+        {
+          p_company_id:     context.companyId,
+          p_opportunity_id: opportunityId,
+          p_items_mode:     itemsMode,
+          p_items:          rpcItems,
+        }
+      )
+
+      if (rpcError) {
+        // Log estruturado de falha parcial — sem expor título, descrição ou preços
+        console.error('[update_opportunity] items stage failed', {
+          companyId:            context.companyId,
+          opportunityId,
+          opportunityResolution,
+          updatedFields,
+          itemsMode,
+          itemsCount:           items.length,
+          fieldsAlreadyUpdated: updatedFields.length > 0,
+          error:                rpcError.message,
+        })
+        throw new Error(`[update_opportunity] RPC de itens falhou (modo ${itemsMode}): ${rpcError.message}`)
+      }
+
+      itemsResult = rpcData
+    }
+  }
+
+  // 7. Resultado estruturado
+  const result = {
+    updated:              true,
+    opportunityId,
+    opportunityResolution,
+  }
+
+  if (updatedFields.length > 0) result.fields = updatedFields
+
+  if (manageItems) {
+    result.itemsMode  = itemsMode
+    result.itemsCount = items.length
+    if (itemsResult?.skipped) {
+      result.itemsSkipped    = true
+      result.itemsSkipReason = itemsResult.reason
+    }
+  }
+
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // Entry point principal — chamado pelo executor.js
 // ---------------------------------------------------------------------------
 
@@ -706,6 +925,9 @@ export async function executeCrmAction(node, context, supabase) {
 
       case 'detach_agent':
         return await detachAgent(config, context, supabase)
+
+      case 'update_opportunity':
+        return await updateOpportunity(config, context, supabase)
 
       default:
         console.log(`[crmActions] ação não suportada nesta etapa: ${actionType} — skipped`)

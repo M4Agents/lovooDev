@@ -535,8 +535,34 @@ export interface MessageConfig {
 }
 
 export interface ActionConfig {
-  action_type: 'create_opportunity' | 'move_opportunity' | 'create_activity' | 'update_lead' | 'add_tag' | 'remove_tag' | 'assign_owner'
+  action_type: 'create_opportunity' | 'move_opportunity' | 'create_activity' | 'update_lead' | 'add_tag' | 'remove_tag' | 'assign_owner' | 'update_opportunity'
   params: Record<string, any>
+}
+
+/** Tipo de desconto aceito em itens de oportunidade */
+export type OpportunityDiscountType = 'fixed' | 'percent'
+
+/** Item configurado em uma ação update_opportunity */
+export interface UpdateOpportunityItem {
+  productId?: string
+  serviceId?: string
+  quantity: number
+  unitPrice?: number | null
+  discountType: OpportunityDiscountType
+  discountValue: number
+}
+
+/** Configuração completa da ação update_opportunity */
+export interface UpdateOpportunityActionConfig {
+  actionType: 'update_opportunity'
+  fields?: {
+    title?: string
+    description?: string | null
+    probability?: number
+  }
+  manageItems?: boolean
+  itemsMode?: 'add' | 'replace'
+  items?: UpdateOpportunityItem[]
 }
 
 export type ConditionType =
