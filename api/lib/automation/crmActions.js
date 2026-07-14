@@ -22,7 +22,8 @@
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
 // =====================================================
 
-import { resolveLeadId, resolveOpportunityId } from './contextUtils.js'
+import { resolveLeadId, resolveOpportunityId }          from './contextUtils.js'
+import { dispatchOpportunityStageChangedTrigger }       from './dispatchOpportunityTrigger.js'
 
 // ---------------------------------------------------------------------------
 // Utilitário: validar membership do usuário na empresa
@@ -74,6 +75,22 @@ async function moveOpportunity(config, context, supabase) {
   })
 
   if (error) throw new Error(`Erro na RPC move_opportunity: ${error.message}`)
+
+  // Disparar event opportunity.stage_changed após sucesso confirmado (fail-safe)
+  try {
+    const resolvedLeadId = await resolveLeadId(context, supabase)
+    await dispatchOpportunityStageChangedTrigger({
+      companyId:    context.companyId,
+      opportunityId,
+      leadId:       resolvedLeadId,
+      oldStageId:   position.stage_id,
+      newStageId:   stageId,
+      funnelId:     position.funnel_id,
+    }, supabase)
+  } catch (dispatchErr) {
+    console.error('[crmActions][moveOpportunity] erro no dispatcher (não crítico):', dispatchErr?.message)
+  }
+
   return { executed: true, action: 'move_opportunity', opportunityId, stageId, method: 'rpc' }
 }
 
@@ -924,6 +941,22 @@ async function changeFunnel(config, context, supabase) {
       p_position_in_stage: 0,
     })
     if (moveError) throw new Error(`Erro ao mover etapa no mesmo funil: ${moveError.message}`)
+
+    // Disparar event opportunity.stage_changed após sucesso confirmado (fail-safe)
+    try {
+      await dispatchOpportunityStageChangedTrigger({
+        companyId:    context.companyId,
+        opportunityId,
+        leadId:       currentPos.lead_id ?? null,
+        oldStageId:   currentPos.stage_id,
+        newStageId:   targetStageId,
+        funnelId:     targetFunnelId,
+        fromFunnelId: currentPos.funnel_id,
+      }, supabase)
+    } catch (dispatchErr) {
+      console.error('[crmActions][changeFunnel][sameFunnel] erro no dispatcher (não crítico):', dispatchErr?.message)
+    }
+
     return { executed: true, action: 'change_opportunity_funnel', opportunityId, targetFunnelId, targetStageId, sameFunnel: true }
   }
 
@@ -963,6 +996,21 @@ async function changeFunnel(config, context, supabase) {
     })
 
   if (insertError) throw new Error(`Erro ao inserir oportunidade no funil destino: ${insertError.message}`)
+
+  // Disparar event opportunity.stage_changed após sucesso confirmado (fail-safe)
+  try {
+    await dispatchOpportunityStageChangedTrigger({
+      companyId:    context.companyId,
+      opportunityId,
+      leadId:       resolvedLeadId,
+      oldStageId:   currentPos?.stage_id   ?? null,
+      newStageId:   targetStageId,
+      funnelId:     targetFunnelId,
+      fromFunnelId: currentPos?.funnel_id  ?? null,
+    }, supabase)
+  } catch (dispatchErr) {
+    console.error('[crmActions][changeFunnel][crossFunnel] erro no dispatcher (não crítico):', dispatchErr?.message)
+  }
 
   return {
     executed:       true,
