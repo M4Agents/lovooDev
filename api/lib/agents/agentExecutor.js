@@ -62,8 +62,8 @@ const MAX_COMPACT_LIST_ITEMS = 15;
 // Helpers isolados. Nunca bloqueiam o fluxo de execução do agente.
 // O débito é fire-and-forget — falhas são logadas e absorvidas silenciosamente.
 
-/** 1.000 tokens = 100 créditos base, ajustados por multiplicador de feature */
-const CREDIT_RATE = 100;
+/** 1.000 tokens = 1,6 créditos base, ajustados por multiplicador de feature */
+const CREDIT_RATE = 1.6;
 
 /**
  * Multiplicadores por feature. DO NOT CHANGE: alinhado com debit_credits_atomic.
