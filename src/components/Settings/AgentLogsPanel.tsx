@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, X, TrendingUp, ChevronDown, ChevronUp, MessageSquare, BarChart2, DollarSign } from 'lucide-react'
 import {
   listLogs,
   getSummary,
@@ -11,6 +11,214 @@ import {
 import { AGENT_FUNCTIONAL_USES } from '../../types/lovoo-agents'
 import { api } from '../../services/api'
 import { PARENT_COMPANY_ID } from '../../config/parentCompanyId'
+
+// ── Constantes do modelo de cobrança (SaaS Governance) ───────────────────────
+
+const CREDIT_RATE        = 1.6    // créditos por 1.000 tokens (base)
+const WPP_MULTIPLIER     = 1      // multiplicador WhatsApp
+const INS_MULTIPLIER     = 6      // multiplicador Insights
+const PRICE_PER_CREDIT   = 0.0347 // R$ por crédito (pacote padrão: R$347/10k)
+const USD_TO_BRL         = 5.80   // taxa de câmbio de referência
+const CREDITS_PER_PKG    = 10000  // créditos por pacote padrão
+const PKG_PRICE_BRL      = 347    // R$ por pacote padrão
+
+// ── Painel de Governança de Lucratividade (SaaS) ──────────────────────────────
+
+function SaasGovernancePanel({ summary }: { summary: LogsSummaryResponse | null }) {
+  const [open, setOpen] = useState(true)
+
+  // Cálculos com base no resumo atual (assumindo mix ~100% WhatsApp para estimativa)
+  const totalTokens       = summary?.total_tokens ?? 0
+  const costUsd           = summary?.estimated_cost_usd ?? 0
+  const costBrl           = costUsd * USD_TO_BRL
+  const estCredits        = Math.ceil((totalTokens / 1000) * CREDIT_RATE * WPP_MULTIPLIER)
+  const estRevenueBrl     = estCredits * PRICE_PER_CREDIT
+  const grossProfitBrl    = estRevenueBrl - costBrl
+  const markup            = costBrl > 0 ? Math.round(estRevenueBrl / costBrl) : 0
+  const margin            = estRevenueBrl > 0 ? ((grossProfitBrl / estRevenueBrl) * 100).toFixed(1) : '—'
+
+  // Custo OpenAI para esgotar 1 pacote de 10k créditos
+  // 10k cr ÷ 1.6 = 6.250 unidades × 1.000 tokens = 6.250.000 tokens
+  const tokensPerPkg      = (CREDITS_PER_PKG / CREDIT_RATE) * 1000
+  const costPerPkgUsd     = (tokensPerPkg / 1_000_000) * 0.40   // gpt-4.1-mini input rate
+  const costPerPkgBrl     = costPerPkgUsd * USD_TO_BRL
+  const profitPerPkgBrl   = PKG_PRICE_BRL - costPerPkgBrl
+  const marginPerPkg      = ((profitPerPkgBrl / PKG_PRICE_BRL) * 100).toFixed(1)
+  const conversationsPerPkg = Math.floor(CREDITS_PER_PKG / (10 * 5)) // 10 cr/msg × 5 msg/conv
+
+  function fmt(n: number, decimals = 2): string {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  }
+
+  return (
+    <div className="bg-white border border-violet-200 rounded-lg overflow-hidden">
+      {/* Header clicável */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 border-b border-violet-100 hover:bg-violet-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <TrendingUp size={16} className="text-violet-600" />
+          <h3 className="text-sm font-semibold text-violet-800">Governança de Lucratividade — SaaS</h3>
+          <span className="text-xs bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full font-medium">Restrito</span>
+        </div>
+        {open ? <ChevronUp size={16} className="text-violet-400" /> : <ChevronDown size={16} className="text-violet-400" />}
+      </button>
+
+      {open && (
+        <div className="p-5 space-y-5">
+
+          {/* ── Seção 1: Fórmula e multiplicadores ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Fórmula de Cobrança Atual</p>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-mono text-sm text-slate-700">
+                créditos = ⌈(tokens ÷ 1.000) × {CREDIT_RATE} × multiplicador⌉
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Multiplicadores por Canal</p>
+              <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="px-3 py-2 text-left text-slate-500 font-medium">Canal</th>
+                      <th className="px-3 py-2 text-center text-slate-500 font-medium">Mult.</th>
+                      <th className="px-3 py-2 text-right text-slate-500 font-medium">cr / 1k tokens</th>
+                      <th className="px-3 py-2 text-right text-slate-500 font-medium">R$ / 1k tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <tr>
+                      <td className="px-3 py-2 flex items-center gap-1.5">
+                        <MessageSquare size={11} className="text-green-500" />
+                        <span className="font-medium text-slate-700">WhatsApp</span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-slate-500">{WPP_MULTIPLIER}×</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-700">{fmt(CREDIT_RATE * WPP_MULTIPLIER, 1)} cr</td>
+                      <td className="px-3 py-2 text-right font-mono text-green-700">
+                        R$ {fmt(CREDIT_RATE * WPP_MULTIPLIER * PRICE_PER_CREDIT, 4)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 flex items-center gap-1.5">
+                        <BarChart2 size={11} className="text-blue-500" />
+                        <span className="font-medium text-slate-700">Insights</span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-slate-500">{INS_MULTIPLIER}×</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-700">{fmt(CREDIT_RATE * INS_MULTIPLIER, 1)} cr</td>
+                      <td className="px-3 py-2 text-right font-mono text-blue-700">
+                        R$ {fmt(CREDIT_RATE * INS_MULTIPLIER * PRICE_PER_CREDIT, 4)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Seção 2: Referência de precificação ── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Referência de Precificação (Pacote Padrão)</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Pacote padrão', value: `${CREDITS_PER_PKG.toLocaleString('pt-BR')} cr`, sub: `R$ ${PKG_PRICE_BRL}` },
+                { label: 'Preço por crédito', value: `R$ ${fmt(PRICE_PER_CREDIT, 4)}`, sub: 'por crédito' },
+                { label: 'Custo OpenAI / pacote', value: `R$ ${fmt(costPerPkgBrl)}`, sub: `$${fmt(costPerPkgUsd, 4)} USD` },
+                { label: 'Conversas / pacote', value: `~${conversationsPerPkg.toLocaleString('pt-BR')}`, sub: '5 msg cada' },
+              ].map(({ label, value, sub }) => (
+                <div key={label} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-0.5">
+                  <p className="text-xs text-slate-500 font-medium">{label}</p>
+                  <p className="text-base font-bold text-slate-800">{value}</p>
+                  <p className="text-xs text-slate-400">{sub}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Seção 3: Lucro por pacote ── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Lucratividade por Pacote (R$ {PKG_PRICE_BRL})</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-0.5">
+                <p className="text-xs text-green-600 font-medium">Receita</p>
+                <p className="text-xl font-bold text-green-700">R$ {fmt(PKG_PRICE_BRL, 2)}</p>
+                <p className="text-xs text-green-500">por pacote vendido</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-0.5">
+                <p className="text-xs text-red-500 font-medium">Custo OpenAI</p>
+                <p className="text-xl font-bold text-red-600">R$ {fmt(costPerPkgBrl)}</p>
+                <p className="text-xs text-red-400">para 10k créditos consumidos</p>
+              </div>
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 space-y-0.5">
+                <p className="text-xs text-violet-600 font-medium">Lucro Bruto</p>
+                <p className="text-xl font-bold text-violet-700">R$ {fmt(profitPerPkgBrl)}</p>
+                <p className="text-xs text-violet-500">{marginPerPkg}% de margem</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Seção 4: Análise dinâmica do período atual ── */}
+          {summary && totalTokens > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <DollarSign size={13} className="text-emerald-600" />
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Análise do Período Atual (estimativa WhatsApp)
+                </p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-emerald-100">
+                    <tr>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">Total de tokens processados</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-slate-700">
+                        {totalTokens.toLocaleString('pt-BR')}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">Custo pago à OpenAI</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-red-600">
+                        R$ {fmt(costBrl)} <span className="text-slate-400">(${fmt(costUsd, 6)} USD)</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">Créditos cobrados dos clientes</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-slate-700">
+                        ~{estCredits.toLocaleString('pt-BR')} cr
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">Receita estimada dos clientes</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-green-600">
+                        R$ {fmt(estRevenueBrl)}
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-100/60">
+                      <td className="px-4 py-2.5 text-xs font-semibold text-emerald-800">Lucro bruto estimado</td>
+                      <td className="px-4 py-2.5 text-right text-sm font-bold text-emerald-700">
+                        R$ {fmt(grossProfitBrl)}
+                        <span className="text-xs font-normal text-emerald-500 ml-2">
+                          ({margin}% margem · {markup}× markup)
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="px-4 py-2 text-xs text-emerald-600 bg-emerald-50 border-t border-emerald-100">
+                  * Estimativa baseada em 100% WhatsApp. Insights têm markup {Math.round((CREDIT_RATE * INS_MULTIPLIER * PRICE_PER_CREDIT) / (0.40 / 1000))}× maior.
+                  Câmbio de referência: R$ {USD_TO_BRL}/USD. Pacote padrão: R$ {PKG_PRICE_BRL}/10k cr.
+                </p>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -245,6 +453,9 @@ export function AgentLogsPanel() {
         <AlertTriangle size={16} className="text-amber-600 mt-0.5 shrink-0" />
         <p className="text-sm text-amber-800">{t('logs.disclaimer')}</p>
       </div>
+
+      {/* ── Painel de Governança de Lucratividade (SaaS) ── */}
+      <SaasGovernancePanel summary={summary} />
 
       {/* ── Filtros ── */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
