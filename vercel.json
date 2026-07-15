@@ -17,7 +17,8 @@
     "api/instagram/deauthorize.js": { "maxDuration": 15 },
     "api/instagram/data-deletion/index.js": { "maxDuration": 30 },
     "api/instagram/data-deletion/status.js": { "maxDuration": 10 },
-    "api/cron/refresh-instagram-tokens.js": { "maxDuration": 60 }
+    "api/cron/refresh-instagram-tokens.js": { "maxDuration": 60 },
+    "api/agents/process-message-buffer.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -67,6 +68,10 @@
     {
       "path": "/api/cron/refresh-instagram-tokens",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/agents/process-message-buffer",
+      "schedule": "* * * * *"
     }
   ],
   "rewrites": [
