@@ -37,6 +37,7 @@ import {
   getPlanLimits,
   checkFeature,
 } from '../lib/plans/limitChecker.js';
+import { validateMessageGroupingWindowS } from '../lib/agents/modelConfigValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -145,6 +146,16 @@ export default async function handler(req, res) {
   }
   if (!hasPrompt && !hasPromptConfig) {
     return res.status(400).json({ success: false, error: 'prompt ou prompt_config é obrigatório.' });
+  }
+
+  // ── Validar campos do model_config ────────────────────────────────────────
+  // Validação síncrona antes da chamada de auth para falha antecipada.
+
+  if (typeof model_config === 'object' && model_config !== null) {
+    const windowErr = validateMessageGroupingWindowS(model_config.message_grouping_window_s);
+    if (windowErr) {
+      return res.status(400).json({ success: false, error: windowErr });
+    }
   }
 
   // ── Validar caller (JWT + membership + role) ──────────────────────────────

@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Bot, ChevronDown, ChevronUp, Loader2, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import { Bot, ChevronDown, ChevronUp, HelpCircle, Loader2, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import {
   companyOwnAgentsApi,
   ConflictError,
@@ -32,6 +32,11 @@ import { AgentPromptBuilder, assemblePreview, createEmptyPromptConfig } from '..
 import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { customFieldsToVariables, type PromptConfig, type PromptVariable } from '../../lib/promptVariables'
 import { AgentCreationModal } from './AgentCreationModal'
+import {
+  initGroupingState,
+  computeGroupingPayload,
+  validateGroupingInput,
+} from './agentGroupingUtils'
 
 // ── Detecção e conversão de formatos de prompt_config ─────────────────────────
 //
@@ -141,6 +146,12 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
     return typeof v === 'number' && v >= 1 && v <= 3 ? v : 1
   })
 
+  // Agrupamento de mensagens: toggle + janela de espera em segundos.
+  // message_grouping_window_s > 0 → habilitado; 0 ou ausente → desabilitado.
+  const _initGrouping = initGroupingState(agent?.model_config ?? null)
+  const [groupingEnabled, setGroupingEnabled] = useState<boolean>(_initGrouping.enabled)
+  const [groupingWindow,  setGroupingWindow]  = useState<number>(_initGrouping.window)
+
   // Estado de prompt — modo free (texto completo)
   const [legacyPrompt, setLegacyPrompt] = useState<string>(
     (initialMode === 'free' && agent) ? agent.prompt : ''
@@ -190,6 +201,10 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
     const name = meta.name.trim()
     if (!name) { setError('Nome é obrigatório.'); return }
 
+    // Validação do campo de agrupamento
+    const groupingErr = validateGroupingInput(groupingEnabled, groupingWindow)
+    if (groupingErr) { setError(groupingErr); return }
+
     // Validação de conteúdo de prompt
     if (!isStructured) {
       if (!legacyPrompt.trim()) { setError('Prompt é obrigatório.'); return }
@@ -215,7 +230,11 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
           allowed_tools:  allowedTools,
-          model_config:   { ...agent.model_config, media_max_per_call: mediaMaxPerCall },
+          model_config:   {
+            ...agent.model_config,
+            media_max_per_call:        mediaMaxPerCall,
+            message_grouping_window_s: computeGroupingPayload(groupingEnabled, groupingWindow),
+          },
         }
 
         if (isStructured) {
@@ -236,7 +255,10 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           knowledge_mode: meta.knowledge_mode,
           is_active:      meta.is_active,
           allowed_tools:  allowedTools,
-          model_config:   { media_max_per_call: mediaMaxPerCall },
+          model_config:   {
+            media_max_per_call:        mediaMaxPerCall,
+            message_grouping_window_s: computeGroupingPayload(groupingEnabled, groupingWindow),
+          },
         }
 
         if (isStructured) {
@@ -440,6 +462,65 @@ function AgentForm({ companyId, agent, customFieldVariables, onSaved, onCancel }
           </p>
         </div>
       )}
+
+      {/* Agrupamento de mensagens */}
+      <div className="border border-gray-100 rounded-lg bg-gray-50 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-gray-700">Agrupar mensagens recebidas</span>
+            <span
+              title="Quando ativado, o agente acumula mensagens recebidas em sequência e responde apenas uma vez ao final do tempo configurado."
+              className="cursor-help"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+            </span>
+          </div>
+          {/* Toggle switch */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={groupingEnabled}
+            onClick={() => setGroupingEnabled(v => !v)}
+            disabled={saving}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2
+                        border-transparent transition-colors duration-200 ease-in-out focus:outline-none
+                        disabled:opacity-50 ${groupingEnabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow
+                          ring-0 transition duration-200 ease-in-out
+                          ${groupingEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+            />
+          </button>
+        </div>
+
+        {groupingEnabled && (
+          <div className="space-y-1.5 pt-1">
+            <label className="block text-xs font-medium text-gray-700">
+              Tempo de espera antes de responder
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={120}
+                step={1}
+                value={groupingWindow}
+                onChange={e => setGroupingWindow(Math.round(Number(e.target.value)))}
+                disabled={saving}
+                placeholder="30"
+                className="w-24 border border-gray-300 rounded-md px-3 py-1.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+              <span className="text-xs text-gray-500">segundos</span>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              O agente aguarda este período após a última mensagem recebida antes de responder.
+              O processamento pode ter um atraso adicional de até aproximadamente um minuto.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Status */}
       <div className="flex items-center gap-2">

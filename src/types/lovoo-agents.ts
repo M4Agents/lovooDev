@@ -27,6 +27,12 @@ export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'error'
 export interface LovooAgentModelConfig {
   temperature?: number
   max_tokens?: number
+  /**
+   * Janela de agrupamento de mensagens em segundos.
+   * 0 ou ausente = agrupamento desabilitado.
+   * 1–120 = agrupamento habilitado com a janela configurada.
+   */
+  message_grouping_window_s?: number
   [key: string]: unknown
 }
 

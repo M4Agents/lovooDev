@@ -42,6 +42,7 @@ import {
   detectOperationalContent,
   OPERATIONAL_SCORE_THRESHOLD,
 } from '../lib/agents/kbContentValidator.js';
+import { validateMessageGroupingWindowS } from '../lib/agents/modelConfigValidator.js';
 
 const SUPABASE_URL     = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -149,6 +150,16 @@ export default async function handler(req, res) {
   // Structured requer prompt_version
   if (hasPromptConfig && (typeof prompt_version !== 'number' || !Number.isInteger(prompt_version))) {
     return res.status(400).json({ success: false, error: 'prompt_version é obrigatório para atualização estruturada.' });
+  }
+
+  // ── Validar campos do model_config ────────────────────────────────────────
+  // Validação síncrona antes da chamada de auth para falha antecipada.
+
+  if (typeof model_config === 'object' && model_config !== null) {
+    const windowErr = validateMessageGroupingWindowS(model_config.message_grouping_window_s);
+    if (windowErr) {
+      return res.status(400).json({ success: false, error: windowErr });
+    }
   }
 
   // ── Validar caller (JWT + membership + role) ──────────────────────────────
