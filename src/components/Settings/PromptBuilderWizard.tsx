@@ -31,6 +31,7 @@ import {
 } from './PromptBuilderSteps'
 import { ConversationImportStep } from './ConversationImportStep'
 import type { ConversationAnalysis } from '../../services/promptBuilderApi'
+import { initGroupingState, computeGroupingPayload, validateGroupingInput } from './agentGroupingUtils'
 
 // ── Helpers de merge do assembler ─────────────────────────────────────────────
 //
@@ -399,6 +400,11 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     return initialAgent?.prompt ?? ''
   })
 
+  // Agrupamento de mensagens: toggle + janela de espera em segundos.
+  const _initGrouping = initGroupingState(initialAgent?.model_config ?? null)
+  const [groupingEnabled, setGroupingEnabled] = useState<boolean>(_initGrouping.enabled)
+  const [groupingWindow,  setGroupingWindow]  = useState<number>(_initGrouping.window)
+
   // Notifica o pai (AgentCreationModal) sempre que tools ou prompt mudam
   useEffect(() => {
     onContextChangeRef.current?.({ allowedTools, currentPrompt: advancedText })
@@ -489,16 +495,25 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     }
     if (!advancedManualActive && !promptConfig) return
 
+    const groupingErr = validateGroupingInput(groupingEnabled, groupingWindow)
+    if (groupingErr) {
+      setError(groupingErr)
+      return
+    }
+
     setError(null)
     setSaving(true)
     try {
       let saved: CompanyAgent
 
-      // model_config: preserva flags existentes e, se advanced, adiciona editing_mode.
+      // model_config: preserva flags existentes, adiciona editing_mode se avançado,
+      // e sempre inclui message_grouping_window_s (0 = desabilitado).
       const baseModelConfig = initialAgent?.model_config ?? {}
-      const modelConfigPayload: Record<string, unknown> = advancedManualActive
-        ? { ...baseModelConfig, editing_mode: 'advanced_manual' }
-        : baseModelConfig
+      const modelConfigPayload: Record<string, unknown> = {
+        ...baseModelConfig,
+        ...(advancedManualActive ? { editing_mode: 'advanced_manual' } : {}),
+        message_grouping_window_s: computeGroupingPayload(groupingEnabled, groupingWindow),
+      }
 
       // knowledge_base e knowledge_mode — derivados automaticamente:
       //   KB + docs → 'hybrid' | KB only → 'inline' | docs only → 'rag' | neither → 'none'
@@ -620,6 +635,8 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
     setConversationAnalysis(null)
     setPromptConfig(null)
     setKnowledgeBase('')
+    setGroupingEnabled(false)
+    setGroupingWindow(30)
     setError(null)
     setSavedAgent(null)
   }
@@ -723,6 +740,10 @@ export function PromptBuilderWizard({ companyId, onSaved, onAdvanced, onCancel, 
           onHasActiveDocsChange={setHasActiveDocs}
           allowedTools={allowedTools}
           setAllowedTools={setAllowedTools}
+          groupingEnabled={groupingEnabled}
+          setGroupingEnabled={setGroupingEnabled}
+          groupingWindow={groupingWindow}
+          setGroupingWindow={setGroupingWindow}
         />
       )}
 

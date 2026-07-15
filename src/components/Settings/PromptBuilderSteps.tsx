@@ -16,8 +16,9 @@ import { AgentToolsSelector } from '../ui/AgentToolsSelector'
 import { EnrichDiffModal } from './EnrichDiffModal'
 import {
   ArrowLeft, ArrowRight, Building2, Check, CheckCircle, ChevronDown, ChevronUp,
-  ClipboardCopy, Eye, FileText, Loader2, Package, Phone, Globe, Sparkles, X, Zap,
+  ClipboardCopy, Eye, FileText, HelpCircle, Loader2, Package, Phone, Globe, Sparkles, X, Zap,
 } from 'lucide-react'
+import { GROUPING_WINDOW_MIN, GROUPING_WINDOW_MAX } from './agentGroupingUtils'
 import { TOOL_CATALOG } from '../../lib/agents/toolCatalog'
 import { promptBuilderApi } from '../../services/promptBuilderApi'
 import { funnelApi } from '../../services/funnelApi'
@@ -676,6 +677,7 @@ export function StepPreview({
   knowledgeBase, setKnowledgeBase,
   hasActiveDocs, onHasActiveDocsChange,
   allowedTools, setAllowedTools,
+  groupingEnabled, setGroupingEnabled, groupingWindow, setGroupingWindow,
 }: {
   config:       FlatPromptConfig
   setConfig:    (v: FlatPromptConfig) => void
@@ -705,6 +707,11 @@ export function StepPreview({
   /** Ferramentas habilitadas para function calling */
   allowedTools:    string[]
   setAllowedTools: (tools: string[]) => void
+  /** Agrupamento de mensagens */
+  groupingEnabled:    boolean
+  setGroupingEnabled: (v: boolean) => void
+  groupingWindow:     number
+  setGroupingWindow:  (v: number) => void
 }) {
   // Preview do modo normal — atualiza com prioridade menor
   const deferredConfig       = useDeferredValue(config)
@@ -1017,6 +1024,65 @@ export function StepPreview({
         setAdvancedText={setAdvancedText}
         advancedManualActive={advancedManualActive}
       />
+
+      {/* ── Agrupamento de mensagens ─────────────────────────────────────────── */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+          <div className="flex items-center gap-1.5">
+            <span className="text-base leading-none">⏱️</span>
+            <span className="text-sm font-semibold text-gray-700">Agrupar mensagens recebidas</span>
+            <span
+              title="Quando ativado, o agente acumula mensagens recebidas em sequência e responde apenas uma vez ao final do tempo configurado."
+              className="cursor-help"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={groupingEnabled}
+            onClick={() => setGroupingEnabled(!groupingEnabled)}
+            disabled={saving}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2
+                        border-transparent transition-colors duration-200 ease-in-out focus:outline-none
+                        disabled:opacity-50 ${groupingEnabled ? 'bg-blue-600' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow
+                          ring-0 transition duration-200 ease-in-out
+                          ${groupingEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+            />
+          </button>
+        </div>
+
+        {groupingEnabled && (
+          <div className="px-4 py-3 bg-white space-y-2">
+            <label className="block text-xs font-medium text-gray-700">
+              Tempo de espera antes de responder
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={GROUPING_WINDOW_MIN}
+                max={GROUPING_WINDOW_MAX}
+                step={1}
+                value={groupingWindow}
+                onChange={e => setGroupingWindow(Math.round(Number(e.target.value)))}
+                disabled={saving}
+                placeholder="30"
+                className="w-24 border border-gray-300 rounded-md px-3 py-1.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+              <span className="text-xs text-gray-500">segundos</span>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              O agente aguarda este período após a última mensagem recebida antes de responder.
+              O processamento pode ter um atraso adicional de até aproximadamente um minuto.
+            </p>
+          </div>
+        )}
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700">
