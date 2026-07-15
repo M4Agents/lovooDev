@@ -78,17 +78,22 @@ export default async function handler(req, res) {
 
   // Desestruturação explícita — descarta campos inesperados do body
   const event = {
-    event_type:        body.event_type,
-    channel:           body.channel,
-    company_id:        body.company_id,
-    instance_id:       body.instance_id        ?? null,
-    conversation_id:   body.conversation_id,
-    uazapi_message_id: body.uazapi_message_id,
-    source_type:       body.source_type        ?? null,
-    source_identifier: body.source_identifier  ?? null,
-    message_text:      body.message_text       ?? null,
-    saved_message_id:  body.saved_message_id   ?? null,
-    timestamp:         body.timestamp          ?? new Date().toISOString()
+    event_type:         body.event_type,
+    channel:            body.channel,
+    company_id:         body.company_id,
+    instance_id:        body.instance_id         ?? null,
+    conversation_id:    body.conversation_id,
+    uazapi_message_id:  body.uazapi_message_id,
+    source_type:        body.source_type         ?? null,
+    source_identifier:  body.source_identifier   ?? null,
+    message_text:       body.message_text        ?? null,
+    // Campos opcionais usados pelo caminho de agrupamento (Etapa 14).
+    // Ausentes em eventos legados — valores padrão aplicados pelo Router.
+    message_type:       body.message_type        ?? null,
+    provider_timestamp: body.provider_timestamp  ?? null,
+    payload:            body.payload             ?? null,
+    saved_message_id:   body.saved_message_id    ?? null,
+    timestamp:          body.timestamp           ?? new Date().toISOString()
   };
 
   console.log('🤖 [EVENT] Evento recebido:', {
@@ -107,11 +112,18 @@ export default async function handler(req, res) {
   try {
     decision = await routeConversationEvent(event);
   } catch (routerError) {
-    console.error('🤖 [EVENT] ❌ Exceção não capturada no Router:', routerError.message);
-    return res.status(200).json({
-      success: true,
+    // O Router lança exceção para erros retentáveis (ex: falha de enqueue).
+    // Retornamos 500 para não mascarar a falha como sucesso.
+    // NOTA: o webhook usa fire-and-forget — retry não é garantido automaticamente.
+    //       O status 500 garante observabilidade e evita falso positivo no log do webhook.
+    console.error('🤖 [EVENT] ❌ Exceção no Router — falha retentável:', {
+      error_code:      routerError.code     ?? 'UNKNOWN',
+      conversation_id: event.conversation_id,
+      company_id:      event.company_id,
+    });
+    return res.status(500).json({
+      success: false,
       status:  'router_error',
-      error:   routerError.message
     });
   }
 

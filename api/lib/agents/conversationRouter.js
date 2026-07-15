@@ -1,46 +1,69 @@
 // =============================================================================
 // api/lib/agents/conversationRouter.js
 //
-// ConversationRouter — Etapa 4 MVP Agentes de Conversação
+// ConversationRouter — Etapa 4 + Etapa 14 (agrupamento controlado)
 //
 // RESPONSABILIDADE ÚNICA:
 //   Decidir SE e COM QUAL assignment processar um evento de conversação.
 //   Não executa o agente. Não monta contexto. Não envia mensagens.
 //
-// FLUXO:
-//   1. Deduplicação (agent_processed_messages — INSERT atômico)
-//   2. Verificação de ai_state (deve ser 'ai_active')
-//   3. Resolução de routing rule (company_id + channel + especificidade)
-//   4. Resolução de assignment + capabilities
-//   5. Validação de can_auto_reply
-//   6. Retorno do RouterDecision
+// FLUXO BASE (sem agrupamento — comportamento preservado):
+//   1. Deduplicação via INSERT atômico em agent_processed_messages
+//   2. Verificação de ai_state
+//   3. Verificação de fluxo ativo
+//   4. Resolução de routing rule
+//   5. Resolução de assignment + capabilities
+//   6. Validação de can_auto_reply
+//   7. Verificação de schedule
+//   8. Retorno should_process = true
 //
-// ACESSO AO BANCO:
-//   Exclusivamente via service_role — bypass de RLS onde necessário.
-//   agent_processed_messages tem RLS sem policies → só service_role pode gravar.
+// FLUXO COM AGRUPAMENTO (Etapa 14 — somente quando efetivamente habilitado):
+//   Idêntico ao fluxo base até o PASSO 6. No PASSO 6.5:
+//   - Lê model_config.message_grouping_window_s do agente (1 query adicional)
+//   - Se window > 0: chama enqueue → RPC gerencia dedup + APM atomicamente
+//   - Se window = 0 ou inválido: segue fluxo base normalmente
 //
-// RETORNO:
-//   RouterDecision: { should_process, skip_reason, assignment_id, ... }
-//   Quando should_process = false → o endpoint retorna 200 silencioso.
-//   Quando should_process = true  → o endpoint dispara execute-agent (fire-and-forget).
+// SEPARAÇÃO DE CONCEITOS (crítico):
+//   canUseMessageGrouping   = elegibilidade pelo evento (canal, tipo, instance_id)
+//                             Determina apenas qual estratégia de APM usar nos SKIPS.
+//   groupingWindowSeconds   = configuração efetiva do agente (lida no PASSO 6.5)
+//   isMessageGroupingEnabled = canUseMessageGrouping && window > 0
+//                             Determina se a execução final usa enqueue ou LLM imediato.
 //
-// DEDUPLICAÇÃO:
-//   INSERT em agent_processed_messages com uazapi_message_id como PK.
-//   Se já existir (error code 23505) → mensagem já foi processada → skip silencioso.
-//   INSERT primeiro garante atomicidade em invocações paralelas do mesmo evento.
+// GARANTIAS DE AUDITORIA EM SKIPS:
+//   Caminho não-agrupado (!canUseMessageGrouping):
+//     PASSO 1 faz INSERT → skips fazem UPDATE via updateProcessedResult (comportamento original).
+//   Caminho agrupável (canUseMessageGrouping = true) com skip:
+//     INSERT na hora do skip com o resultado já definido (skipWithAudit).
+//     Idempotente: 23505 = dedup paralelo, silenciado.
+//   Caminho agrupável com grouping habilitado (isMessageGroupingEnabled = true):
+//     INSERT omitido no Router — RPC enqueue cria APM com instance_id IS NOT NULL.
+//     Evita estado parcial: sem INSERT antigo + falha no enqueue = retry funciona.
 //
-// MATCHING DE REGRAS:
-//   Regras ordenadas por priority ASC (menor número = maior prioridade).
-//   Para cada regra, verifica event_type, source_type, source_identifier.
-//   Campos NULL na regra = "qualquer valor" (wildcard).
-//   Primeiro match válido é usado. Regra com is_fallback = true é catch-all.
+// TRATAMENTO DE ERROS DO ENQUEUE:
+//   Erros técnicos (DB_ERROR, TENANT_VIOLATION, BATCH_LIMIT_REACHED, etc.) lançam throw.
+//   process-conversation-event.js captura e retorna 500 (não mascara como sucesso).
+//   Duplicata saudável e mensagem nova = retorno HTTP 200 (sucesso funcional).
+//
+// DEDUPLICAÇÃO (dois índices parciais independentes):
+//   apm_dedup_router:  UNIQUE(company_id, uazapi_message_id) WHERE instance_id IS NULL
+//   apm_dedup_enqueue: UNIQUE(company_id, instance_id, uazapi_message_id) WHERE instance_id IS NOT NULL
 // =============================================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient }    from '@supabase/supabase-js';
 import { resolveFlowAgent } from './flowOrchestrator.js';
+import { isWithinSchedule } from './scheduleUtils.js';
+import {
+  enqueueMessage,
+  MessageBufferLimitError,
+  MessageBufferTenantError,
+  MessageBufferDuplicateStateError,
+  MessageBufferDatabaseError,
+  MessageBufferStateError,
+  MessageBufferValidationError,
+} from './messageBufferService.js';
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
-// Segue o mesmo padrão de api/lib/agents/logger.ts
 
 function getServiceSupabase() {
   const url = process.env.VITE_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -51,19 +74,27 @@ function getServiceSupabase() {
   });
 }
 
+// ── Tipos de evento inbound elegíveis para agrupamento ────────────────────────
+// Somente mensagens reais do usuário. Exclui status, confirmações e eventos internos.
+const INBOUND_EVENT_TYPES = new Set(['conversation.message_received']);
+
+// ── Limites de agrupamento — fixos no backend ────────────────────────────────
+const GROUPING_MAX_WINDOW_SECONDS         = 120;
+const GROUPING_MAX_BATCH_DURATION_SECONDS = 120;
+
 // ── Tipos de skip (internos ao Router) ───────────────────────────────────────
-// Mapeados para os valores válidos de agent_processed_messages.result ao gravar.
 
 const SKIP = {
-  ALREADY_PROCESSED: 'already_processed', // Sem gravação — registro já existe
-  AI_INACTIVE:       'ai_inactive',        // → DB: 'skipped_ai_inactive'
-  NO_RULE:           'no_rule',            // → DB: 'skipped_no_rule'
-  CAPABILITY_DENIED: 'capability_denied',  // → DB: 'skipped_no_rule'
-  OUT_OF_SCHEDULE:   'out_of_schedule',    // → DB: 'skipped_out_of_schedule'
-  ERROR:             'error',              // → DB: 'error'
+  ALREADY_PROCESSED: 'already_processed',
+  AI_INACTIVE:       'ai_inactive',
+  NO_RULE:           'no_rule',
+  CAPABILITY_DENIED: 'capability_denied',
+  OUT_OF_SCHEDULE:   'out_of_schedule',
+  ERROR:             'error',
+  MESSAGE_BUFFERED:  'message_buffered',
 };
 
-// Mapeamento RouterDecision.skip_reason → agent_processed_messages.result
+// Mapeamento skip_reason → agent_processed_messages.result
 const SKIP_TO_DB_RESULT = {
   [SKIP.AI_INACTIVE]:       'skipped_ai_inactive',
   [SKIP.NO_RULE]:           'skipped_no_rule',
@@ -72,145 +103,79 @@ const SKIP_TO_DB_RESULT = {
   [SKIP.ERROR]:             'error',
 };
 
-// ── Schedule helper ───────────────────────────────────────────────────────────
-
-/**
- * Verifica se o momento atual está dentro de alguma janela do operating_schedule.
- *
- * Regras:
- *   - schedule null ou undefined → true (sem restrição)
- *   - enabled = false            → true (sem restrição)
- *   - enabled = true + windows=[]→ false (fail-safe: restrição ativa sem janelas = bloqueio)
- *   - timezone inválido          → false (fail-safe: configuração corrompida = bloqueio)
- *   - enabled = true + windows   → verifica se start <= agora < end no dia atual do schedule
- *
- * Comparação: start <= horaAtual < end  (HH:MM lexicográfico)
- * Referência de tempo: sempre o timezone do schedule, nunca o servidor.
- *
- * @param {object|null} schedule - operating_schedule do banco
- * @param {{ assignmentId?: string, conversationId?: string, companyId?: string }} context - Para log
- * @returns {{ allowed: boolean, reason?: string, meta?: object }}
- */
-function isWithinSchedule(schedule, context = {}) {
-  if (!schedule || schedule.enabled === false) {
-    return { allowed: true };
-  }
-
-  const windows = schedule.windows ?? [];
-  if (windows.length === 0) {
-    const meta = { assignment_id: context.assignmentId, company_id: context.companyId, conversation_id: context.conversationId };
-    console.warn('🤖 [ROUTER] ⏰ schedule bloqueado — enabled=true mas windows vazio:', meta);
-    return { allowed: false, reason: 'empty_schedule', meta };
-  }
-
-  const tz = schedule.timezone;
-  let dayOfWeek, currentTime;
-
-  try {
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone:  tz,
-      weekday:   'short',
-      hour:      '2-digit',
-      minute:    '2-digit',
-      hour12:    false
-    }).formatToParts(now);
-
-    const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-    const weekdayStr = parts.find((p) => p.type === 'weekday')?.value ?? '';
-    dayOfWeek = dayMap[weekdayStr];
-
-    if (dayOfWeek === undefined) throw new Error(`weekday desconhecido: "${weekdayStr}"`);
-
-    const hour   = parts.find((p) => p.type === 'hour')?.value   ?? '00';
-    const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
-    // Intl pode retornar '24' para meia-noite em alguns ambientes — normalizar
-    const h = String(parseInt(hour, 10) % 24).padStart(2, '0');
-    const m = String(parseInt(minute, 10)).padStart(2, '0');
-    currentTime = `${h}:${m}`;
-
-  } catch (err) {
-    const meta = {
-      assignment_id:   context.assignmentId,
-      company_id:      context.companyId,
-      conversation_id: context.conversationId,
-      timezone_used:   tz,
-    };
-    console.error('🤖 [ROUTER] ⚠️  schedule com timezone inválido — bloqueando (fail-safe):', { ...meta, error: err.message });
-    return { allowed: false, reason: 'invalid_timezone', meta };
-  }
-
-  const todayWindows = windows.filter((w) => w.day === dayOfWeek);
-  const matched = todayWindows.some((w) => w.start <= currentTime && currentTime < w.end);
-
-  const meta = {
-    assignment_id:   context.assignmentId,
-    company_id:      context.companyId,
-    conversation_id: context.conversationId,
-    timezone_used:   tz,
-    day_calculated:  dayOfWeek,
-    time_calculated: currentTime,
-    windows_checked: todayWindows,
-  };
-
-  if (!matched) {
-    console.log('🤖 [ROUTER] ⏰ schedule bloqueado — fora da janela:', { ...meta, reason: 'no_window_matched' });
-    return { allowed: false, reason: 'no_window_matched', meta };
-  }
-
-  return { allowed: true };
-}
-
 // ── Função principal ──────────────────────────────────────────────────────────
 
 /**
  * Roteia um evento de conversação para o assignment correto.
  *
- * @param {object} event - Evento emitido pelo ConversationEventEmitter
+ * @param {object}   event            - Evento do ConversationEventEmitter
+ * @param {object}   [_deps]          - Dependências injetáveis (para testes)
+ * @param {object}   [_deps.svc]      - Cliente service_role
+ * @param {Function} [_deps.enqueueMessage] - Função de enqueue
  * @returns {RouterDecision}
+ * @throws {MessageBufferError} Se o enqueue falhar tecnicamente (permite retry via 500)
  */
-export async function routeConversationEvent(event) {
-  const svc = getServiceSupabase();
+export async function routeConversationEvent(event, _deps = {}) {
+  const svc             = _deps.svc            ?? getServiceSupabase();
+  const _enqueueMessage = _deps.enqueueMessage ?? enqueueMessage;
 
   if (!svc) {
-    console.error('🤖 [ROUTER] ❌ service_role client indisponível — verifique SUPABASE_SERVICE_ROLE_KEY');
+    console.error('🤖 [ROUTER] ❌ service_role client indisponível');
     return buildDecision(false, SKIP.ERROR, null, event);
   }
 
-  // ── PASSO 1: Deduplicação ─────────────────────────────────────────────────
-  // INSERT atômico: se uazapi_message_id já existe (PK), retorna code 23505.
-  // Garante que invocações paralelas do mesmo evento não se duplicam.
+  // ── PASSO 0: Elegibilidade para agrupamento (sem I/O) ─────────────────────
+  // Determina apenas se o evento É DO TIPO que pode ser agrupado.
+  // Não determina se grouping está habilitado no agente — isso é resolvido no PASSO 6.5.
+  //
+  // Elegível: canal whatsapp + evento inbound + instance_id presente.
+  // Exclui: canal web, status de entrega, outbound, eventos sem instance_id.
+  //
+  // Impacto: controla qual estratégia de APM é usada nos skips:
+  //   false → PASSO 1 já fez INSERT → skips fazem UPDATE
+  //   true  → PASSO 1 pulado → skips fazem INSERT com resultado final
 
-  const { error: insertError } = await svc
-    .from('agent_processed_messages')
-    .insert({
-      uazapi_message_id: event.uazapi_message_id,
-      conversation_id:   event.conversation_id,
-      company_id:        event.company_id,
-      assignment_id:     null,
-      result:            'processed'  // valor temporário; atualizado abaixo
-    });
+  const canUseMessageGrouping = (
+    event.channel === 'whatsapp' &&
+    INBOUND_EVENT_TYPES.has(event.event_type) &&
+    !!event.instance_id
+  );
 
-  if (insertError) {
-    if (insertError.code === '23505') {
-      // Deduplicação: mensagem já registrada por execução anterior
-      console.log('🤖 [ROUTER] ⏭️  Deduplicado — mensagem já processada:', event.uazapi_message_id);
-      return buildDecision(false, SKIP.ALREADY_PROCESSED, null, event);
+  // ── PASSO 1: Deduplicação (somente !canUseMessageGrouping) ───────────────
+  // Para canUseMessageGrouping=true: INSERT é diferido.
+  //   - Se grouping habilitado (window > 0): RPC enqueue cria APM atomicamente
+  //   - Se grouping desabilitado (window = 0): INSERT acontece no PASSO 7
+  //   - Se skip ocorre: INSERT acontece na função skipWithAudit
+  // Isso evita estado parcial: INSERT antigo + falha de enqueue = mensagem perdida.
+
+  if (!canUseMessageGrouping) {
+    const { error: insertError } = await svc
+      .from('agent_processed_messages')
+      .insert({
+        uazapi_message_id: event.uazapi_message_id,
+        conversation_id:   event.conversation_id,
+        company_id:        event.company_id,
+        assignment_id:     null,
+        result:            'processed'
+      });
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        console.log('🤖 [ROUTER] ⏭️  Deduplicado — mensagem já processada:', event.uazapi_message_id);
+        return buildDecision(false, SKIP.ALREADY_PROCESSED, null, event);
+      }
+      console.error('🤖 [ROUTER] ❌ Erro ao registrar deduplicação:', insertError.message);
+      return buildDecision(false, SKIP.ERROR, null, event);
     }
-    // Erro de banco inesperado — não tentar gravar (pode falhar também)
-    console.error('🤖 [ROUTER] ❌ Erro ao registrar deduplicação:', insertError.message);
-    return buildDecision(false, SKIP.ERROR, null, event);
   }
 
   // ── PASSO 2: Verificar ai_state da conversa ───────────────────────────────
-  // O Router só age quando ai_state = 'ai_active'.
-  // Todos os outros estados (inactive, paused, suggested) são ignorados.
 
   const { data: conversation, error: convError } = await svc
     .from('chat_conversations')
     .select('id, ai_state, ai_assignment_id, contact_phone')
     .eq('id', event.conversation_id)
-    .eq('company_id', event.company_id)  // garante multi-tenant
+    .eq('company_id', event.company_id)
     .single();
 
   if (convError || !conversation) {
@@ -219,7 +184,7 @@ export async function routeConversationEvent(event) {
       company_id:      event.company_id,
       error:           convError?.message
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.ERROR, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.ERROR, null);
     return buildDecision(false, SKIP.ERROR, null, event);
   }
 
@@ -228,24 +193,22 @@ export async function routeConversationEvent(event) {
       conversation_id: event.conversation_id,
       ai_state:        conversation.ai_state
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.AI_INACTIVE, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.AI_INACTIVE, null);
     return buildDecision(false, SKIP.AI_INACTIVE, conversation, event);
   }
 
-  // ── PASSO 2.5: Verificar fluxo ativo (Phase 3) ───────────────────────────
-  // Se a conversa tem um conversation_flow_states ativo, o agent_id do estágio
-  // atual tem prioridade sobre as agent_routing_rules.
-  // locked_opportunity_id é propagado ao contexto para o toolExecutor.
+  // ── PASSO 2.5: Verificar fluxo ativo ────────────────────────────────────
+  // Fluxos ativos não usam agrupamento nesta etapa.
+  // auditProcessed garante registro APM independente do canUseMessageGrouping.
 
   const flowResult = await resolveFlowAgent(event.conversation_id, event.company_id);
 
   if (flowResult) {
     console.log('🤖 [ROUTER] 🔀 Fluxo ativo — usando agente do estágio:', {
-      agent_id:    flowResult.agent_id,
+      agent_id:        flowResult.agent_id,
       conversation_id: event.conversation_id,
     });
 
-    // Verificar schedule do assignment vinculado à conversa (via ai_assignment_id)
     if (conversation.ai_assignment_id) {
       const { data: flowAssignment } = await svc
         .from('company_agent_assignments')
@@ -270,13 +233,13 @@ export async function routeConversationEvent(event) {
             ...flowScheduleCheck.meta,
             reason:          flowScheduleCheck.reason,
           });
-          await updateProcessedResult(svc, event.uazapi_message_id, SKIP.OUT_OF_SCHEDULE, conversation.ai_assignment_id);
+          await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.OUT_OF_SCHEDULE, conversation.ai_assignment_id);
           return buildDecision(false, SKIP.OUT_OF_SCHEDULE, conversation, event);
         }
       }
     }
 
-    await updateProcessedResult(svc, event.uazapi_message_id, null, conversation.ai_assignment_id);
+    await auditProcessed(svc, event, canUseMessageGrouping, conversation.ai_assignment_id);
 
     return {
       should_process:        true,
@@ -299,9 +262,6 @@ export async function routeConversationEvent(event) {
   }
 
   // ── PASSO 3: Resolver routing rule ────────────────────────────────────────
-  // Busca todas as regras ativas da empresa para o canal do evento.
-  // Inclui regras com channel = '*' (canal coringa).
-  // Ordenadas por priority ASC — menor número = maior prioridade.
 
   const { data: rules, error: rulesError } = await svc
     .from('agent_routing_rules')
@@ -313,7 +273,7 @@ export async function routeConversationEvent(event) {
 
   if (rulesError) {
     console.error('🤖 [ROUTER] ❌ Erro ao buscar routing rules:', rulesError.message);
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.ERROR, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.ERROR, null);
     return buildDecision(false, SKIP.ERROR, conversation, event);
   }
 
@@ -327,19 +287,17 @@ export async function routeConversationEvent(event) {
       source_identifier: event.source_identifier,
       rules_checked:     rules?.length ?? 0
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.NO_RULE, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.NO_RULE, null);
     return buildDecision(false, SKIP.NO_RULE, conversation, event);
   }
 
   // ── PASSO 4: Resolver assignment + capabilities ───────────────────────────
-  // O assignment define o agente base (agent_id) e suas capacidades operacionais.
-  // Validação de company_id aqui garante multi-tenant mesmo com assignment_id externo.
 
   const { data: assignment, error: assignError } = await svc
     .from('company_agent_assignments')
     .select('id, agent_id, capabilities, price_display_policy, is_active, display_name, operating_schedule')
     .eq('id', matchedRule.assignment_id)
-    .eq('company_id', event.company_id)  // garante multi-tenant
+    .eq('company_id', event.company_id)
     .single();
 
   if (assignError || !assignment) {
@@ -348,36 +306,31 @@ export async function routeConversationEvent(event) {
       company_id:    event.company_id,
       error:         assignError?.message
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.NO_RULE, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.NO_RULE, null);
     return buildDecision(false, SKIP.NO_RULE, conversation, event);
   }
 
   if (!assignment.is_active) {
     console.log('🤖 [ROUTER] ⏭️  Assignment inativo:', assignment.id);
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.NO_RULE, null);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.NO_RULE, null);
     return buildDecision(false, SKIP.NO_RULE, conversation, event);
   }
 
   // ── PASSO 5: Validar can_auto_reply ──────────────────────────────────────
-  // Esta capability determina se o agente pode responder automaticamente.
-  // Não depende do prompt — é uma regra de negócio controlada pelo backend.
 
   const capabilities = assignment.capabilities ?? {};
 
   if (!capabilities.can_auto_reply) {
     console.log('🤖 [ROUTER] ⏭️  can_auto_reply = false para assignment:', {
-      assignment_id:  assignment.id,
-      display_name:   assignment.display_name,
+      assignment_id: assignment.id,
+      display_name:  assignment.display_name,
       capabilities
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.CAPABILITY_DENIED, assignment.id);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.CAPABILITY_DENIED, assignment.id);
     return buildDecision(false, SKIP.CAPABILITY_DENIED, conversation, event);
   }
 
   // ── PASSO 6: Verificar operating_schedule ────────────────────────────────
-  // O schedule restringe quando a IA pode responder sem alterar o ai_state.
-  // Comparação: start <= horário_atual_local < end (timezone do schedule).
-  // Fail-safe: timezone inválido ou windows vazio com enabled=true → bloquear.
 
   const scheduleCheck = isWithinSchedule(assignment.operating_schedule, {
     assignmentId:   assignment.id,
@@ -386,23 +339,148 @@ export async function routeConversationEvent(event) {
   });
 
   if (!scheduleCheck.allowed) {
-    console.log('🤖 [ROUTER] ⏰ Fora do horário de atendimento — skip registrado:', {
-      event:          'agent_skip_out_of_schedule',
-      assignment_id:  assignment.id,
-      company_id:     event.company_id,
+    console.log('🤖 [ROUTER] ⏰ Fora do horário de atendimento:', {
+      event:           'agent_skip_out_of_schedule',
+      assignment_id:   assignment.id,
+      company_id:      event.company_id,
       conversation_id: event.conversation_id,
       ...scheduleCheck.meta,
-      reason:         scheduleCheck.reason,
+      reason:          scheduleCheck.reason,
     });
-    await updateProcessedResult(svc, event.uazapi_message_id, SKIP.OUT_OF_SCHEDULE, assignment.id);
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.OUT_OF_SCHEDULE, assignment.id);
     return buildDecision(false, SKIP.OUT_OF_SCHEDULE, conversation, event);
   }
 
-  // ── PASSO 7: Atualizar agent_processed_messages com assignment_id resolvido ──
-  // Mantém result = 'processed' (correto: o Router decidiu processar).
-  // assignment_id agora preenchido para rastreabilidade.
+  // ── PASSO 6.5: Resolver configuração de agrupamento ──────────────────────
+  // Executado somente para eventos elegíveis (canUseMessageGrouping = true).
+  // Agora temos todos os dados necessários: company_id, assignment, agent_id.
+  // Uma query adicional: lovoo_agents filtrado por company_id + id (multi-tenant).
+  //
+  // isMessageGroupingEnabled = canUseMessageGrouping && window > 0
+  // Somente quando true o INSERT antigo é omitido — caso contrário o PASSO 7
+  // faz o INSERT diferido e segue o fluxo normal.
 
-  await updateProcessedResult(svc, event.uazapi_message_id, null, assignment.id);
+  let isMessageGroupingEnabled = false;
+  let groupingWindowSeconds    = 0;
+
+  if (canUseMessageGrouping) {
+    groupingWindowSeconds    = await resolveGroupingWindow(svc, event.company_id, assignment.agent_id);
+    isMessageGroupingEnabled = groupingWindowSeconds > 0;
+  }
+
+  // ── PASSO 7: Execução agrupada (apenas quando efetivamente habilitado) ────
+  // Neste ponto: nenhum INSERT antigo de APM foi feito.
+  // A RPC agent_message_enqueue_v1 cria o registro APM com instance_id IS NOT NULL.
+  //
+  // Erros de enqueue lançam throw — process-conversation-event retorna 500.
+  // Duplicata saudável = HTTP 200 (sucesso funcional, mensagem já no buffer).
+  // Mensagem nova = HTTP 200 (sucesso funcional, message_buffered).
+
+  if (isMessageGroupingEnabled) {
+    const messageType = resolveMessageType(event);
+
+    let enqueueResult;
+    try {
+      enqueueResult = await _enqueueMessage({
+        svc,
+        companyId:               event.company_id,
+        conversationId:          event.conversation_id,
+        assignmentId:            assignment.id,
+        channel:                 event.channel,
+        windowSeconds:           groupingWindowSeconds,
+        maxBatchDurationSeconds: GROUPING_MAX_BATCH_DURATION_SECONDS,
+        providerMessageId:       event.uazapi_message_id,
+        instanceId:              event.instance_id,
+        messageText:             event.message_text       ?? null,
+        messageType,
+        providerTimestamp:       event.provider_timestamp ?? null,
+        receivedAt:              event.timestamp          ?? null,
+        payload:                 event.payload            ?? {},
+      });
+    } catch (enqueueError) {
+      // Falha retentável — não retornar como sucesso (mascara falha).
+      // Throw permite que process-conversation-event responda com 500.
+      // NOTA: o webhook usa fire-and-forget; retry não é garantido automaticamente.
+      //       A falha fica visível nos logs e no status HTTP para observabilidade.
+      console.error('🤖 [ROUTER] ❌ Falha no enqueue — lançando para permitir retry:', {
+        operation:       'enqueueMessage',
+        company_id:      event.company_id,
+        conversation_id: event.conversation_id,
+        assignment_id:   assignment.id,
+        agent_id:        assignment.agent_id,
+        error_code:      enqueueError.code ?? 'UNKNOWN',
+      });
+      throw enqueueError;
+    }
+
+    if (enqueueResult.duplicate) {
+      // Duplicata saudável: mensagem já está no buffer (idempotente).
+      console.log('🤖 [ROUTER] ⏭️  Duplicata no buffer — skip silencioso:', {
+        conversation_id: event.conversation_id,
+        assignment_id:   assignment.id,
+        batch_id:        enqueueResult.batchId,
+      });
+      return buildDecision(false, SKIP.ALREADY_PROCESSED, conversation, event);
+    }
+
+    console.log('🤖 [ROUTER] 📬 Mensagem enfileirada no buffer:', {
+      conversation_id: event.conversation_id,
+      assignment_id:   assignment.id,
+      agent_id:        assignment.agent_id,
+      batch_id:        enqueueResult.batchId,
+      window_seconds:  groupingWindowSeconds,
+    });
+
+    return {
+      should_process:        false,
+      skip_reason:           SKIP.MESSAGE_BUFFERED,
+      rule_id:               matchedRule.id,
+      assignment_id:         assignment.id,
+      agent_id:              assignment.agent_id,
+      flow_state_id:         null,
+      locked_opportunity_id: null,
+      capabilities,
+      price_display_policy:  assignment.price_display_policy,
+      conversation: {
+        id:               conversation.id,
+        ai_state:         conversation.ai_state,
+        ai_assignment_id: conversation.ai_assignment_id,
+        contact_phone:    conversation.contact_phone,
+      },
+      event,
+      batch_id:         enqueueResult.batchId,
+      batch_message_id: enqueueResult.batchMessageId,
+      deadline_at:      enqueueResult.deadlineAt,
+    };
+  }
+
+  // ── PASSO 7 (caminho não-agrupado): Finalizar APM e retornar ─────────────
+
+  if (canUseMessageGrouping) {
+    // INSERT diferido do PASSO 1 — grouping estava elegível mas desabilitado (window = 0).
+    // Feito aqui com assignment_id já resolvido (uma operação em vez de INSERT + UPDATE).
+    const { error: insertError } = await svc
+      .from('agent_processed_messages')
+      .insert({
+        uazapi_message_id: event.uazapi_message_id,
+        conversation_id:   event.conversation_id,
+        company_id:        event.company_id,
+        assignment_id:     assignment.id,
+        result:            'processed',
+      });
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        console.log('🤖 [ROUTER] ⏭️  Deduplicado (fallback grouping-eligible):', event.uazapi_message_id);
+        return buildDecision(false, SKIP.ALREADY_PROCESSED, conversation, event);
+      }
+      console.error('🤖 [ROUTER] ❌ Erro ao registrar APM (fallback grouping):', insertError.message);
+      return buildDecision(false, SKIP.ERROR, conversation, event);
+    }
+  } else {
+    // Caminho original: PASSO 1 fez INSERT → agora atualiza assignment_id.
+    await updateProcessedResult(svc, event.company_id, event.uazapi_message_id, null, assignment.id);
+  }
 
   console.log('🤖 [ROUTER] ✅ Roteado com sucesso:', {
     rule_id:         matchedRule.id,
@@ -412,8 +490,6 @@ export async function routeConversationEvent(event) {
     display_name:    assignment.display_name,
     conversation_id: event.conversation_id
   });
-
-  // ── RouterDecision final ──────────────────────────────────────────────────
 
   return {
     should_process:        true,
@@ -435,28 +511,164 @@ export async function routeConversationEvent(event) {
   };
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers de auditoria APM ──────────────────────────────────────────────────
+
+/**
+ * Registra um skip em agent_processed_messages.
+ *
+ * Caminho não-agrupado (!canUseMessageGrouping):
+ *   PASSO 1 já fez INSERT — faz UPDATE do resultado via updateProcessedResult.
+ *
+ * Caminho agrupável (canUseMessageGrouping = true):
+ *   Faz INSERT com o resultado final do skip.
+ *   23505 = dedup paralelo, silenciado.
+ *   Fire-and-forget: falhas de escrita não interrompem o Router.
+ *
+ * @param {object} svc
+ * @param {object} event
+ * @param {boolean} canUseMessageGrouping
+ * @param {string} skipReason - Chave SKIP.*
+ * @param {string|null} assignmentId
+ */
+async function skipWithAudit(svc, event, canUseMessageGrouping, skipReason, assignmentId) {
+  if (!canUseMessageGrouping) {
+    await updateProcessedResult(svc, event.company_id, event.uazapi_message_id, skipReason, assignmentId);
+    return;
+  }
+
+  // canUseMessageGrouping = true: INSERT direto com resultado do skip.
+  try {
+    const dbResult = SKIP_TO_DB_RESULT[skipReason] ?? 'error';
+    await svc.from('agent_processed_messages').insert({
+      uazapi_message_id: event.uazapi_message_id,
+      conversation_id:   event.conversation_id,
+      company_id:        event.company_id,
+      assignment_id:     assignmentId,
+      result:            dbResult,
+    });
+    // { error: { code: '23505' } } = dedup paralelo — silenciado intencionalmente
+  } catch (err) {
+    console.error('🤖 [ROUTER] ⚠️  Falha ao registrar skip audit (grouping path):', err.message);
+  }
+}
+
+/**
+ * Registra uma mensagem processada (should_process = true) em agent_processed_messages.
+ *
+ * Análogo ao skipWithAudit mas para o caminho de sucesso (flow agent, etc.).
+ * Não usado para o caminho de enqueue — a RPC já cria o registro APM.
+ *
+ * @param {object} svc
+ * @param {object} event
+ * @param {boolean} canUseMessageGrouping
+ * @param {string|null} assignmentId
+ */
+async function auditProcessed(svc, event, canUseMessageGrouping, assignmentId) {
+  if (!canUseMessageGrouping) {
+    await updateProcessedResult(svc, event.company_id, event.uazapi_message_id, null, assignmentId);
+    return;
+  }
+
+  try {
+    await svc.from('agent_processed_messages').insert({
+      uazapi_message_id: event.uazapi_message_id,
+      conversation_id:   event.conversation_id,
+      company_id:        event.company_id,
+      assignment_id:     assignmentId,
+      result:            'processed',
+    });
+  } catch (err) {
+    console.error('🤖 [ROUTER] ⚠️  Falha ao registrar audit processado (grouping path):', err.message);
+  }
+}
+
+// ── Helpers de agrupamento ────────────────────────────────────────────────────
+
+/**
+ * Resolve a janela de agrupamento do agente.
+ *
+ * Busca lovoo_agents com filtros multi-tenant (company_id + id).
+ * Retorna 0 se: agente não encontrado, inativo, ou janela inválida.
+ *
+ * @param {object} svc
+ * @param {string} companyId
+ * @param {string} agentId
+ * @returns {Promise<number>} Janela em segundos (0 = desabilitado)
+ */
+async function resolveGroupingWindow(svc, companyId, agentId) {
+  if (!companyId || !agentId) return 0;
+
+  const { data: agent, error } = await svc
+    .from('lovoo_agents')
+    .select('is_active, model_config')
+    .eq('id', agentId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (error || !agent) {
+    console.warn('🤖 [ROUTER] ⚠️  Agente não encontrado para resolução de grouping:', {
+      agent_id:   agentId,
+      company_id: companyId,
+    });
+    return 0;
+  }
+
+  if (!agent.is_active) return 0;
+
+  return readGroupingWindow(agent.model_config);
+}
+
+/**
+ * Lê e valida model_config.message_grouping_window_s.
+ *
+ * Regras backend (não delegadas ao frontend):
+ *   Deve ser inteiro >= 1 e <= 120.
+ *   Ausente, null ou 0 → 0 (desabilitado).
+ *   Inválido → 0 + warning seguro (sem o valor, apenas o tipo).
+ *
+ * @param {object|null} modelConfig
+ * @returns {number}
+ */
+function readGroupingWindow(modelConfig) {
+  if (!modelConfig || typeof modelConfig !== 'object') return 0;
+
+  const w = modelConfig.message_grouping_window_s;
+
+  if (w === undefined || w === null || w === 0) return 0;
+
+  if (!Number.isInteger(w) || w < 1 || w > GROUPING_MAX_WINDOW_SECONDS) {
+    console.warn('🤖 [ROUTER] ⚠️  message_grouping_window_s inválido — agrupamento desabilitado:', {
+      value_type: typeof w,
+    });
+    return 0;
+  }
+
+  return w;
+}
+
+/**
+ * Determina o tipo de mensagem a partir do evento.
+ * Prioridade: event.message_type → 'text' (se message_text) → 'unknown'.
+ *
+ * @param {object} event
+ * @returns {string}
+ */
+function resolveMessageType(event) {
+  if (event.message_type && typeof event.message_type === 'string') return event.message_type;
+  if (event.message_text) return 'text';
+  return 'unknown';
+}
+
+// ── Helpers do Router ─────────────────────────────────────────────────────────
 
 /**
  * Encontra a primeira routing rule que corresponde ao evento.
- * Rules já chegam ordenadas por priority ASC — primeiro match é o correto.
- *
- * Lógica de especificidade (gerenciada pela ordenação por priority):
- *   - Regra com source_identifier preenchido = mais específica (prioridade baixa numericamente)
- *   - Regra com source_type preenchido = intermediária
- *   - Regra is_fallback = true, todos NULL = catch-all (prioridade alta numericamente)
- *
- * Campos NULL na regra = wildcard para aquela dimensão.
  */
 function findMatchingRule(rules, event) {
   for (const rule of rules) {
-    // event_type: se a regra especifica, deve bater exatamente
     if (rule.event_type !== null && rule.event_type !== event.event_type) continue;
-    // source_type: se a regra especifica, deve bater exatamente
     if (rule.source_type !== null && rule.source_type !== event.source_type) continue;
-    // source_identifier: se a regra especifica, deve bater exatamente
     if (rule.source_identifier !== null && rule.source_identifier !== event.source_identifier) continue;
-    // Todas as condições satisfeitas (ou todas NULL = catch-all)
     return rule;
   }
   return null;
@@ -464,22 +676,16 @@ function findMatchingRule(rules, event) {
 
 /**
  * Atualiza o resultado de um registro em agent_processed_messages.
- * Fire-and-forget: falhas são silenciosas (não interrompem o Router).
- *
- * @param {object} svc             - Cliente service_role
- * @param {string} uazapi_message_id
- * @param {string|null} skipReason - Chave SKIP.* ou null para manter 'processed'
- * @param {string|null} assignmentId
+ * Usado somente pelo caminho !canUseMessageGrouping (PASSO 1 já fez INSERT).
+ * Fire-and-forget: falhas são silenciosas.
  */
-async function updateProcessedResult(svc, uazapi_message_id, skipReason, assignmentId) {
+async function updateProcessedResult(svc, companyId, uazapi_message_id, skipReason, assignmentId) {
   try {
     const update = {};
 
-    // Traduz skip_reason interno para o enum aceito pelo banco
     if (skipReason && SKIP_TO_DB_RESULT[skipReason]) {
       update.result = SKIP_TO_DB_RESULT[skipReason];
     }
-    // assignment_id: atualiza sempre que fornecido
     if (assignmentId !== undefined) {
       update.assignment_id = assignmentId;
     }
@@ -489,10 +695,11 @@ async function updateProcessedResult(svc, uazapi_message_id, skipReason, assignm
     await svc
       .from('agent_processed_messages')
       .update(update)
-      .eq('uazapi_message_id', uazapi_message_id);
+      .eq('company_id', companyId)
+      .eq('uazapi_message_id', uazapi_message_id)
+      .is('instance_id', null);
 
   } catch (err) {
-    // Nunca deve interromper o fluxo do Router
     console.error('🤖 [ROUTER] ⚠️  Falha ao atualizar agent_processed_messages:', err.message);
   }
 }
