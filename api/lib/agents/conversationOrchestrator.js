@@ -40,10 +40,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID }   from 'crypto';
-
-// ── Constantes ────────────────────────────────────────────────────────────────
-
-const STALE_LOCK_MINUTES = 5;
+import { acquireConversationLock, releaseConversationLock } from './conversationLock.js';
 
 // ── Cliente service_role ──────────────────────────────────────────────────────
 // Segue o mesmo padrão de api/lib/agents/logger.ts
@@ -86,75 +83,31 @@ export async function orchestrateExecution(decision) {
   let isNewSession = false;
 
   try {
-    // ── PASSO 1: Verificar e limpar stale lock ────────────────────────────────
-    // Um lock é considerado stale quando foi adquirido há mais de STALE_LOCK_MINUTES
-    // e provavelmente pertence a uma execução que falhou ou foi interrompida.
-    // Limpamos antes de tentar INSERT para não bloquear indefinidamente.
+    // ── PASSO 1 + 2: Verificar stale lock e adquirir lock atômico ────────────
+    // Delegado ao helper compartilhado conversationLock.js.
+    // Stale lock (> 5 min) é removido antes do INSERT.
+    // 23505 = lock ocupado → skip silencioso.
 
-    const staleThreshold = new Date(
-      Date.now() - STALE_LOCK_MINUTES * 60 * 1000
-    ).toISOString();
-
-    const { data: staleLock } = await svc
-      .from('agent_processing_locks')
-      .select('conversation_id, acquired_at, locked_by_run_id')
-      .eq('conversation_id', conversationId)
-      .lt('acquired_at', staleThreshold)
-      .maybeSingle();
-
-    if (staleLock) {
-      console.log('🤖 [ORCH] ⚠️  Stale lock detectado — removendo antes de tentar novo lock:', {
-        conversation_id: conversationId,
-        stale_since:     staleLock.acquired_at,
-        stale_run_id:    staleLock.locked_by_run_id,
-        threshold_min:   STALE_LOCK_MINUTES
-      });
-
-      // DELETE com filtro de tempo: seguro em race condition
-      // (outro processo pode deletar simultaneamente — sem problema)
-      await svc
-        .from('agent_processing_locks')
-        .delete()
-        .eq('conversation_id', conversationId)
-        .lt('acquired_at', staleThreshold);
+    let lockResult;
+    try {
+      lockResult = await acquireConversationLock(svc, { companyId, conversationId, runId });
+    } catch (lockErr) {
+      console.error('🤖 [ORCH] ❌ Erro inesperado ao adquirir lock:', lockErr.message);
+      return { success: false, skip_reason: 'error', error: lockErr.message };
     }
 
-    // ── PASSO 2: Adquirir lock atômico ────────────────────────────────────────
-    // INSERT com conversation_id como PK. Se já existir → conflito 23505.
-    // Conflito = outra execução ativa → abortar silenciosamente.
-    // lockAcquired = false enquanto não confirmamos o INSERT.
-
-    const { error: lockError } = await svc
-      .from('agent_processing_locks')
-      .insert({
+    if (!lockResult.acquired) {
+      // Lock pertence a outra execução ativa — skip silencioso correto
+      console.log('🤖 [ORCH] ⏭️  Lock ocupado — conversa já está sendo processada:', {
         conversation_id: conversationId,
-        locked_by_run_id: runId
-        // acquired_at tem DEFAULT now() no banco
+        run_id:          runId,
       });
-
-    if (lockError) {
-      if (lockError.code === '23505') {
-        // Lock pertence a outra execução ativa — skip silencioso correto
-        console.log('🤖 [ORCH] ⏭️  Lock ocupado — conversa já está sendo processada:', {
-          conversation_id: conversationId,
-          run_id:          runId
-        });
-        // lockAcquired = false → finally não tenta deletar lock alheio
-        return { success: false, skip_reason: 'skipped_lock_busy' };
-      }
-
-      // Erro de banco inesperado
-      console.error('🤖 [ORCH] ❌ Erro inesperado ao adquirir lock:', lockError.message);
-      return { success: false, skip_reason: 'error', error: lockError.message };
+      // lockAcquired = false → finally não tenta liberar lock alheio
+      return { success: false, skip_reason: 'skipped_lock_busy' };
     }
 
     // Lock adquirido — finally garantirá a liberação a partir daqui
     lockAcquired = true;
-
-    console.log('🤖 [ORCH] 🔒 Lock adquirido:', {
-      conversation_id: conversationId,
-      run_id:          runId
-    });
 
     // ── PASSO 3: Revalidar ai_state diretamente do banco ──────────────────────
     // O RouterDecision contém o ai_state de T1 (momento do Router).
@@ -275,9 +228,9 @@ export async function orchestrateExecution(decision) {
 
   } finally {
     // Liberar lock em TODOS os caminhos onde ele foi adquirido.
-    // Quando 23505 (lock alheio), lockAcquired = false → não deleta lock alheio.
+    // Quando lock_busy (lock alheio), lockAcquired = false → não deleta lock alheio.
     if (lockAcquired) {
-      await releaseLock(svc, conversationId);
+      await releaseConversationLock(svc, { companyId, conversationId, runId });
     }
   }
 }
@@ -290,7 +243,7 @@ export async function orchestrateExecution(decision) {
  *
  * @returns {{ sessionId: string, isNewSession: boolean }}
  */
-async function findOrCreateSession(svc, { companyId, conversationId, assignmentId, ruleId }) {
+export async function findOrCreateSession(svc, { companyId, conversationId, assignmentId, ruleId }) {
   // Buscar sessão ativa para esta conversa + assignment
   const { data: existing, error: selectError } = await svc
     .from('agent_conversation_sessions')
@@ -360,24 +313,5 @@ async function closeSession(svc, sessionId, status, endReason) {
 
   if (error) {
     console.error('🤖 [ORCH] ⚠️  Falha ao fechar sessão:', { sessionId, status, endReason, error: error.message });
-  }
-}
-
-/**
- * Libera o lock de processamento da conversa via DELETE.
- * Sempre chamado no bloco `finally` — nunca omitir.
- * Silencioso em caso de falha (lock expira por TTL de qualquer forma).
- */
-async function releaseLock(svc, conversationId) {
-  try {
-    await svc
-      .from('agent_processing_locks')
-      .delete()
-      .eq('conversation_id', conversationId);
-
-    console.log('🤖 [ORCH] 🔓 Lock liberado:', { conversation_id: conversationId });
-  } catch (err) {
-    // Não relançar — a execução já terminou; o lock expirará por TTL (5 min)
-    console.error('🤖 [ORCH] ⚠️  Falha ao liberar lock (expirará por TTL):', err.message);
   }
 }

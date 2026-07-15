@@ -80,6 +80,49 @@ function getServiceSupabase() {
   });
 }
 
+// ── Formatação de mensagens agrupadas ─────────────────────────────────────────
+
+/**
+ * Formata um array de mensagens agrupadas em texto legível para o LLM.
+ *
+ * Formato:
+ *   [Mensagem 1 — HH:mm]
+ *   texto da mensagem
+ *
+ *   [Mensagem 2 — áudio]
+ *
+ * Regras:
+ *   - Nunca inclui payload bruto
+ *   - Mídia sem texto recebe rótulo normalizado (não inventa conteúdo)
+ *   - Quebras internas do texto são preservadas
+ *
+ * @param {Array<{ text?: string, type?: string, receivedAt?: string }>} messages
+ * @returns {string}
+ */
+export function formatGroupedMessages(messages) {
+  return messages.map((m, idx) => {
+    const timeLabel = m.receivedAt
+      ? ` — ${new Date(m.receivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      : '';
+
+    const hasText = m.text && m.text.trim().length > 0;
+
+    if (!hasText) {
+      const typeMap = {
+        audio:    'áudio',
+        image:    'imagem',
+        video:    'vídeo',
+        document: 'documento',
+        sticker:  'sticker',
+      };
+      const typeLabel = typeMap[m.type] ?? 'mídia';
+      return `[Mensagem ${idx + 1}${timeLabel}]\n[${typeLabel}]`;
+    }
+
+    return `[Mensagem ${idx + 1}${timeLabel}]\n${m.text}`;
+  }).join('\n\n');
+}
+
 // ── Função principal ──────────────────────────────────────────────────────────
 
 export async function buildContext(orchestratorContext) {
@@ -232,7 +275,12 @@ export async function buildContext(orchestratorContext) {
   //   3. Item único identificado pelo matcher padrão
   //   4. Fallback multi-mensagem (últimas 5 inbound — só se nenhuma das anteriores)
 
-  const userMessage = orchestratorContext.event.message_text ?? '';
+  // Mensagem do usuário: usa grouped_messages quando disponível (execução agrupada),
+  // caso contrário usa event.message_text (fluxo individual normal).
+  const groupedMsgs = orchestratorContext.grouped_messages;
+  const userMessage  = (Array.isArray(groupedMsgs) && groupedMsgs.length > 0)
+    ? formatGroupedMessages(groupedMsgs)
+    : (orchestratorContext.event?.message_text ?? '');
 
   // Etapa 1: matcher padrão na mensagem atual (exato → token → fuzzy)
   const { bestMatch: currentMatch, topCandidates: currentCandidates, isAmbiguous: currentAmbiguous } =
