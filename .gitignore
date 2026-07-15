@@ -76,4 +76,11 @@ backup/
 /p4b_full.json
 .snapshots/*.tsbuildinfo
 *.tsbuildinfo
+
+# Supabase CLI temporary files
+supabase/.temp/
+
+# Local project snapshots
+.snapshots/
+
 .env*
