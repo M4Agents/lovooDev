@@ -6,42 +6,55 @@
 
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { Clock, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Clock, CheckCircle, AlertTriangle, MessageCircle, TimerOff } from 'lucide-react'
 import { useReactFlow } from 'reactflow'
 import NodeToolbar from './NodeToolbar'
 import NodeDebugBadge from './NodeDebugBadge'
 
 // =====================================================
 // HELPER: Traduzir unidades de tempo
+// Exportado para testes unitários
 // =====================================================
-const getUnitLabel = (unit?: string): string => {
+export const getUnitLabel = (unit?: string): string => {
   switch (unit) {
-    case 'seconds':
-      return 'segundo(s)'
-    case 'minutes':
-      return 'minuto(s)'
-    case 'hours':
-      return 'hora(s)'
-    case 'days':
-      return 'dia(s)'
-    default:
-      return 'minuto(s)'
+    case 'seconds':  return 'segundo(s)'
+    case 'minutes':  return 'minuto(s)'
+    case 'hours':    return 'hora(s)'
+    case 'days':     return 'dia(s)'
+    default:         return 'minuto(s)'
   }
 }
 
 // =====================================================
 // HELPER: Gerar preview dinâmico do delay
+// Exportado para testes unitários
 // =====================================================
-const getDelayPreview = (config: any): string => {
-  if (!config || config.duration == null || config.duration <= 0) {
-    return 'Clique para configurar tempo'
+export const getDelayPreview = (config: any): string => {
+  const hasDuration = config?.duration != null && config.duration > 0
+  const isTimeOrResponse = config?.wait_mode === 'time_or_response'
+
+  if (!hasDuration) {
+    return isTimeOrResponse
+      ? 'Configurar tempo de espera'
+      : 'Clique para configurar tempo'
   }
-  return `Aguardar ${config.duration} ${getUnitLabel(config.unit)}`
+
+  const unitLabel = getUnitLabel(config.unit)
+
+  if (isTimeOrResponse) {
+    return `Resp. ou ${config.duration} ${unitLabel}`
+  }
+
+  return `Aguardar ${config.duration} ${unitLabel}`
 }
 
 const DelayNode = ({ data, selected, id }: NodeProps) => {
-  const delayPreview = getDelayPreview(data.config)
-  const hasConfig = !!(data.config?.duration > 0)
+  const config = data.config || {}
+  // wait_mode desconhecido → fallback para modo legado 'time'
+  const isTimeOrResponse = config.wait_mode === 'time_or_response'
+
+  const delayPreview = getDelayPreview(config)
+  const hasConfig = !!(config.duration > 0)
   const { setNodes, setEdges } = useReactFlow()
 
   const handleDelete = () => {
@@ -101,7 +114,7 @@ const DelayNode = ({ data, selected, id }: NodeProps) => {
           <div className="flex items-center gap-1">
             <Clock className="w-2.5 h-2.5 text-white" />
             <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
-              Aguardar
+              {isTimeOrResponse ? 'Aguardar resp.' : 'Aguardar'}
             </span>
           </div>
           {hasConfig ? (
@@ -115,25 +128,64 @@ const DelayNode = ({ data, selected, id }: NodeProps) => {
       {/* Content Preview */}
       <div className="px-2 py-2 bg-gray-50">
         <div className="text-center">
-          <div className="text-xl mb-1">⏱️</div>
+          <div className="text-xl mb-1">{isTimeOrResponse ? '🔔' : '⏱️'}</div>
           <div className="text-[8px] font-semibold text-gray-700 leading-tight">
             {delayPreview}
           </div>
         </div>
       </div>
       
-      {/* Opções de fluxo (estilo Datacraz) */}
+      {/* Handles de saída — condicionais por modo */}
       <div className="px-2 py-1 space-y-1 border-t border-gray-200 text-[7px] overflow-visible relative">
-        <div className="flex items-center justify-end pr-2">
-          <span className="text-gray-600">Próximo passo</span>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id="next"
-            className="absolute -right-1 w-2 h-2 rounded-full !bg-orange-500 !border-2 !border-white"
-            style={{ top: '8px' }}
-          />
-        </div>
+        {isTimeOrResponse ? (
+          <>
+            {/* Handle responded — Lead respondeu */}
+            <div className="flex items-center justify-between pr-2">
+              <div className="flex items-center gap-1">
+                <MessageCircle className="w-2 h-2 text-green-600" />
+                <span className="text-green-700">Lead respondeu</span>
+              </div>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id="responded"
+                title="Saída: Lead respondeu"
+                aria-label="Saída: Lead respondeu"
+                className="absolute -right-1 w-2 h-2 rounded-full !bg-green-600 !border-2 !border-white"
+                style={{ top: '8px' }}
+              />
+            </div>
+
+            {/* Handle timeout — Sem resposta */}
+            <div className="flex items-center justify-between pr-2">
+              <div className="flex items-center gap-1">
+                <TimerOff className="w-2 h-2 text-orange-600" />
+                <span className="text-orange-700">Sem resposta</span>
+              </div>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id="timeout"
+                title="Saída: Sem resposta"
+                aria-label="Saída: Sem resposta"
+                className="absolute -right-1 w-2 h-2 rounded-full !bg-orange-500 !border-2 !border-white"
+                style={{ top: '22px' }}
+              />
+            </div>
+          </>
+        ) : (
+          /* Handle legado — Próximo passo */
+          <div className="flex items-center justify-end pr-2">
+            <span className="text-gray-600">Próximo passo</span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="next"
+              className="absolute -right-1 w-2 h-2 rounded-full !bg-orange-500 !border-2 !border-white"
+              style={{ top: '8px' }}
+            />
+          </div>
+        )}
       </div>
       
       {/* Estatísticas */}

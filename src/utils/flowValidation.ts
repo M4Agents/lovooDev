@@ -193,7 +193,8 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
         break
       }
 
-      case 'delay':
+      case 'delay': {
+        // ── Duração obrigatória para todos os modos ────────────────────────────
         if (!config.duration || config.duration <= 0) {
           errors.push({
             nodeId: node.id,
@@ -201,7 +202,107 @@ export function validateFlow(nodes: Node[], edges: Edge[]): ValidationResult {
             message: `Bloco de delay "${node.data.label}" não tem duração configurada`
           })
         }
+
+        const waitMode   = config.wait_mode as string | undefined
+        const outgoing   = edges.filter(e => e.source === node.id)
+
+        if (waitMode === 'time_or_response') {
+          // ── Novo modo: validar handles responded + timeout ──────────────────
+          //
+          // Estado estrutural válido:
+          //   exatamente 1 edge responded
+          //   exatamente 1 edge timeout
+          //   nenhuma outra edge de saída
+          //
+          // Ordem dos handles: responded e timeout são os únicos permitidos.
+          // next, null, undefined, ou qualquer outro texto são inválidos.
+
+          const respondedCount = outgoing.filter(e => e.sourceHandle === 'responded').length
+          const timeoutCount   = outgoing.filter(e => e.sourceHandle === 'timeout').length
+          const nextCount      = outgoing.filter(e => e.sourceHandle === 'next').length
+          // Edges com handle não reconhecido (exceto next, tratado separadamente)
+          const unknownEdges   = outgoing.filter(
+            e => e.sourceHandle !== 'responded'
+              && e.sourceHandle !== 'timeout'
+              && e.sourceHandle !== 'next'
+          )
+
+          // Regra 1 — ausência de responded
+          if (respondedCount === 0) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}" precisa de uma conexão para "Lead respondeu"`
+            })
+          }
+
+          // Regra 2 — ausência de timeout
+          if (timeoutCount === 0) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}" precisa de uma conexão para "Sem resposta (timeout)"`
+            })
+          }
+
+          // Regra 4 — duplicidade de responded
+          if (respondedCount > 1) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}": o caminho "Lead respondeu" possui mais de uma conexão`
+            })
+          }
+
+          // Regra 5 — duplicidade de timeout
+          if (timeoutCount > 1) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}": o caminho "Sem resposta (timeout)" possui mais de uma conexão`
+            })
+          }
+
+          // Regra 3 — handle legado "next" (conversão incompleta de modo)
+          if (nextCount > 0) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}" possui uma conexão antiga "next". Reconecte os caminhos.`
+            })
+          }
+
+          // Regra 8/9 — handle sem sourceHandle ou handle desconhecido
+          // (null, undefined, string arbitrária além de responded/timeout/next)
+          if (unknownEdges.length > 0) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de espera "${node.data.label}" possui conexões com handles incompatíveis`
+            })
+          }
+
+        } else {
+          // ── Modo legado (wait_mode ausente ou 'time') ────────────────────────
+          //
+          // Validação de handles incompatíveis em modo legado:
+          // Edges com sourceHandle 'responded' ou 'timeout' foram criadas para o
+          // modo time_or_response. No executor legado, getNextNodes seguiria todas
+          // as edges de saída sem filtrar por handle — o que produziria bifurcação
+          // incorreta. Bloquear publicação previne comportamento não determinístico.
+          const hasIncompatibleEdges = outgoing.some(
+            e => e.sourceHandle === 'responded' || e.sourceHandle === 'timeout'
+          )
+          if (hasIncompatibleEdges) {
+            errors.push({
+              nodeId: node.id,
+              type: 'error',
+              message: `Bloco de delay "${node.data.label}" possui conexões incompatíveis com o modo atual. Altere o modo para "Aguardar resposta" ou reconecte os caminhos.`
+            })
+          }
+        }
         break
+      }
 
       case 'action':
         if (!config.actionType) {

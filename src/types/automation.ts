@@ -612,8 +612,31 @@ export interface ConditionConfig {
 
 export interface DelayConfig {
   duration: number
-  unit: 'minutes' | 'hours' | 'days'
+  /** `seconds` é suportado no backend (delayHandler.js) e no formulário. */
+  unit: 'seconds' | 'minutes' | 'hours' | 'days'
   business_hours_only?: boolean
+  /**
+   * Modo de espera do nó Delay.
+   *
+   * - Ausente ou `'time'` → comportamento legado: aguarda apenas o tempo configurado.
+   *   Handles de saída: `next` (ou qualquer edge sem handle).
+   * - `'time_or_response'` → novo modo: aguarda até o lead responder OU o tempo expirar.
+   *   Handles de saída obrigatórios: `responded` (lead respondeu) e `timeout` (sem resposta).
+   *
+   * Flows antigos sem este campo devem ser tratados como `'time'` pelo executor e
+   * pela validação — nunca forçar migration automática.
+   */
+  wait_mode?: 'time' | 'time_or_response'
+  /**
+   * Nome da variável onde a resposta do lead será salva (apenas no modo `time_or_response`).
+   *
+   * Opcional em todas as situações:
+   * - `undefined` / `null` / `''` → resposta não é salva em variável.
+   * - Qualquer string não-vazia → nome da variável de destino na execução.
+   *
+   * Não bloqueia publicação quando ausente ou vazio.
+   */
+  response_variable?: string | null
 }
 
 export interface DistributionConfig {
