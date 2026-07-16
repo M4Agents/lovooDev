@@ -250,6 +250,21 @@ function getNextNodes(currentNode, allNodes, allEdges, result) {
     return nextNodes
   }
 
+  // Delay time_or_response: roteia por handle 'responded' ou 'timeout' conforme resumeReason.
+  // result.sourceHandle é definido por _resumeFromNodeInternal antes de chamar getNextNodes.
+  // Legacy delay (wait_mode ausente ou 'time') não entra neste bloco — cai no default abaixo.
+  if (currentNode.type === 'delay') {
+    const waitMode = currentNode.data?.config?.wait_mode
+    if (waitMode === 'time_or_response') {
+      const sourceHandle = result?.sourceHandle
+      if (!sourceHandle) return []
+      const edge = outgoing.find(e => e.sourceHandle === sourceHandle)
+      if (!edge) return []
+      const next = allNodes.find(n => n.id === edge.target)
+      return next ? [next] : []
+    }
+  }
+
   // Demais tipos: ordenar por posição Y e retornar todos
   return outgoing
     .sort((a, b) => {
@@ -468,82 +483,208 @@ async function processNode(node, allNodes, allEdges, context, supabase) {
 }
 
 // ---------------------------------------------------------------------------
-// Retomada após delay — chamado por process-schedules
+// _resumeFromNodeInternal — núcleo compartilhado de retomada
+//
+// Dois caminhos distintos controlados por alreadyClaimed:
+//
+// alreadyClaimed = false (legado):
+//   - exige execution.status = 'paused'
+//   - trata _awaiting_input (salva userResponse, remove marcador)
+//   - executa a transição paused → running no banco
+//
+// alreadyClaimed = true (pós-claim via claim_paused_execution_v1):
+//   - a RPC já transitou para running e removeu o marcador
+//   - execution.variables já reflete o estado pós-claim
+//   - NÃO repete a transição paused → running
+//   - NÃO remove marcador (já foi removido)
+//   - SE resumeReason = 'lead_response' e claimedMarker.response_variable
+//     configurado, salva userResponse nas variables (Opção A)
+//   - routeia pelo handle 'responded' ou 'timeout' conforme resumeReason
+//
+// Em ambos os caminhos:
+//   - adquire executionLock para proteção operacional adicional
+//   - não cancela schedule (responsabilidade do webhook/cron)
+//   - falhas após claim: marca como failed, propaga erro, não reverte para paused
 // ---------------------------------------------------------------------------
 
-export async function resumeFromNode(execution, flow, pausedNodeId, supabase, userResponse = undefined) {
-  // Garantia de segurança: só retomar se execution estiver realmente pausada
-  if (execution.status !== 'paused') {
-    console.warn(`[executor] resumeFromNode: execução ${execution.id} não está pausada (status: ${execution.status}) — skip`)
-    return { skipped: true, reason: `execução não está pausada (status: ${execution.status})` }
+async function _resumeFromNodeInternal({
+  execution,
+  flow,
+  pausedNodeId,
+  supabase,
+  userResponse    = undefined,
+  resumeReason    = undefined,
+  awaitingType    = undefined,
+  scheduleId      = undefined,
+  alreadyClaimed  = false,
+  claimedMarker   = null,
+  preAcquiredLock = null,
+}) {
+  // -------------------------------------------------------------------------
+  // Caminho legado: validar status = 'paused' antes de qualquer operação.
+  // Caminho pós-claim: a RPC já garantiu a transição — status = 'running'.
+  // -------------------------------------------------------------------------
+  if (!alreadyClaimed) {
+    if (execution.status !== 'paused') {
+      console.warn(`[executor] resumeFromNode: execução ${execution.id} não está pausada (status: ${execution.status}) — skip`)
+      return { skipped: true, reason: `execução não está pausada (status: ${execution.status})` }
+    }
   }
 
-  // Adquirir lock antes de qualquer operação — protege contra cron + webhook simultâneos
-  const lock = await acquireLock(execution.id, supabase)
-  if (!lock.acquired) {
-    console.warn(`[executor] resumeFromNode: execução ${execution.id} ignorada — ${lock.reason}`)
-    return { skipped: true, reason: lock.reason }
+  // -------------------------------------------------------------------------
+  // Gestão do executionLock — dois caminhos:
+  //
+  // Caminho A — preAcquiredLock fornecido pelo caller (webhook):
+  //   O caller já adquiriu o lock antes do claim para evitar o cenário
+  //   "claim concluído + lock indisponível". O executor usa o lock recebido
+  //   e não o libera (responsabilidade do caller no finally externo).
+  //   Limitação: lockId não contém executionId — o caller deve garantir
+  //   que o lock pertence à execução correta antes de chamar este método.
+  //
+  // Caminho B — preAcquiredLock ausente (cron e legado):
+  //   O executor adquire e libera o lock internamente (comportamento atual).
+  // -------------------------------------------------------------------------
+  let lock
+  const callerOwnedLock = preAcquiredLock !== null
+
+  if (callerOwnedLock) {
+    // Validar que o lock recebido é operacionalmente válido
+    if (!preAcquiredLock.acquired || typeof preAcquiredLock.lockId !== 'string' || !preAcquiredLock.lockId) {
+      throw new Error(
+        `[executor] preAcquiredLock inválido para execução ${execution.id} ` +
+        `— acquired=${preAcquiredLock.acquired}, lockId=${preAcquiredLock.lockId ?? 'ausente'}`
+      )
+    }
+    lock = preAcquiredLock
+    console.log(`[executor] usando lock pré-adquirido pelo caller — execução ${execution.id} (lockId: ${lock.lockId})`)
+  } else {
+    // Caminho B: adquirir lock internamente
+    // Para alreadyClaimed=true: a claim RPC já venceu a corrida atomicamente;
+    // o lock protege contra dupla entrada no processNode para a mesma execução.
+    lock = await acquireLock(execution.id, supabase)
+    if (!lock.acquired) {
+      if (alreadyClaimed) {
+        // Pós-claim sem preAcquiredLock: a execução está em 'running' com
+        // marcador já removido. O caller (cron) deve registrar e fazer retry.
+        // completeExecution('failed') NÃO é chamado — o lock pode estar
+        // sendo usado por outra instância que processará normalmente.
+        const errorMsg =
+          `[executor] POST_CLAIM_LOCK_UNAVAILABLE: execução ${execution.id} ` +
+          `foi reivindicada mas o lock não pôde ser adquirido — ${lock.reason}`
+        console.error(errorMsg)
+        throw new Error(errorMsg)
+      }
+      // Caminho legado: skip silencioso preserva o comportamento atual.
+      console.warn(`[executor] resumeFromNode: execução ${execution.id} ignorada — ${lock.reason}`)
+      return { skipped: true, reason: lock.reason }
+    }
   }
 
   try {
     const allNodes = flow.nodes || []
     const allEdges = flow.edges || []
 
-    // Localizar o nó que pausou a execução
+    // pausedNodeId é sempre fornecido explicitamente pelo caller.
+    // No caminho pós-claim, execution.current_node_id pode ser null
+    // (limpo pela RPC) — nunca depender dele para localizar o nó.
     const pausedNode = allNodes.find(n => n.id === pausedNodeId)
     if (!pausedNode) {
       throw new Error(`Nó "${pausedNodeId}" não encontrado no flow — o flow pode ter sido editado após o pause`)
     }
 
     // -------------------------------------------------------------------------
-    // Tratar retomada de user_input: persistir resposta na variável configurada
+    // Caminho legado: tratar _awaiting_input e executar claim local
     // -------------------------------------------------------------------------
+    let wasAwaitingInput = false
 
-    const awaitingInput = execution.variables?._awaiting_input
+    if (!alreadyClaimed) {
+      const awaitingInput = execution.variables?._awaiting_input
+      wasAwaitingInput = !!awaitingInput
 
-    if (awaitingInput) {
-      // Retomada de user_input — userResponse é obrigatório
-      if (userResponse === undefined || userResponse === null || String(userResponse).trim() === '') {
-        throw new Error(
-          `userResponse é obrigatório para retomar a execução ${execution.id} (aguardando entrada no nó "${awaitingInput.node_id}")`
-        )
+      if (awaitingInput) {
+        // Retomada de user_input — userResponse é obrigatório
+        if (userResponse === undefined || userResponse === null || String(userResponse).trim() === '') {
+          throw new Error(
+            `userResponse é obrigatório para retomar a execução ${execution.id} (aguardando entrada no nó "${awaitingInput.node_id}")`
+          )
+        }
+
+        const variableName = awaitingInput.variable_name || 'user_response'
+        const updatedVariables = { ...(execution.variables || {}) }
+
+        updatedVariables[variableName] = userResponse
+        delete updatedVariables._awaiting_input
+
+        const { error: varErr } = await supabase
+          .from('automation_executions')
+          .update({ variables: updatedVariables })
+          .eq('id', execution.id)
+
+        if (varErr) throw new Error(`Erro ao salvar resposta do usuário: ${varErr.message}`)
+
+        execution.variables = updatedVariables
+
+        console.log(`[executor] user_input: resposta salva em context.variables.${variableName}`)
       }
 
-      const variableName = awaitingInput.variable_name || 'user_response'
-      const updatedVariables = { ...(execution.variables || {}) }
+      // Claim legado: transição paused → running e limpeza dos campos de pausa.
+      // O caminho pós-claim pula este bloco — a RPC já fez isso atomicamente.
+      const { error: resumeErr } = await supabase
+        .from('automation_executions')
+        .update({
+          status:          'running',
+          paused_at:       null,
+          resume_at:       null,
+          timeout_at:      null,
+          current_node_id: null,
+        })
+        .eq('id', execution.id)
 
-      updatedVariables[variableName] = userResponse
-      delete updatedVariables._awaiting_input
+      if (resumeErr) {
+        throw new Error(`Erro ao retomar execução: ${resumeErr.message}`)
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Caminho pós-claim: salvar response_variable se configurada (Opção A).
+    //
+    // Responsabilidade: executor salva a resposta do lead nas variables.
+    // Isso é consistente com o tratamento de _awaiting_input no caminho legado.
+    // O webhook entrega userResponse e claimedMarker; o executor persiste.
+    // O cancelamento do schedule é responsabilidade do webhook, não do executor.
+    //
+    // Condições para salvar:
+    //   1. alreadyClaimed = true (pós-claim, não duplicar com caminho legado)
+    //   2. resumeReason = 'lead_response' (lead respondeu — timeout não tem resposta)
+    //   3. claimedMarker.response_variable configurado (editor configurou a variável)
+    //   4. userResponse !== undefined (caller entregou a resposta)
+    // -------------------------------------------------------------------------
+    if (
+      alreadyClaimed
+      && resumeReason === 'lead_response'
+      && claimedMarker?.response_variable
+      && userResponse !== undefined
+    ) {
+      const responseVarName  = claimedMarker.response_variable
+      // execution.variables já tem _awaiting_delay_response removido (pós-claim da RPC)
+      const updatedVars = { ...(execution.variables || {}), [responseVarName]: userResponse }
 
       const { error: varErr } = await supabase
         .from('automation_executions')
-        .update({ variables: updatedVariables })
+        .update({ variables: updatedVars })
         .eq('id', execution.id)
 
-      if (varErr) throw new Error(`Erro ao salvar resposta do usuário: ${varErr.message}`)
+      if (varErr) {
+        throw new Error(`Erro ao salvar response_variable "${responseVarName}": ${varErr.message}`)
+      }
 
-      execution.variables = updatedVariables
-
-      console.log(`[executor] user_input: resposta salva em context.variables.${variableName}`)
+      execution.variables = updatedVars
+      console.log(`[executor] delay time_or_response: resposta salva em context.variables.${responseVarName}`)
     }
 
-    // Voltar execução para running e limpar campos de pausa
-    const { error: resumeErr } = await supabase
-      .from('automation_executions')
-      .update({
-        status:          'running',
-        paused_at:       null,
-        resume_at:       null,
-        timeout_at:      null,
-        current_node_id: null,
-      })
-      .eq('id', execution.id)
-
-    if (resumeErr) {
-      throw new Error(`Erro ao retomar execução: ${resumeErr.message}`)
-    }
-
-    // triggerNode não está disponível aqui; resolveInstanceId usa pausedNode como fallback
+    // -------------------------------------------------------------------------
+    // Construir contexto — mesma lógica para ambos os caminhos
+    // -------------------------------------------------------------------------
     const context = {
       executionId:    execution.id,
       flowId:         flow.id,
@@ -554,8 +695,6 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
       opportunityId:  execution.opportunity_id  || null,
       instanceId:     resolveInstanceId(execution, pausedNode),
       // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
-      // trigger_data.conversationId existe apenas como compatibilidade com payloads legados.
-      // Não derivar de outras fontes — para evitar divergência futura como ocorreu com instanceId.
       conversationId: execution.trigger_data?.conversation_id
                       ?? execution.trigger_data?.conversationId
                       ?? null,
@@ -563,7 +702,6 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
 
     if (!assertContext(context)) {
       const errorMsg = 'context inválido após resume — campo obrigatório ausente'
-      // Gravar rastro diretamente usando execution.id e flow.id (não o context, que é inválido)
       try {
         await supabase.from('automation_logs').insert({
           execution_id:  execution.id,
@@ -592,10 +730,45 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
       return { failed: true, reason: 'context inválido' }
     }
 
-    const resumeType = awaitingInput ? 'user_input' : 'delay'
-    console.log(`[executor] retomando execução ${execution.id} após ${resumeType}: ${pausedNodeId}`)
+    // -------------------------------------------------------------------------
+    // Determinar roteamento para getNextNodes
+    //
+    // Delay time_or_response: roteia por 'responded' ou 'timeout'.
+    //   switch explícito — não usa ternário, não permite fallback silencioso.
+    //   Qualquer resumeReason inválido (undefined, typo, valor futuro) lança erro.
+    //
+    // Delay legado (wait_mode ausente ou 'time'): routingResult = {} → todas as edges.
+    // Demais tipos de nó: routingResult = {} → comportamento inalterado.
+    // -------------------------------------------------------------------------
+    let routingResult = {}
 
-    const nextNodes = getNextNodes(pausedNode, allNodes, allEdges, {})
+    if (pausedNode.type === 'delay') {
+      const waitMode = pausedNode.data?.config?.wait_mode
+      if (waitMode === 'time_or_response') {
+        switch (resumeReason) {
+          case 'lead_response':
+            routingResult = { sourceHandle: 'responded' }
+            break
+          case 'timeout':
+            routingResult = { sourceHandle: 'timeout' }
+            break
+          default:
+            throw new Error(
+              `resumeReason inválido para delay time_or_response: "${resumeReason}" — ` +
+              `esperado 'lead_response' ou 'timeout' ` +
+              `(execution: ${execution.id}, node: ${pausedNode.id})`
+            )
+        }
+      }
+    }
+
+    const resumeLabel = alreadyClaimed
+      ? `delay_time_or_response[${resumeReason}]`
+      : (wasAwaitingInput ? 'user_input' : 'delay')
+
+    console.log(`[executor] retomando execução ${execution.id} após ${resumeLabel}: ${pausedNodeId}`)
+
+    const nextNodes = getNextNodes(pausedNode, allNodes, allEdges, routingResult)
 
     if (nextNodes.length === 0) {
       await completeExecution(execution.id, 'completed', null, supabase)
@@ -608,7 +781,13 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
         await processNode(next, allNodes, allEdges, context, supabase)
       }
     } catch (err) {
-      console.error(`[executor] erro ao retomar execução ${execution.id}:`, err?.message)
+      // Falha após claim: não reverter para 'paused', não recriar marcador.
+      // Marcar como failed e propagar — política de retry é do caller/cron.
+      console.error(
+        `[executor] erro ao retomar execução ${execution.id}` +
+        ` (node: ${pausedNodeId}, resumeReason: ${resumeReason ?? 'n/a'}):`,
+        err?.message
+      )
       await completeExecution(execution.id, 'failed', err?.message, supabase)
       throw err
     }
@@ -629,8 +808,89 @@ export async function resumeFromNode(execution, flow, pausedNodeId, supabase, us
     return { completed: true }
 
   } finally {
-    await releaseLock(execution.id, lock.lockId, supabase)
+    // Liberar lock somente quando o executor é o proprietário (Caminho B).
+    // Quando preAcquiredLock foi fornecido (Caminho A), o caller é responsável
+    // pela liberação no seu próprio finally.
+    if (!callerOwnedLock) {
+      await releaseLock(execution.id, lock.lockId, supabase)
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Retomada após delay — chamado por process-schedules e webhook legados
+//
+// Wrapper posicional que preserva o contrato atual dos callers externos:
+//   - api/uazapi-webhook-final.js
+//   - api/automation/process-schedules.ts
+//   - api/automation/continue-execution.ts
+//   - outros callers que usam assinatura posicional
+//
+// Sempre opera com alreadyClaimed = false (claim legado dentro da função).
+// Novos callers pós-claim devem usar resumeClaimedExecution().
+// ---------------------------------------------------------------------------
+
+export async function resumeFromNode(execution, flow, pausedNodeId, supabase, userResponse = undefined) {
+  return _resumeFromNodeInternal({
+    execution,
+    flow,
+    pausedNodeId,
+    supabase,
+    userResponse,
+    resumeReason:   undefined,
+    awaitingType:   undefined,
+    scheduleId:     undefined,
+    alreadyClaimed: false,
+    claimedMarker:  null,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Retomada pós-claim — para webhook e cron após claim_paused_execution_v1
+//
+// Contrato:
+//   execution    — objeto pós-claim retornado pela RPC (status=running, marcador removido)
+//   flow         — flow object com nodes e edges
+//   pausedNodeId — id do nó que estava pausado (vem do resultado da find RPC ou do marker)
+//   supabase     — cliente supabaseAdmin
+//   userResponse — conteúdo da resposta do lead (pode ser null/'' para lead_response)
+//   resumeReason — 'lead_response' | 'timeout' (obrigatório para delay time_or_response)
+//   awaitingType — 'awaiting_input' | 'delay_response' (contexto para logging)
+//   scheduleId   — uuid do schedule (para logging; cancelamento é responsabilidade do webhook)
+//   claimedMarker — objeto _awaiting_delay_response original, retornado pela claim RPC
+//                   claimedMarker.response_variable: nome da variável onde salvar a resposta
+//
+// Sempre opera com alreadyClaimed = true:
+//   - não repete a transição paused → running
+//   - não remove marcador (já removido pela RPC)
+//   - routeia pelo resumeReason
+// ---------------------------------------------------------------------------
+
+export async function resumeClaimedExecution({
+  execution,
+  flow,
+  pausedNodeId,
+  supabase,
+  userResponse    = undefined,
+  resumeReason,
+  awaitingType    = undefined,
+  scheduleId      = undefined,
+  claimedMarker   = null,
+  preAcquiredLock = null,
+}) {
+  return _resumeFromNodeInternal({
+    execution,
+    flow,
+    pausedNodeId,
+    supabase,
+    userResponse,
+    resumeReason,
+    awaitingType,
+    scheduleId,
+    alreadyClaimed:  true,
+    claimedMarker,
+    preAcquiredLock,
+  })
 }
 
 // ---------------------------------------------------------------------------

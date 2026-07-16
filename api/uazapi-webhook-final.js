@@ -32,7 +32,8 @@
 
 import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCreatedTrigger.js';
 import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
-import { resumeFromNode }                 from './lib/automation/executor.js';
+import { resumeFromNode, resumeClaimedExecution } from './lib/automation/executor.js';
+import { acquireLock, releaseLock }               from './lib/automation/executionLock.js';
 import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
 
@@ -1264,6 +1265,13 @@ async function processMessage(payload) {
     // Estratégia: busca direta no banco, prioriza lead_id; fallback para qualquer
     // execução pausada da empresa. Chama continue-execution diretamente para evitar
     // inconsistência de status que o RPC anterior causava.
+    //
+    // awaitingInputFound: flag que previne a busca de delay_response quando
+    // uma execução awaiting_input foi localizada (prioridade determinística).
+    // Documentação: sem correlação reply-to, awaiting_input tem prioridade
+    // determinística — não identifica perfeitamente a intenção do lead.
+    let awaitingInputFound = false;
+
     if (direction === 'inbound' && conversationId) {
       try {
         console.log('[webhook][user_input] v3 — buscando via RPC SECURITY DEFINER', { companyId: company.id, inboundLeadId });
@@ -1282,6 +1290,10 @@ async function processMessage(payload) {
         } else if (!pausedResult?.found) {
           console.log('[webhook][user_input] nenhuma execução pausada aguardando input');
         } else {
+          // Marca como encontrado ANTES de tentar o resume — previne busca de
+          // delay_response mesmo que o resume subsequente falhe.
+          awaitingInputFound = true;
+
           const target = { id: pausedResult.execution_id, lead_id: pausedResult.lead_id };
 
           if (target) {
@@ -1318,6 +1330,258 @@ async function processMessage(payload) {
         }
       } catch (resumeError) {
         console.error('[webhook][user_input] EXCEPTION ao retomar automação:', resumeError?.message);
+      }
+    }
+
+    // =====================================================
+    // 🔄 RETOMADA DE DELAY_RESPONSE (time_or_response)
+    //
+    // Executado somente quando awaiting_input não localizou execução
+    // elegível para esta mensagem. Prioridade determinística:
+    //   1. awaiting_input  (caminho acima)
+    //   2. delay_response  (este bloco)
+    //
+    // Uma única execução é retomada por mensagem (ver awaitingInputFound).
+    //
+    // Ordem correta (elimina janela pós-claim irrecuperável):
+    //   find_v2 → validar → carregar flow → adquirir lock
+    //   → claim_delay_response_lead_v1 (atômico: execution+schedule+post_claim)
+    //   → resumeClaimedExecution(preAcquiredLock)
+    //   → marcar schedule processed
+    //   → liberar lock no finally
+    //
+    // Queda após o claim → schedule em processing → TTL → cron recovery.
+    //
+    // RPCs usadas (service_role, SECURITY DEFINER):
+    //   - find_paused_awaiting_execution_v2     → localiza candidato
+    //   - claim_delay_response_lead_v1          → claim atômico transacional
+    //
+    // claim_paused_execution_v1 preservada para compatibilidade ou uso futuro.
+    // claim_delay_response_timeout_v1 NÃO é usada aqui — é exclusiva do cron.
+    // =====================================================
+    if (direction === 'inbound' && conversationId && !awaitingInputFound && inboundLeadId) {
+      // Lock pré-adquirido pelo webhook. Liberado no finally externo após
+      // qualquer desvio de fluxo (lock indisponível, claimed=false, erro no
+      // resume). Garante que o executor não tente adquiri-lo novamente.
+      let delayLock       = null;  // { acquired: true, lockId: string } quando adquirido
+      let delayLockExecId = null;  // execução à qual o lock pertence (para release)
+
+      try {
+        const supabaseAdminDelay = getSupabaseAdmin();
+
+        // ── 1. Localizar execução pausada com _awaiting_delay_response ──────
+        const { data: delayResult, error: delayFindErr } = await supabaseAdminDelay
+          .rpc('find_paused_awaiting_execution_v2', {
+            p_company_id:    company.id,
+            p_lead_id:       Number(inboundLeadId),
+            p_awaiting_type: 'delay_response',
+          });
+
+        if (delayFindErr) {
+          console.error('[webhook][delay_response] erro SQL em find_paused_awaiting_execution_v2:', {
+            company_id: company.id, error: delayFindErr.message,
+          });
+        } else if (!delayResult?.found) {
+          console.log('[webhook][delay_response] nenhuma execução delay_response pausada', {
+            company_id: company.id, lead_id: inboundLeadId,
+          });
+        } else {
+          // ── 2. Validar campos críticos do resultado ──────────────────────
+          const {
+            execution_id:     candidateExecutionId,
+            company_id:       resultCompanyId,
+            awaiting_node_id: candidateNodeId,
+            awaiting_type:    resultAwaitingType,
+            automation_id:    candidateFlowId,
+            schedule_id:      candidateScheduleId,
+          } = delayResult;
+
+          if (!candidateExecutionId || !resultCompanyId || !candidateNodeId) {
+            console.error('[webhook][delay_response] resultado incompleto da RPC de busca', {
+              company_id:           company.id,
+              lead_id:              inboundLeadId,
+              has_execution_id:     !!candidateExecutionId,
+              has_awaiting_node_id: !!candidateNodeId,
+            });
+          } else if (resultAwaitingType !== 'delay_response') {
+            console.error('[webhook][delay_response] awaiting_type inesperado no resultado:', {
+              company_id: company.id, awaiting_type: resultAwaitingType,
+            });
+          } else if (!candidateFlowId) {
+            console.error('[webhook][delay_response] automation_id ausente no resultado', {
+              company_id: company.id, execution_id: candidateExecutionId,
+            });
+          } else if (!candidateScheduleId) {
+            console.error('[webhook][delay_response] schedule_id ausente no resultado', {
+              company_id:   company.id,
+              execution_id: candidateExecutionId,
+            });
+          } else {
+            // ── 3. Pré-carregar flow (antes do lock e do claim) ───────────
+            const { data: preFlow, error: preFlowErr } = await supabaseAdminDelay
+              .from('automation_flows')
+              .select('id, nodes, edges, company_id')
+              .eq('id', candidateFlowId)
+              .eq('company_id', resultCompanyId)
+              .single();
+
+            if (preFlowErr || !preFlow) {
+              console.error('[webhook][delay_response] flow não encontrado — skip', {
+                company_id:   resultCompanyId,
+                flow_id:      candidateFlowId,
+                execution_id: candidateExecutionId,
+              });
+            } else {
+              // ── 4. Adquirir executionLock ANTES do claim ─────────────────
+              // Garante defesa em profundidade contra processamento duplo.
+              // A nova RPC já protege via FOR UPDATE, mas o lock operacional
+              // garante que o executor não seja chamado concorrentemente.
+              // Limitação: lockId não contém executionId — uso é exclusivo para
+              // candidateExecutionId dentro deste bloco.
+              delayLock       = await acquireLock(candidateExecutionId, supabaseAdminDelay);
+              delayLockExecId = candidateExecutionId;
+
+              if (!delayLock.acquired) {
+                console.log('[webhook][delay_response] lock indisponível — skip (execução permanece pausada)', {
+                  company_id:   company.id,
+                  execution_id: candidateExecutionId,
+                  reason:       delayLock.reason,
+                });
+                // Não chamar claim, não executar.
+                // delayLock.acquired = false → finally não chama releaseLock.
+              } else {
+                // ── 5. Claim transacional atômico ─────────────────────────
+                // claim_delay_response_lead_v1 garante atomicamente:
+                //   a) execution paused → running, marcador removido
+                //   b) response_variable salva em variables (quando configurada)
+                //   c) schedule pending → processing, post_claim persistido
+                // Após o commit: qualquer queda é recuperável pelo cron via TTL.
+                const { data: claimResult, error: claimErr } = await supabaseAdminDelay
+                  .rpc('claim_delay_response_lead_v1', {
+                    p_company_id:     resultCompanyId,
+                    p_schedule_id:    candidateScheduleId,
+                    p_execution_id:   candidateExecutionId,
+                    p_paused_node_id: candidateNodeId,
+                    p_user_response:  messageText,
+                  });
+
+                if (claimErr) {
+                  console.error('[webhook][delay_response] erro SQL em claim_delay_response_lead_v1:', {
+                    company_id:   company.id,
+                    execution_id: candidateExecutionId,
+                    schedule_id:  candidateScheduleId,
+                    error:        claimErr.message,
+                  });
+                  // Lock liberado no finally.
+                } else if (!claimResult?.claimed) {
+                  // Corrida perdida ou execução stale — não é erro.
+                  // Lock liberado no finally.
+                  console.log('[webhook][delay_response] claim não realizado:', {
+                    company_id:   company.id,
+                    execution_id: candidateExecutionId,
+                    schedule_id:  candidateScheduleId,
+                    reason:       claimResult?.reason,
+                  });
+                } else {
+                  // ── 6. claimed=true — usar exclusivamente dados pós-claim ──
+                  // response_variable JÁ foi salva atomicamente pela RPC.
+                  // O executor não deve salvá-la novamente (claimedMarker=null).
+                  const claimedExecution = claimResult.execution;
+
+                  // Validar que o flow pertence à execução pós-claim
+                  if (preFlow.id !== claimedExecution.flow_id || preFlow.company_id !== claimedExecution.company_id) {
+                    console.error('[webhook][delay_response] flow divergente após claim — não retomar', {
+                      company_id:   claimedExecution.company_id,
+                      execution_id: claimedExecution.id,
+                      flow_id:      claimedExecution.flow_id,
+                    });
+                    // Schedule permanece processing → TTL → cron recupera.
+                    // Lock liberado no finally.
+                  } else {
+                    // ── 7. Resume com lock pré-adquirido ─────────────────
+                    // claimedMarker=null: impede segundo salvamento de response_variable.
+                    // userResponse=undefined: variável já em execution.variables.
+                    // preAcquiredLock: executor usa lock sem readquirir nem liberar.
+                    try {
+                      await resumeClaimedExecution({
+                        execution:       claimedExecution,
+                        flow:            preFlow,
+                        pausedNodeId:    claimResult.marker?.node_id ?? candidateNodeId,
+                        supabase:        supabaseAdminDelay,
+                        userResponse:    undefined,
+                        resumeReason:    'lead_response',
+                        awaitingType:    'delay_response',
+                        scheduleId:      candidateScheduleId,
+                        claimedMarker:   null,
+                        preAcquiredLock: delayLock,
+                      });
+
+                      // ── 8. Finalizar schedule após sucesso do executor ────
+                      // Somente aqui o schedule é marcado processed.
+                      // Se este update falhar: schedule permanece processing
+                      // → TTL → cron detecta execution.status=completed → skip.
+                      try {
+                        await supabaseAdminDelay
+                          .from('automation_schedules')
+                          .update({
+                            status:      'processed',
+                            executed_at: new Date().toISOString(),
+                          })
+                          .eq('id', candidateScheduleId)
+                          .eq('company_id', claimedExecution.company_id)
+                          .eq('status', 'processing');
+                        console.log('[webhook][delay_response] execução retomada e schedule finalizado', {
+                          company_id:    company.id,
+                          lead_id:       inboundLeadId,
+                          execution_id:  claimedExecution.id,
+                          flow_id:       claimedExecution.flow_id,
+                          node_id:       candidateNodeId,
+                          schedule_id:   candidateScheduleId,
+                          awaiting_type: 'delay_response',
+                          claim_result:  'claimed',
+                        });
+                      } catch (finalizeEx) {
+                        console.error('[webhook][delay_response] falha ao finalizar schedule — flow já executado', {
+                          schedule_id:  candidateScheduleId,
+                          company_id:   claimedExecution.company_id,
+                          execution_id: claimedExecution.id,
+                          error:        finalizeEx?.message,
+                        });
+                        // O flow JÁ foi executado. Não desfazer.
+                        // Schedule permanece processing → TTL → cron detecta execution.status != running → skip.
+                      }
+                    } catch (resumeEx) {
+                      // Falha no executor: schedule permanece processing.
+                      // TTL → pending → cron tenta recovery.
+                      console.error('[webhook][delay_response] erro ao retomar execução', {
+                        company_id:   company.id,
+                        execution_id: claimedExecution.id,
+                        node_id:      candidateNodeId,
+                        schedule_id:  candidateScheduleId,
+                        resume_stage: 'resume_error',
+                        error:        resumeEx?.message,
+                      });
+                    }
+                    // Lock liberado no finally independentemente do resultado.
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (delayResumeErr) {
+        console.error('[webhook][delay_response] EXCEPTION no fluxo delay_response:', {
+          company_id: company.id,
+          lead_id:    inboundLeadId,
+          error:      delayResumeErr?.message,
+        });
+      } finally {
+        // Liberar lock somente se foi adquirido com sucesso neste bloco.
+        // releaseLock nunca lança exceção — seguro em finally.
+        if (delayLock?.acquired && delayLockExecId) {
+          const supabaseAdminForRelease = getSupabaseAdmin();
+          await releaseLock(delayLockExecId, delayLock.lockId, supabaseAdminForRelease);
+        }
       }
     }
 
