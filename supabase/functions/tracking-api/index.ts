@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
+
+const LP_NOT_FOUND_CODES = new Set([
+  'INVALID_TRACKING_CODE',
+  'LANDING_PAGE_NOT_FOUND',
+  'LANDING_PAGE_INACTIVE',
+]);
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -15,51 +23,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     const url = new URL(req.url);
     const path = url.pathname;
 
     if (path === '/tracking-api/visitor' && req.method === 'POST') {
-      const body = await req.json();
-      const { tracking_code, session_id, user_agent, device_type, screen_resolution, referrer } = body;
-
-      const { data: page } = await supabase
-        .from('landing_pages')
-        .select('id')
-        .eq('tracking_code', tracking_code)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (!page) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid tracking code' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const { data: visitor, error } = await supabase
-        .from('visitors')
-        .insert({
-          landing_page_id: page.id,
-          session_id,
-          user_agent,
-          device_type,
-          screen_resolution,
-          referrer,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      return new Response(
-        JSON.stringify({ visitor_id: visitor.id }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return await handleTrackingVisit(req);
     }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     if (path === '/tracking-api/event' && req.method === 'POST') {
       const body = await req.json();
@@ -80,7 +53,7 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: jsonHeaders }
       );
     }
 
@@ -97,7 +70,7 @@ Deno.serve(async (req: Request) => {
       if (!visitor) {
         return new Response(
           JSON.stringify({ error: 'Visitor not found' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 404, headers: jsonHeaders }
         );
       }
 
@@ -161,19 +134,143 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true, conversion_id: conversion.id }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: jsonHeaders }
       );
     }
 
     return new Response(
       JSON.stringify({ error: 'Not found' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 404, headers: jsonHeaders }
     );
   } catch (error: any) {
     console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: jsonHeaders }
     );
   }
 });
+
+async function handleTrackingVisit(req: Request): Promise<Response> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const anonKey =
+      Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('VITE_SUPABASE_ANON_KEY');
+
+    if (!supabaseUrl || !anonKey) {
+      console.error('[tracking-api/visitor] Missing anon credentials');
+      return new Response(
+        JSON.stringify({ error: 'Tracking visit failed' }),
+        { status: 500, headers: jsonHeaders }
+      );
+    }
+
+    const body = await req.json();
+    const {
+      tracking_code,
+      visitor_id,
+      session_id,
+      user_agent,
+      device_type,
+      screen_resolution,
+      referrer,
+      timezone,
+      language,
+    } = body || {};
+
+    if (!tracking_code) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid tracking code' }),
+        { status: 404, headers: jsonHeaders }
+      );
+    }
+
+    const supabaseAnon = createClient(supabaseUrl, anonKey);
+
+    const payload = {
+      p_tracking_code: tracking_code,
+      p_persistent_visitor_id: isValidUUID(visitor_id) ? visitor_id : generateUUID(),
+      p_session_id: isValidUUID(session_id) ? session_id : generateUUID(),
+      p_user_agent: user_agent ?? null,
+      p_device_type: normalizeDeviceType(device_type),
+      p_screen_resolution: screen_resolution ?? null,
+      p_referrer: referrer ?? null,
+      p_timezone: timezone ?? null,
+      p_language: language ?? null,
+    };
+
+    const { data, error } = await supabaseAnon.rpc('public_create_tracking_visit', payload);
+
+    if (error) {
+      console.error('[tracking-api/visitor] RPC client error');
+      return new Response(
+        JSON.stringify({ error: 'Tracking visit failed' }),
+        { status: 500, headers: jsonHeaders }
+      );
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result?.success === true && result.visit_id) {
+      console.log('[tracking-api/visitor] Visit created:', result.visit_id);
+      return new Response(
+        JSON.stringify({ visitor_id: result.visit_id }),
+        { headers: jsonHeaders }
+      );
+    }
+
+    const errorCode =
+      typeof result?.error_code === 'string' && result.error_code
+        ? result.error_code
+        : 'TRACKING_VISIT_FAILED';
+
+    console.error('[tracking-api/visitor] Visit failed:', errorCode);
+
+    if (LP_NOT_FOUND_CODES.has(errorCode)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid tracking code' }),
+        { status: 404, headers: jsonHeaders }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Tracking visit failed' }),
+      { status: 500, headers: jsonHeaders }
+    );
+  } catch (error) {
+    console.error('[tracking-api/visitor] Exception:', sanitizeError(error));
+    return new Response(
+      JSON.stringify({ error: 'Tracking visit failed' }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
+}
+
+function normalizeDeviceType(value: unknown): string | null {
+  if (value === 'desktop' || value === 'mobile' || value === 'tablet') {
+    return value;
+  }
+  return null;
+}
+
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function isValidUUID(str: unknown): str is string {
+  if (typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    str
+  );
+}
+
+function sanitizeError(error: unknown): string {
+  if (!error) return 'unknown';
+  if (typeof error === 'string') return error.slice(0, 200);
+  if (error instanceof Error) return (error.message || 'Error').slice(0, 200);
+  return 'unknown';
+}
