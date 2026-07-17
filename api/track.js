@@ -101,29 +101,7 @@ async function processTracking(params) {
     if (action === 'sync_visitor' && params.tracking_code) {
       await createCanonicalVisit(params, apiUrl, apiKey);
     } else if (action === 'sync_event' && params.visitor_id) {
-      console.log('Processing event:', params.event_type);
-
-      const eventResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_behavior_event`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: apiKey,
-        },
-        body: JSON.stringify({
-          visitor_id_param: params.visitor_id,
-          event_type_param: params.event_type,
-          event_data_param: params.event_data ? JSON.parse(params.event_data) : {},
-          coordinates_param: params.coordinates ? JSON.parse(params.coordinates) : null,
-          element_selector_param: params.element_selector,
-          section_param: params.section,
-        }),
-      });
-
-      if (eventResponse.ok) {
-        console.log('Event created successfully');
-      } else {
-        console.error('Error creating event:', eventResponse.status);
-      }
+      await createCanonicalBehaviorEvent(params, apiUrl, apiKey);
     } else if (action === 'sync_conversion' && params.visitor_id) {
       console.log('Processing conversion');
 
@@ -185,30 +163,132 @@ async function processDirectly(type, data, apiUrl, apiKey) {
     }
 
     if (type === 'event' && data.visitor_id) {
-      const eventResponse = await fetch(`${apiUrl}/rest/v1/rpc/create_behavior_event`, {
+      await createCanonicalBehaviorEvent(data, apiUrl, apiKey);
+    }
+  } catch (error) {
+    console.error('[track] Error in direct processing:', sanitizeError(error));
+  }
+}
+
+async function createCanonicalBehaviorEvent(params, apiUrl, apiKey) {
+  if (!params?.visitor_id) {
+    return null;
+  }
+
+  const eventData = buildCanonicalEventData(params);
+  const pageUrl =
+    typeof params.page_url === 'string' && params.page_url
+      ? params.page_url
+      : typeof eventData.url === 'string' && eventData.url
+        ? eventData.url
+        : null;
+
+  const payload = {
+    p_tracking_code: params.tracking_code ?? null,
+    p_persistent_visitor_id: params.visitor_id,
+    p_session_id: params.session_id ?? null,
+    p_event_type: params.event_type ?? null,
+    p_event_data: eventData,
+    p_page_url: pageUrl,
+  };
+
+  try {
+    const response = await fetch(
+      `${apiUrl}/rest/v1/rpc/public_create_tracking_behavior_event`,
+      {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          visitor_id_param: data.visitor_id,
-          event_type_param: data.event_type,
-          event_data_param: data.event_data ? JSON.parse(data.event_data) : {},
-          coordinates_param: data.coordinates ? JSON.parse(data.coordinates) : null,
-          element_selector_param: data.element_selector,
-          section_param: data.section,
-        }),
-      });
-
-      if (eventResponse.ok) {
-        console.log('Event created successfully via direct processing');
-      } else {
-        console.error('Error creating event:', eventResponse.status);
+        body: JSON.stringify(payload),
       }
+    );
+
+    if (!response.ok) {
+      console.error('[track] Behavior RPC HTTP error:', response.status, 'action=sync_event');
+      return null;
     }
+
+    const raw = await response.json();
+    const result = Array.isArray(raw) ? raw[0] : raw;
+
+    if (result?.success === true && result.event_id) {
+      console.log('[track] Behavior event created');
+      return result;
+    }
+
+    console.error(
+      '[track] Behavior RPC failed:',
+      result?.error_code || 'UNKNOWN_ERROR',
+      'action=sync_event'
+    );
+    return result ?? null;
   } catch (error) {
-    console.error('[track] Error in direct processing:', sanitizeError(error));
+    console.error('[track] Behavior RPC exception:', sanitizeError(error));
+    return null;
+  }
+}
+
+function buildCanonicalEventData(params) {
+  let eventData = safeParseJsonObject(params.event_data);
+
+  const coordinates = safeParseJsonValue(params.coordinates);
+  if (coordinates !== undefined && eventData.coordinates === undefined) {
+    eventData = { ...eventData, coordinates };
+  }
+
+  if (
+    typeof params.element_selector === 'string' &&
+    params.element_selector &&
+    eventData.element_selector === undefined
+  ) {
+    eventData = { ...eventData, element_selector: params.element_selector };
+  }
+
+  if (typeof params.section === 'string' && params.section && eventData.section === undefined) {
+    eventData = { ...eventData, section: params.section };
+  }
+
+  return eventData;
+}
+
+function safeParseJsonObject(value) {
+  if (value == null || value === '') {
+    return {};
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function safeParseJsonValue(value) {
+  if (value == null || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
   }
 }
 
