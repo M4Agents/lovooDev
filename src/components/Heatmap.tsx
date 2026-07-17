@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { BehaviorEvent } from '../lib/supabase';
+import {
+  normalizeHeatmapCoordinates,
+  type HeatmapCoordinateEvent,
+} from '../utils/normalizeHeatmapCoordinates';
 
 type HeatmapProps = {
   landingPageId: string;
 };
 
+type HeatmapEvent = HeatmapCoordinateEvent & {
+  id: string;
+  visitor_id: string;
+  event_type: string;
+};
+
 export const Heatmap: React.FC<HeatmapProps> = ({ landingPageId }) => {
-  const [events, setEvents] = useState<BehaviorEvent[]>([]);
+  const [events, setEvents] = useState<HeatmapEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [maxClicks, setMaxClicks] = useState(0);
 
@@ -17,15 +26,15 @@ export const Heatmap: React.FC<HeatmapProps> = ({ landingPageId }) => {
 
   const loadHeatmapData = async () => {
     try {
-      const data = await api.getHeatmapData(landingPageId);
+      const data = (await api.getHeatmapData(landingPageId)) as HeatmapEvent[];
       setEvents(data);
 
       const clickCounts: { [key: string]: number } = {};
       data.forEach((event) => {
-        if (event.coordinates) {
-          const key = `${Math.round((event.coordinates as any).x / 50)}-${Math.round((event.coordinates as any).y / 50)}`;
-          clickCounts[key] = (clickCounts[key] || 0) + 1;
-        }
+        const coords = normalizeHeatmapCoordinates(event);
+        if (!coords) return;
+        const key = `${Math.round(coords.x / 50)}-${Math.round(coords.y / 50)}`;
+        clickCounts[key] = (clickCounts[key] || 0) + 1;
       });
 
       setMaxClicks(Math.max(...Object.values(clickCounts), 1));
@@ -55,17 +64,16 @@ export const Heatmap: React.FC<HeatmapProps> = ({ landingPageId }) => {
 
   const clickCounts: { [key: string]: { count: number; x: number; y: number }[] } = {};
   events.forEach((event) => {
-    if (event.coordinates) {
-      const coords = event.coordinates as any;
-      const x = Math.round(coords.x / 50) * 50;
-      const y = Math.round(coords.y / 50) * 50;
-      const key = `${x}-${y}`;
+    const coords = normalizeHeatmapCoordinates(event);
+    if (!coords) return;
+    const x = Math.round(coords.x / 50) * 50;
+    const y = Math.round(coords.y / 50) * 50;
+    const key = `${x}-${y}`;
 
-      if (!clickCounts[key]) {
-        clickCounts[key] = [];
-      }
-      clickCounts[key].push({ count: 1, x: coords.x, y: coords.y });
+    if (!clickCounts[key]) {
+      clickCounts[key] = [];
     }
+    clickCounts[key].push({ count: 1, x: coords.x, y: coords.y });
   });
 
   const aggregatedClicks = Object.entries(clickCounts).map(([key, clicks]) => {

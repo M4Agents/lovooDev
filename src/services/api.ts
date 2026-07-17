@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { normalizeHeatmapCoordinates } from '../utils/normalizeHeatmapCoordinates';
 // triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 
 // Process tracking queue
@@ -194,13 +195,15 @@ export const api = {
 
     const { data, error } = await supabase
       .from('behavior_events')
-      .select('*')
+      .select('id, visitor_id, event_type, coordinates, event_data')
       .in('visitor_id', visitIds)
-      .eq('event_type', 'click')
-      .not('coordinates', 'is', null);
+      .eq('event_type', 'click');
 
     if (error) throw error;
-    return data;
+
+    return (data || []).filter(
+      (event) => normalizeHeatmapCoordinates(event) !== null
+    );
   },
 
   async updateCompanyWebhook(companyId: string, webhookUrl: string) {
