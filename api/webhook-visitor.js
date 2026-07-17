@@ -5,118 +5,139 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  
+
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
-  
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-  
+
   try {
-    console.log('Webhook received raw body:', req.body);
-    console.log('Webhook received headers:', req.headers);
-    
-    const { tracking_code, session_id, visitor_id, user_agent, device_type, screen_resolution, referrer, timezone, language } = req.body;
-    
+    const {
+      tracking_code,
+      session_id,
+      visitor_id,
+      user_agent,
+      device_type,
+      screen_resolution,
+      referrer,
+      timezone,
+      language,
+    } = req.body || {};
+
     if (!tracking_code) {
-      console.error('Missing tracking_code in payload:', req.body);
+      console.error('[webhook-visitor] Missing tracking_code');
       res.status(400).json({ error: 'tracking_code is required' });
       return;
     }
-    
-    console.log('Webhook received visitor data:', { tracking_code, session_id, device_type, user_agent });
-    
-    // Process data using direct SQL execution
-    const result = await createVisitorDirectSQL({
+
+    const result = await createCanonicalVisit({
       tracking_code,
-      session_id: session_id || `webhook_${Date.now()}`,
-      visitor_id: visitor_id || null,
-      user_agent: user_agent || 'Webhook Tracking',
-      device_type: device_type || 'unknown',
-      screen_resolution: screen_resolution || '1920x1080',
-      referrer: referrer || 'direct',
-      timezone: timezone || null,
-      language: language || null
+      session_id,
+      visitor_id,
+      user_agent,
+      device_type,
+      screen_resolution,
+      referrer,
+      timezone,
+      language,
     });
-    
+
     if (result.success) {
-      console.log('SUCCESS: Visitor created via webhook:', result.visitor_id);
+      console.log('[webhook-visitor] Visit created:', result.visitor_id);
       res.status(200).json({ success: true, visitor_id: result.visitor_id });
     } else {
-      console.error('ERROR: Webhook visitor creation failed:', result.error);
+      console.error('[webhook-visitor] Visit failed:', result.error);
       res.status(500).json({ success: false, error: result.error });
     }
-    
   } catch (error) {
-    console.error('ERROR: Exception in webhook:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[webhook-visitor] Exception:', sanitizeError(error));
+    res.status(500).json({ success: false, error: 'TRACKING_VISIT_FAILED' });
   }
 }
 
-async function createVisitorDirectSQL(params) {
-  try {
-    // Use the Supabase client with direct SQL execution
-    const { createClient } = await import('@supabase/supabase-js');
+async function createCanonicalVisit(params) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('[tracking] Missing Supabase environment variables');
-      return { success: false, error: 'Server configuration error' };
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Generate UUID for session_id if not valid
-    let sessionId = params.session_id;
-    if (!sessionId || !isValidUUID(sessionId)) {
-      sessionId = generateUUID();
-    }
-    
-    // Execute the enhanced function with remarketing data
-    const { data, error } = await supabase.rpc('public_create_visitor_enhanced', {
-      tracking_code_text: params.tracking_code,
-      session_id_text: sessionId,
-      visitor_id_text: params.visitor_id,
-      user_agent_text: params.user_agent,
-      device_type_text: params.device_type,
-      screen_resolution_text: params.screen_resolution,
-      referrer_text: params.referrer,
-      timezone_text: params.timezone,
-      language_text: params.language
-    });
-    
-    if (error) {
-      console.error('Supabase RPC error:', error);
-      return { success: false, error: error.message };
-    }
-    
-    if (data && data.success) {
-      return { success: true, visitor_id: data.visitor_id };
-    } else {
-      return { success: false, error: 'Function returned false' };
-    }
-    
-  } catch (error) {
-    console.error('Exception in createVisitorDirectSQL:', error);
-    return { success: false, error: error.message };
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('[webhook-visitor] Missing Supabase environment variables');
+    return { success: false, error: 'TRACKING_VISIT_FAILED' };
   }
+
+  const payload = {
+    p_tracking_code: params.tracking_code,
+    p_persistent_visitor_id: isValidUUID(params.visitor_id)
+      ? params.visitor_id
+      : generateUUID(),
+    p_session_id: isValidUUID(params.session_id) ? params.session_id : generateUUID(),
+    p_user_agent: params.user_agent ?? null,
+    p_device_type: normalizeDeviceType(params.device_type),
+    p_screen_resolution: params.screen_resolution ?? null,
+    p_referrer: params.referrer ?? null,
+    p_timezone: params.timezone ?? null,
+    p_language: params.language ?? null,
+  };
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data, error } = await supabase.rpc('public_create_tracking_visit', payload);
+
+    if (error) {
+      console.error('[webhook-visitor] RPC client error');
+      return { success: false, error: 'TRACKING_VISIT_FAILED' };
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    if (result?.success === true && result.visit_id) {
+      return { success: true, visitor_id: result.visit_id };
+    }
+
+    const errorCode =
+      typeof result?.error_code === 'string' && result.error_code
+        ? result.error_code
+        : 'TRACKING_VISIT_FAILED';
+
+    console.error('[webhook-visitor] Visit failed:', errorCode);
+    return { success: false, error: errorCode };
+  } catch (error) {
+    console.error('[webhook-visitor] RPC exception:', sanitizeError(error));
+    return { success: false, error: 'TRACKING_VISIT_FAILED' };
+  }
+}
+
+function normalizeDeviceType(value) {
+  if (value === 'desktop' || value === 'mobile' || value === 'tablet') {
+    return value;
+  }
+  return null;
 }
 
 function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c == 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }
 
 function isValidUUID(str) {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (typeof str !== 'string') return false;
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(str);
+}
+
+function sanitizeError(error) {
+  if (!error) return 'unknown';
+  if (typeof error === 'string') return error.slice(0, 200);
+  if (error instanceof Error) return (error.message || 'Error').slice(0, 200);
+  return 'unknown';
 }
