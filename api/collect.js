@@ -4,21 +4,21 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  
+
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
-  
+
   const { query } = req;
-  
+
   // Process data in background
   if (query.tracking_code) {
-    processVisitorData(query).catch(err => 
-      console.error('Background processing error:', err)
+    processVisitorData(query).catch((err) =>
+      console.error('[collect] Background processing error:', sanitizeError(err))
     );
   }
-  
+
   // Return success response
   res.status(200).json({ success: true, message: 'Data received' });
 }
@@ -28,114 +28,87 @@ async function processVisitorData(params) {
   const apiKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
   if (!apiUrl || !apiKey) {
-    console.error('[tracking] Missing Supabase environment variables');
+    console.error('[collect] Missing Supabase environment variables');
     return null;
   }
 
+  const payload = buildCanonicalVisitPayload(params);
+
   try {
-    console.log('Processing visitor data via server-side:', params);
-    
-    // Use the function that we know works
-    const response = await fetch(`${apiUrl}/rest/v1/rpc/public_create_visitor`, {
+    const response = await fetch(`${apiUrl}/rest/v1/rpc/public_create_tracking_visit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': apiKey,
-        'Authorization': `Bearer ${apiKey}`
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        tracking_code_text: params.tracking_code,
-        session_id_text: params.session_id || `server_${Date.now()}`,
-        user_agent_text: params.user_agent || 'Server-Side Tracking',
-        device_type_text: params.device_type || 'unknown',
-        screen_resolution_text: params.screen_resolution || '1920x1080',
-        referrer_text: params.referrer || 'direct'
-      })
+      body: JSON.stringify(payload),
     });
-    
-    if (response.ok) {
-      const result = await response.json();
-      console.log('SUCCESS: Visitor created via server-side public_create_visitor:', result);
-      return result;
-    } else {
-      const error = await response.text();
-      console.error('ERROR: Server-side visitor creation failed:', response.status, error);
-      
-      // Fallback: Try direct table insert with service role
-      return await tryDirectInsert(params, apiUrl);
+
+    if (!response.ok) {
+      console.error('[collect] RPC HTTP error:', response.status);
+      return null;
     }
-    
+
+    const raw = await response.json();
+    const result = Array.isArray(raw) ? raw[0] : raw;
+
+    if (result?.success === true) {
+      console.log('[collect] Visit created:', result.visit_id);
+      return result;
+    }
+
+    console.error('[collect] RPC failed:', result?.error_code || 'UNKNOWN_ERROR');
+    return result ?? null;
   } catch (error) {
-    console.error('ERROR: Exception in server-side processing:', error);
-    // Fallback: Try direct insert
-    return await tryDirectInsert(params, apiUrl);
+    console.error('[collect] RPC exception:', sanitizeError(error));
+    return null;
   }
 }
 
-async function tryDirectInsert(params, apiUrl) {
-  try {
-    console.log('Attempting direct table insert as fallback...');
-    
-    // Get service role key for direct insert
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceKey) {
-      console.error('No service role key available for direct insert');
-      return null;
-    }
-    
-    // First get landing page ID
-    const pageResponse = await fetch(`${apiUrl}/rest/v1/landing_pages?tracking_code=eq.${params.tracking_code}&select=id`, {
-      headers: {
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`
-      }
-    });
-    
-    if (!pageResponse.ok) {
-      console.error('Failed to get landing page:', await pageResponse.text());
-      return null;
-    }
-    
-    const pages = await pageResponse.json();
-    if (pages.length === 0) {
-      console.error('Landing page not found for tracking code:', params.tracking_code);
-      return null;
-    }
-    
-    const landingPageId = pages[0].id;
-    
-    // Direct insert into visitors table
-    const insertResponse = await fetch(`${apiUrl}/rest/v1/visitors`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`,
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        landing_page_id: landingPageId,
-        session_id: params.session_id || `server_${Date.now()}`,
-        user_agent: params.user_agent || 'Server-Side Tracking',
-        device_type: params.device_type || 'unknown',
-        screen_resolution: params.screen_resolution || '1920x1080',
-        referrer: params.referrer || 'direct',
-        created_at: new Date().toISOString()
-      })
-    });
-    
-    if (insertResponse.ok) {
-      const result = await insertResponse.json();
-      console.log('SUCCESS: Direct insert worked:', result[0]?.id);
-      return result;
-    } else {
-      const error = await insertResponse.text();
-      console.error('ERROR: Direct insert failed:', insertResponse.status, error);
-      return null;
-    }
-    
-  } catch (error) {
-    console.error('ERROR: Exception in direct insert:', error);
-    return null;
+function buildCanonicalVisitPayload(params) {
+  return {
+    p_tracking_code: params.tracking_code,
+    p_persistent_visitor_id: resolveUuidOrGenerate(params.visitor_id),
+    p_session_id: resolveUuidOrGenerate(params.session_id),
+    p_user_agent: params.user_agent ?? null,
+    p_device_type: normalizeDeviceType(params.device_type),
+    p_screen_resolution: params.screen_resolution ?? null,
+    p_referrer: params.referrer ?? null,
+    p_timezone: params.timezone ?? null,
+    p_language: params.language ?? null,
+  };
+}
+
+function resolveUuidOrGenerate(value) {
+  return isValidUUID(value) ? value : generateUUID();
+}
+
+function normalizeDeviceType(value) {
+  if (value === 'desktop' || value === 'mobile' || value === 'tablet') {
+    return value;
   }
+  return null;
+}
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function isValidUUID(str) {
+  if (typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    str
+  );
+}
+
+function sanitizeError(error) {
+  if (!error) return 'unknown';
+  if (typeof error === 'string') return error.slice(0, 200);
+  if (error instanceof Error) return (error.message || 'Error').slice(0, 200);
+  return 'unknown';
 }
