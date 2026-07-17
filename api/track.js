@@ -21,14 +21,15 @@ export default async function handler(req, res) {
 
   const { query } = req;
 
-  // Process tracking data in background
   if (query.action) {
-    processTracking(query).catch((err) =>
-      console.error('[track] Background tracking error:', sanitizeError(err))
-    );
+    try {
+      await processTracking(query);
+    } catch (err) {
+      console.error('[track] Processing error:', sanitizeError(err));
+    }
   }
 
-  // Always return pixel immediately
+  // Always return pixel after processing completes
   res.setHeader('Content-Type', 'image/gif');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.status(200).send(PIXEL_GIF);

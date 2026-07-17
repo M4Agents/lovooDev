@@ -12,11 +12,12 @@ export default async function handler(req, res) {
 
   const { query } = req;
 
-  // Process data in background
   if (query.tracking_code) {
-    processVisitorData(query).catch((err) =>
-      console.error('[collect] Background processing error:', sanitizeError(err))
-    );
+    try {
+      await processVisitorData(query);
+    } catch (err) {
+      console.error('[collect] Processing error:', sanitizeError(err));
+    }
   }
 
   // Return success response
