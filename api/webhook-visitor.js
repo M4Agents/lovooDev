@@ -1,4 +1,10 @@
 // Webhook para receber dados de visitantes via POST (sem CORS)
+const INVALID_TRACKING_HTTP_CODES = new Set([
+  'INVALID_TRACKING_CODE',
+  'LANDING_PAGE_NOT_FOUND',
+  'LANDING_PAGE_INACTIVE',
+]);
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -51,12 +57,17 @@ export default async function handler(req, res) {
       console.log('[webhook-visitor] Visit created:', result.visitor_id);
       res.status(200).json({ success: true, visitor_id: result.visitor_id });
     } else {
-      console.error('[webhook-visitor] Visit failed:', result.error);
-      res.status(500).json({ success: false, error: result.error });
+      const errorCode = typeof result.error === 'string' ? result.error : 'TRACKING_VISIT_FAILED';
+      console.error('[webhook-visitor] Visit failed:', errorCode);
+      if (INVALID_TRACKING_HTTP_CODES.has(errorCode)) {
+        res.status(404).json({ success: false, error: 'Invalid tracking code' });
+      } else {
+        res.status(500).json({ success: false, error: 'Tracking visit failed' });
+      }
     }
   } catch (error) {
     console.error('[webhook-visitor] Exception:', sanitizeError(error));
-    res.status(500).json({ success: false, error: 'TRACKING_VISIT_FAILED' });
+    res.status(500).json({ success: false, error: 'Tracking visit failed' });
   }
 }
 
