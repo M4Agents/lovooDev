@@ -27,9 +27,12 @@
       
       console.log('M4Track: Initialized with tracking code:', trackingCode);
       
-      // Start tracking immediately
-      this.trackVisitor();
-      this.setupEventListeners();
+      // Visit first, then page_view/listeners (avoid event-before-visit race)
+      this.trackVisitor()
+        .catch(function () { /* visit attempt settled with error; continue */ })
+        .then(function () {
+          M4Track.setupEventListeners();
+        });
       this.setupFormInterception();
       this.setupHttpInterception();
     },
@@ -75,7 +78,9 @@
     },
     
     trackVisitor: function() {
-      if (!this.config.isInitialized) return;
+      if (!this.config.isInitialized) {
+        return Promise.resolve();
+      }
       
       const visitorData = {
         tracking_code: this.config.trackingCode,
@@ -90,50 +95,52 @@
       };
       
       console.log('M4Track: Tracking visitor via webhook approach');
-      this.sendDataViaWebhook('visitor', visitorData);
+      return this.sendDataViaWebhook('visitor', visitorData);
     },
     
     sendDataViaWebhook: function(type, data) {
-      try {
-        if (type === 'visitor') {
+      var self = this;
+      if (type !== 'visitor') {
+        return Promise.resolve();
+      }
+
+      return new Promise(function (resolve) {
+        try {
           console.log('M4Track: Sending webhook data:', data);
-          
-          // Try normal fetch first (can see errors)
-          fetch(`${this.config.apiUrl}/api/webhook-visitor`, {
+
+          fetch(`${self.config.apiUrl}/api/webhook-visitor`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
-          }).then(response => {
+          }).then(function (response) {
             if (response.ok) {
-              console.log(`M4Track: Successfully sent ${type} data via webhook approach`);
-              return response.json();
-            } else {
-              console.error(`M4Track: Webhook failed with status:`, response.status);
-              throw new Error(`HTTP ${response.status}`);
+              console.log('M4Track: Successfully sent visitor data via webhook approach');
+              return response.json().catch(function () { return null; });
             }
-          }).then(result => {
-            console.log('M4Track: Webhook response:', result);
-          }).catch(error => {
-            console.error(`M4Track: Webhook error:`, error);
+            console.error('M4Track: Webhook failed with status:', response.status);
+            throw new Error('HTTP ' + response.status);
+          }).then(function (result) {
+            if (result) {
+              console.log('M4Track: Webhook response:', result);
+            }
+            resolve();
+          }).catch(function (error) {
+            console.error('M4Track: Webhook error:', error);
             console.log('M4Track: Falling back to image request');
-            // Fallback to image request
-            this.sendDataViaImage(type, data);
+            self.sendDataViaImage('visitor', data, resolve);
           });
-        } else {
-          // For events, use image fallback
-          this.sendDataViaImage(type, data);
+        } catch (error) {
+          console.error('M4Track: Error in sendDataViaWebhook:', error);
+          self.sendDataViaImage('visitor', data, resolve);
         }
-      } catch (error) {
-        console.error('M4Track: Error in sendDataViaWebhook:', error);
-        this.sendDataViaImage(type, data);
-      }
+      });
     },
     
-    sendDataViaImage: function(type, data) {
+    // Visit fallback only → /api/collect (events use sendEventViaTrack)
+    sendDataViaImage: function(type, data, onComplete) {
       try {
-        // Build URL with parameters
         const params = new URLSearchParams();
         params.set('action', type);
         
@@ -143,39 +150,77 @@
           }
         });
         
-        // Use Image request (no CORS restrictions)
         const img = new Image();
-        img.onload = () => {
-          console.log(`M4Track: Successfully sent ${type} data via image fallback`);
+        const finish = function () {
+          if (typeof onComplete === 'function') {
+            onComplete();
+          }
         };
-        img.onerror = () => {
-          console.error(`M4Track: Error sending ${type} data via image`);
+        img.onload = function () {
+          console.log('M4Track: Successfully sent ' + type + ' data via image fallback');
+          finish();
+        };
+        img.onerror = function () {
+          console.error('M4Track: Error sending ' + type + ' data via image');
+          finish();
         };
         
-        // Send to our collect endpoint
         const collectUrl = `${this.config.apiUrl}/api/collect?${params.toString()}`;
         img.src = collectUrl;
-        
-        console.log(`M4Track: Sending ${type} data via image to:`, collectUrl);
-        
+        console.log('M4Track: Sending visitor data via image fallback to collect');
       } catch (error) {
         console.error('M4Track: Error in sendDataViaImage:', error);
+        if (typeof onComplete === 'function') {
+          onComplete();
+        }
+      }
+    },
+
+    sendEventViaTrack: function(data) {
+      try {
+        const params = new URLSearchParams();
+        params.set('action', 'sync_event');
+
+        Object.keys(data).forEach(key => {
+          if (data[key] !== null && data[key] !== undefined) {
+            params.set(key, data[key].toString());
+          }
+        });
+
+        const img = new Image();
+        img.onload = function () {
+          console.log('M4Track: Successfully sent event via track sync_event');
+        };
+        img.onerror = function () {
+          console.error('M4Track: Error sending event via track sync_event');
+        };
+
+        img.src = `${this.config.apiUrl}/api/track?${params.toString()}`;
+        console.log('M4Track: Sending event via track sync_event');
+      } catch (error) {
+        console.error('M4Track: Error in sendEventViaTrack:', error);
       }
     },
     
     trackEvent: function(eventType, eventData = {}) {
       if (!this.config.isInitialized) return;
+
+      const pageUrl =
+        eventData && typeof eventData.url === 'string' && eventData.url
+          ? eventData.url
+          : window.location.href;
       
       const event = {
         tracking_code: this.config.trackingCode,
+        visitor_id: this.getOrCreateVisitorId(),
         session_id: this.config.sessionId,
         event_type: eventType,
         event_data: JSON.stringify(eventData),
-        timestamp: Date.now()
+        page_url: pageUrl
       };
       
       console.log(`M4Track: Tracking event: ${eventType}`);
-      this.sendDataViaImage('event', event);
+      this.sendEventViaTrack(event);
     },
     
     setupEventListeners: function() {
