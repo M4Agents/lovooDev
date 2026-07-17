@@ -97,21 +97,50 @@ export type LandingPage = {
   updated_at: string;
 };
 
+/** visitors.id — PK da linha de visita (visit_id) */
+export type VisitId = string;
+/** visitors.visitor_id — UUID persistente no browser (persistent_visitor_id) */
+export type PersistentVisitorId = string;
+/** visitors.session_id — sessão da aba/browser */
+export type TrackingSessionId = string;
+
+export type LeadCustomValue = {
+  field_id: string;
+  value: string;
+  lead_custom_fields: {
+    field_name: string;
+    field_label: string;
+    field_type: string;
+  };
+};
+
+/**
+ * Row de `visitors`.
+ * - `id` = visit_id (PK da visita)
+ * - `visitor_id` = persistent_visitor_id (coluna real; não renomear)
+ * - `session_id` = TrackingSessionId
+ */
 export type Visitor = {
-  id: string;
+  /** visit_id — PK da visita */
+  id: VisitId;
   landing_page_id: string;
-  session_id: string;
+  session_id: TrackingSessionId;
+  /** persistent_visitor_id — coluna real `visitors.visitor_id` */
+  visitor_id: PersistentVisitorId | null;
   ip_address: string | null;
   user_agent: string | null;
   device_type: 'desktop' | 'mobile' | 'tablet' | null;
   screen_resolution: string | null;
   referrer: string | null;
+  timezone: string | null;
+  language: string | null;
   created_at: string;
 };
 
 export type BehaviorEvent = {
   id: string;
-  visitor_id: string;
+  /** FK para `visitors.id` (visit_id), não persistent_visitor_id */
+  visitor_id: VisitId;
   event_type: 'click' | 'scroll' | 'hover' | 'form_interaction' | 'page_view' | 'section_view';
   event_data: Record<string, any>;
   coordinates: { x: number; y: number } | null;
@@ -122,7 +151,8 @@ export type BehaviorEvent = {
 
 export type Conversion = {
   id: string;
-  visitor_id: string;
+  /** FK para `visitors.id` (visit_id), não persistent_visitor_id */
+  visitor_id: VisitId;
   landing_page_id: string;
   form_data: Record<string, any>;
   behavior_summary: Record<string, any>;
@@ -131,6 +161,63 @@ export type Conversion = {
   webhook_sent: boolean;
   webhook_response: Record<string, any> | null;
   converted_at: string;
+};
+
+/**
+ * Lead canônico (CRM).
+ * `visitor_id` (TEXT) armazena persistent_visitor_id — sem FK para `visitors.id`.
+ * Demais opcionais usam `?: string` (compatível com interfaces locais e hooks).
+ */
+export type Lead = {
+  id?: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  origin: string;
+  status: string;
+  interest?: string;
+  responsible_user_id?: string;
+  /** persistent_visitor_id (TEXT, sem FK) — compatibilidade temporária */
+  visitor_id?: string | null;
+  record_type?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_contact_at?: string;
+  is_over_plan?: boolean;
+
+  instagram?: string;
+  linkedin?: string;
+  tiktok?: string;
+
+  cargo?: string;
+  poder_investimento?: string;
+
+  data_nascimento?: string;
+  cep?: string;
+  estado?: string;
+  cidade?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  complemento?: string;
+
+  campanha?: string;
+  conjunto_anuncio?: string;
+  anuncio?: string;
+
+  company_name?: string;
+  company_cnpj?: string;
+  company_razao_social?: string;
+  company_nome_fantasia?: string;
+  company_cep?: string;
+  company_cidade?: string;
+  company_estado?: string;
+  company_endereco?: string;
+  company_telefone?: string;
+  company_email?: string;
+  company_site?: string;
+
+  lead_custom_values?: LeadCustomValue[];
 };
 
 export type WebhookLog = {

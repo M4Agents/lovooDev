@@ -22,64 +22,13 @@ import {
 import { LeadEntriesSection } from './LeadEntriesSection';
 import { useAuth } from '../contexts/AuthContext';
 import { chatApi } from '../services/chat/chatApi';
+import type { Lead as CanonicalLead } from '../lib/supabase';
 
-interface Lead {
+type Lead = CanonicalLead & {
   id: number;
-  name: string;
-  email?: string;
-  phone?: string;
-  origin: string;
-  status: string;
-  interest?: string;
-  responsible_user_id?: string;
-  visitor_id?: string;
-  record_type?: string;
   created_at: string;
   updated_at: string;
-  last_contact_at?: string;
-  is_over_plan?: boolean;
-  // Empresa
-  company_name?: string;
-  company_cnpj?: string;
-  company_razao_social?: string;
-  company_nome_fantasia?: string;
-  company_email?: string;
-  company_telefone?: string;
-  company_site?: string;
-  company_cep?: string;
-  company_cidade?: string;
-  company_estado?: string;
-  company_endereco?: string;
-  // Endereço pessoal
-  cep?: string;
-  endereco?: string;
-  numero?: string;
-  bairro?: string;
-  complemento?: string;
-  cidade?: string;
-  estado?: string;
-  // Perfil
-  cargo?: string;
-  poder_investimento?: string;
-  data_nascimento?: string;
-  instagram?: string;
-  linkedin?: string;
-  tiktok?: string;
-  // Marketing
-  campanha?: string;
-  conjunto_anuncio?: string;
-  anuncio?: string;
-  // Custom fields
-  lead_custom_values?: Array<{
-    field_id: string;
-    value: string;
-    lead_custom_fields: {
-      field_name: string;
-      field_label: string;
-      field_type: string;
-    };
-  }>;
-}
+};
 
 interface CompanyUser {
   id?: string;

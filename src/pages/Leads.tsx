@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
+import type { Lead as CanonicalLead } from '../lib/supabase';
 import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { useAccessControl } from '../hooks/useAccessControl';
 import { usePlanLeadStats } from '../hooks/usePlanLeadStats';
@@ -54,33 +55,13 @@ import { Avatar } from '../components/Avatar';
 import { TagBadge } from '../components/TagBadge';
 import type { Tag as LeadTag } from '../types/tags';
 
-interface Lead {
+/** Lead da listagem — canônico + tags e id obrigatório */
+type Lead = CanonicalLead & {
   id: number;
-  name: string;
-  email?: string;
-  phone?: string;
-  origin: string;
-  status: string;
-  interest?: string;
-  responsible_user_id?: string;
-  visitor_id?: string;
-  record_type?: string;
   created_at: string;
   updated_at: string;
-  last_contact_at?: string;
   tags?: LeadTag[];
-  /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
-  is_over_plan?: boolean;
-  lead_custom_values?: Array<{
-    field_id: string;
-    value: string;
-    lead_custom_fields: {
-      field_name: string;
-      field_label: string;
-      field_type: string;
-    };
-  }>;
-}
+};
 
 
 interface LeadStats {
@@ -303,10 +284,11 @@ export const Leads: React.FC = () => {
           if (!phoneDigits) return;
 
           const contact = await chatApi.getContactInfo(company.id, phoneDigits);
-          if (contact?.profile_picture_url) {
+          const profilePictureUrl = contact?.profile_picture_url;
+          if (profilePictureUrl) {
             setLeadPhotos((prev) => {
               if (prev[phoneDigits]) return prev;
-              return { ...prev, [phoneDigits]: contact.profile_picture_url };
+              return { ...prev, [phoneDigits]: profilePictureUrl };
             });
           }
         } catch (error) {

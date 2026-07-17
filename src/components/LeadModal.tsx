@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
+import type { Lead } from '../lib/supabase';
 import { UserSelector } from './WhatsAppChat/UserSelector';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
@@ -29,65 +30,6 @@ import {
   AlertTriangle,
   AlertCircle
 } from 'lucide-react';
-
-interface Lead {
-  id?: number;
-  name: string;
-  email?: string;
-  phone?: string;
-  origin: string;
-  status: string;
-  interest?: string;
-  responsible_user_id?: string;
-  visitor_id?: string;
-  record_type?: string;  // NOVO: Tipo de registro do lead
-  
-  // NOVOS CAMPOS - Redes Sociais
-  instagram?: string;
-  linkedin?: string;
-  tiktok?: string;
-  
-  // NOVOS CAMPOS - Informações Profissionais
-  cargo?: string;
-  poder_investimento?: string;
-  
-  // NOVOS CAMPOS - Dados Pessoais
-  data_nascimento?: string;
-  cep?: string;
-  estado?: string;
-  cidade?: string;
-  endereco?: string;
-  numero?: string;
-  bairro?: string;
-  complemento?: string;
-  
-  // NOVOS CAMPOS - Dados de Anúncios
-  campanha?: string;
-  conjunto_anuncio?: string;
-  anuncio?: string;
-  
-  // Campos da empresa (existentes)
-  company_name?: string;
-  company_cnpj?: string;
-  company_razao_social?: string;
-  company_nome_fantasia?: string;
-  company_cep?: string;
-  company_cidade?: string;
-  company_estado?: string;
-  company_endereco?: string;
-  company_telefone?: string;
-  company_email?: string;
-  company_site?: string;
-  lead_custom_values?: Array<{
-    field_id: string;
-    value: string;
-    lead_custom_fields: {
-      field_name: string;
-      field_label: string;
-      field_type: string;
-    };
-  }>;
-}
 
 interface CustomField {
   id: string;

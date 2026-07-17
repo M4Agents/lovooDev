@@ -13,6 +13,7 @@ import { OpportunitiesSection } from './OpportunitiesSection'
 import { InstanceSelector } from '../InstanceSelector'
 import { UserSelector } from '../UserSelector'
 import { supabase } from '../../../lib/supabase'
+import type { Lead } from '../../../lib/supabase'
 import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
@@ -30,69 +31,6 @@ import type {
   ScheduleMessageForm
 } from '../../../types/whatsapp-chat'
 import type { LeadActivity } from '../../../types/calendar'
-
-// =====================================================
-// INTERFACE LEAD PARA COMPATIBILIDADE
-// =====================================================
-
-interface Lead {
-  id?: number;
-  name: string;
-  email?: string;
-  phone?: string;
-  origin: string;
-  status: string;
-  interest?: string;
-  responsible_user_id?: string;
-  visitor_id?: string;
-  record_type?: string;
-  
-  // Redes Sociais
-  instagram?: string;
-  linkedin?: string;
-  tiktok?: string;
-  
-  // Informações Profissionais
-  cargo?: string;
-  poder_investimento?: string;
-  
-  // Dados Pessoais
-  data_nascimento?: string;
-  cep?: string;
-  estado?: string;
-  cidade?: string;
-  endereco?: string;
-  numero?: string;
-  bairro?: string;
-  complemento?: string;
-  
-  // Dados de Anúncios
-  campanha?: string;
-  conjunto_anuncio?: string;
-  anuncio?: string;
-  
-  // Campos da empresa
-  company_name?: string;
-  company_cnpj?: string;
-  company_razao_social?: string;
-  company_nome_fantasia?: string;
-  company_cep?: string;
-  company_cidade?: string;
-  company_estado?: string;
-  company_endereco?: string;
-  company_telefone?: string;
-  company_email?: string;
-  company_site?: string;
-  lead_custom_values?: Array<{
-    field_id: string;
-    value: string;
-    lead_custom_fields: {
-      field_name: string;
-      field_label: string;
-      field_type: string;
-    };
-  }>;
-}
 
 // =====================================================
 // FUNÇÃO DE CONVERSÃO CHATCONTACT -> LEAD

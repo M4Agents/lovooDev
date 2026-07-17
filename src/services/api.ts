@@ -168,11 +168,12 @@ export const api = {
     return result;
   },
 
-  async getBehaviorEvents(visitorId: string) {
+  /** `visitId` = `visitors.id` (FK em `behavior_events.visitor_id`) */
+  async getBehaviorEvents(visitId: string) {
     const { data, error } = await supabase
       .from('behavior_events')
       .select('*')
-      .eq('visitor_id', visitorId)
+      .eq('visitor_id', visitId)
       .order('timestamp', { ascending: true });
 
     if (error) throw error;
@@ -187,14 +188,14 @@ export const api = {
 
     if (visitorsError) throw visitorsError;
 
-    const visitorIds = visitors?.map(v => v.id) || [];
+    const visitIds = visitors?.map(v => v.id) || [];
 
-    if (visitorIds.length === 0) return [];
+    if (visitIds.length === 0) return [];
 
     const { data, error } = await supabase
       .from('behavior_events')
       .select('*')
-      .in('visitor_id', visitorIds)
+      .in('visitor_id', visitIds)
       .eq('event_type', 'click')
       .not('coordinates', 'is', null);
 
@@ -658,17 +659,21 @@ export const api = {
       if (conversionsError) throw conversionsError;
 
       const totalVisitors = visitors?.length || 0;
-      const visitorsWithId = visitors?.filter(v => v.visitor_id) || [];
-      const uniqueVisitors = visitorsWithId.length > 0 
-        ? new Set(visitorsWithId.map(v => v.visitor_id)).size 
+      // `visitors.visitor_id` = persistent_visitor_id (remarketing), não visit_id
+      const visitorsWithPersistentId = visitors?.filter(v => v.visitor_id) || [];
+      const uniqueVisitors = visitorsWithPersistentId.length > 0
+        ? new Set(visitorsWithPersistentId.map(v => v.visitor_id as string)).size
         : totalVisitors;
-      
-      const visitorCounts = visitorsWithId.reduce((acc: Record<string, number>, v) => {
-        if (v.visitor_id) acc[v.visitor_id] = (acc[v.visitor_id] || 0) + 1;
+
+      const persistentVisitorCounts = visitorsWithPersistentId.reduce((acc: Record<string, number>, v) => {
+        const persistentVisitorId = v.visitor_id;
+        if (persistentVisitorId) {
+          acc[persistentVisitorId] = (acc[persistentVisitorId] || 0) + 1;
+        }
         return acc;
       }, {});
-      
-      const returningVisitors = Object.values(visitorCounts).filter(count => count > 1).length;
+
+      const returningVisitors = Object.values(persistentVisitorCounts).filter(count => count > 1).length;
       const newVisitors = uniqueVisitors - returningVisitors;
       const conversionRate = totalVisitors > 0 ? ((conversions?.length || 0) / totalVisitors) * 100 : 0;
 
@@ -762,6 +767,7 @@ export const api = {
     status?: string;
     interest?: string;
     responsible_user_id?: string | null;
+    /** persistent_visitor_id (coluna `leads.visitor_id` TEXT) — não é visit_id */
     visitor_id?: string | null;
     record_type?: string;  // NOVO: Tipo de registro
     custom_fields?: Record<string, any>;
@@ -1129,6 +1135,7 @@ export const api = {
     status?: string;
     interest?: string;
     responsible_user_id?: string | null;
+    /** persistent_visitor_id (coluna `leads.visitor_id` TEXT) — não é visit_id */
     visitor_id?: string | null;
     record_type?: string;  // NOVO: Tipo de registro
     custom_fields?: Record<string, any>;
