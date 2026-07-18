@@ -29,9 +29,10 @@ import {
 
 export const ModernLandingPages: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company } = useAuth();
+  const { company, companyTimezone } = useAuth();
   const { canSeeLandingPageOwner } = useAccessControl();
   const [pages, setPages] = useState<LandingPage[]>([]);
+  const [conversionsToday, setConversionsToday] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPage, setEditingPage] = useState<LandingPage | null>(null);
@@ -68,6 +69,22 @@ export const ModernLandingPages: React.FC = () => {
     }
   }, [company]);
 
+  const loadConversionsToday = async (landingPages: LandingPage[]) => {
+    const pageIds = landingPages.map((p) => p.id).filter(Boolean);
+    if (!pageIds.length) {
+      setConversionsToday(0);
+      return;
+    }
+    try {
+      const tz = companyTimezone || 'America/Sao_Paulo';
+      const count = await api.getConversionsTodayCount(pageIds, tz);
+      setConversionsToday(count);
+    } catch (error) {
+      console.error('ModernLandingPages: Error loading conversions today:', error);
+      setConversionsToday(0);
+    }
+  };
+
   const loadPages = async () => {
     console.log('ModernLandingPages: loadPages called, company:', company);
     if (!company) {
@@ -81,6 +98,7 @@ export const ModernLandingPages: React.FC = () => {
       const data = await api.getLandingPages(company.id);
       console.log('ModernLandingPages: API returned data:', data);
       setPages(data);
+      await loadConversionsToday(data || []);
     } catch (error) {
       console.error('ModernLandingPages: Error loading pages:', error);
     } finally {
@@ -97,6 +115,7 @@ export const ModernLandingPages: React.FC = () => {
       const data = await api.getLandingPages(companyId);
       console.log('ModernLandingPages: API returned data:', data);
       setPages(data);
+      await loadConversionsToday(data || []);
     } catch (error) {
       console.error('ModernLandingPages: Error loading pages by ID:', error);
     } finally {
@@ -296,7 +315,7 @@ export const ModernLandingPages: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">{t('tracking.stats.conversionsToday')}</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-2xl font-semibold text-gray-900">{conversionsToday}</p>
             </div>
             <div className="p-3 bg-purple-50 rounded-xl">
               <BarChart3 className="w-6 h-6 text-purple-600" />
@@ -330,10 +349,10 @@ export const ModernLandingPages: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {pages.map((page) => (
-            <Card key={page.id} hover className="group">
+            <Card key={page.id} hover className="group min-w-0 overflow-hidden">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <h3 className="text-lg font-semibold text-gray-900 truncate">
                       {page.name}
                     </h3>
@@ -360,7 +379,7 @@ export const ModernLandingPages: React.FC = () => {
                     href={page.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 group-hover:underline"
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 group-hover:underline min-w-0"
                   >
                     <span className="truncate">{page.url}</span>
                     <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -368,12 +387,13 @@ export const ModernLandingPages: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex flex-wrap items-center gap-1 mb-4">
                 <Button
                   size="sm"
                   variant="ghost"
                   icon={page.status === 'active' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   onClick={() => toggleStatus(page)}
+                  className="shrink-0"
                 >
                   {page.status === 'active' ? t('tracking.actions.pause') : t('tracking.actions.activate')}
                 </Button>
@@ -383,6 +403,7 @@ export const ModernLandingPages: React.FC = () => {
                   variant="ghost"
                   icon={<Edit2 className="w-4 h-4" />}
                   onClick={() => handleEdit(page)}
+                  className="shrink-0"
                 >
                   {t('tracking.actions.edit')}
                 </Button>
@@ -392,6 +413,7 @@ export const ModernLandingPages: React.FC = () => {
                   variant="ghost"
                   icon={<Code className="w-4 h-4" />}
                   onClick={() => showTrackingCodeModal(page)}
+                  className="shrink-0"
                 >
                   {t('tracking.actions.code')}
                 </Button>
@@ -402,7 +424,7 @@ export const ModernLandingPages: React.FC = () => {
                   icon={verifyingPage === page.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
                   onClick={() => verifyTrackingTag(page)}
                   disabled={verifyingPage === page.id}
-                  className="text-green-600 hover:text-green-700"
+                  className="text-green-600 hover:text-green-700 shrink-0"
                 >
                   {verifyingPage === page.id ? t('tracking.actions.verifying') : t('tracking.actions.verifyTag')}
                 </Button>
@@ -412,7 +434,7 @@ export const ModernLandingPages: React.FC = () => {
                   variant="ghost"
                   icon={<Trash2 className="w-4 h-4" />}
                   onClick={() => handleDelete(page.id)}
-                  className="text-red-600 hover:text-red-700"
+                  className="text-red-600 hover:text-red-700 shrink-0"
                 >
                   {t('tracking.actions.delete')}
                 </Button>

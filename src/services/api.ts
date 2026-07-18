@@ -118,6 +118,52 @@ export const api = {
     if (error) throw error;
   },
 
+  /** Conta conversões Track do dia corrente (timezone da empresa) nas LPs informadas. */
+  async getConversionsTodayCount(
+    landingPageIds: string[],
+    timezone: string = 'America/Sao_Paulo'
+  ): Promise<number> {
+    if (!landingPageIds.length) return 0;
+
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone || 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    // Meia-noite no fuso da empresa → ISO UTC (Brasil sem DST: -03:00)
+    const offsetMatch = (() => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone || 'America/Sao_Paulo',
+          timeZoneName: 'shortOffset',
+          hour: '2-digit',
+        }).formatToParts(new Date());
+        const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-3';
+        const m = tzName.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/i);
+        if (!m) return '-03:00';
+        const sign = m[1].startsWith('-') ? '-' : '+';
+        const hours = Math.abs(parseInt(m[1], 10)).toString().padStart(2, '0');
+        const mins = (m[2] || '00').padStart(2, '0');
+        return `${sign}${hours}:${mins}`;
+      } catch {
+        return '-03:00';
+      }
+    })();
+
+    const startIso = new Date(`${ymd}T00:00:00${offsetMatch}`).toISOString();
+
+    const { count, error } = await supabase
+      .from('conversions')
+      .select('id', { count: 'exact', head: true })
+      .in('landing_page_id', landingPageIds)
+      .gte('converted_at', startIso);
+
+    if (error) throw error;
+    return count || 0;
+  },
+
   async getAnalytics(landingPageId: string, dateRange?: { start: string; end: string }) {
     
     let query = supabase
