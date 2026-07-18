@@ -111,7 +111,7 @@
         },
         {
           "key": "Cache-Control",
-          "value": "public, max-age=31536000"
+          "value": "public, max-age=300, must-revalidate"
         }
       ]
     },
@@ -128,7 +128,7 @@
         },
         {
           "key": "Cache-Control",
-          "value": "public, max-age=31536000"
+          "value": "public, max-age=300, must-revalidate"
         }
       ]
     },
