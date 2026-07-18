@@ -515,7 +515,11 @@ export const AdvancedAnalytics: React.FC = () => {
                           {visitor.device_type}
                         </td>
                         <td className="py-3 px-4 text-sm text-slate-600">
-                          {visitor.referrer === 'direct' ? 'Direto' : visitor.referrer || 'N/A'}
+                          {visitor.utm_source
+                            ? visitor.utm_source
+                            : visitor.referrer === 'direct'
+                              ? 'Direto'
+                              : visitor.referrer || 'N/A'}
                         </td>
                         <td className="py-3 px-4 text-sm text-slate-600">
                           {new Date(visitor.created_at).toLocaleString('pt-BR', {
@@ -633,6 +637,11 @@ export const AdvancedAnalytics: React.FC = () => {
                     <h4 className="font-medium text-slate-900 mb-2">Origem</h4>
                     <div className="space-y-2 text-sm">
                       <div><span className="font-medium">Referrer:</span> {selectedVisitor.referrer || 'Direto'}</div>
+                      <div><span className="font-medium">UTM Source:</span> {selectedVisitor.utm_source || 'N/A'}</div>
+                      <div><span className="font-medium">UTM Medium:</span> {selectedVisitor.utm_medium || 'N/A'}</div>
+                      <div><span className="font-medium">UTM Campaign:</span> {selectedVisitor.utm_campaign || 'N/A'}</div>
+                      <div><span className="font-medium">UTM Content:</span> {selectedVisitor.utm_content || 'N/A'}</div>
+                      <div><span className="font-medium">UTM Term:</span> {selectedVisitor.utm_term || 'N/A'}</div>
                       <div><span className="font-medium">IP:</span> {selectedVisitor.ip_address || 'N/A'}</div>
                       <div><span className="font-medium">Timezone:</span> {selectedVisitor.timezone || 'N/A'}</div>
                     </div>

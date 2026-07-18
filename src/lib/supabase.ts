@@ -134,6 +134,12 @@ export type Visitor = {
   referrer: string | null;
   timezone: string | null;
   language: string | null;
+  /** First-touch UTM captured at visit time */
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
   created_at: string;
 };
 
