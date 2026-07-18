@@ -952,7 +952,15 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
         source:          'webhook',
         externalEventId: canonical.webhook_id || null,
         originChannel:   canonical.utm_source  || null,
-        metadata:        { payload_hash: hashPayload(payloadRef) },
+        metadata:        {
+          payload_hash: hashPayload(payloadRef),
+          visitor_id: canonical.visitor_id || null,
+          utm_source: canonical.utm_source || null,
+          utm_medium: canonical.utm_medium || null,
+          utm_campaign: canonical.campanha || null,
+          utm_content: canonical.conjunto_anuncio || null,
+          utm_term: canonical.anuncio || null,
+        },
         supabase:        supabaseAdmin,
       });
     } catch (err) {

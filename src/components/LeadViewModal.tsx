@@ -427,7 +427,7 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
           <Section title="Histórico de Entradas" icon={<RefreshCw className="w-4 h-4" />}>
             <div className="sm:col-span-2">
               <p className="text-xs text-slate-500 mb-3">
-                Registro de cada vez que este lead chegou ao sistema, por qualquer canal.
+                Linha do tempo de visitas na LP e entradas no CRM (mais recente primeiro).
               </p>
               {company?.id && (
                 <LeadEntriesSection leadId={lead.id} companyId={company.id} />

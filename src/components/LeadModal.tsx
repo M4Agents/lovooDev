@@ -1601,7 +1601,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 Histórico de Entradas
               </h3>
               <p className="text-sm text-gray-500">
-                Registro de cada vez que este lead chegou ao sistema, por qualquer canal.
+                Linha do tempo de visitas na LP e entradas no CRM (mais recente primeiro).
               </p>
               <LeadEntriesSection leadId={activeLead.id} companyId={company.id} />
             </div>
