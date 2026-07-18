@@ -13,6 +13,9 @@
       sessionId: null,
       isInitialized: false
     },
+
+    // In-memory fallback when localStorage is unavailable (page session only)
+    _utmMemory: {},
     
     init: function(trackingCode, apiUrl) {
       if (!trackingCode || !apiUrl) {
@@ -26,6 +29,13 @@
       this.config.isInitialized = true;
       
       console.log('M4Track: Initialized with tracking code:', trackingCode);
+
+      // First-touch UTM snapshot (fail-open; never blocks init/tracking)
+      try {
+        this.captureFirstTouchAttribution();
+      } catch (e) {
+        console.log('M4Track: UTM capture skipped', e && e.message ? e.message : e);
+      }
       
       // Visit first, then page_view/listeners (avoid event-before-visit race)
       this.trackVisitor()
@@ -64,6 +74,406 @@
         const v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
+    },
+
+    // Limits aligned with api/webhook-lead.js FIELD_WHITELIST
+    UTM_LIMITS: {
+      utm_source: 255,
+      utm_medium: 100,
+      utm_campaign: 255,
+      utm_content: 255,
+      utm_term: 255
+    },
+
+    // Alias groups from api/webhook-lead.js (exact whitelist keys only)
+    UTM_ALIAS_GROUPS: {
+      utm_source: ['utm_source', 'origin', 'origem', 'source', 'fonte'],
+      utm_medium: ['utm_medium', 'medium', 'midia', 'mídia', 'canal_midia'],
+      utm_campaign: ['utm_campaign', 'campanha', 'campaign', 'campaign_name', 'nome_campanha'],
+      utm_content: ['utm_content', 'conjunto_anuncio', 'adset', 'ad_set', 'conjunto'],
+      utm_term: ['utm_term', 'anuncio', 'ad', 'ad_name', 'nome_anuncio']
+    },
+
+    getUtmStorageKey: function() {
+      var code = this.config && this.config.trackingCode;
+      if (!code) return null;
+      return 'lovocrm_utm_first:' + code;
+    },
+
+    normalizeUtmValue: function(raw, maxLen) {
+      if (raw === null || raw === undefined) return null;
+      var str = String(raw).trim();
+      if (!str) return null;
+      if (maxLen && str.length > maxLen) {
+        str = str.substring(0, maxLen);
+      }
+      return str;
+    },
+
+    readUtmsFromUrl: function() {
+      var result = {
+        utm_source: null,
+        utm_medium: null,
+        utm_campaign: null,
+        utm_content: null,
+        utm_term: null
+      };
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var limits = this.UTM_LIMITS;
+        var keys = Object.keys(result);
+        for (var i = 0; i < keys.length; i++) {
+          var key = keys[i];
+          result[key] = this.normalizeUtmValue(params.get(key), limits[key]);
+        }
+      } catch (e) {
+        /* fail-open */
+      }
+      return result;
+    },
+
+    hasAnyValidUtm: function(utms) {
+      if (!utms || typeof utms !== 'object') return false;
+      return !!(utms.utm_source || utms.utm_medium || utms.utm_campaign ||
+        utms.utm_content || utms.utm_term);
+    },
+
+    isValidUtmSnapshot: function(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+        return false;
+      }
+      return Object.prototype.hasOwnProperty.call(snapshot, 'utm_source') ||
+        Object.prototype.hasOwnProperty.call(snapshot, 'utm_medium') ||
+        Object.prototype.hasOwnProperty.call(snapshot, 'utm_campaign') ||
+        Object.prototype.hasOwnProperty.call(snapshot, 'utm_content') ||
+        Object.prototype.hasOwnProperty.call(snapshot, 'utm_term');
+    },
+
+    readUtmSnapshot: function() {
+      var key = this.getUtmStorageKey();
+      if (!key) return null;
+
+      if (this._utmMemory[key] === '__corrupt__') {
+        return null;
+      }
+      if (this._utmMemory[key] && this.isValidUtmSnapshot(this._utmMemory[key])) {
+        return this._utmMemory[key];
+      }
+
+      try {
+        var raw = localStorage.getItem(key);
+        if (raw === null || raw === undefined) {
+          return null;
+        }
+        var parsed = JSON.parse(raw);
+        if (!this.isValidUtmSnapshot(parsed)) {
+          this._utmMemory[key] = '__corrupt__';
+          return null;
+        }
+        this._utmMemory[key] = parsed;
+        return parsed;
+      } catch (e) {
+        try {
+          if (localStorage.getItem(key) !== null) {
+            this._utmMemory[key] = '__corrupt__';
+          }
+        } catch (e2) { /* ignore */ }
+        return null;
+      }
+    },
+
+    /** True when a storage key already exists (even if corrupt) — blocks new capture */
+    hasUtmSnapshotKey: function() {
+      var key = this.getUtmStorageKey();
+      if (!key) return false;
+      if (this._utmMemory[key] === '__corrupt__') return true;
+      if (this._utmMemory[key] && this.isValidUtmSnapshot(this._utmMemory[key])) return true;
+      try {
+        return localStorage.getItem(key) !== null;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    writeUtmSnapshot: function(snapshot) {
+      var key = this.getUtmStorageKey();
+      if (!key || !snapshot) return false;
+      this._utmMemory[key] = snapshot;
+      try {
+        localStorage.setItem(key, JSON.stringify(snapshot));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    captureFirstTouchAttribution: function() {
+      if (this.hasUtmSnapshotKey()) {
+        return this.readUtmSnapshot();
+      }
+
+      var fromUrl = this.readUtmsFromUrl();
+      if (!this.hasAnyValidUtm(fromUrl)) {
+        return null;
+      }
+
+      var snapshot = {
+        utm_source: fromUrl.utm_source,
+        utm_medium: fromUrl.utm_medium,
+        utm_campaign: fromUrl.utm_campaign,
+        utm_content: fromUrl.utm_content,
+        utm_term: fromUrl.utm_term,
+        captured_at: new Date().toISOString(),
+        landing_url: (typeof window !== 'undefined' && window.location && window.location.href)
+          ? String(window.location.href)
+          : null
+      };
+
+      this.writeUtmSnapshot(snapshot);
+      return snapshot;
+    },
+
+    /** UTM fields only (never exposes captured_at / landing_url for injection) */
+    getFirstTouchAttribution: function() {
+      var snapshot = this.readUtmSnapshot();
+      if (!snapshot || !this.isValidUtmSnapshot(snapshot)) return null;
+      return {
+        utm_source: snapshot.utm_source || null,
+        utm_medium: snapshot.utm_medium || null,
+        utm_campaign: snapshot.utm_campaign || null,
+        utm_content: snapshot.utm_content || null,
+        utm_term: snapshot.utm_term || null
+      };
+    },
+
+    valueIsNonEmpty: function(value) {
+      if (value === null || value === undefined) return false;
+      return String(value).trim() !== '';
+    },
+
+    bodyHasNonEmptyAlias: function(body, aliases) {
+      if (!body || typeof body !== 'object') return false;
+      var keys = Object.keys(body);
+      for (var i = 0; i < aliases.length; i++) {
+        var aliasLower = aliases[i].toLowerCase();
+        for (var j = 0; j < keys.length; j++) {
+          if (String(keys[j]).toLowerCase() === aliasLower && this.valueIsNonEmpty(body[keys[j]])) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+
+    formHasNonEmptyAlias: function(form, aliases) {
+      if (!form || !form.querySelector) return false;
+      for (var i = 0; i < aliases.length; i++) {
+        var alias = aliases[i];
+        var el = form.querySelector(
+          'input[name="' + alias + '"], select[name="' + alias + '"], textarea[name="' + alias + '"]'
+        );
+        if (el && this.valueIsNonEmpty(el.value)) {
+          return true;
+        }
+      }
+      return false;
+    },
+
+    formDataHasNonEmptyAlias: function(fd, aliases) {
+      if (!fd || typeof fd.get !== 'function') return false;
+      for (var i = 0; i < aliases.length; i++) {
+        if (this.valueIsNonEmpty(fd.get(aliases[i]))) {
+          return true;
+        }
+      }
+      return false;
+    },
+
+    urlSearchParamsHasNonEmptyAlias: function(params, aliases) {
+      if (!params || typeof params.get !== 'function') return false;
+      for (var i = 0; i < aliases.length; i++) {
+        if (this.valueIsNonEmpty(params.get(aliases[i]))) {
+          return true;
+        }
+      }
+      return false;
+    },
+
+    injectUtmsIntoBody: function(bodyData) {
+      if (!bodyData || typeof bodyData !== 'object' || Array.isArray(bodyData)) {
+        return bodyData;
+      }
+      var attr = this.getFirstTouchAttribution();
+      if (!attr || !this.hasAnyValidUtm(attr)) return bodyData;
+
+      var groups = this.UTM_ALIAS_GROUPS;
+      var utmKeys = Object.keys(groups);
+      for (var i = 0; i < utmKeys.length; i++) {
+        var utmKey = utmKeys[i];
+        var value = attr[utmKey];
+        if (!value) continue;
+        var aliases = groups[utmKey];
+        if (this.bodyHasNonEmptyAlias(bodyData, aliases)) continue;
+
+        var filled = false;
+        var keys = Object.keys(bodyData);
+        for (var a = 0; a < aliases.length && !filled; a++) {
+          var aliasLower = aliases[a].toLowerCase();
+          for (var k = 0; k < keys.length; k++) {
+            if (String(keys[k]).toLowerCase() === aliasLower) {
+              if (!this.valueIsNonEmpty(bodyData[keys[k]])) {
+                bodyData[keys[k]] = value;
+              }
+              filled = true;
+              break;
+            }
+          }
+        }
+        if (!filled) {
+          bodyData[utmKey] = value;
+        }
+      }
+      return bodyData;
+    },
+
+    injectUtmsIntoForm: function(form) {
+      if (!form) return;
+      var attr = this.getFirstTouchAttribution();
+      if (!attr || !this.hasAnyValidUtm(attr)) return;
+
+      var groups = this.UTM_ALIAS_GROUPS;
+      var utmKeys = Object.keys(groups);
+      for (var i = 0; i < utmKeys.length; i++) {
+        var utmKey = utmKeys[i];
+        var value = attr[utmKey];
+        if (!value) continue;
+        var aliases = groups[utmKey];
+        if (this.formHasNonEmptyAlias(form, aliases)) continue;
+
+        var existing = null;
+        for (var a = 0; a < aliases.length; a++) {
+          var el = form.querySelector(
+            'input[name="' + aliases[a] + '"], select[name="' + aliases[a] + '"], textarea[name="' + aliases[a] + '"]'
+          );
+          if (el) {
+            existing = el;
+            break;
+          }
+        }
+
+        if (existing) {
+          if (!this.valueIsNonEmpty(existing.value)) {
+            existing.value = value;
+          }
+        } else {
+          var hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = utmKey;
+          hidden.value = value;
+          form.appendChild(hidden);
+        }
+      }
+    },
+
+    injectUtmsIntoFormData: function(fd) {
+      if (!fd || typeof fd.append !== 'function') return;
+      var attr = this.getFirstTouchAttribution();
+      if (!attr || !this.hasAnyValidUtm(attr)) return;
+
+      var groups = this.UTM_ALIAS_GROUPS;
+      var utmKeys = Object.keys(groups);
+      for (var i = 0; i < utmKeys.length; i++) {
+        var utmKey = utmKeys[i];
+        var value = attr[utmKey];
+        if (!value) continue;
+        var aliases = groups[utmKey];
+        if (this.formDataHasNonEmptyAlias(fd, aliases)) continue;
+
+        var existingName = null;
+        for (var a = 0; a < aliases.length; a++) {
+          if (typeof fd.has === 'function' && fd.has(aliases[a])) {
+            existingName = aliases[a];
+            break;
+          }
+        }
+        if (existingName) {
+          if (typeof fd.set === 'function') {
+            fd.set(existingName, value);
+          }
+        } else {
+          fd.append(utmKey, value);
+        }
+      }
+    },
+
+    injectUtmsIntoURLSearchParams: function(params) {
+      if (!params || typeof params.get !== 'function') return;
+      var attr = this.getFirstTouchAttribution();
+      if (!attr || !this.hasAnyValidUtm(attr)) return;
+
+      var groups = this.UTM_ALIAS_GROUPS;
+      var utmKeys = Object.keys(groups);
+      for (var i = 0; i < utmKeys.length; i++) {
+        var utmKey = utmKeys[i];
+        var value = attr[utmKey];
+        if (!value) continue;
+        var aliases = groups[utmKey];
+        if (this.urlSearchParamsHasNonEmptyAlias(params, aliases)) continue;
+
+        var existingName = null;
+        for (var a = 0; a < aliases.length; a++) {
+          if (params.has(aliases[a])) {
+            existingName = aliases[a];
+            break;
+          }
+        }
+        if (existingName) {
+          if (!this.valueIsNonEmpty(params.get(existingName))) {
+            params.set(existingName, value);
+          }
+        } else {
+          params.set(utmKey, value);
+        }
+      }
+    },
+
+    ensureVisitorAndSessionOnBody: function(bodyData) {
+      if (!bodyData || typeof bodyData !== 'object') return bodyData;
+      if (!bodyData.visitor_id) {
+        bodyData.visitor_id = this.getOrCreateVisitorId();
+      }
+      if (!bodyData.session_id) {
+        bodyData.session_id = this.config.sessionId;
+      }
+      return bodyData;
+    },
+
+    ensureVisitorAndSessionOnFormData: function(fd) {
+      if (!fd) return;
+      if (!this.valueIsNonEmpty(fd.get('visitor_id'))) {
+        if (typeof fd.set === 'function' && fd.has('visitor_id')) {
+          fd.set('visitor_id', this.getOrCreateVisitorId());
+        } else {
+          fd.append('visitor_id', this.getOrCreateVisitorId());
+        }
+      }
+      if (!this.valueIsNonEmpty(fd.get('session_id'))) {
+        if (typeof fd.set === 'function' && fd.has('session_id')) {
+          fd.set('session_id', this.config.sessionId);
+        } else {
+          fd.append('session_id', this.config.sessionId);
+        }
+      }
+    },
+
+    ensureVisitorAndSessionOnURLSearchParams: function(params) {
+      if (!params) return;
+      if (!this.valueIsNonEmpty(params.get('visitor_id'))) {
+        params.set('visitor_id', this.getOrCreateVisitorId());
+      }
+      if (!this.valueIsNonEmpty(params.get('session_id'))) {
+        params.set('session_id', this.config.sessionId);
+      }
     },
     
     getDeviceType: function() {
@@ -458,6 +868,13 @@
           
           console.log('LovoCRM: ✅ Session ID adicionado:', sessionIdField.value);
         }
+
+        // First-touch UTMs (form/body > pixel; fail-open)
+        try {
+          self.injectUtmsIntoForm(form);
+        } catch (utmErr) {
+          console.log('LovoCRM: UTM form inject skipped', utmErr && utmErr.message ? utmErr.message : utmErr);
+        }
         
       } catch (error) {
         console.error('LovoCRM: Erro ao adicionar visitor_id:', error);
@@ -503,6 +920,12 @@
           sessionIdField.value = self.config.sessionId;
           console.log('LovoCRM: ✅ Session ID garantido:', sessionIdField.value);
         }
+
+        try {
+          self.injectUtmsIntoForm(form);
+        } catch (utmErr) {
+          console.log('LovoCRM: UTM form inject skipped', utmErr && utmErr.message ? utmErr.message : utmErr);
+        }
         
       } catch (error) {
         console.error('LovoCRM: Erro ao garantir visitor_id:', error);
@@ -533,46 +956,32 @@
               console.log('LovoCRM: Interceptando requisição fetch para webhook');
               
               try {
-                // Tentar parsear o body como JSON
-                let bodyData;
-                if (typeof options.body === 'string') {
-                  bodyData = JSON.parse(options.body);
-                } else if (options.body instanceof FormData) {
-                  // Converter FormData para objeto
-                  bodyData = {};
-                  for (let [key, value] of options.body.entries()) {
-                    bodyData[key] = value;
+                var body = options.body;
+
+                if (typeof body === 'string') {
+                  var bodyData;
+                  try {
+                    bodyData = JSON.parse(body);
+                  } catch (jsonErr) {
+                    // Non-JSON string: do not modify
+                    bodyData = null;
                   }
-                } else {
-                  bodyData = options.body;
-                }
-                
-                // Adicionar visitor_id se não existir
-                if (!bodyData.visitor_id) {
-                  bodyData.visitor_id = self.getOrCreateVisitorId();
-                  console.log('LovoCRM: ✅ Visitor ID adicionado ao fetch:', bodyData.visitor_id);
-                }
-                
-                // Adicionar session_id se não existir
-                if (!bodyData.session_id) {
-                  bodyData.session_id = self.config.sessionId;
-                  console.log('LovoCRM: ✅ Session ID adicionado ao fetch:', bodyData.session_id);
-                }
-                
-                // Atualizar o body da requisição
-                if (options.body instanceof FormData) {
-                  // Recriar FormData com novos campos
-                  const newFormData = new FormData();
-                  for (let [key, value] of Object.entries(bodyData)) {
-                    newFormData.append(key, value);
+                  if (bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
+                    self.ensureVisitorAndSessionOnBody(bodyData);
+                    self.injectUtmsIntoBody(bodyData);
+                    options.body = JSON.stringify(bodyData);
+                    console.log('LovoCRM: 🚀 Fetch JSON enriquecido com visitor/session/UTM');
                   }
-                  options.body = newFormData;
-                } else {
-                  // Atualizar JSON
-                  options.body = JSON.stringify(bodyData);
+                } else if (typeof FormData !== 'undefined' && body instanceof FormData) {
+                  self.ensureVisitorAndSessionOnFormData(body);
+                  self.injectUtmsIntoFormData(body);
+                  console.log('LovoCRM: 🚀 Fetch FormData enriquecido com visitor/session/UTM');
+                } else if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+                  self.ensureVisitorAndSessionOnURLSearchParams(body);
+                  self.injectUtmsIntoURLSearchParams(body);
+                  console.log('LovoCRM: 🚀 Fetch URLSearchParams enriquecido com visitor/session/UTM');
                 }
-                
-                console.log('LovoCRM: 🚀 Requisição enriquecida com visitor_id');
+                // Blob / ArrayBuffer / ReadableStream / other: leave untouched
                 
               } catch (error) {
                 console.error('LovoCRM: Erro ao processar body da requisição:', error);
@@ -604,26 +1013,21 @@
               console.log('LovoCRM: Interceptando requisição XMLHttpRequest para webhook');
               
               try {
-                let bodyData;
                 if (typeof data === 'string') {
-                  bodyData = JSON.parse(data);
-                  
-                  // Adicionar visitor_id se não existir
-                  if (!bodyData.visitor_id) {
-                    bodyData.visitor_id = self.getOrCreateVisitorId();
-                    console.log('LovoCRM: ✅ Visitor ID adicionado ao XHR:', bodyData.visitor_id);
+                  var bodyData;
+                  try {
+                    bodyData = JSON.parse(data);
+                  } catch (jsonErr) {
+                    bodyData = null;
                   }
-                  
-                  // Adicionar session_id se não existir
-                  if (!bodyData.session_id) {
-                    bodyData.session_id = self.config.sessionId;
-                    console.log('LovoCRM: ✅ Session ID adicionado ao XHR:', bodyData.session_id);
+                  if (bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
+                    self.ensureVisitorAndSessionOnBody(bodyData);
+                    self.injectUtmsIntoBody(bodyData);
+                    data = JSON.stringify(bodyData);
+                    console.log('LovoCRM: 🚀 XHR JSON enriquecido com visitor/session/UTM');
                   }
-                  
-                  // Atualizar dados
-                  data = JSON.stringify(bodyData);
-                  console.log('LovoCRM: 🚀 XHR enriquecido com visitor_id');
                 }
+                // FormData / other XHR bodies: limitation preserved (no broad restructure)
               } catch (error) {
                 console.error('LovoCRM: Erro ao processar XHR data:', error);
                 // Continuar com dados originais se houver erro
