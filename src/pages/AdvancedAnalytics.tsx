@@ -41,6 +41,32 @@ const DATE_RANGES: DateRange[] = [
   { start: '90', end: '0', label: 'Últimos 90 dias' },
 ];
 
+/** Label curto + tooltip completo para coluna Origem (evita URL longa estourar a tabela). */
+function formatVisitorOrigin(visitor: {
+  utm_source?: string | null;
+  referrer?: string | null;
+}): { label: string; title: string } {
+  if (visitor.utm_source) {
+    return { label: visitor.utm_source, title: visitor.utm_source };
+  }
+  const ref = visitor.referrer;
+  if (!ref || ref === 'direct') {
+    return { label: 'Direto', title: 'Direto' };
+  }
+  try {
+    const u = new URL(ref);
+    const path = u.pathname === '/' ? '' : u.pathname.replace(/\/$/, '');
+    const short = `${u.hostname}${path}`;
+    return { label: short || ref, title: ref };
+  } catch {
+    const withoutQuery = ref.split('?')[0];
+    return {
+      label: withoutQuery.length > 48 ? `${withoutQuery.slice(0, 45)}...` : withoutQuery,
+      title: ref,
+    };
+  }
+}
+
 export const AdvancedAnalytics: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -446,13 +472,18 @@ export const AdvancedAnalytics: React.FC = () => {
               <div className="space-y-4">
                 {Object.entries(data.referrerBreakdown).slice(0, 5).map(([referrer, count]) => {
                   const percentage = (count / data.totalVisitors) * 100;
-                  const displayName = referrer === 'direct' ? 'Direto' : referrer;
+                  const origin = formatVisitorOrigin({ referrer });
                   
                   return (
                     <div key={referrer} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-700">{displayName}</span>
-                        <div className="text-right">
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          className="text-sm font-medium text-slate-700 truncate min-w-0"
+                          title={origin.title}
+                        >
+                          {origin.label}
+                        </span>
+                        <div className="text-right shrink-0">
                           <span className="text-sm font-semibold text-slate-900">{count}</span>
                           <span className="text-xs text-slate-500 ml-2">({percentage.toFixed(1)}%)</span>
                         </div>
@@ -483,21 +514,22 @@ export const AdvancedAnalytics: React.FC = () => {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-fixed min-w-[720px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Visitor ID</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Tipo</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Dispositivo</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Origem</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Data e Hora</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Detalhes</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[12%]">Visitor ID</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[12%]">Tipo</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[12%]">Dispositivo</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[28%]">Origem</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[20%]">Data e Hora</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 w-[16%]">Detalhes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.visitors.slice(0, 20).map((visitor) => {
                     const isReturning = visitor.visitor_id ? 
                       data.visitors.filter(v => v.visitor_id === visitor.visitor_id).length > 1 : false;
+                    const origin = formatVisitorOrigin(visitor);
                     
                     return (
                       <tr key={visitor.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -514,14 +546,15 @@ export const AdvancedAnalytics: React.FC = () => {
                         <td className="py-3 px-4 text-sm text-slate-600 capitalize">
                           {visitor.device_type}
                         </td>
-                        <td className="py-3 px-4 text-sm text-slate-600">
-                          {visitor.utm_source
-                            ? visitor.utm_source
-                            : visitor.referrer === 'direct'
-                              ? 'Direto'
-                              : visitor.referrer || 'N/A'}
+                        <td className="py-3 px-4 text-sm text-slate-600 max-w-0">
+                          <span
+                            className="block truncate"
+                            title={origin.title}
+                          >
+                            {origin.label || 'N/A'}
+                          </span>
                         </td>
-                        <td className="py-3 px-4 text-sm text-slate-600">
+                        <td className="py-3 px-4 text-sm text-slate-600 whitespace-nowrap">
                           {new Date(visitor.created_at).toLocaleString('pt-BR', {
                             timeZone: 'America/Sao_Paulo',
                             day: '2-digit',
@@ -636,7 +669,10 @@ export const AdvancedAnalytics: React.FC = () => {
                   <div className="bg-slate-50 p-4 rounded-lg">
                     <h4 className="font-medium text-slate-900 mb-2">Origem</h4>
                     <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">Referrer:</span> {selectedVisitor.referrer || 'Direto'}</div>
+                      <div className="break-all">
+                        <span className="font-medium">Referrer:</span>{' '}
+                        {selectedVisitor.referrer || 'Direto'}
+                      </div>
                       <div><span className="font-medium">UTM Source:</span> {selectedVisitor.utm_source || 'N/A'}</div>
                       <div><span className="font-medium">UTM Medium:</span> {selectedVisitor.utm_medium || 'N/A'}</div>
                       <div><span className="font-medium">UTM Campaign:</span> {selectedVisitor.utm_campaign || 'N/A'}</div>
