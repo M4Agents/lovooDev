@@ -717,9 +717,18 @@ export default async function handler(req, res) {
     // mas não deve seguir para o pipeline — removido explicitamente aqui.
     delete canonical.api_key;
 
+    // SaaS: se o intermediário não mandou visitor_id, casa sinal do pixel (company+phone/email)
+    let consumedSignalId = null;
+    try {
+      consumedSignalId = await attachVisitorFromConversionSignal(svcClient, companyId, canonical);
+    } catch (err) {
+      console.error('[webhook-lead] conversion signal attach failed', { message: err?.message });
+    }
+
     // ── 10. Criação atômica do lead via RPC restrita a service_role ───────────
     // company_id vem do step 7 — nunca de req.body nem de canonical
     // A RPC valida empresa ativa + max_leads + deduplica + insere em uma transação
+    // Com visitor_id (payload ou sinal), create_lead_from_company herda UTM da visita
     const { data: lead, error: leadError } = await svcClient.rpc('create_lead_from_company', {
       p_company_id: companyId,
       lead_data: {
@@ -745,6 +754,17 @@ export default async function handler(req, res) {
         p_request_id: requestId, p_result: 'error', p_error_code: 'rpc_error',
       })).catch(() => {});
       return res.status(500).json({ success: false, error: 'internal_error' });
+    }
+
+    if (consumedSignalId && lead?.lead_id) {
+      Promise.resolve(
+        svcClient
+          .from('lead_conversion_signals')
+          .update({ lead_id: lead.lead_id, consumed_at: new Date().toISOString() })
+          .eq('id', consumedSignalId)
+      ).catch((err) =>
+        console.error('[webhook-lead] failed to stamp conversion signal', { message: err?.message })
+      );
     }
 
     if (!lead?.success) {
@@ -951,7 +971,45 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
     }
   }
 
+  // 5. Visitor ↔ lead (sync): payload visitor_id ou sinal do pixel
+  try {
+    if (canonical.visitor_id) {
+      await processVisitorConnection(svcClient, lead.lead_id, companyId, canonical.visitor_id, canonical);
+    }
+  } catch (err) {
+    console.error('[webhook-lead] Visitor connection failed (sync)', { message: err?.message });
+  }
+
   return customFieldsProcessed;
+}
+
+/** Attach persistent visitor_id from pixel conversion signal (company + phone/email). */
+async function attachVisitorFromConversionSignal(svcClient, companyId, canonical) {
+  if (!canonical || canonical.visitor_id) return null;
+  if (!canonical.phone && !canonical.email) return null;
+
+  const { data, error } = await svcClient.rpc('consume_conversion_signal_for_lead', {
+    p_company_id: companyId,
+    p_phone: canonical.phone || null,
+    p_email: canonical.email || null,
+  });
+
+  if (error) {
+    console.error('[webhook-lead] consume_conversion_signal_for_lead error', { message: error.message });
+    return null;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.success !== true || !row.persistent_visitor_id) {
+    return null;
+  }
+
+  canonical.visitor_id = String(row.persistent_visitor_id);
+  console.log('[webhook-lead] visitor_id attached from conversion signal', {
+    signal_id: row.signal_id || null,
+    visitor_id_prefix: canonical.visitor_id.slice(0, 8),
+  });
+  return row.signal_id || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -963,16 +1021,8 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
 async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields }) {
   const companyId = lead.company_id;
 
-  // 1. Visitor connection
-  try {
-    if (canonical.visitor_id) {
-      await processVisitorConnection(svcClient, lead.lead_id, companyId, canonical.visitor_id, canonical);
-    } else {
-      await processRetroactiveVisitorSearch(svcClient, lead.lead_id, companyId, canonical);
-    }
-  } catch (err) {
-    console.error('[webhook-lead] Visitor connection failed', { message: err?.message });
-  }
+  // 1. Visitor connection — already handled sync in executeLeadCriticalPostCreate when visitor_id present.
+  //    Keep async only as no-op placeholder for advanced webhooks below.
 
   // 2. Webhooks avançados — usa customFieldsProcessed já disponível
   try {
@@ -1164,10 +1214,11 @@ async function processVisitorConnection(supabase, leadId, companyId, visitorId, 
       // 2. Calcular engagement score baseado nos dados
       const engagementScore = calculateEngagementScore(visitorData);
       
-      // 3. Criar registro na tabela conversions (conecta analytics + CRM)
+      // 3. Criar registro na tabela conversions (FK = visitors.id / visit_id)
+      const visitRowId = visitorData.id || visitorId;
       const conversionData = {
         id: generateUUID(),
-        visitor_id: visitorId,
+        visitor_id: visitRowId,
         landing_page_id: visitorData.landing_page_id,
         form_data: {
           name: detectedFields.name,
@@ -1195,7 +1246,7 @@ async function processVisitorConnection(supabase, leadId, companyId, visitorId, 
       const { data: existingConversion } = await supabase
         .from('conversions')
         .select('id')
-        .eq('visitor_id', visitorId)
+        .eq('visitor_id', visitRowId)
         .limit(1)
         .single();
       
@@ -1215,11 +1266,13 @@ async function processVisitorConnection(supabase, leadId, companyId, visitorId, 
         }
       }
       
-      // 6. Atualizar lead com visitor_id (se campo existir)
+      // 6. Atualizar lead com persistent visitor_id (TEXT)
+      const persistentId = visitorData.visitor_id || visitorId;
       const { error: updateError } = await supabase
         .from('leads')
-        .update({ visitor_id: visitorId })
-        .eq('id', leadId);
+        .update({ visitor_id: persistentId })
+        .eq('id', leadId)
+        .eq('company_id', companyId);
       
       if (updateError) {
         console.error('Erro ao atualizar visitor_id no lead:', updateError);

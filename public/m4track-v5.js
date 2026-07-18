@@ -344,8 +344,89 @@
       return (
         u.indexOf('/api/webhook-visitor') !== -1 ||
         u.indexOf('/api/collect') !== -1 ||
-        u.indexOf('/api/track') !== -1
+        u.indexOf('/api/track') !== -1 ||
+        u.indexOf('/api/conversion-signal') !== -1
       );
+    },
+
+    extractContactFromObject: function(obj) {
+      if (!obj || typeof obj !== 'object') return null;
+      var phone = null;
+      var email = null;
+      var name = null;
+      var phoneKeys = ['phone', 'whatsapp', 'telefone', 'tel', 'celular', 'mobile'];
+      var emailKeys = ['email', 'e-mail'];
+      var nameKeys = ['name', 'nome', 'full_name', 'fullname'];
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; i++) {
+        var k = String(keys[i]).toLowerCase();
+        var v = obj[keys[i]];
+        if (!this.valueIsNonEmpty(v)) continue;
+        if (!phone && phoneKeys.indexOf(k) !== -1) phone = String(v).trim();
+        if (!email && emailKeys.indexOf(k) !== -1) email = String(v).trim();
+        if (!name && nameKeys.indexOf(k) !== -1) name = String(v).trim();
+      }
+      if (!phone && !email) return null;
+      return { phone: phone, email: email, name: name };
+    },
+
+    extractContactFromForm: function(form) {
+      if (!form || !form.querySelector) return null;
+      function val(names) {
+        for (var i = 0; i < names.length; i++) {
+          var el = form.querySelector(
+            'input[name="' + names[i] + '"], select[name="' + names[i] + '"], textarea[name="' + names[i] + '"]'
+          );
+          if (el && String(el.value || '').trim()) return String(el.value).trim();
+        }
+        return null;
+      }
+      var phone = val(['phone', 'whatsapp', 'telefone', 'tel', 'celular', 'mobile']);
+      var email = val(['email', 'e-mail']);
+      var name = val(['name', 'nome', 'full_name', 'fullname']);
+      if (!phone && !email) return null;
+      return { phone: phone, email: email, name: name };
+    },
+
+    /** Fire-and-forget signal to Lovoo so leads can attach visitor_id without n8n forwarding it */
+    sendConversionSignal: function(contact) {
+      try {
+        if (!this.config.isInitialized || !contact || (!contact.phone && !contact.email)) {
+          return;
+        }
+        var payload = {
+          tracking_code: this.config.trackingCode,
+          visitor_id: this.getOrCreateVisitorId(),
+          session_id: this.config.sessionId,
+          phone: contact.phone || null,
+          email: contact.email || null,
+          name: contact.name || null
+        };
+        var url = this.config.apiUrl + '/api/conversion-signal';
+        var body = JSON.stringify(payload);
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+          try {
+            var blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon(url, blob)) {
+              console.log('LovoCRM: Conversion signal sent via beacon');
+              return;
+            }
+          } catch (beaconErr) { /* fall through */ }
+        }
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true,
+          mode: 'cors'
+        }).then(function () {
+          console.log('LovoCRM: Conversion signal sent via fetch');
+        }).catch(function () {
+          console.warn('LovoCRM: Conversion signal failed (non-blocking)');
+        });
+      } catch (e) {
+        /* fail-open */
+      }
     },
 
     injectUtmsIntoBody: function(bodyData) {
@@ -827,53 +908,35 @@
         console.log('LovoCRM: Analisando formulário - Action:', action, 'Method:', method);
         
         // Critérios mais amplos de detecção
-        const isWebhookForm = action.includes('webhook-lead') || 
+        const isWebhookForm = action.includes('webhook-lead') ||
                              action.includes('lovoocrm.com') ||
                              action.includes('app.lovoocrm.com') ||
-                             action.includes('/api/webhook');
+                             action.includes('/api/webhook') ||
+                             action.includes('m4track.com.br') ||
+                             action.includes('webhooks.');
         
         let isLovoCRMForm = isWebhookForm;
         
         if (!isWebhookForm) {
-          // Verificar se tem campo api_key (indicativo de webhook LovoCRM)
           const apiKeyField = form.querySelector('input[name="api_key"]');
-          const apiKeyValue = apiKeyField ? apiKeyField.value : '';
-          
-          console.log('LovoCRM: Campo api_key encontrado:', !!apiKeyField, 'Valor:', apiKeyValue ? 'presente' : 'vazio');
-          
-          // RELAXADO: Aceitar campo api_key mesmo sem valor (pode ser preenchido via JS)
           if (apiKeyField) {
             isLovoCRMForm = true;
-            console.log('LovoCRM: Formulário identificado por campo api_key (valor pode ser definido dinamicamente)');
           }
         }
         
-        // Verificar também por outros indicadores (critérios mais flexíveis)
         if (!isLovoCRMForm) {
-          // Verificar se tem campos típicos de lead
           const hasLeadFields = form.querySelector('input[name="nome"], input[name="name"], input[name="email"]');
-          const hasApiKeyField = form.querySelector('input[name="api_key"]'); // Qualquer tipo
-          
-          console.log('LovoCRM: Campos de lead encontrados:', !!hasLeadFields, 'Campo api_key encontrado:', !!hasApiKeyField);
-          
-          // FLEXÍVEL: Se tem campos de lead E campo api_key (qualquer tipo)
-          if (hasLeadFields && hasApiKeyField) {
+          const hasContactFields = form.querySelector(
+            'input[name="telefone"], input[name="phone"], input[name="whatsapp"], input[name="celular"], textarea[name="mensagem"], textarea[name="message"]'
+          );
+          if (hasLeadFields && hasContactFields) {
             isLovoCRMForm = true;
-            console.log('LovoCRM: Formulário identificado por campos de lead + api_key');
-          }
-          
-          // AINDA MAIS FLEXÍVEL: Se tem campos de lead e parece ser formulário de contato
-          if (!isLovoCRMForm && hasLeadFields) {
-            const hasContactFields = form.querySelector('input[name="telefone"], input[name="phone"], textarea[name="mensagem"], textarea[name="message"]');
-            if (hasContactFields) {
-              console.log('LovoCRM: Formulário com campos de lead e contato - assumindo LovoCRM');
-              isLovoCRMForm = true;
-            }
+            console.log('LovoCRM: Formulário lead-like (nome/contato) — interceptando para sinal de conversão');
           }
         }
         
         if (!isLovoCRMForm) {
-          console.log('LovoCRM: Formulário não é LovoCRM, ignorando');
+          console.log('LovoCRM: Formulário não é lead-like, ignorando');
           return;
         }
         
@@ -886,12 +949,11 @@
         // TAMBÉM interceptar submit com capture phase (executa ANTES da serialização)
         form.addEventListener('submit', function(e) {
           console.log('LovoCRM: Submit interceptado - garantindo visitor_id...');
-          
-          // Garantir que visitor_id ainda está presente
           self.ensureVisitorIdPresent(form);
-          
-          console.log('LovoCRM: ✅ Visitor_id garantido - formulário continua envio normal');
-        }, true); // true = capture phase (executa ANTES)
+          var contact = self.extractContactFromForm(form);
+          if (contact) self.sendConversionSignal(contact);
+          console.log('LovoCRM: ✅ Visitor_id + conversion signal — formulário continua envio normal');
+        }, true);
         
       } catch (error) {
         console.error('LovoCRM: Erro ao interceptar formulário:', error);
@@ -1030,6 +1092,10 @@
                       }
                       options.body = JSON.stringify(bodyData);
                       enriched = true;
+                      if (leadLike || isLovoo) {
+                        var contactFetch = self.extractContactFromObject(bodyData);
+                        if (contactFetch) self.sendConversionSignal(contactFetch);
+                      }
                     }
                   }
                 } else if (typeof FormData !== 'undefined' && body instanceof FormData) {
@@ -1040,6 +1106,12 @@
                       injectUtm = true;
                     }
                     enriched = true;
+                    var contactFd = self.extractContactFromObject({
+                      name: body.get('name') || body.get('nome'),
+                      phone: body.get('phone') || body.get('whatsapp') || body.get('telefone'),
+                      email: body.get('email')
+                    });
+                    if (contactFd) self.sendConversionSignal(contactFd);
                   }
                 } else if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
                   if (isLovoo || self.urlSearchParamsLookLikeLeadPayload(body)) {
@@ -1049,6 +1121,12 @@
                       injectUtm = true;
                     }
                     enriched = true;
+                    var contactSp = self.extractContactFromObject({
+                      name: body.get('name') || body.get('nome'),
+                      phone: body.get('phone') || body.get('whatsapp') || body.get('telefone'),
+                      email: body.get('email')
+                    });
+                    if (contactSp) self.sendConversionSignal(contactSp);
                   }
                 }
 
@@ -1094,6 +1172,8 @@
                         injectUtmXhr = true;
                       }
                       data = JSON.stringify(bodyData);
+                      var contactXhr = self.extractContactFromObject(bodyData);
+                      if (contactXhr) self.sendConversionSignal(contactXhr);
                       console.log('LovoCRM: XHR enriquecido (' + (injectUtmXhr ? 'visitor+UTM' : 'visitor/session') + ')');
                     }
                   }
