@@ -720,6 +720,9 @@ export default async function handler(req, res) {
     // ── 10. Criação atômica do lead via RPC restrita a service_role ───────────
     // company_id vem do step 7 — nunca de req.body nem de canonical
     // A RPC valida empresa ativa + max_leads + deduplica + insere em uma transação
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f79aef'},body:JSON.stringify({sessionId:'f79aef',runId:'utm-track',hypothesisId:'H3',location:'webhook-lead.js:create_lead',message:'lead create inputs for UTM inheritance',data:{hasVisitorId:!!canonical.visitor_id,visitor_id_prefix:typeof canonical.visitor_id==='string'?canonical.visitor_id.slice(0,8):null,payloadHasUtm:!!(canonical.utm_source||canonical.utm_medium||canonical.campanha||canonical.conjunto_anuncio||canonical.anuncio),utm_source:canonical.utm_source||null,utm_medium:canonical.utm_medium||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const { data: lead, error: leadError } = await svcClient.rpc('create_lead_from_company', {
       p_company_id: companyId,
       lead_data: {

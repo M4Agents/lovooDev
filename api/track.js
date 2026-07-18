@@ -307,6 +307,11 @@ async function createCanonicalVisit(params, apiUrl, apiKey) {
     p_referrer: params.referrer ?? null,
     p_timezone: params.timezone ?? null,
     p_language: params.language ?? null,
+    p_utm_source: sanitizeUtm(params.utm_source, 255),
+    p_utm_medium: sanitizeUtm(params.utm_medium, 100),
+    p_utm_campaign: sanitizeUtm(params.utm_campaign, 255),
+    p_utm_content: sanitizeUtm(params.utm_content, 255),
+    p_utm_term: sanitizeUtm(params.utm_term, 255),
   };
 
   try {
@@ -350,6 +355,14 @@ function normalizeDeviceType(value) {
     return value;
   }
   return null;
+}
+
+function sanitizeUtm(value, maxLen) {
+  if (value === null || value === undefined) return null;
+  const raw = Array.isArray(value) ? value[0] : value;
+  const str = String(raw).trim();
+  if (!str) return null;
+  return str.slice(0, maxLen);
 }
 
 function generateUUID() {

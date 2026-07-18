@@ -299,6 +299,55 @@
       return false;
     },
 
+    /** Lead-like convert body: name + contact (any host). Used only to attach visitor_id/session. */
+    bodyLooksLikeLeadPayload: function(body) {
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+      var hasName = this.bodyHasNonEmptyAlias(body, ['name', 'nome', 'full_name', 'fullname']);
+      var hasContact = this.bodyHasNonEmptyAlias(body, [
+        'phone', 'whatsapp', 'telefone', 'tel', 'celular', 'email', 'e-mail'
+      ]);
+      return hasName && hasContact;
+    },
+
+    formDataLooksLikeLeadPayload: function(fd) {
+      if (!fd || typeof fd.get !== 'function') return false;
+      var hasName = this.formDataHasNonEmptyAlias(fd, ['name', 'nome', 'full_name', 'fullname']);
+      var hasContact = this.formDataHasNonEmptyAlias(fd, [
+        'phone', 'whatsapp', 'telefone', 'tel', 'celular', 'email', 'e-mail'
+      ]);
+      return hasName && hasContact;
+    },
+
+    urlSearchParamsLookLikeLeadPayload: function(params) {
+      if (!params || typeof params.get !== 'function') return false;
+      var hasName = this.urlSearchParamsHasNonEmptyAlias(params, ['name', 'nome', 'full_name', 'fullname']);
+      var hasContact = this.urlSearchParamsHasNonEmptyAlias(params, [
+        'phone', 'whatsapp', 'telefone', 'tel', 'celular', 'email', 'e-mail'
+      ]);
+      return hasName && hasContact;
+    },
+
+    isLovooLeadUrl: function(urlStr) {
+      if (!urlStr) return false;
+      var u = String(urlStr);
+      return (
+        u.indexOf('webhook-lead') !== -1 ||
+        u.indexOf('lovoocrm.com') !== -1 ||
+        u.indexOf('app.lovoocrm.com') !== -1 ||
+        u.indexOf('/api/webhook') !== -1
+      );
+    },
+
+    isTrackingEndpointUrl: function(urlStr) {
+      if (!urlStr) return false;
+      var u = String(urlStr);
+      return (
+        u.indexOf('/api/webhook-visitor') !== -1 ||
+        u.indexOf('/api/collect') !== -1 ||
+        u.indexOf('/api/track') !== -1
+      );
+    },
+
     injectUtmsIntoBody: function(bodyData) {
       if (!bodyData || typeof bodyData !== 'object' || Array.isArray(bodyData)) {
         return bodyData;
@@ -491,7 +540,7 @@
       if (!this.config.isInitialized) {
         return Promise.resolve();
       }
-      
+
       const visitorData = {
         tracking_code: this.config.trackingCode,
         session_id: this.config.sessionId,
@@ -503,7 +552,21 @@
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         language: navigator.language
       };
-      
+
+      // First-touch UTM goes on the visit (not required on form convert)
+      var attr = this.getFirstTouchAttribution();
+      if (attr && this.hasAnyValidUtm(attr)) {
+        visitorData.utm_source = attr.utm_source || null;
+        visitorData.utm_medium = attr.utm_medium || null;
+        visitorData.utm_campaign = attr.utm_campaign || null;
+        visitorData.utm_content = attr.utm_content || null;
+        visitorData.utm_term = attr.utm_term || null;
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f79aef'},body:JSON.stringify({sessionId:'f79aef',runId:'utm-track',hypothesisId:'H1',location:'m4track-v5.js:trackVisitor',message:'visit payload with first-touch UTM',data:{hasUtm:!!(visitorData.utm_source||visitorData.utm_medium||visitorData.utm_campaign||visitorData.utm_content||visitorData.utm_term),utm_source:visitorData.utm_source||null,utm_medium:visitorData.utm_medium||null,utm_campaign:visitorData.utm_campaign||null,visitor_id_prefix:String(visitorData.visitor_id||'').slice(0,8)},timestamp:Date.now()})}).catch(function(){});
+      // #endregion
+
       console.log('M4Track: Tracking visitor via webhook approach');
       return this.sendDataViaWebhook('visitor', visitorData);
     },
@@ -932,7 +995,7 @@
       }
     },
     
-    // NOVA FUNÇÃO: Interceptar requisições HTTP (fetch/axios) para React/SPA
+    // Interceptar fetch/XHR: Lovoo URLs = visitor+UTM; lead-like qualquer host = só visitor/session
     setupHttpInterception: function() {
       const self = this;
       
@@ -944,52 +1007,66 @@
           const originalFetch = window.fetch;
           
           window.fetch = function(url, options) {
-            // Verificar se é uma requisição para webhook LovoCRM
-            const isWebhookRequest = url && (
-              url.includes('webhook-lead') ||
-              url.includes('lovoocrm.com') ||
-              url.includes('app.lovoocrm.com') ||
-              url.includes('/api/webhook')
-            );
-            
-            if (isWebhookRequest && options && options.body) {
-              console.log('LovoCRM: Interceptando requisição fetch para webhook');
-              
+            var urlStr = typeof url === 'string' ? url : (url && url.url ? String(url.url) : '');
+            var isTracking = self.isTrackingEndpointUrl(urlStr);
+            var isLovoo = self.isLovooLeadUrl(urlStr);
+
+            if (!isTracking && options && options.body) {
               try {
                 var body = options.body;
+                var enriched = false;
+                var injectUtm = false;
 
                 if (typeof body === 'string') {
                   var bodyData;
                   try {
                     bodyData = JSON.parse(body);
                   } catch (jsonErr) {
-                    // Non-JSON string: do not modify
                     bodyData = null;
                   }
                   if (bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
-                    self.ensureVisitorAndSessionOnBody(bodyData);
-                    self.injectUtmsIntoBody(bodyData);
-                    options.body = JSON.stringify(bodyData);
-                    console.log('LovoCRM: 🚀 Fetch JSON enriquecido com visitor/session/UTM');
+                    var leadLike = self.bodyLooksLikeLeadPayload(bodyData);
+                    if (isLovoo || leadLike) {
+                      self.ensureVisitorAndSessionOnBody(bodyData);
+                      if (isLovoo) {
+                        self.injectUtmsIntoBody(bodyData);
+                        injectUtm = true;
+                      }
+                      options.body = JSON.stringify(bodyData);
+                      enriched = true;
+                    }
                   }
                 } else if (typeof FormData !== 'undefined' && body instanceof FormData) {
-                  self.ensureVisitorAndSessionOnFormData(body);
-                  self.injectUtmsIntoFormData(body);
-                  console.log('LovoCRM: 🚀 Fetch FormData enriquecido com visitor/session/UTM');
+                  if (isLovoo || self.formDataLooksLikeLeadPayload(body)) {
+                    self.ensureVisitorAndSessionOnFormData(body);
+                    if (isLovoo) {
+                      self.injectUtmsIntoFormData(body);
+                      injectUtm = true;
+                    }
+                    enriched = true;
+                  }
                 } else if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
-                  self.ensureVisitorAndSessionOnURLSearchParams(body);
-                  self.injectUtmsIntoURLSearchParams(body);
-                  console.log('LovoCRM: 🚀 Fetch URLSearchParams enriquecido com visitor/session/UTM');
+                  if (isLovoo || self.urlSearchParamsLookLikeLeadPayload(body)) {
+                    self.ensureVisitorAndSessionOnURLSearchParams(body);
+                    if (isLovoo) {
+                      self.injectUtmsIntoURLSearchParams(body);
+                      injectUtm = true;
+                    }
+                    enriched = true;
+                  }
                 }
-                // Blob / ArrayBuffer / ReadableStream / other: leave untouched
-                
+
+                if (enriched) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f79aef'},body:JSON.stringify({sessionId:'f79aef',runId:'utm-track',hypothesisId:'H4',location:'m4track-v5.js:setupHttpInterception:fetch',message:'convert request enriched',data:{isLovoo:!!isLovoo,injectUtm:!!injectUtm,host:(function(){try{return new URL(urlStr,window.location.href).hostname;}catch(e){return 'unknown';}})()},mode:'visitor_session'+(injectUtm?'+utm':'')},timestamp:Date.now()})}).catch(function(){});
+                  // #endregion
+                  console.log('LovoCRM: Fetch enriquecido (' + (injectUtm ? 'visitor+UTM' : 'visitor/session') + ')');
+                }
               } catch (error) {
                 console.error('LovoCRM: Erro ao processar body da requisição:', error);
-                // Continuar com requisição original se houver erro
               }
             }
             
-            // Chamar fetch original com dados (possivelmente) modificados
             return originalFetch.apply(this, arguments);
           };
           
@@ -1001,17 +1078,11 @@
           const originalXHRSend = XMLHttpRequest.prototype.send;
           
           XMLHttpRequest.prototype.send = function(data) {
-            // Verificar se é uma requisição para webhook LovoCRM
-            const isWebhookRequest = this._url && (
-              this._url.includes('webhook-lead') ||
-              this._url.includes('lovoocrm.com') ||
-              this._url.includes('app.lovoocrm.com') ||
-              this._url.includes('/api/webhook')
-            );
-            
-            if (isWebhookRequest && data) {
-              console.log('LovoCRM: Interceptando requisição XMLHttpRequest para webhook');
-              
+            var urlStr = this._url ? String(this._url) : '';
+            var isTracking = self.isTrackingEndpointUrl(urlStr);
+            var isLovoo = self.isLovooLeadUrl(urlStr);
+
+            if (!isTracking && data) {
               try {
                 if (typeof data === 'string') {
                   var bodyData;
@@ -1021,20 +1092,27 @@
                     bodyData = null;
                   }
                   if (bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
-                    self.ensureVisitorAndSessionOnBody(bodyData);
-                    self.injectUtmsIntoBody(bodyData);
-                    data = JSON.stringify(bodyData);
-                    console.log('LovoCRM: 🚀 XHR JSON enriquecido com visitor/session/UTM');
+                    var leadLikeXhr = self.bodyLooksLikeLeadPayload(bodyData);
+                    if (isLovoo || leadLikeXhr) {
+                      self.ensureVisitorAndSessionOnBody(bodyData);
+                      var injectUtmXhr = false;
+                      if (isLovoo) {
+                        self.injectUtmsIntoBody(bodyData);
+                        injectUtmXhr = true;
+                      }
+                      data = JSON.stringify(bodyData);
+                      // #region agent log
+                      fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f79aef'},body:JSON.stringify({sessionId:'f79aef',runId:'utm-track',hypothesisId:'H4',location:'m4track-v5.js:setupHttpInterception:xhr',message:'convert XHR enriched',data:{isLovoo:!!isLovoo,injectUtm:!!injectUtmXhr},timestamp:Date.now()})}).catch(function(){});
+                      // #endregion
+                      console.log('LovoCRM: XHR enriquecido (' + (injectUtmXhr ? 'visitor+UTM' : 'visitor/session') + ')');
+                    }
                   }
                 }
-                // FormData / other XHR bodies: limitation preserved (no broad restructure)
               } catch (error) {
                 console.error('LovoCRM: Erro ao processar XHR data:', error);
-                // Continuar com dados originais se houver erro
               }
             }
             
-            // Chamar método original
             return originalXHRSend.call(this, data);
           };
           
