@@ -46,10 +46,6 @@ export default async function handler(req, res) {
       return;
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f79aef'},body:JSON.stringify({sessionId:'f79aef',runId:'utm-track',hypothesisId:'H1',location:'webhook-visitor.js:handler',message:'incoming visit UTM fields',data:{hasUtm:!!(utm_source||utm_medium||utm_campaign||utm_content||utm_term),utm_source:typeof utm_source==='string'?utm_source.slice(0,40):null,utm_medium:typeof utm_medium==='string'?utm_medium.slice(0,40):null,utm_campaign:typeof utm_campaign==='string'?utm_campaign.slice(0,40):null,visitor_id_prefix:typeof visitor_id==='string'?visitor_id.slice(0,8):null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     const result = await createCanonicalVisit({
       tracking_code,
       session_id,

@@ -563,30 +563,6 @@
         visitorData.utm_term = attr.utm_term || null;
       }
 
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f79aef' },
-          body: JSON.stringify({
-            sessionId: 'f79aef',
-            runId: 'utm-track',
-            hypothesisId: 'H1',
-            location: 'm4track-v5.js:trackVisitor',
-            message: 'visit payload with first-touch UTM',
-            data: {
-              hasUtm: !!(visitorData.utm_source || visitorData.utm_medium || visitorData.utm_campaign || visitorData.utm_content || visitorData.utm_term),
-              utm_source: visitorData.utm_source || null,
-              utm_medium: visitorData.utm_medium || null,
-              utm_campaign: visitorData.utm_campaign || null,
-              visitor_id_prefix: String(visitorData.visitor_id || '').slice(0, 8)
-            },
-            timestamp: Date.now()
-          })
-        }).catch(function () {});
-      } catch (_dbgErr) {}
-      // #endregion
-
       console.log('M4Track: Tracking visitor via webhook approach');
       return this.sendDataViaWebhook('visitor', visitorData);
     },
@@ -1077,30 +1053,6 @@
                 }
 
                 if (enriched) {
-                  // #region agent log
-                  try {
-                    var _dbgHost = 'unknown';
-                    try { _dbgHost = new URL(urlStr, window.location.href).hostname; } catch (_e) {}
-                    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f79aef' },
-                      body: JSON.stringify({
-                        sessionId: 'f79aef',
-                        runId: 'utm-track',
-                        hypothesisId: 'H4',
-                        location: 'm4track-v5.js:setupHttpInterception:fetch',
-                        message: 'convert request enriched',
-                        data: {
-                          isLovoo: !!isLovoo,
-                          injectUtm: !!injectUtm,
-                          host: _dbgHost,
-                          mode: injectUtm ? 'visitor_session+utm' : 'visitor_session'
-                        },
-                        timestamp: Date.now()
-                      })
-                    }).catch(function () {});
-                  } catch (_dbgErr) {}
-                  // #endregion
                   console.log('LovoCRM: Fetch enriquecido (' + (injectUtm ? 'visitor+UTM' : 'visitor/session') + ')');
                 }
               } catch (error) {
@@ -1142,23 +1094,6 @@
                         injectUtmXhr = true;
                       }
                       data = JSON.stringify(bodyData);
-                      // #region agent log
-                      try {
-                        fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f79aef' },
-                          body: JSON.stringify({
-                            sessionId: 'f79aef',
-                            runId: 'utm-track',
-                            hypothesisId: 'H4',
-                            location: 'm4track-v5.js:setupHttpInterception:xhr',
-                            message: 'convert XHR enriched',
-                            data: { isLovoo: !!isLovoo, injectUtm: !!injectUtmXhr },
-                            timestamp: Date.now()
-                          })
-                        }).catch(function () {});
-                      } catch (_dbgErr) {}
-                      // #endregion
                       console.log('LovoCRM: XHR enriquecido (' + (injectUtmXhr ? 'visitor+UTM' : 'visitor/session') + ')');
                     }
                   }
