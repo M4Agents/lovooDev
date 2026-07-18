@@ -228,7 +228,17 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
     lead.cargo || lead.poder_investimento || lead.data_nascimento ||
     lead.instagram || lead.linkedin || lead.tiktok
   );
-  const hasMarketing = !!(lead.campanha || lead.conjunto_anuncio || lead.anuncio);
+  const hasMarketing = !!(
+    lead.utm_source || lead.utm_medium ||
+    lead.campanha || lead.conjunto_anuncio || lead.anuncio
+  );
+  const marketingIconField =
+    lead.utm_source ? 'utm_source' :
+    lead.utm_medium ? 'utm_medium' :
+    lead.campanha ? 'campanha' :
+    lead.conjunto_anuncio ? 'conjunto_anuncio' :
+    lead.anuncio ? 'anuncio' :
+    null;
   const hasCustom = !!(lead.lead_custom_values?.length);
 
   return (
@@ -368,9 +378,31 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
           {/* ── Marketing ───────────────────────────────────────────────── */}
           {hasMarketing && (
             <Section title="Marketing" icon={<Megaphone className="w-4 h-4" />}>
-              <InfoRow icon={<Megaphone className="w-4 h-4" />} label="Campanha" value={lead.campanha} />
-              <InfoRow label="Conjunto de Anúncio" value={lead.conjunto_anuncio} />
-              <InfoRow label="Anúncio" value={lead.anuncio} />
+              <InfoRow
+                icon={marketingIconField === 'utm_source' ? <Megaphone className="w-4 h-4" /> : undefined}
+                label="Origem"
+                value={lead.utm_source}
+              />
+              <InfoRow
+                icon={marketingIconField === 'utm_medium' ? <Megaphone className="w-4 h-4" /> : undefined}
+                label="Mídia"
+                value={lead.utm_medium}
+              />
+              <InfoRow
+                icon={marketingIconField === 'campanha' ? <Megaphone className="w-4 h-4" /> : undefined}
+                label="Campanha"
+                value={lead.campanha}
+              />
+              <InfoRow
+                icon={marketingIconField === 'conjunto_anuncio' ? <Megaphone className="w-4 h-4" /> : undefined}
+                label="Conjunto de Anúncio"
+                value={lead.conjunto_anuncio}
+              />
+              <InfoRow
+                icon={marketingIconField === 'anuncio' ? <Megaphone className="w-4 h-4" /> : undefined}
+                label="Anúncio"
+                value={lead.anuncio}
+              />
             </Section>
           )}
 
