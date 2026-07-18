@@ -40,7 +40,7 @@ const STANDARD_FIELDS = new Set([
   'company_razao_social', 'company_nome_fantasia',
   'company_cep', 'company_cidade', 'company_estado',
   'company_endereco', 'company_telefone', 'company_site',
-  'campanha', 'conjunto_anuncio', 'anuncio', 'utm_medium',
+  'campanha', 'conjunto_anuncio', 'anuncio', 'utm_medium', 'utm_source',
   'visitor_id',
 ]);
 

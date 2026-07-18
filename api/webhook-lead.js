@@ -735,6 +735,7 @@ export default async function handler(req, res) {
         conjunto_anuncio: canonical.conjunto_anuncio || null,
         anuncio:          canonical.anuncio          || null,
         utm_medium:       canonical.utm_medium       || null,
+        utm_source:       canonical.utm_source       || null,
       },
     });
 

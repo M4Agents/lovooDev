@@ -204,6 +204,9 @@ export type Lead = {
   campanha?: string;
   conjunto_anuncio?: string;
   anuncio?: string;
+  /** First-touch UTM source (coluna leads.utm_source) */
+  utm_source?: string | null;
+  utm_medium?: string | null;
 
   company_name?: string;
   company_cnpj?: string;
