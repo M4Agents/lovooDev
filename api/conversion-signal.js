@@ -1,12 +1,24 @@
 // Pixel → Lovoo conversion signal (does not create leads)
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function applyCors(req, res) {
+  const origin = typeof req.headers?.origin === 'string' ? req.headers.origin : '';
+  // Reflect LP origin (required when browser sends credentials); fallback *
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+}
+
+export default async function handler(req, res) {
+  applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
+    res.status(204).end();
     return;
   }
 

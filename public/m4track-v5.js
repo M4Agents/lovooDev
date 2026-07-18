@@ -404,23 +404,18 @@
         };
         var url = this.config.apiUrl + '/api/conversion-signal';
         var body = JSON.stringify(payload);
-        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-          try {
-            var blob = new Blob([body], { type: 'application/json' });
-            if (navigator.sendBeacon(url, blob)) {
-              console.log('LovoCRM: Conversion signal sent via beacon');
-              return;
-            }
-          } catch (beaconErr) { /* fall through */ }
-        }
-        fetch(url, {
+        // Always omit credentials so CORS Allow-Origin: * is valid.
+        // Use native fetch (not the intercepted wrapper) to avoid inheriting form credentials.
+        var doFetch = this._originalFetch || (typeof window !== 'undefined' && window.fetch) || fetch;
+        doFetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: body,
           keepalive: true,
-          mode: 'cors'
+          mode: 'cors',
+          credentials: 'omit'
         }).then(function () {
-          console.log('LovoCRM: Conversion signal sent via fetch');
+          console.log('LovoCRM: Conversion signal sent');
         }).catch(function () {
           console.warn('LovoCRM: Conversion signal failed (non-blocking)');
         });
@@ -1063,6 +1058,7 @@
         // Interceptar fetch (método mais comum em React)
         if (window.fetch) {
           const originalFetch = window.fetch;
+          self._originalFetch = originalFetch.bind(window);
           
           window.fetch = function(url, options) {
             var urlStr = typeof url === 'string' ? url : (url && url.url ? String(url.url) : '');
