@@ -1176,16 +1176,10 @@ async function execSendMedia(svc, args, ctx) {
 async function execRequestHandoff(svc, args, ctx) {
   const reason = String(args.reason ?? '').trim().slice(0, 300)
 
-  // Atualiza ai_state da conversa para ai_paused
-  const { error: convError } = await svc
-    .from('chat_conversations')
-    .update({ ai_state: 'ai_paused', updated_at: new Date().toISOString() })
-    .eq('id', ctx.conversation_id)
-    .eq('company_id', ctx.company_id)
-
-  if (convError) return { success: false, error: convError.message }
-
-  // Registra evento de handoff
+  // Registra evento de handoff.
+  // O ai_state NÃO é alterado aqui — será aplicado para 'ai_paused' pelo
+  // execute-agent.js APÓS o envio da resposta ao lead (handoff diferido).
+  // Isso garante que a última mensagem do agente seja entregue antes do pause.
   const { error: handoffError } = await svc
     .from('agent_handoff_events')
     .insert({
@@ -1202,7 +1196,9 @@ async function execRequestHandoff(svc, args, ctx) {
     console.error('[TOOL] request_handoff: erro ao registrar evento:', handoffError.message)
   }
 
-  return { success: true, handoff_type: 'ai_to_human', reason }
+  // deferred_ai_state sinaliza ao pipeline que o estado deve ser aplicado
+  // após o envio — nunca durante a execução da tool.
+  return { success: true, handoff_type: 'ai_to_human', reason, deferred_ai_state: 'ai_paused' }
 }
 
 // ── Dispatcher principal ──────────────────────────────────────────────────────

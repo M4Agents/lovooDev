@@ -340,10 +340,22 @@ export async function executeAgent(output) {
       });
   }
 
+  // ── Detectar handoff diferido ────────────────────────────────────────────────
+  // Verifica se alguma tool sinalizou deferred_ai_state = 'ai_paused'.
+  // O estado será aplicado em execute-agent.js APÓS o envio da resposta ao lead.
+  const toolResults = runResult.tool_results ?? []
+  const handoff_requested = toolResults.some(tr => tr.result?.deferred_ai_state === 'ai_paused')
+
+  if (handoff_requested) {
+    console.log('🤖 [EXEC] 🔀 Handoff diferido detectado — ai_paused será aplicado após envio:', {
+      run_id:          output.run_id,
+      conversation_id: output.conversation?.id,
+    })
+  }
+
   // ── Avaliar transição de fluxo (Phase 3 — fire-and-forget) ──────────────────
   // Executado após o LLM responder. Não bloqueia o retorno ao lead.
   if (output.conversation?.id && companyId) {
-    const toolResults = runResult.tool_results ?? []
     void evaluateTransition(
       output.conversation.id,
       companyId,
@@ -356,12 +368,13 @@ export async function executeAgent(output) {
 
   // ── Montar AgentExecutorOutput ───────────────────────────────────────────────
   const executorOutput = {
-    run_id:       output.run_id,
-    session_id:   output.session_id,
-    raw_response: cleanResponse,  // resposta limpa — bloco <!-- mem --> já removido
-    agent_id:     output.agent.id,
-    ok:           true,
-    fallback:     false,
+    run_id:             output.run_id,
+    session_id:         output.session_id,
+    raw_response:       cleanResponse,  // resposta limpa — bloco <!-- mem --> já removido
+    agent_id:           output.agent.id,
+    ok:                 true,
+    fallback:           false,
+    handoff_requested,  // sinaliza ao execute-agent.js para aplicar ai_paused após envio
     metadata: {
       company_id:      companyId,
       assignment_id:   output.metadata.assignment_id,

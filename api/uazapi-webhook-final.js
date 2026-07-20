@@ -159,14 +159,6 @@ async function processMessage(payload) {
 
     // #endregion
 
-    // 🔍 LOG IDENTIFICADOR DE VERSÃO - INVESTIGAÇÃO DE DEPLOY
-    const versionTimestamp = '2025-12-23 08:47:00';
-    console.log('🚀 WEBHOOK FINAL EXECUTANDO - VERSÃO:', versionTimestamp);
-    console.log('🔍 INVESTIGAÇÃO: Verificando se código corrigido está ativo');
-    console.log('📝 CORREÇÃO ESPERADA: Processamento de mídia antes do RPC');
-    
-    console.log('🔑 SUPABASE CONECTADO - WEBHOOK CONVERTIDO PARA USAR SECURITY DEFINER');
-    
     // Validações básicas
     if (payload.EventType !== 'messages') {
       return { success: false, error: 'Event type inválido' };
@@ -268,15 +260,6 @@ async function processMessage(payload) {
 
     const messageId  = message.id;
     const replyToId  = extractReplyId(message);
-    // Log de diagnóstico de reply — sanitizado (sem conteúdo da mensagem)
-    console.log('[WEBHOOK][REPLY-DIAG] campos candidatos presentes:', {
-      quotedMsgId:           message.quotedMsgId             ? 'present' : 'absent',
-      contextInfoStanzaId:   message.contextInfo?.stanzaId   ? 'present' : 'absent',
-      contextInfoQuotedId:   message.contextInfo?.quotedMessage?.key?.id ? 'present' : 'absent',
-      quotedId:              message.quoted?.id              ? 'present' : 'absent',
-      referencedMessageId:   message.referencedMessageId     ? 'present' : 'absent',
-      resolved:              replyToId ? 'yes' : 'none',
-    });
     const instanceName = payload.instanceName;
     const ownerPhone = payload.owner; // Telefone da instância
     
@@ -1109,9 +1092,7 @@ async function processMessage(payload) {
 
       // 🔔 CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS
       // Quando lead responde, cancelar mensagens agendadas se configurado
-      // 🔥 WEBHOOK VERSION: 2026-03-02-17:40 - AUTO-CANCEL ENABLED
       try {
-        console.log('🔥 WEBHOOK AUTO-CANCEL VERSION: 2026-03-02-17:40');
         console.log('🔔 VERIFICANDO CANCELAMENTO AUTOMÁTICO DE MENSAGENS AGENDADAS...');
         
         const { data: cancelResult, error: cancelError } = await supabase
@@ -1610,9 +1591,6 @@ async function processMessage(payload) {
         message?.contextInfo?.entryPointConversionSource ||
         null
 
-      // #region agent log
-      console.log(`[DEBUG-275bca][webhook] dispatch instanceId=${instance.id} leadId=${inboundLeadId} conversationId=${conversationId} direction=${direction}`)
-      // #endregion
       await dispatchMessageReceivedTrigger({
         companyId:           company.id,
         leadId:              inboundLeadId,

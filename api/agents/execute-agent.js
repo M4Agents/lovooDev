@@ -330,6 +330,38 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── 6.5: Aplicar handoff diferido ────────────────────────────────────────
+  // Se o agente chamou request_handoff, aplica ai_state = 'ai_paused' APÓS
+  // o envio da resposta ao lead — garantindo que a última mensagem seja entregue
+  // antes da conversa ser pausada para atendimento humano.
+  // Executado independentemente do resultado do gateway (parcial ou completo).
+  if (executorOutput.handoff_requested) {
+    try {
+      const { error: handoffStateErr } = await supabaseAdmin
+        .from('chat_conversations')
+        .update({ ai_state: 'ai_paused', updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+        .eq('company_id', companyId);
+
+      if (handoffStateErr) {
+        console.error('🤖 [EXECUTE] ❌ Falha ao aplicar handoff diferido:', {
+          error:           handoffStateErr.message,
+          conversation_id: conversationId,
+        });
+      } else {
+        // #region agent log
+        console.log('🤖 [EXECUTE] 🔀 ai_state → ai_paused (handoff diferido aplicado após envio):', {
+          conversation_id: conversationId,
+          company_id:      companyId,
+          run_id:          context.run_id,
+        });
+        // #endregion
+      }
+    } catch (handoffStateEx) {
+      console.error('🤖 [EXECUTE] ❌ Exceção ao aplicar handoff diferido:', handoffStateEx.message);
+    }
+  }
+
   // ── 7. Resposta final ─────────────────────────────────────────────────────
 
   const totalBlocks  = composerOutput.blocks?.length ?? 0;
