@@ -426,15 +426,39 @@ async function execAddNote(svc, args, ctx) {
 async function execMoveOpportunity(svc, args, ctx) {
   let toStageId = args.stage_id ?? null
 
-  // Resolve pelo nome da etapa quando stage_id não for informado
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',location:'toolExecutor.js:execMoveOpportunity:entry',message:'move_opportunity chamado',data:{stage_id:args.stage_id,stage_name:args.stage_name,lead_id:ctx.lead_id,company_id:ctx.company_id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  // Resolve pelo nome da etapa quando stage_id não for informado.
+  // funnel_stages não tem company_id — filtra pelos funis da empresa via sales_funnels.
   if (!toStageId && args.stage_name) {
+    const { data: companyFunnels } = await svc
+      .from('sales_funnels')
+      .select('id')
+      .eq('company_id', ctx.company_id)
+
+    const funnelIds = companyFunnels?.map(f => f.id) ?? []
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',location:'toolExecutor.js:execMoveOpportunity:funnels',message:'funis encontrados',data:{funnelIds,stage_name:args.stage_name},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (!funnelIds.length) {
+      return { success: false, error: `Etapa "${args.stage_name}" não encontrada: empresa sem funis configurados` }
+    }
+
     const { data: stageByName } = await svc
       .from('funnel_stages')
       .select('id, funnel_id')
-      .eq('company_id', ctx.company_id)
+      .in('funnel_id', funnelIds)
       .ilike('name', args.stage_name.trim())
       .limit(1)
       .maybeSingle()
+
+    // #region agent log
+    fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',location:'toolExecutor.js:execMoveOpportunity:stageResolved',message:'etapa resolvida por nome',data:{stageByName,stage_name:args.stage_name},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (!stageByName) {
       return { success: false, error: `Etapa "${args.stage_name}" não encontrada nos funis da empresa` }
@@ -486,6 +510,9 @@ async function execMoveOpportunity(svc, args, ctx) {
     p_position_in_stage: 0,
   })
 
+  // #region agent log
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',location:'toolExecutor.js:execMoveOpportunity:rpcResult',message:'resultado do rpc move_opportunity',data:{error:error?.message??null,opportunityId,toStageId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (error) return { success: false, error: error.message }
   return { success: true, opportunity_id: opportunityId, to_stage_id: toStageId }
 }
