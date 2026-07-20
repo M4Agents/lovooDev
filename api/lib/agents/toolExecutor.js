@@ -424,8 +424,25 @@ async function execAddNote(svc, args, ctx) {
 }
 
 async function execMoveOpportunity(svc, args, ctx) {
-  const toStageId = args.stage_id
-  if (!toStageId) return { success: false, error: 'stage_id obrigatório' }
+  let toStageId = args.stage_id ?? null
+
+  // Resolve pelo nome da etapa quando stage_id não for informado
+  if (!toStageId && args.stage_name) {
+    const { data: stageByName } = await svc
+      .from('funnel_stages')
+      .select('id, funnel_id')
+      .eq('company_id', ctx.company_id)
+      .ilike('name', args.stage_name.trim())
+      .limit(1)
+      .maybeSingle()
+
+    if (!stageByName) {
+      return { success: false, error: `Etapa "${args.stage_name}" não encontrada nos funis da empresa` }
+    }
+    toStageId = stageByName.id
+  }
+
+  if (!toStageId) return { success: false, error: 'Informe stage_name ou stage_id para mover a oportunidade' }
 
   const opportunityId = await resolveActiveOpportunity(
     svc, ctx.lead_id, ctx.company_id, ctx.locked_opportunity_id

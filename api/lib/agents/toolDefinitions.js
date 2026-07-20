@@ -164,13 +164,18 @@ export const ALL_TOOL_DEFINITIONS = [
       name: 'move_opportunity',
       description:
         'Move o card da oportunidade ativa para outra etapa do funil. '
-        + 'Use apenas quando o lead avançar claramente no processo de venda.',
+        + 'Use apenas quando o lead avançar claramente no processo de venda. '
+        + 'Prefira informar stage_name com o nome exato da etapa; stage_id (UUID) é aceito como alternativa.',
       parameters: {
         type: 'object',
         properties: {
+          stage_name: {
+            type: 'string',
+            description: 'Nome exato da etapa de destino (ex: "Transferir Humano"). Preferível ao stage_id.',
+          },
           stage_id: {
             type: 'string',
-            description: 'UUID da etapa de destino no funil',
+            description: 'UUID da etapa de destino (alternativa ao stage_name)',
             format: 'uuid',
           },
           reason: {
@@ -179,7 +184,6 @@ export const ALL_TOOL_DEFINITIONS = [
             maxLength: 200,
           },
         },
-        required: ['stage_id'],
       },
     },
   },
