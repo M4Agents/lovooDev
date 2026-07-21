@@ -41,7 +41,7 @@ import { matchCatalogItem, findComparisonItems } from './catalogMatcher.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const MESSAGES_LIMIT   = 20;
+const MESSAGES_LIMIT   = 40;
 const MAX_CATALOG_ITEMS = 30;
 
 // ── Detecção de intenção de comparação ────────────────────────────────────────
@@ -177,11 +177,14 @@ export async function buildContext(orchestratorContext) {
   }
 
   // Limite dinâmico: reduz para 10 quando memória com summary existe.
-  // Fetched sempre com MESSAGES_LIMIT=20; o slice é feito aqui pós-fase-1
+  // Fetched sempre com MESSAGES_LIMIT; o slice é feito aqui pós-fase-1
   // sem custo extra de DB. Economia: ~200-400 tokens em conversas com memória.
+  // CRÍTICO: recentMessages está em ordem cronológica (mais antigas → mais recentes).
+  // Usar slice(-10) para manter as 10 MAIS RECENTES. slice(0, 10) pegava as mais
+  // antigas da janela e descartava o turno atual — causando repetição de perguntas.
   const contactMemory = contactResult.status === 'fulfilled' ? (contactResult.value?.memory ?? null) : null;
   if (contactMemory?.summary) {
-    recentMessages = recentMessages.slice(0, 10);
+    recentMessages = recentMessages.slice(-10);
   }
 
   // ── Contato / Lead ────────────────────────────────────────────────────────
@@ -512,6 +515,19 @@ export async function buildContext(orchestratorContext) {
     conversation_id:     conversationId,
     company_id:          companyId,
   });
+
+  // #region agent log
+  console.log('🤖 [CTX:debug-hist]', {
+    hypothesisId: 'H1',
+    conversation_id: conversationId,
+    messages_count: recentMessages.length,
+    has_memory_summary: Boolean(contactMemory?.summary),
+    first_preview: (recentMessages[0]?.content ?? '').slice(0, 80),
+    last_preview: (recentMessages[recentMessages.length - 1]?.content ?? '').slice(0, 80),
+    user_message: (userMessage ?? '').slice(0, 80),
+  });
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',runId:'hist-fix',hypothesisId:'H1',location:'contextBuilder.js:buildContext:exit',message:'histórico enviado ao executor',data:{conversationId,messagesCount:recentMessages.length,hasMemorySummary:Boolean(contactMemory?.summary),memoryFacts:contactMemory?.facts??null,firstPreview:(recentMessages[0]?.content??'').slice(0,80),lastPreview:(recentMessages[recentMessages.length-1]?.content??'').slice(0,80),userMessage:(userMessage??'').slice(0,80),directions:recentMessages.map(m=>m.direction)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return { success: true, output };
 }

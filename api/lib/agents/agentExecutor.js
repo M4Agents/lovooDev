@@ -220,6 +220,11 @@ export async function executeAgent(output) {
     company_id:      companyId
   });
 
+  // #region agent log
+  const _histMsgs = output.conversation?.recent_messages ?? [];
+  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',runId:'hist-fix',hypothesisId:'H1',location:'agentExecutor.js:executeAgent:pre-llm',message:'contexto montado antes do LLM',data:{conversationId:output.conversation?.id,messagesCount:_histMsgs.length,userMessage:userMessage.slice(0,80),hasMemorySection:extraContext.includes('[MEMÓRIA]'),hasHistorySection:extraContext.includes('Histórico da conversa'),historyTail:extraContext.includes('Histórico da conversa')?extraContext.slice(extraContext.indexOf('Histórico da conversa'),extraContext.indexOf('Histórico da conversa')+500):null,lastHistPreview:(_histMsgs[_histMsgs.length-1]?.content??'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // ── Resolver prompt via prompt_config (se disponível) ────────────────────────
   // Se o agente tem prompt_config JSONB, monta o prompt a partir do template
   // estruturado + dados live da empresa. Caso contrário, usa agent.prompt raw.

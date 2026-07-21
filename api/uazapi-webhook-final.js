@@ -911,18 +911,110 @@ async function processMessage(payload) {
             return { success: true, message: 'reset:/confirmar_reset — expirado' };
           }
 
-          // ── Executar reset completo — deleta conversa + lead e tudo relacionado ─
+          // ── Executar reset completo — limpa histórico + deleta conversas + lead ─
+          //
+          // PROBLEMA ANTERIOR:
+          //   - Só deletava a conversa atual; o mesmo telefone pode ter várias conversas.
+          //   - Dependia só do CASCADE; se o DELETE falhasse silenciosamente (0 rows),
+          //     o histórico permanecia e a IA repetia perguntas.
           //
           // Ordem de operações (respeitando FK constraints):
-          //   1. sendReply antes de deletar (precisa da conversa aberta)
-          //   2. duplicate_notifications (NO ACTION — bloqueia delete do lead)
-          //   3. conversation_flow_states (sem CASCADE de chat_conversations)
-          //   4. chat_conversations (CASCADE: messages, sessions, locks, handoff_events...)
-          //   5. leads pelo telefone (CASCADE: opportunities, custom_values, activities, tags...)
+          //   1. sendReply antes de deletar
+          //   2. Localizar TODAS as conversas do telefone na empresa
+          //   3. Apagar chat_messages explicitamente (histórico usado pela IA)
+          //   4. Apagar conversation_flow_states
+          //   5. Apagar todas as conversas do telefone
+          //   6. duplicate_notifications (NO ACTION — bloqueia delete do lead)
+          //   7. Deletar leads do telefone (CASCADE oportunidades/tags/etc.)
 
           await sendReply('Pronto! Conversa e lead deletados. Pode reimportar para começar do zero 😊');
 
-          // 1. Remover duplicate_notifications do(s) lead(s) deste telefone
+          // 1. Todas as conversas deste telefone nesta empresa
+          const { data: convsToDelete, error: convsListError } = await supabaseAdmin
+            .from('chat_conversations')
+            .select('id')
+            .eq('company_id', company.id)
+            .eq('contact_phone', phoneNumber);
+
+          if (convsListError) {
+            console.error('[RESET] Erro ao listar conversas do telefone:', convsListError.message);
+          }
+
+          const conversationIds = [...new Set([
+            conversationId,
+            ...((convsToDelete ?? []).map(c => c.id)),
+          ].filter(Boolean))];
+
+          // 2. Apagar mensagens explicitamente — garante histórico zerado para a IA
+          let messagesDeleted = 0;
+          if (conversationIds.length > 0) {
+            const { error: msgDeleteError, count: msgCount } = await supabaseAdmin
+              .from('chat_messages')
+              .delete({ count: 'exact' })
+              .in('conversation_id', conversationIds)
+              .eq('company_id', company.id);
+
+            if (msgDeleteError) {
+              console.error('[RESET] Erro ao deletar mensagens:', msgDeleteError.message);
+            } else {
+              messagesDeleted = msgCount ?? 0;
+            }
+          }
+
+          // 3. Flow states (sem FK cascade para chat_conversations)
+          let flowDeleted = true;
+          if (conversationIds.length > 0) {
+            const { error: flowError } = await supabaseAdmin
+              .from('conversation_flow_states')
+              .delete()
+              .in('conversation_id', conversationIds)
+              .eq('company_id', company.id);
+
+            if (flowError) {
+              flowDeleted = false;
+              console.error('[RESET] Erro ao deletar flow states:', flowError.message);
+            }
+          }
+
+          // 4. Deletar TODAS as conversas do telefone (não só a atual)
+          //    CASCADE limpa: sessions, locks, handoff_events, scheduled_messages, batches.
+          //    agent_processed_messages → SET NULL.
+          const { error: convDeleteError, count: convCount } = await supabaseAdmin
+            .from('chat_conversations')
+            .delete({ count: 'exact' })
+            .in('id', conversationIds)
+            .eq('company_id', company.id);
+
+          if (convDeleteError) {
+            console.error('[RESET] Erro ao deletar conversas:', convDeleteError.message);
+          }
+
+          const conversationsDeleted = convCount ?? 0;
+
+          // Fallback: se delete da conversa atual falhou, ao menos zera memória/flags
+          // para não reenviar estado estruturado antigo na próxima sessão.
+          if (conversationsDeleted === 0) {
+            const { error: memClearError } = await supabaseAdmin
+              .from('chat_conversations')
+              .update({
+                memory: {},
+                reset_pending: false,
+                ai_state: 'ai_active',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversationId)
+              .eq('company_id', company.id);
+
+            if (memClearError) {
+              console.error('[RESET] Fallback limpeza memory falhou:', memClearError.message);
+            } else {
+              console.warn('[RESET] Fallback: conversa não deletada — memory/flags limpos', {
+                conversation_id: conversationId,
+              });
+            }
+          }
+
+          // 5. Remover duplicate_notifications do(s) lead(s) deste telefone
           const { data: leadsToDelete } = await supabaseAdmin
             .from('leads')
             .select('id')
@@ -938,31 +1030,7 @@ async function processMessage(payload) {
               .or(`lead_id.in.(${leadIds.join(',')}),duplicate_of_lead_id.in.(${leadIds.join(',')})`);
           }
 
-          // 2. Deletar conversation_flow_states (sem FK cascade)
-          const { error: flowError } = await supabaseAdmin
-            .from('conversation_flow_states')
-            .delete()
-            .eq('conversation_id', conversationId)
-            .eq('company_id', company.id);
-
-          if (flowError) {
-            console.error('[RESET] Erro ao deletar flow states:', flowError.message);
-          }
-
-          // 3. Deletar a conversa — CASCADE limpa: messages, sessions, locks, handoff_events,
-          //    scheduled_messages, migration_log. agent_processed_messages → SET NULL.
-          const { error: convDeleteError } = await supabaseAdmin
-            .from('chat_conversations')
-            .delete()
-            .eq('id', conversationId)
-            .eq('company_id', company.id)
-            .eq('reset_pending', true); // anti-execução-duplicada
-
-          if (convDeleteError) {
-            console.error('[RESET] Erro ao deletar conversa:', convDeleteError.message);
-          }
-
-          // 4. Deletar todos os leads do telefone — CASCADE limpa: opportunities,
+          // 6. Deletar todos os leads do telefone — CASCADE limpa: opportunities,
           //    opportunity_items, opportunity_funnel_positions, lead_custom_values,
           //    lead_activities, lead_tag_assignments, lead_stage_history, lead_entries,
           //    lead_media_unified, internal_notes, system_notifications.
@@ -983,13 +1051,19 @@ async function processMessage(payload) {
           }
 
           console.log('[RESET] reset total concluído', {
-            conversation_id: conversationId,
-            company_id:      company.id,
-            phone:           phoneNumber,
-            leads_deleted:   leadsDeleted,
-            flow_deleted:    !flowError,
-            conv_deleted:    !convDeleteError,
+            conversation_id:         conversationId,
+            company_id:              company.id,
+            phone:                   phoneNumber,
+            conversations_targeted:  conversationIds.length,
+            conversations_deleted:   conversationsDeleted,
+            messages_deleted:        messagesDeleted,
+            leads_deleted:           leadsDeleted,
+            flow_deleted:            flowDeleted,
           });
+
+          // #region agent log
+          fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',runId:'reset-fix',hypothesisId:'H-reset',location:'uazapi-webhook-final.js:confirmar_reset',message:'reset concluído',data:{conversationId,conversationsTargeted:conversationIds.length,conversationsDeleted,messagesDeleted,leadsDeleted,flowDeleted},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
 
           return { success: true, message: 'reset:/confirmar_reset — total' };
         } catch (err) {
