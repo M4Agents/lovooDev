@@ -118,3 +118,200 @@ export async function resolveOpportunityId(context, supabase) {
 
   return opportunityId
 }
+
+/**
+ * Normaliza telefone para dígitos com DDI 55 quando aplicável.
+ * Espelha a regra usada pelo whatsappSender (sem export circular).
+ */
+function cleanPhoneNumber(phone) {
+  let clean = String(phone || '').replace(/\D/g, '')
+  if (!clean.startsWith('55') && clean.length <= 11) clean = '55' + clean
+  return clean
+}
+
+/**
+ * Persiste conversation_id na execução para sobreviver a pause/resume (delay).
+ *
+ * Atualiza:
+ *   - context.conversationId / context.triggerData / context.variables (memória)
+ *   - automation_executions.trigger_data.conversation_id (fonte de verdade no resume)
+ *   - automation_executions.variables.conversation_id (preservado pelo delayHandler)
+ *
+ * Fail-safe: falha de persistência não aborta o nó chamador (só loga).
+ *
+ * @param {import('./contextTypes.js').AutomationContext} context
+ * @param {string} conversationId
+ * @param {object} supabase
+ * @returns {Promise<void>}
+ */
+export async function persistConversationId(context, conversationId, supabase) {
+  if (!conversationId || !context?.executionId || !context?.companyId) return
+
+  context.conversationId = conversationId
+  context.triggerData = {
+    ...(context.triggerData || {}),
+    conversation_id: conversationId,
+  }
+  context.variables = {
+    ...(context.variables || {}),
+    conversation_id: conversationId,
+  }
+
+  try {
+    const { data: execution, error: readErr } = await supabase
+      .from('automation_executions')
+      .select('trigger_data, variables')
+      .eq('id', context.executionId)
+      .eq('company_id', context.companyId)
+      .maybeSingle()
+
+    if (readErr) {
+      console.warn('[contextUtils] persistConversationId: falha ao ler execução:', readErr.message)
+      return
+    }
+    if (!execution) {
+      console.warn('[contextUtils] persistConversationId: execução não encontrada', {
+        executionId: context.executionId,
+        companyId: context.companyId,
+      })
+      return
+    }
+
+    const nextTriggerData = {
+      ...(execution.trigger_data || {}),
+      conversation_id: conversationId,
+    }
+    const nextVariables = {
+      ...(execution.variables || {}),
+      ...(context.variables || {}),
+      conversation_id: conversationId,
+    }
+
+    const { error: writeErr } = await supabase
+      .from('automation_executions')
+      .update({
+        trigger_data: nextTriggerData,
+        variables: nextVariables,
+      })
+      .eq('id', context.executionId)
+      .eq('company_id', context.companyId)
+
+    if (writeErr) {
+      console.warn('[contextUtils] persistConversationId: falha ao gravar:', writeErr.message)
+    }
+  } catch (err) {
+    console.warn('[contextUtils] persistConversationId: erro inesperado:', err?.message)
+  }
+}
+
+/**
+ * Resolve conversationId para nós que dependem de conversa (ex.: attach_agent).
+ *
+ * Prioridade:
+ *   1. context.conversationId
+ *   2. trigger_data.conversation_id / conversationId
+ *   3. variables.conversation_id
+ *   4. lookup por lead_id na empresa (conversa active mais recente)
+ *   5. lookup por telefone do lead (conversa active mais recente)
+ *
+ * @param {import('./contextTypes.js').AutomationContext} context
+ * @param {object} supabase
+ * @returns {Promise<{ conversationId: string|null, source: string|null }>}
+ */
+export async function resolveConversationId(context, supabase) {
+  if (context?.conversationId) {
+    return { conversationId: context.conversationId, source: 'context' }
+  }
+
+  const fromTrigger =
+    context?.triggerData?.conversation_id
+    ?? context?.triggerData?.conversationId
+    ?? null
+  if (fromTrigger) {
+    return { conversationId: fromTrigger, source: 'trigger_data' }
+  }
+
+  const fromVariables = context?.variables?.conversation_id ?? null
+  if (fromVariables) {
+    return { conversationId: fromVariables, source: 'variables' }
+  }
+
+  if (!context?.companyId) {
+    return { conversationId: null, source: null }
+  }
+
+  const leadId = await resolveLeadId(context, supabase)
+  if (!leadId) {
+    return { conversationId: null, source: null }
+  }
+
+  const { data: byLead, error: byLeadErr } = await supabase
+    .from('chat_conversations')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('lead_id', leadId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (byLeadErr) {
+    console.warn('[contextUtils] resolveConversationId: erro lookup lead_id:', byLeadErr.message)
+  } else if (byLead?.id) {
+    return { conversationId: byLead.id, source: 'lead_id_lookup' }
+  }
+
+  const { data: lead, error: leadErr } = await supabase
+    .from('leads')
+    .select('id, phone')
+    .eq('id', leadId)
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+
+  if (leadErr) {
+    console.warn('[contextUtils] resolveConversationId: erro ao buscar lead:', leadErr.message)
+    return { conversationId: null, source: null }
+  }
+
+  if (!lead?.phone) {
+    return { conversationId: null, source: null }
+  }
+
+  const phone = cleanPhoneNumber(lead.phone)
+  const { data: byPhone, error: byPhoneErr } = await supabase
+    .from('chat_conversations')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('contact_phone', phone)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (byPhoneErr) {
+    console.warn('[contextUtils] resolveConversationId: erro lookup phone:', byPhoneErr.message)
+    return { conversationId: null, source: null }
+  }
+
+  if (byPhone?.id) {
+    return { conversationId: byPhone.id, source: 'phone_lookup' }
+  }
+
+  return { conversationId: null, source: null }
+}
+
+/**
+ * Extrai conversation_id de uma linha de automation_executions (resume/start).
+ *
+ * @param {{ trigger_data?: object, variables?: object }} execution
+ * @returns {string|null}
+ */
+export function readConversationIdFromExecution(execution) {
+  if (!execution) return null
+  return (
+    execution.trigger_data?.conversation_id
+    ?? execution.trigger_data?.conversationId
+    ?? execution.variables?.conversation_id
+    ?? null
+  )
+}

@@ -11,6 +11,8 @@
 // Sem imports de src/ — usa apenas supabaseAdmin.
 // =====================================================
 
+import { persistConversationId } from './contextUtils.js'
+
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
 // ---------------------------------------------------------------------------
@@ -399,9 +401,15 @@ export async function sendMessageNode(node, context, supabase) {
     )
   }
 
-  // Propagar conversationId para o contexto — permite que nós subsequentes
-  // (ex: attach_agent) usem a conversa criada/resolvida por este nó.
-  context.conversationId = conversationId
+  // Propagar + persistir conversationId — nós subsequentes (ex: attach_agent)
+  // e o resume após delay precisam do mesmo id. Sem persistir no banco,
+  // o resume remonta o context só com trigger_data original (null em
+  // opportunity.stage_changed) e o attach_agent é pulado.
+  await persistConversationId(context, conversationId, supabase)
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a12b9f'},body:JSON.stringify({sessionId:'a12b9f',runId:'attach-fix',hypothesisId:'H1',location:'whatsappSender.js:persistConversationId',message:'conversation_id persistido após message node',data:{executionId:context.executionId,companyId:context.companyId,conversationId,leadId:context.leadId??null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   // 4. Resolver instância WhatsApp
   const instance = await resolveInstance(conversationId, effectiveInstanceId, supabase)
@@ -441,9 +449,10 @@ export async function sendMessageNode(node, context, supabase) {
   )
 
   return {
-    sent:      true,
-    to:        phone,
-    message:   message.substring(0, 80),
-    messageId: uazResult.uazapiMessageId || dbMessageId,
+    sent:            true,
+    to:              phone,
+    message:         message.substring(0, 80),
+    messageId:       uazResult.uazapiMessageId || dbMessageId,
+    conversationId,
   }
 }

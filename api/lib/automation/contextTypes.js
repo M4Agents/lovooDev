@@ -84,12 +84,13 @@
  *   UUID da conversa WhatsApp (chat_conversations.id).
  *   Opcional. Null para eventos que não são message.received.
  *
- *   REGRA DE FONTE ÚNICA (evitar divergência como ocorreu com instanceId):
- *     - Fonte de verdade: trigger_data.conversation_id  (snake_case — padrão dos dispatchers)
- *     - trigger_data.conversationId existe apenas como compatibilidade com payloads legados
- *     - Não derivar de outras fontes (ex: chat_conversations.id via lookup) sem necessidade real
+ *   Resolução (evitar perda após delay / opportunity.stage_changed):
+ *     1. trigger_data.conversation_id  (snake_case — dispatchers + persistido pelo message node)
+ *     2. trigger_data.conversationId   (camelCase — compatibilidade legado)
+ *     3. variables.conversation_id     (preservado pelo delayHandler no pause/resume)
+ *     4. lookup por lead_id / telefone  (attach_agent — necessidade real comprovada)
  *
- *   Usado por: futuras condições de canal e nós de distribuição/execute_agent.
+ *   Usado por: attach_agent, message node (persist), resume do executor.
  *
  * @property {number|null} [_resolvedLeadId]
  *   Cache interno — preenchido por resolveLeadId() (contextUtils.js) após query ao banco.

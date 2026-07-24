@@ -11,6 +11,7 @@
 
 import { acquireLock, releaseLock } from './executionLock.js'
 import { getPlanLimits, checkLimit }  from '../plans/limitChecker.js'
+import { readConversationIdFromExecution } from './contextUtils.js'
 
 // ---------------------------------------------------------------------------
 // Resolução de instanceId — fonte única para processFlowAsync e resumeFromNode
@@ -19,6 +20,11 @@ import { getPlanLimits, checkLimit }  from '../plans/limitChecker.js'
 //   1. trigger_data.instance_id  (snake_case — padrão dos dispatchers atuais)
 //   2. trigger_data.instanceId   (camelCase  — compatibilidade legado)
 //   3. triggerNode config        (config do nó trigger do flow — fallback estático)
+//
+// conversationId (resume/start) via readConversationIdFromExecution:
+//   1. trigger_data.conversation_id (persistido pelo message node)
+//   2. trigger_data.conversationId  (legado)
+//   3. variables.conversation_id    (preservado pelo delayHandler)
 // ---------------------------------------------------------------------------
 
 function resolveInstanceId(execution, triggerNode) {
@@ -694,11 +700,13 @@ async function _resumeFromNodeInternal({
       leadId:         execution.lead_id        || execution.trigger_data?.lead_id || null,
       opportunityId:  execution.opportunity_id  || null,
       instanceId:     resolveInstanceId(execution, pausedNode),
-      // conversationId: fonte de verdade é trigger_data.conversation_id (snake_case).
-      conversationId: execution.trigger_data?.conversation_id
-                      ?? execution.trigger_data?.conversationId
-                      ?? null,
+      // conversationId: trigger_data (persistido pelo message) ou variables (delay).
+      conversationId: readConversationIdFromExecution(execution),
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a12b9f'},body:JSON.stringify({sessionId:'a12b9f',runId:'attach-fix',hypothesisId:'H1',location:'executor.js:resumeFromNode',message:'context remontado no resume',data:{executionId:execution.id,companyId:execution.company_id,conversationId:context.conversationId,leadId:context.leadId,pausedNodeId,hasTriggerConv:!!execution.trigger_data?.conversation_id,hasVarConv:!!execution.variables?.conversation_id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (!assertContext(context)) {
       const errorMsg = 'context inválido após resume — campo obrigatório ausente'
@@ -919,9 +927,7 @@ export async function processFlowAsync(flow, execution, supabase) {
       leadId:         execution.lead_id        || execution.trigger_data?.lead_id || null,
       opportunityId:  execution.opportunity_id  || null,
       instanceId:     resolveInstanceId(execution, triggerNode),
-      conversationId: execution.trigger_data?.conversation_id
-                      ?? execution.trigger_data?.conversationId
-                      ?? null,
+      conversationId: readConversationIdFromExecution(execution),
     }
 
     if (!assertContext(context)) {

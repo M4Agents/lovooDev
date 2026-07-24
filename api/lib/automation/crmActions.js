@@ -22,8 +22,8 @@
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
 // =====================================================
 
-import { resolveLeadId, resolveOpportunityId }          from './contextUtils.js'
-import { dispatchOpportunityStageChangedTrigger }       from './dispatchOpportunityTrigger.js'
+import { resolveLeadId, resolveOpportunityId, resolveConversationId } from './contextUtils.js'
+import { dispatchOpportunityStageChangedTrigger }                     from './dispatchOpportunityTrigger.js'
 
 // ---------------------------------------------------------------------------
 // Utilitário: validar membership do usuário na empresa
@@ -510,7 +510,7 @@ async function setCustomField(config, context, supabase) {
 // ---------------------------------------------------------------------------
 
 async function attachAgent(config, context, supabase) {
-  const { companyId, conversationId } = context
+  const { companyId } = context
   const agentId  = config.agentId
   const force    = config.force === true
 
@@ -518,8 +518,28 @@ async function attachAgent(config, context, supabase) {
   if (!companyId) throw new Error('[attach_agent] companyId ausente no contexto — erro crítico de executor')
   if (!agentId)   throw new Error('[attach_agent] agentId obrigatório na configuração do nó')
 
+  // Resolver conversa: context/trigger/variables (pós message+delay) ou lookup por lead.
+  // Necessário para opportunity.stage_changed, que chega com conversation_id null.
+  const resolved = await resolveConversationId(context, supabase)
+  const conversationId = resolved.conversationId
+  const conversationSource = resolved.source
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a12b9f'},body:JSON.stringify({sessionId:'a12b9f',runId:'attach-fix',hypothesisId:'H2',location:'crmActions.js:attachAgent',message:'resolveConversationId no attach_agent',data:{executionId:context.executionId??null,companyId,conversationId,conversationSource,leadId:context.leadId??null,contextConversationId:context.conversationId??null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // Condição de runtime esperada (ex.: trigger lead.created sem conversa) → skipped
-  if (!conversationId) return { skipped: true, reason: 'conversationId ausente — attach_agent requer uma conversa no contexto' }
+  if (!conversationId) {
+    return {
+      skipped: true,
+      reason: 'conversationId ausente — attach_agent requer uma conversa no contexto ou conversa ativa do lead',
+      action: 'attach_agent',
+      conversationSource: null,
+    }
+  }
+
+  // Propagar para o restante do ciclo (mesmo resume já trazia em context)
+  context.conversationId = conversationId
 
   // Buscar assignment ativo da empresa para o agente selecionado
   const { data: assignment, error: assignErr } = await supabase
@@ -555,6 +575,7 @@ async function attachAgent(config, context, supabase) {
       reason: 'Conversa com agente pausado — use force: true para reativar',
       action: 'attach_agent',
       conversationId,
+      conversationSource,
       previousAiState,
       previousAssignmentId
     }
@@ -568,6 +589,7 @@ async function attachAgent(config, context, supabase) {
         reason: 'Agente já está ativo nesta conversa',
         action: 'attach_agent',
         conversationId,
+        conversationSource,
         assignmentId: assignment.id,
         previousAiState,
         newAiState: 'ai_active'
@@ -581,6 +603,7 @@ async function attachAgent(config, context, supabase) {
         reason: 'Conversa já possui outro agente ativo. Use force: true para substituir.',
         action: 'attach_agent',
         conversationId,
+        conversationSource,
         previousAssignmentId,
         newAssignmentId: assignment.id
       }
@@ -596,12 +619,17 @@ async function attachAgent(config, context, supabase) {
   if (updateErr) throw new Error(`[attach_agent] erro ao ativar agente: ${updateErr.message}`)
 
   const replaced = previousAiState === 'ai_active' && previousAssignmentId !== assignment.id
-  console.log(`[attach_agent] agente ${agentId} ${replaced ? 'substituído' : 'ativado'} na conversa ${conversationId}`)
+  console.log(`[attach_agent] agente ${agentId} ${replaced ? 'substituído' : 'ativado'} na conversa ${conversationId} (source=${conversationSource})`)
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a12b9f'},body:JSON.stringify({sessionId:'a12b9f',runId:'attach-fix',hypothesisId:'H2',location:'crmActions.js:attachAgent:activated',message:'attach_agent ativou IA',data:{conversationId,conversationSource,agentId,assignmentId:assignment.id,previousAiState,replaced},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return {
     executed: true,
     action: 'attach_agent',
     conversationId,
+    conversationSource,
     agentId,
     assignmentId: assignment.id,
     previousAiState,
