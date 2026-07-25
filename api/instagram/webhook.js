@@ -261,8 +261,28 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
   const detail = rpc?.skipped ? rpc.reason : (rpc?.ok ? null : (rpc?.error ?? 'rpc_returned_not_ok'));
   await updateWebhookEvent(svc, eventId, status, detail);
 
-  // Enriquecer perfil do participante (awaited — fire-and-forget não funciona em Vercel serverless,
-  // pois a função é encerrada logo após res.status(200). Meta permite até 20s para resposta.)
+  // #region agent log [enrich-gate] — diagnóstico do gate de enriquecimento
+  await svc.from('instagram_webhook_events').insert({
+    company_id:        companyId,
+    connection_id:     connectionId,
+    instagram_user_id: ev.instagramUserId,
+    event_type:        'unknown',
+    ig_object_id:      `enrich_gate_${Date.now()}`,
+    raw_payload:       {
+      _diag:               true,
+      step:                'enrich_gate',
+      rpc_ok:              rpc?.ok              ?? null,
+      rpc_skipped:         rpc?.skipped         ?? null,
+      rpc_conversation_id: rpc?.conversation_id ?? null,
+      participant_igsid:   ev.participantIgUserId ?? null,
+      has_connection:      !!connection,
+      will_enrich:         !!(rpc?.ok && rpc?.conversation_id && ev.participantIgUserId && connection),
+    },
+    processing_status: 'skipped',
+    hmac_valid:        true,
+  }).catch(() => {});
+  // #endregion
+
   if (rpc?.ok && rpc?.conversation_id && ev.participantIgUserId && connection) {
     await enrichParticipantIfNeeded(rpc.conversation_id, ev.participantIgUserId, connection, svc);
   }
