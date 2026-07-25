@@ -335,7 +335,7 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 
     // Buscar perfil do participante na Graph API
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${participantIgsid}`);
-    profileUrl.searchParams.set('fields',       'name,username,profile_pic,profile_picture_url');
+    profileUrl.searchParams.set('fields',       'name,username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
@@ -375,7 +375,7 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 
     const name     = profileData.name     ?? conv.participant_name     ?? null;
     const username = profileData.username ?? conv.participant_username ?? null;
-    const picUrl   = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
+    const picUrl   = profileData.profile_pic ?? null;
 
     // Fazer upload da foto para storage permanente
     let avatarUrl = conv.participant_avatar ?? null;
@@ -463,9 +463,8 @@ async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection,
       return;
     }
 
-    // Solicitar profile_pic (messaging context) e profile_picture_url (business context)
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${igUserId}`);
-    profileUrl.searchParams.set('fields',       'username,profile_pic,profile_picture_url');
+    profileUrl.searchParams.set('fields',       'username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 
     console.log('[enrichCommentAvatar] fetching_profile', { igCommentId, igUserId });
@@ -487,8 +486,7 @@ async function enrichCommentAvatar(igCommentId, igUserId, companyId, connection,
 
     if (profileData.error || !profileRes.ok) return;
 
-    // Tentar profile_pic (DM context) e profile_picture_url (Business API) como fallback
-    const picUrl = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
+    const picUrl = profileData.profile_pic ?? null;
     if (!picUrl) {
       console.warn('[enrichCommentAvatar] no_pic_url — ambos os campos ausentes', { igCommentId, igUserId });
       return;

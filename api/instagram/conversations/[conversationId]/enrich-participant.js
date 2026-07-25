@@ -92,7 +92,7 @@ export default async function handler(req, res) {
   let profileData;
   try {
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${conv.ig_participant_id}`);
-    profileUrl.searchParams.set('fields',       'name,username,profile_pic,profile_picture_url');
+    profileUrl.searchParams.set('fields',       'name,username,profile_pic');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileRes = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
 
   const name     = profileData.name     ?? conv.participant_name     ?? null;
   const username = profileData.username ?? conv.participant_username ?? null;
-  const picUrl   = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
+  const picUrl   = profileData.profile_pic ?? null;
 
   // ── 6. Fazer upload da foto para storage permanente ─────────────────────────
   let avatarUrl = null;
