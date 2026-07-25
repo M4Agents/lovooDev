@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { isRestrictionError, recordRestriction } from './lib/uazapi/restrictions.js';
+import { canonicalizeBrMobilePhone } from './lib/phone/canonicalizeBrMobile.js';
 
 // =====================================================
 // CONFIGURAÇÕES SUPABASE
@@ -231,17 +232,7 @@ export default async function handler(req, res) {
  * Formatar número de telefone para Uazapi
  */
 function formatPhoneForUazapi(phone) {
-  // Remove caracteres não numéricos
-  const cleanPhone = phone.replace(/\D/g, '');
-  
-  // Garantir formato internacional
-  if (cleanPhone.startsWith('55')) {
-    return cleanPhone;
-  } else if (cleanPhone.startsWith('11') || cleanPhone.startsWith('21')) {
-    return `55${cleanPhone}`;
-  } else {
-    return `5511${cleanPhone}`;
-  }
+  return canonicalizeBrMobilePhone(phone) || String(phone || '').replace(/\D/g, '');
 }
 
 /**

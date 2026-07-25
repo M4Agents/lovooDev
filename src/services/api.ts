@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { normalizeHeatmapCoordinates } from '../utils/normalizeHeatmapCoordinates';
+import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
 // triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 
 // Process tracking queue
@@ -866,30 +867,28 @@ export const api = {
       // Sanitizar email vazio para evitar violação da constraint valid_email
       if ((leadData as any).email === '') delete (leadData as any).email;
 
-      // ── Normalizar telefone ─────────────────────────────────────────────────
-      // Garante formato consistente com webhook/WhatsApp (5511987654321).
-      // Impacto: apenas leads com 10 ou 11 dígitos (sem DDI) ganham o prefixo 55.
-      // Leads já com 12–13 dígitos (ex: vindos do chat) ficam inalterados.
+      // ── Normalizar telefone (canônico BR: 55+DDD+9+8 quando elegível) ───────
       if ((leadData as any).phone) {
-        const rawDigits = String((leadData as any).phone).replace(/\D/g, '');
-        if (rawDigits.length === 10 || rawDigits.length === 11) {
-          (leadData as any).phone = '55' + rawDigits;
-        } else if (rawDigits.length > 0) {
-          (leadData as any).phone = rawDigits;
+        const canonical = canonicalizeBrMobilePhone((leadData as any).phone);
+        if (canonical) {
+          (leadData as any).phone = canonical;
         }
       }
 
       // ── Deduplicação pré-insert ─────────────────────────────────────────────
       // Previne criação de lead duplicado quando já existe um lead com o mesmo
       // número (ex: lead criado pelo WhatsApp antes do cadastro manual).
-      // Usa phone_normalized (coluna gerada no banco) para comparação eficiente.
-      // Verifica o número normalizado completo E os últimos 11 dígitos (cobre
-      // leads antigos gravados sem DDI: "11987654321" vs "5511987654321").
+      // Usa phone_normalized (coluna gerada) com o canônico e fallback RIGHT(11)
+      // para cobrir histórico ainda não backfillado.
       if ((leadData as any).phone && (leadData as any).company_id) {
         const phoneNorm = String((leadData as any).phone).replace(/\D/g, '');
         const right11   = phoneNorm.slice(-11);
+        const withoutNinth =
+          phoneNorm.length === 13 && phoneNorm.startsWith('55') && phoneNorm.charAt(4) === '9'
+            ? phoneNorm.slice(0, 4) + phoneNorm.slice(5)
+            : null;
         const lookupValues = phoneNorm.length >= 10
-          ? [...new Set([phoneNorm, right11])]
+          ? [...new Set([phoneNorm, right11, withoutNinth].filter(Boolean) as string[])]
           : [];
 
         if (lookupValues.length > 0) {

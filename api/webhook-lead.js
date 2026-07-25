@@ -7,6 +7,7 @@ import { createHash } from 'crypto';
 import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreatedTrigger.js';
 import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js';
+import { canonicalizeBrMobilePhone } from './lib/phone/canonicalizeBrMobile.js';
 
 const MAX_PAYLOAD_BYTES = 10_240; // 10 KB por requisição
 
@@ -147,9 +148,9 @@ function normalizeEmail(str) {
   return str.trim().toLowerCase();
 }
 
-// Telefone: remove apenas espaços nas bordas (preserva formatação original)
+// Telefone: formato canônico BR (55 + DDD + 9 + 8) quando elegível
 function normalizePhone(str) {
-  return str.trim();
+  return canonicalizeBrMobilePhone(str) || String(str || '').trim();
 }
 
 // ---------------------------------------------------------------------------

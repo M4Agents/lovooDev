@@ -19,6 +19,7 @@ import { createClient }          from '@supabase/supabase-js';
 import { getPlanLimits }         from '../lib/plans/limitChecker.js';
 import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
 import { handleLeadReentry, hashPayload } from '../lib/leads/handleLeadReentry.js';
+import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile.js';
 
 const SUPABASE_URL   = process.env.SUPABASE_URL || 'https://etzdsywunlpbgxkphuil.supabase.co';
 const MAX_LEADS      = 1_000;
@@ -213,6 +214,10 @@ function buildLeadPayload(raw) {
     if (!STANDARD_FIELDS.has(key)) continue;
     if (val === null || val === undefined || val === '') continue;
     payload[key] = String(val).slice(0, 500);
+  }
+  if (payload.phone) {
+    const canonical = canonicalizeBrMobilePhone(payload.phone);
+    if (canonical) payload.phone = canonical;
   }
   if (!payload.origin) payload.origin = 'file_import';
   return payload;
