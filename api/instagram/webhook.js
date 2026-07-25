@@ -304,6 +304,19 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
     const profileData = await profileRes.json();
 
+    // #region agent log [enrich-diag]
+    console.log('[enrich-diag] igsid=%s httpStatus=%d ok=%s hasError=%s errorCode=%s errorMsg=%s name=%s username=%s hasProfilePic=%s hasProfilePictureUrl=%s',
+      participantIgsid, profileRes.status, profileRes.ok,
+      !!profileData.error,
+      profileData.error?.code     ?? 'none',
+      profileData.error?.message  ?? 'none',
+      profileData.name     ?? 'NULL',
+      profileData.username ?? 'NULL',
+      !!profileData.profile_pic,
+      !!profileData.profile_picture_url
+    );
+    // #endregion
+
     if (profileData.error || !profileRes.ok) return;
 
     const name     = profileData.name     ?? conv.participant_name     ?? null;
