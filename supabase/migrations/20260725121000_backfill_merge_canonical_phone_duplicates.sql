@@ -1,10 +1,105 @@
 -- =====================================================
--- MIGRATION: Backfill phone canônico + merge de duplicados
+-- MIGRATION: Funções de backfill/merge por telefone canônico
 -- Data: 2026-07-25
 -- Depende de: 20260725120000_canonicalize_br_mobile_phone.sql
+--
+-- IMPORTANTE:
+--   Esta migration NÃO executa backfill nem merge automaticamente.
+--   DEV e produção compartilham o mesmo banco — apply só cria funções.
+--
+-- Sequência segura (manual):
+--   1) SELECT public.preview_br_canonical_phone_duplicates(NULL);
+--   2) SELECT public.backfill_br_canonical_phones('<company_id>');  -- ou NULL
+--   3) SELECT public.merge_br_canonical_phone_duplicates('<company_id>');
+--   4) Após validar (ex: Valleron), repetir com NULL para global
 -- =====================================================
 
--- ── 1. Função de merge controlado por telefone canônico ──────────────────────
+-- ── 1. Preview (dry-run) de pares canônicos ──────────────────────────────────
+CREATE OR REPLACE FUNCTION public.preview_br_canonical_phone_duplicates(
+  p_company_id uuid DEFAULT NULL
+)
+RETURNS TABLE (
+  company_id uuid,
+  canon text,
+  lead_count bigint,
+  keep_id integer,
+  discard_ids integer[],
+  lead_ids integer[]
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  WITH groups AS (
+    SELECT
+      l.company_id,
+      public.canonicalize_br_mobile_phone(l.phone) AS canon,
+      array_agg(l.id ORDER BY l.created_at ASC, l.id ASC) AS ids
+    FROM public.leads l
+    WHERE l.deleted_at IS NULL
+      AND l.phone IS NOT NULL
+      AND BTRIM(l.phone) <> ''
+      AND (p_company_id IS NULL OR l.company_id = p_company_id)
+      AND LENGTH(public.canonicalize_br_mobile_phone(l.phone)) >= 12
+    GROUP BY l.company_id, public.canonicalize_br_mobile_phone(l.phone)
+    HAVING COUNT(*) > 1
+  )
+  SELECT
+    g.company_id,
+    g.canon,
+    cardinality(g.ids)::bigint AS lead_count,
+    g.ids[1] AS keep_id,
+    g.ids[2:cardinality(g.ids)] AS discard_ids,
+    g.ids AS lead_ids
+  FROM groups g
+  ORDER BY g.company_id, g.canon;
+$$;
+
+COMMENT ON FUNCTION public.preview_br_canonical_phone_duplicates(uuid) IS
+  'Dry-run: lista pares/grupos de leads com o mesmo telefone canônico BR.';
+
+REVOKE ALL ON FUNCTION public.preview_br_canonical_phone_duplicates(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.preview_br_canonical_phone_duplicates(uuid) TO service_role;
+
+-- ── 2. Backfill opt-in (por empresa ou global) ───────────────────────────────
+CREATE OR REPLACE FUNCTION public.backfill_br_canonical_phones(
+  p_company_id uuid DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_updated integer := 0;
+BEGIN
+  UPDATE public.leads
+  SET phone = public.canonicalize_br_mobile_phone(phone),
+      updated_at = NOW()
+  WHERE deleted_at IS NULL
+    AND phone IS NOT NULL
+    AND BTRIM(phone) <> ''
+    AND (p_company_id IS NULL OR company_id = p_company_id)
+    AND public.canonicalize_br_mobile_phone(phone) IS DISTINCT FROM phone;
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'updated_leads', v_updated,
+    'company_id', p_company_id
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.backfill_br_canonical_phones(uuid) IS
+  'Atualiza leads.phone para o formato canônico BR. Escopo: company_id ou NULL=global.';
+
+REVOKE ALL ON FUNCTION public.backfill_br_canonical_phones(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.backfill_br_canonical_phones(uuid) TO service_role;
+
+-- ── 3. Merge opt-in (por empresa ou global) ──────────────────────────────────
 CREATE OR REPLACE FUNCTION public.merge_br_canonical_phone_duplicates(
   p_company_id uuid DEFAULT NULL
 )
@@ -147,31 +242,14 @@ BEGIN
     'success', true,
     'merged_pairs', v_merged_count,
     'failed_pairs', v_failed_count,
+    'company_id', p_company_id,
     'errors', v_errors
   );
 END;
 $$;
 
 COMMENT ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) IS
-  'Mescla leads duplicados pelo telefone canônico BR (mantém o mais antigo).';
+  'Mescla leads duplicados pelo telefone canônico BR (mantém o mais antigo). Escopo opt-in.';
 
 REVOKE ALL ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) TO service_role;
-
--- ── 2. Backfill: gravar phone canônico ───────────────────────────────────────
-UPDATE public.leads
-SET phone = public.canonicalize_br_mobile_phone(phone),
-    updated_at = NOW()
-WHERE deleted_at IS NULL
-  AND phone IS NOT NULL
-  AND BTRIM(phone) <> ''
-  AND public.canonicalize_br_mobile_phone(phone) IS DISTINCT FROM phone;
-
--- ── 3. Merge automático dos pares restantes ──────────────────────────────────
-DO $$
-DECLARE
-  v_merge_result jsonb;
-BEGIN
-  SELECT public.merge_br_canonical_phone_duplicates(NULL) INTO v_merge_result;
-  RAISE NOTICE 'merge_br_canonical_phone_duplicates => %', v_merge_result;
-END $$;
