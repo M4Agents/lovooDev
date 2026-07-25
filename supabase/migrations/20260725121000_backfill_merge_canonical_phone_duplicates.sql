@@ -1,0 +1,177 @@
+-- =====================================================
+-- MIGRATION: Backfill phone canônico + merge de duplicados
+-- Data: 2026-07-25
+-- Depende de: 20260725120000_canonicalize_br_mobile_phone.sql
+-- =====================================================
+
+-- ── 1. Função de merge controlado por telefone canônico ──────────────────────
+CREATE OR REPLACE FUNCTION public.merge_br_canonical_phone_duplicates(
+  p_company_id uuid DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  r RECORD;
+  v_keep_id INTEGER;
+  v_discard_id INTEGER;
+  v_user_id UUID;
+  v_company_id UUID;
+  v_merged_count INTEGER := 0;
+  v_failed_count INTEGER := 0;
+  v_errors jsonb := '[]'::jsonb;
+  v_source leads%ROWTYPE;
+  v_target leads%ROWTYPE;
+BEGIN
+  FOR r IN
+    WITH groups AS (
+      SELECT
+        l.company_id,
+        public.canonicalize_br_mobile_phone(l.phone) AS canon,
+        array_agg(l.id ORDER BY l.created_at ASC, l.id ASC) AS ids
+      FROM public.leads l
+      WHERE l.deleted_at IS NULL
+        AND l.phone IS NOT NULL
+        AND BTRIM(l.phone) <> ''
+        AND (p_company_id IS NULL OR l.company_id = p_company_id)
+        AND LENGTH(public.canonicalize_br_mobile_phone(l.phone)) >= 12
+      GROUP BY l.company_id, public.canonicalize_br_mobile_phone(l.phone)
+      HAVING COUNT(*) > 1
+    )
+    SELECT company_id, canon, ids
+    FROM groups
+    ORDER BY company_id, canon
+  LOOP
+    v_keep_id := r.ids[1];
+    v_company_id := r.company_id;
+
+    SELECT cu.user_id
+      INTO v_user_id
+    FROM public.company_users cu
+    WHERE cu.company_id = r.company_id
+      AND cu.is_active = true
+    ORDER BY
+      CASE lower(COALESCE(cu.role, ''))
+        WHEN 'super_admin' THEN 0
+        WHEN 'system_admin' THEN 1
+        WHEN 'admin' THEN 2
+        ELSE 3
+      END,
+      cu.created_at ASC NULLS LAST
+    LIMIT 1;
+
+    FOR i IN 2..array_length(r.ids, 1) LOOP
+      v_discard_id := r.ids[i];
+
+      BEGIN
+        SELECT * INTO v_source FROM public.leads WHERE id = v_discard_id AND deleted_at IS NULL;
+        IF NOT FOUND THEN
+          CONTINUE;
+        END IF;
+
+        SELECT * INTO v_target FROM public.leads WHERE id = v_keep_id AND deleted_at IS NULL;
+        IF NOT FOUND THEN
+          RAISE EXCEPTION 'Lead destino % não encontrado', v_keep_id;
+        END IF;
+
+        IF v_source.company_id IS DISTINCT FROM v_target.company_id THEN
+          RAISE EXCEPTION 'Leads de empresas diferentes';
+        END IF;
+
+        -- merge_fields: mantém o mais antigo (keep), mescla campos e soft-delete o mais novo
+        UPDATE public.leads SET
+          name = CASE
+            WHEN LENGTH(COALESCE(v_source.name, '')) > LENGTH(COALESCE(v_target.name, ''))
+            THEN v_source.name ELSE v_target.name END,
+          email         = COALESCE(v_source.email, v_target.email),
+          phone         = r.canon,
+          interest      = COALESCE(v_source.interest, v_target.interest),
+          company_name  = COALESCE(v_source.company_name, v_target.company_name),
+          company_cnpj  = COALESCE(v_source.company_cnpj, v_target.company_cnpj),
+          company_email = COALESCE(v_source.company_email, v_target.company_email),
+          visitor_id    = COALESCE(v_target.visitor_id, v_source.visitor_id),
+          updated_at    = NOW()
+        WHERE id = v_keep_id;
+
+        UPDATE public.leads
+        SET deleted_at = NOW(),
+            duplicate_status = 'merged',
+            updated_at = NOW()
+        WHERE id = v_discard_id;
+
+        UPDATE public.opportunities
+          SET lead_id = v_keep_id, updated_at = NOW()
+        WHERE lead_id = v_discard_id AND company_id = v_company_id;
+
+        UPDATE public.opportunity_funnel_positions
+          SET lead_id = v_keep_id
+        WHERE lead_id = v_discard_id;
+
+        BEGIN
+          UPDATE public.lead_entries
+            SET lead_id = v_keep_id
+          WHERE lead_id = v_discard_id AND company_id = v_company_id;
+        EXCEPTION WHEN undefined_table THEN
+          NULL;
+        END;
+
+        UPDATE public.chat_conversations
+          SET lead_id = v_keep_id
+        WHERE lead_id = v_discard_id AND company_id = v_company_id;
+
+        BEGIN
+          INSERT INTO public.lead_merge_history (
+            source_lead_id, target_lead_id, merged_by_user_id, merge_strategy, created_at
+          ) VALUES (
+            v_discard_id, v_keep_id, v_user_id, 'merge_fields', NOW()
+          );
+        EXCEPTION WHEN OTHERS THEN
+          NULL;
+        END;
+
+        v_merged_count := v_merged_count + 1;
+      EXCEPTION WHEN OTHERS THEN
+        v_failed_count := v_failed_count + 1;
+        v_errors := v_errors || jsonb_build_object(
+          'keep_id', v_keep_id,
+          'discard_id', v_discard_id,
+          'error', SQLERRM
+        );
+      END;
+    END LOOP;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'merged_pairs', v_merged_count,
+    'failed_pairs', v_failed_count,
+    'errors', v_errors
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) IS
+  'Mescla leads duplicados pelo telefone canônico BR (mantém o mais antigo).';
+
+REVOKE ALL ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.merge_br_canonical_phone_duplicates(uuid) TO service_role;
+
+-- ── 2. Backfill: gravar phone canônico ───────────────────────────────────────
+UPDATE public.leads
+SET phone = public.canonicalize_br_mobile_phone(phone),
+    updated_at = NOW()
+WHERE deleted_at IS NULL
+  AND phone IS NOT NULL
+  AND BTRIM(phone) <> ''
+  AND public.canonicalize_br_mobile_phone(phone) IS DISTINCT FROM phone;
+
+-- ── 3. Merge automático dos pares restantes ──────────────────────────────────
+DO $$
+DECLARE
+  v_merge_result jsonb;
+BEGIN
+  SELECT public.merge_br_canonical_phone_duplicates(NULL) INTO v_merge_result;
+  RAISE NOTICE 'merge_br_canonical_phone_duplicates => %', v_merge_result;
+END $$;

@@ -5,6 +5,7 @@
 // Processa mensagens pendentes e envia via UAZAPI
 
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
+import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile.js'
 
 const supabase = getSupabaseAdmin()
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
@@ -196,9 +197,7 @@ async function createChatMessageRecord(message) {
 // =====================================================
 
 function cleanPhone(phone) {
-  let clean = (phone || '').replace(/\D/g, '')
-  if (!clean.startsWith('55') && clean.length <= 11) clean = '55' + clean
-  return clean
+  return canonicalizeBrMobilePhone(phone) || String(phone || '').replace(/\D/g, '')
 }
 
 // =====================================================

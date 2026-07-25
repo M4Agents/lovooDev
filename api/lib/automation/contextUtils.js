@@ -7,6 +7,8 @@
 // Sem imports de src/ — standalone.
 // =====================================================
 
+import { canonicalizeBrMobilePhone } from '../phone/canonicalizeBrMobile.js'
+
 /**
  * Resolve o leadId a partir do context.
  *
@@ -120,13 +122,10 @@ export async function resolveOpportunityId(context, supabase) {
 }
 
 /**
- * Normaliza telefone para dígitos com DDI 55 quando aplicável.
- * Espelha a regra usada pelo whatsappSender (sem export circular).
+ * Normaliza telefone para o formato canônico BR (55+DDD+9+8 quando elegível).
  */
 function cleanPhoneNumber(phone) {
-  let clean = String(phone || '').replace(/\D/g, '')
-  if (!clean.startsWith('55') && clean.length <= 11) clean = '55' + clean
-  return clean
+  return canonicalizeBrMobilePhone(phone) || String(phone || '').replace(/\D/g, '')
 }
 
 /**

@@ -12,6 +12,7 @@
 // =====================================================
 
 import { persistConversationId } from './contextUtils.js'
+import { canonicalizeBrMobilePhone } from '../phone/canonicalizeBrMobile.js'
 
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
@@ -197,9 +198,7 @@ async function resolveUserId(companyId, supabase) {
 // ---------------------------------------------------------------------------
 
 function cleanPhoneNumber(phone) {
-  let clean = (phone || '').replace(/\D/g, '')
-  if (!clean.startsWith('55') && clean.length <= 11) clean = '55' + clean
-  return clean
+  return canonicalizeBrMobilePhone(phone) || String(phone || '').replace(/\D/g, '')
 }
 
 function formatCurrency(value, currency) {

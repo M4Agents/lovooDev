@@ -7,6 +7,7 @@ import type { Lead } from '../lib/supabase';
 import { UserSelector } from './WhatsAppChat/UserSelector';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
+import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
 import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername, extractLinkedInUsername, extractTikTokUsername, isValidSocialUsername } from '../utils/socialMedia';
 import { LeadTagsField } from './LeadTagsField';
@@ -357,18 +358,18 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const checkDuplicateLead = async (): Promise<boolean> => {
     if (!company?.id) return false;
 
-    const phoneRaw = formData.phone.replace(/\D/g, '');
     const email = formData.email.trim().toLowerCase();
 
-    // Normaliza telefone (mesma lógica de api.createLead)
-    let phoneNorm = '';
-    if (phoneRaw.length === 10 || phoneRaw.length === 11) {
-      phoneNorm = '55' + phoneRaw;
-    } else if (phoneRaw.length > 0) {
-      phoneNorm = phoneRaw;
-    }
+    // Normaliza telefone canônico BR (mesma lógica de api.createLead)
+    const phoneNorm = canonicalizeBrMobilePhone(formData.phone) || '';
     const right11 = phoneNorm.slice(-11);
-    const lookupValues = phoneNorm.length >= 10 ? [...new Set([phoneNorm, right11])] : [];
+    const withoutNinth =
+      phoneNorm.length === 13 && phoneNorm.startsWith('55') && phoneNorm.charAt(4) === '9'
+        ? phoneNorm.slice(0, 4) + phoneNorm.slice(5)
+        : null;
+    const lookupValues = phoneNorm.length >= 10
+      ? [...new Set([phoneNorm, right11, withoutNinth].filter(Boolean) as string[])]
+      : [];
 
     const conditions: string[] = [];
     if (lookupValues.length > 0) {
