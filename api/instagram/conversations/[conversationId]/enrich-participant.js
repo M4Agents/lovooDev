@@ -52,8 +52,10 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ error: auth.error });
   }
 
-  // ── 3. Se já tem nome, retornar sem chamar a Meta ───────────────────────────
-  if (conv.participant_name) {
+  // ── 3. Se já tem nome E avatar, retornar sem chamar a Meta ─────────────────
+  // Reprocessar se avatar estiver nulo — a Meta pode ter retornado só o nome
+  // anteriormente e agora profile_picture_url pode estar disponível.
+  if (conv.participant_name && conv.participant_avatar) {
     return res.status(200).json({
       participant_name:     conv.participant_name,
       participant_username: conv.participant_username,
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
   let profileData;
   try {
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${conv.ig_participant_id}`);
-    profileUrl.searchParams.set('fields',       'name,username,profile_pic');
+    profileUrl.searchParams.set('fields',       'name,username,profile_pic,profile_picture_url');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileRes = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
@@ -103,9 +105,9 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'meta_api_unavailable', message: 'API do Instagram indisponível' });
   }
 
-  const name     = profileData.name     ?? null;
-  const username = profileData.username ?? null;
-  const picUrl   = profileData.profile_pic ?? null;
+  const name     = profileData.name     ?? conv.participant_name     ?? null;
+  const username = profileData.username ?? conv.participant_username ?? null;
+  const picUrl   = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
 
   // ── 6. Fazer upload da foto para storage permanente ─────────────────────────
   let avatarUrl = null;

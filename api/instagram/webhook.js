@@ -283,7 +283,7 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
       .eq('id', conversationId)
       .maybeSingle();
 
-    if (!conv || conv.participant_name) return;
+    if (!conv || (conv.participant_name && conv.participant_avatar)) return;
 
     // Guard: token pode ter sido nulificado por deauthorize/data_deletion
     if (!connection.access_token_enc) return;
@@ -298,7 +298,7 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 
     // Buscar perfil do participante na Graph API
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${participantIgsid}`);
-    profileUrl.searchParams.set('fields',       'name,username,profile_pic');
+    profileUrl.searchParams.set('fields',       'name,username,profile_pic,profile_picture_url');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
@@ -306,12 +306,12 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
 
     if (profileData.error || !profileRes.ok) return;
 
-    const name     = profileData.name     ?? null;
-    const username = profileData.username ?? null;
-    const picUrl   = profileData.profile_pic ?? null;
+    const name     = profileData.name     ?? conv.participant_name     ?? null;
+    const username = profileData.username ?? conv.participant_username ?? null;
+    const picUrl   = profileData.profile_pic ?? profileData.profile_picture_url ?? null;
 
     // Fazer upload da foto para storage permanente
-    let avatarUrl = null;
+    let avatarUrl = conv.participant_avatar ?? null;
     if (picUrl && conv.company_id) {
       avatarUrl = await uploadAvatarToStorage(svc, {
         cdnUrl:    picUrl,
