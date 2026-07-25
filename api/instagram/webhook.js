@@ -304,17 +304,31 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
     const profileRes  = await fetch(profileUrl.toString(), { signal: AbortSignal.timeout(10_000) });
     const profileData = await profileRes.json();
 
-    // #region agent log [enrich-diag]
-    console.log('[enrich-diag] igsid=%s httpStatus=%d ok=%s hasError=%s errorCode=%s errorMsg=%s name=%s username=%s hasProfilePic=%s hasProfilePictureUrl=%s',
-      participantIgsid, profileRes.status, profileRes.ok,
-      !!profileData.error,
-      profileData.error?.code     ?? 'none',
-      profileData.error?.message  ?? 'none',
-      profileData.name     ?? 'NULL',
-      profileData.username ?? 'NULL',
-      !!profileData.profile_pic,
-      !!profileData.profile_picture_url
-    );
+    // #region agent log [enrich-diag] — grava resultado no banco para diagnóstico
+    await svc.from('instagram_webhook_events').insert({
+      company_id:        conv.company_id,
+      connection_id:     connection.id,
+      instagram_user_id: participantIgsid,
+      event_type:        'unknown',
+      ig_object_id:      `enrich_diag_${participantIgsid}`,
+      raw_payload:       {
+        _diag:              true,
+        igsid:              participantIgsid,
+        http_status:        profileRes.status,
+        http_ok:            profileRes.ok,
+        has_error:          !!profileData.error,
+        error_code:         profileData.error?.code         ?? null,
+        error_subcode:      profileData.error?.error_subcode ?? null,
+        error_message:      profileData.error?.message       ?? null,
+        error_type:         profileData.error?.type          ?? null,
+        name:               profileData.name                 ?? null,
+        username:           profileData.username              ?? null,
+        has_profile_pic:    !!profileData.profile_pic,
+        has_profile_pic_url:!!profileData.profile_picture_url,
+      },
+      processing_status: 'skipped',
+      hmac_valid:        true,
+    }).catch(() => {});
     // #endregion
 
     if (profileData.error || !profileRes.ok) return;
