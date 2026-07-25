@@ -261,9 +261,10 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
   const detail = rpc?.skipped ? rpc.reason : (rpc?.ok ? null : (rpc?.error ?? 'rpc_returned_not_ok'));
   await updateWebhookEvent(svc, eventId, status, detail);
 
-  // Enriquecer perfil do participante (fire-and-forget — não bloqueia resposta Meta)
+  // Enriquecer perfil do participante (awaited — fire-and-forget não funciona em Vercel serverless,
+  // pois a função é encerrada logo após res.status(200). Meta permite até 20s para resposta.)
   if (rpc?.ok && rpc?.conversation_id && ev.participantIgUserId && connection) {
-    enrichParticipantIfNeeded(rpc.conversation_id, ev.participantIgUserId, connection, svc).catch(() => {});
+    await enrichParticipantIfNeeded(rpc.conversation_id, ev.participantIgUserId, connection, svc);
   }
 }
 

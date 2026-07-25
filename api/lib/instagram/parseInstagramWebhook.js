@@ -42,17 +42,17 @@ export function parseDmEvents(entry) {
     let content     = msg.text ?? null;
     let mediaUrl    = null;
 
-    if (msg.is_deleted) {
-      messageType = 'deleted';
-      content     = null;
-    } else if (msg.is_unsupported) {
+    const ALLOWED_MSG_TYPES = new Set(['text', 'image', 'video', 'audio', 'storyReply']);
+
+    if (msg.is_deleted || msg.is_unsupported) {
       messageType = 'unsupported';
       content     = null;
     } else if (msg.attachments?.length > 0) {
-      const att   = msg.attachments[0];
-      messageType = att.type ?? 'attachment';
-      mediaUrl    = att.payload?.url ?? null;
-      content     = null;
+      const att    = msg.attachments[0];
+      const rawType = att.type ?? '';
+      messageType  = ALLOWED_MSG_TYPES.has(rawType) ? rawType : 'unsupported';
+      mediaUrl     = att.payload?.url ?? null;
+      content      = null;
     }
 
     events.push({

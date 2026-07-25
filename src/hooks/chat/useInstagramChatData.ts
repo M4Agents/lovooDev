@@ -341,6 +341,9 @@ export function useInstagramChatData(
                       last_message_preview: payload.new.last_message_preview ?? c.last_message_preview,
                       assigned_to:          payload.new.assigned_to          ?? c.assigned_to,
                       updated_at:           payload.new.updated_at           ?? c.updated_at,
+                      participant_name:     payload.new.participant_name     ?? c.participant_name,
+                      participant_username: payload.new.participant_username ?? c.participant_username,
+                      participant_avatar:   payload.new.participant_avatar   ?? c.participant_avatar,
                     }
                   : c
               )
