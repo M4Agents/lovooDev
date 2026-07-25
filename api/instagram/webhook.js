@@ -276,25 +276,40 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
 
 async function enrichParticipantIfNeeded(conversationId, participantIgsid, connection, svc) {
   try {
-    // Verificar se já tem nome (evitar chamadas desnecessárias à Meta)
+    // Verificar se já tem nome e avatar (evitar chamadas desnecessárias à Meta)
     const { data: conv } = await svc
       .from('instagram_conversations')
-      .select('participant_name, company_id')
+      .select('participant_name, participant_avatar, company_id')
       .eq('id', conversationId)
       .maybeSingle();
 
-    if (!conv || (conv.participant_name && conv.participant_avatar)) return;
+    if (!conv) {
+      await svc.from('instagram_webhook_events').insert({ company_id: connection.company_id, connection_id: connection.id, instagram_user_id: participantIgsid, event_type: 'unknown', ig_object_id: `enrich_diag_${Date.now()}`, raw_payload: { _diag: true, step: 'conv_not_found', conversationId }, processing_status: 'skipped', hmac_valid: true }).catch(() => {});
+      return;
+    }
+    if (conv.participant_name && conv.participant_avatar) {
+      // já enriquecido — nada a fazer
+      return;
+    }
 
     // Guard: token pode ter sido nulificado por deauthorize/data_deletion
-    if (!connection.access_token_enc) return;
+    if (!connection.access_token_enc) {
+      await svc.from('instagram_webhook_events').insert({ company_id: conv.company_id, connection_id: connection.id, instagram_user_id: participantIgsid, event_type: 'unknown', ig_object_id: `enrich_diag_${Date.now()}`, raw_payload: { _diag: true, step: 'no_token' }, processing_status: 'skipped', hmac_valid: true }).catch(() => {});
+      return;
+    }
 
     // Descriptografar token
     let accessToken;
     try {
       accessToken = decryptInstagramToken(connection.access_token_enc);
-    } catch {
+    } catch (decErr) {
+      await svc.from('instagram_webhook_events').insert({ company_id: conv.company_id, connection_id: connection.id, instagram_user_id: participantIgsid, event_type: 'unknown', ig_object_id: `enrich_diag_${Date.now()}`, raw_payload: { _diag: true, step: 'decrypt_failed', err: decErr?.message }, processing_status: 'skipped', hmac_valid: true }).catch(() => {});
       return;
     }
+
+    // #region agent log [enrich-diag] — confirma chegada na chamada Meta API
+    await svc.from('instagram_webhook_events').insert({ company_id: conv.company_id, connection_id: connection.id, instagram_user_id: participantIgsid, event_type: 'unknown', ig_object_id: `enrich_diag_${Date.now()}`, raw_payload: { _diag: true, step: 'before_meta_call', igsid: participantIgsid }, processing_status: 'skipped', hmac_valid: true }).catch(() => {});
+    // #endregion
 
     // Buscar perfil do participante na Graph API
     const profileUrl = new URL(`https://graph.instagram.com/${GRAPH_API_VERSION}/${participantIgsid}`);
@@ -310,21 +325,22 @@ async function enrichParticipantIfNeeded(conversationId, participantIgsid, conne
       connection_id:     connection.id,
       instagram_user_id: participantIgsid,
       event_type:        'unknown',
-      ig_object_id:      `enrich_diag_${participantIgsid}`,
+      ig_object_id:      `enrich_diag_${Date.now()}_result`,
       raw_payload:       {
-        _diag:              true,
-        igsid:              participantIgsid,
-        http_status:        profileRes.status,
-        http_ok:            profileRes.ok,
-        has_error:          !!profileData.error,
-        error_code:         profileData.error?.code         ?? null,
-        error_subcode:      profileData.error?.error_subcode ?? null,
-        error_message:      profileData.error?.message       ?? null,
-        error_type:         profileData.error?.type          ?? null,
-        name:               profileData.name                 ?? null,
-        username:           profileData.username              ?? null,
-        has_profile_pic:    !!profileData.profile_pic,
-        has_profile_pic_url:!!profileData.profile_picture_url,
+        _diag:               true,
+        step:                'meta_response',
+        igsid:               participantIgsid,
+        http_status:         profileRes.status,
+        http_ok:             profileRes.ok,
+        has_error:           !!profileData.error,
+        error_code:          profileData.error?.code         ?? null,
+        error_subcode:       profileData.error?.error_subcode ?? null,
+        error_message:       profileData.error?.message       ?? null,
+        error_type:          profileData.error?.type          ?? null,
+        name:                profileData.name                 ?? null,
+        username:            profileData.username             ?? null,
+        has_profile_pic:     !!profileData.profile_pic,
+        has_profile_pic_url: !!profileData.profile_picture_url,
       },
       processing_status: 'skipped',
       hmac_valid:        true,
