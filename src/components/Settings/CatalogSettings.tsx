@@ -545,9 +545,7 @@ const ProductForm: React.FC<{
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
-  const [costPrice, setCostPrice] = useState<string>(
-    initial?.cost_price != null ? String(initial.cost_price) : ''
-  )
+  const [costPrice, setCostPrice] = useState<number>(initial?.cost_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
   const [supplierId, setSupplierId] = useState(initial?.supplier_id ?? '')
@@ -640,7 +638,7 @@ const ProductForm: React.FC<{
     if (!canWriteCatalog) return
     setSaving(true)
     try {
-      const parsedCostPrice = costPrice !== '' ? parseFloat(costPrice) : null
+      const parsedCostPrice = costPrice > 0 ? costPrice : null
       if (initial) {
         const updated = await catalogApi.updateProduct(initial.id, {
           name,
@@ -744,14 +742,11 @@ const ProductForm: React.FC<{
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de custo</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
+          <CatalogDefaultPriceField
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            currencyCode={defaultCurrency}
             value={costPrice}
-            onChange={(e) => setCostPrice(e.target.value)}
-            placeholder="0,00"
+            onChange={setCostPrice}
           />
         </div>
       </div>
@@ -1347,9 +1342,7 @@ const ServiceForm: React.FC<{
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
-  const [costPrice, setCostPrice] = useState<string>(
-    initial?.cost_price != null ? String(initial.cost_price) : ''
-  )
+  const [costPrice, setCostPrice] = useState<number>(initial?.cost_price ?? 0)
   const [description, setDescription] = useState(initial?.description ?? '')
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
   const [supplierId, setSupplierId] = useState(initial?.supplier_id ?? '')
@@ -1441,7 +1434,7 @@ const ServiceForm: React.FC<{
     if (!canWriteCatalog) return
     setSaving(true)
     try {
-      const parsedCostPrice = costPrice !== '' ? parseFloat(costPrice) : null
+      const parsedCostPrice = costPrice > 0 ? costPrice : null
       if (initial) {
         const updated = await catalogApi.updateService(initial.id, {
           name,
@@ -1552,14 +1545,11 @@ const ServiceForm: React.FC<{
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de custo</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
+          <CatalogDefaultPriceField
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            currencyCode={defaultCurrency}
             value={costPrice}
-            onChange={(e) => setCostPrice(e.target.value)}
-            placeholder="0,00"
+            onChange={setCostPrice}
           />
         </div>
       </div>
