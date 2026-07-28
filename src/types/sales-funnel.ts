@@ -137,15 +137,50 @@ export interface CatalogCategory {
   updated_at: string
 }
 
+/** Fornecedor cadastrado no sistema — tabela suppliers. */
+export interface Supplier {
+  id: string
+  company_id: string
+  name: string
+  trade_name?: string | null
+  document?: string | null
+  document_type?: 'cnpj' | 'cpf' | 'other' | null
+  email?: string | null
+  phone?: string | null
+  website?: string | null
+  contact_name?: string | null
+  contact_phone?: string | null
+  address_street?: string | null
+  address_city?: string | null
+  address_state?: string | null
+  address_zip?: string | null
+  address_country?: string | null
+  notes?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface CatalogProduct {
   id: string
   company_id: string
   name: string
   description?: string | null
+  /** Preço de venda padrão. Usado em oportunidades. */
   default_price: number
+  /** Preço de custo (informativo, não afeta valor de oportunidades). */
+  cost_price?: number | null
   category_id?: string | null
   /** Resolvido via join: catalog_categories(name) — presente apenas quando a query inclui o join. */
   catalog_categories?: { name: string } | null
+  /** FK para tabela suppliers. */
+  supplier_id?: string | null
+  /** Resolvido via join: suppliers(id, name). */
+  supplier?: { id: string; name: string } | null
+  /** Código identificador do produto no catálogo do fornecedor. */
+  supplier_product_code?: string | null
+  /** URL pública da foto principal do produto (Supabase Storage). */
+  primary_image_url?: string | null
   is_active: boolean
   availability_status: CatalogAvailabilityStatus
   stock_status: CatalogStockStatus
@@ -167,10 +202,21 @@ export interface CatalogService {
   company_id: string
   name: string
   description?: string | null
+  /** Preço de venda padrão. Usado em oportunidades. */
   default_price: number
+  /** Preço de custo (informativo, não afeta valor de oportunidades). */
+  cost_price?: number | null
   category_id?: string | null
   /** Resolvido via join: catalog_categories(name) — presente apenas quando a query inclui o join. */
   catalog_categories?: { name: string } | null
+  /** FK para tabela suppliers. */
+  supplier_id?: string | null
+  /** Resolvido via join: suppliers(id, name). */
+  supplier?: { id: string; name: string } | null
+  /** Código identificador do serviço no catálogo do fornecedor. */
+  supplier_product_code?: string | null
+  /** URL pública da foto/imagem principal do serviço (Supabase Storage). */
+  primary_image_url?: string | null
   is_active: boolean
   availability_status: CatalogAvailabilityStatus
   stock_status: CatalogStockStatus

@@ -7,21 +7,24 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Package, Plus, Pencil, RefreshCw, Tag, Trash2,
   ChevronDown, Search, SlidersHorizontal, X as XIcon,
-  Download, Upload, Sparkles,
+  Download, Upload, Sparkles, Building2, ImagePlus,
 } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
 import { catalogMediaApi } from '../../services/catalogMediaApi'
 import { catalogCategoriesApi } from '../../services/catalogCategoriesApi'
-import type { CatalogCategory, CatalogProduct, CatalogService } from '../../types/sales-funnel'
+import { suppliersApi } from '../../services/suppliersApi'
+import type { CatalogCategory, CatalogProduct, CatalogService, Supplier } from '../../types/sales-funnel'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { CatalogItemMediaEditor } from './CatalogItemMediaEditor'
 import { CatalogItemRelationsEditor } from './CatalogItemRelationsEditor'
 import { CatalogDefaultPriceField } from './CatalogDefaultPriceField'
 import { CatalogImportModal } from './CatalogImportModal'
+import { SuppliersSettings } from './SuppliersSettings'
 import { exportCatalogToCsv } from '../../utils/catalogCsvExport'
 import { useDebounce } from '../../hooks/useDebounce'
 import { formatMoney } from '../../lib/formatMoney'
+import { uploadCatalogMediaToLibrary } from '../../services/catalogLibraryUpload'
 
 type Props = {
   companyId: string
@@ -44,7 +47,7 @@ export const CatalogSettings: React.FC<Props> = ({
   const [services, setServices] = useState<CatalogService[]>([])
   const [productThumbs, setProductThumbs] = useState<Record<string, string>>({})
   const [serviceThumbs, setServiceThumbs] = useState<Record<string, string>>({})
-  const [subTab, setSubTab] = useState<'products' | 'services' | 'categories'>('products')
+  const [subTab, setSubTab] = useState<'products' | 'services' | 'categories' | 'suppliers'>('products')
   const [categories, setCategories] = useState<CatalogCategory[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -151,6 +154,18 @@ export const CatalogSettings: React.FC<Props> = ({
             >
               Categorias ({categories.length})
             </button>
+            <button
+              type="button"
+              onClick={() => setSubTab('suppliers')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                subTab === 'suppliers' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5" />
+                Fornecedores
+              </span>
+            </button>
           </div>
 
           {subTab === 'products' && (
@@ -179,6 +194,9 @@ export const CatalogSettings: React.FC<Props> = ({
               categories={categories}
               onRefresh={load}
             />
+          )}
+          {subTab === 'suppliers' && (
+            <SuppliersSettings companyId={companyId} />
           )}
         </>
       )}
@@ -527,8 +545,18 @@ const ProductForm: React.FC<{
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
+  const [costPrice, setCostPrice] = useState<string>(
+    initial?.cost_price != null ? String(initial.cost_price) : ''
+  )
   const [description, setDescription] = useState(initial?.description ?? '')
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
+  const [supplierId, setSupplierId] = useState(initial?.supplier_id ?? '')
+  const [supplierProductCode, setSupplierProductCode] = useState(initial?.supplier_product_code ?? '')
+  const [primaryImageUrl, setPrimaryImageUrl] = useState(initial?.primary_image_url ?? '')
+  const [imageUploading, setImageUploading] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [linkedInactiveSupplier, setLinkedInactiveSupplier] = useState<Supplier | null>(null)
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
   const [availability, setAvailability] = useState(initial?.availability_status ?? 'available')
   const [stock, setStock] = useState(initial?.stock_status ?? 'unknown')
@@ -549,6 +577,40 @@ const ProductForm: React.FC<{
   const [previewNotes, setPreviewNotes] = useState<string | null>(null)
   const [previewGuidance, setPreviewGuidance] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
+
+  useEffect(() => {
+    suppliersApi.listActive(companyId).then(async (activeList) => {
+      if (initial?.supplier_id) {
+        const alreadyActive = activeList.some((s) => s.id === initial.supplier_id)
+        if (!alreadyActive) {
+          const inactive = await suppliersApi.getById(initial.supplier_id, companyId)
+          setLinkedInactiveSupplier(inactive)
+        }
+      }
+      setSuppliers(activeList)
+    }).catch(() => {})
+  }, [companyId, initial?.supplier_id])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageError(null)
+    setImageUploading(true)
+    try {
+      const result = await uploadCatalogMediaToLibrary(file, companyId, 'product')
+      if (!result.ok) {
+        setImageError(result.error)
+        return
+      }
+      const previewUrl = (result.data as Record<string, unknown>).preview_url as string | null
+      if (previewUrl) setPrimaryImageUrl(previewUrl)
+    } catch {
+      setImageError('Erro ao fazer upload da imagem.')
+    } finally {
+      setImageUploading(false)
+      e.target.value = ''
+    }
+  }
 
   const handleGenerate = async (field: 'notes' | 'guidance') => {
     const isNotes = field === 'notes'
@@ -578,12 +640,17 @@ const ProductForm: React.FC<{
     if (!canWriteCatalog) return
     setSaving(true)
     try {
+      const parsedCostPrice = costPrice !== '' ? parseFloat(costPrice) : null
       if (initial) {
         const updated = await catalogApi.updateProduct(initial.id, {
           name,
           default_price: defaultPrice,
+          cost_price: parsedCostPrice,
           description: description || null,
           category_id: categoryId || null,
+          supplier_id: supplierId || null,
+          supplier_product_code: supplierProductCode.trim() || null,
+          primary_image_url: primaryImageUrl || null,
           is_active: isActive,
           availability_status: availability as CatalogProduct['availability_status'],
           stock_status: stock as CatalogProduct['stock_status'],
@@ -599,8 +666,12 @@ const ProductForm: React.FC<{
         const created = await catalogApi.createProduct(companyId, {
           name,
           default_price: defaultPrice,
+          cost_price: parsedCostPrice ?? undefined,
           description: description || undefined,
           category_id: categoryId || null,
+          supplier_id: supplierId || null,
+          supplier_product_code: supplierProductCode.trim() || undefined,
+          primary_image_url: primaryImageUrl || undefined,
           is_active: isActive,
           availability_status: availability as CatalogProduct['availability_status'],
           stock_status: stock as CatalogProduct['stock_status'],
@@ -635,26 +706,14 @@ const ProductForm: React.FC<{
       <h3 className="text-lg font-semibold text-gray-900">
         {initial ? 'Editar produto' : 'Novo produto'}
       </h3>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
-          <input
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço padrão</label>
-          <CatalogDefaultPriceField
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            currencyCode={defaultCurrency}
-            value={defaultPrice}
-            onChange={setDefaultPrice}
-            required
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
@@ -668,6 +727,105 @@ const ProductForm: React.FC<{
             <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}
         </select>
+      </div>
+
+      {/* Fornecedor + preços */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de venda</label>
+          <CatalogDefaultPriceField
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            currencyCode={defaultCurrency}
+            value={defaultPrice}
+            onChange={setDefaultPrice}
+            required
+          />
+          <p className="text-[11px] text-slate-400 mt-1">Usado nas oportunidades.</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de custo</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={costPrice}
+            onChange={(e) => setCostPrice(e.target.value)}
+            placeholder="0,00"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Fornecedor</label>
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
+          >
+            <option value="">Sem fornecedor</option>
+            {linkedInactiveSupplier && (
+              <option key={linkedInactiveSupplier.id} value={linkedInactiveSupplier.id} disabled>
+                {linkedInactiveSupplier.name} — inativo
+              </option>
+            )}
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Código do fornecedor</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={supplierProductCode}
+            onChange={(e) => setSupplierProductCode(e.target.value)}
+            placeholder="SKU / código no catálogo do fornecedor"
+          />
+        </div>
+      </div>
+
+      {/* Foto do produto */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Foto do produto</label>
+        <div className="flex items-start gap-3">
+          {primaryImageUrl ? (
+            <div className="relative w-20 h-20 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+              <img
+                src={primaryImageUrl}
+                alt="Foto do produto"
+                className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setPrimaryImageUrl('')}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700"
+                title="Remover foto"
+              >
+                <XIcon className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="w-20 h-20 rounded-lg border border-dashed border-slate-300 flex items-center justify-center bg-slate-50 flex-shrink-0">
+              <ImagePlus className="w-7 h-7 text-slate-300" />
+            </div>
+          )}
+          <div className="flex-1 space-y-1.5">
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              {imageUploading ? 'Enviando…' : 'Selecionar imagem'}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={imageUploading}
+                onChange={handleImageUpload}
+              />
+            </label>
+            {imageError && <p className="text-xs text-red-600">{imageError}</p>}
+            <p className="text-[11px] text-slate-400">PNG, JPG ou WEBP. Máx. 5 MB.</p>
+          </div>
+        </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Descrição (catálogo)</label>
@@ -1189,8 +1347,18 @@ const ServiceForm: React.FC<{
   const [mediaBatchBusy, setMediaBatchBusy] = useState(false)
   const [name, setName] = useState(initial?.name ?? '')
   const [defaultPrice, setDefaultPrice] = useState(initial?.default_price ?? 0)
+  const [costPrice, setCostPrice] = useState<string>(
+    initial?.cost_price != null ? String(initial.cost_price) : ''
+  )
   const [description, setDescription] = useState(initial?.description ?? '')
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
+  const [supplierId, setSupplierId] = useState(initial?.supplier_id ?? '')
+  const [supplierProductCode, setSupplierProductCode] = useState(initial?.supplier_product_code ?? '')
+  const [primaryImageUrl, setPrimaryImageUrl] = useState(initial?.primary_image_url ?? '')
+  const [imageUploading, setImageUploading] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [linkedInactiveSupplier, setLinkedInactiveSupplier] = useState<Supplier | null>(null)
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
   const [availability, setAvailability] = useState(initial?.availability_status ?? 'available')
   const [aiNotes, setAiNotes] = useState(initial?.ai_notes ?? '')
@@ -1210,6 +1378,40 @@ const ServiceForm: React.FC<{
   const [previewNotes, setPreviewNotes] = useState<string | null>(null)
   const [previewGuidance, setPreviewGuidance] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
+
+  useEffect(() => {
+    suppliersApi.listActive(companyId).then(async (activeList) => {
+      if (initial?.supplier_id) {
+        const alreadyActive = activeList.some((s) => s.id === initial.supplier_id)
+        if (!alreadyActive) {
+          const inactive = await suppliersApi.getById(initial.supplier_id, companyId)
+          setLinkedInactiveSupplier(inactive)
+        }
+      }
+      setSuppliers(activeList)
+    }).catch(() => {})
+  }, [companyId, initial?.supplier_id])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageError(null)
+    setImageUploading(true)
+    try {
+      const result = await uploadCatalogMediaToLibrary(file, companyId, 'service')
+      if (!result.ok) {
+        setImageError(result.error)
+        return
+      }
+      const previewUrl = (result.data as Record<string, unknown>).preview_url as string | null
+      if (previewUrl) setPrimaryImageUrl(previewUrl)
+    } catch {
+      setImageError('Erro ao fazer upload da imagem.')
+    } finally {
+      setImageUploading(false)
+      e.target.value = ''
+    }
+  }
 
   const handleGenerate = async (field: 'notes' | 'guidance') => {
     const isNotes = field === 'notes'
@@ -1239,12 +1441,17 @@ const ServiceForm: React.FC<{
     if (!canWriteCatalog) return
     setSaving(true)
     try {
+      const parsedCostPrice = costPrice !== '' ? parseFloat(costPrice) : null
       if (initial) {
         const updated = await catalogApi.updateService(initial.id, {
           name,
           default_price: defaultPrice,
+          cost_price: parsedCostPrice,
           description: description || null,
           category_id: categoryId || null,
+          supplier_id: supplierId || null,
+          supplier_product_code: supplierProductCode.trim() || null,
+          primary_image_url: primaryImageUrl || null,
           is_active: isActive,
           availability_status: availability as CatalogService['availability_status'],
           ai_notes: aiNotes || null,
@@ -1259,8 +1466,12 @@ const ServiceForm: React.FC<{
         const created = await catalogApi.createService(companyId, {
           name,
           default_price: defaultPrice,
+          cost_price: parsedCostPrice ?? undefined,
           description: description || undefined,
           category_id: categoryId || null,
+          supplier_id: supplierId || null,
+          supplier_product_code: supplierProductCode.trim() || undefined,
+          primary_image_url: primaryImageUrl || undefined,
           is_active: isActive,
           availability_status: availability as CatalogService['availability_status'],
           ai_notes: aiNotes || undefined,
@@ -1294,26 +1505,14 @@ const ServiceForm: React.FC<{
       <h3 className="text-lg font-semibold text-gray-900">
         {initial ? 'Editar serviço' : 'Novo serviço'}
       </h3>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
-          <input
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço padrão</label>
-          <CatalogDefaultPriceField
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            currencyCode={defaultCurrency}
-            value={defaultPrice}
-            onChange={setDefaultPrice}
-            required
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
@@ -1336,6 +1535,105 @@ const ServiceForm: React.FC<{
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+      </div>
+
+      {/* Fornecedor + preços */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de venda</label>
+          <CatalogDefaultPriceField
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            currencyCode={defaultCurrency}
+            value={defaultPrice}
+            onChange={setDefaultPrice}
+            required
+          />
+          <p className="text-[11px] text-slate-400 mt-1">Usado nas oportunidades.</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Preço de custo</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={costPrice}
+            onChange={(e) => setCostPrice(e.target.value)}
+            placeholder="0,00"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Fornecedor</label>
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
+          >
+            <option value="">Sem fornecedor</option>
+            {linkedInactiveSupplier && (
+              <option key={linkedInactiveSupplier.id} value={linkedInactiveSupplier.id} disabled>
+                {linkedInactiveSupplier.name} — inativo
+              </option>
+            )}
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Código do fornecedor</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={supplierProductCode}
+            onChange={(e) => setSupplierProductCode(e.target.value)}
+            placeholder="SKU / código no catálogo do fornecedor"
+          />
+        </div>
+      </div>
+
+      {/* Foto do serviço */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Imagem do serviço</label>
+        <div className="flex items-start gap-3">
+          {primaryImageUrl ? (
+            <div className="relative w-20 h-20 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+              <img
+                src={primaryImageUrl}
+                alt="Imagem do serviço"
+                className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setPrimaryImageUrl('')}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700"
+                title="Remover imagem"
+              >
+                <XIcon className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="w-20 h-20 rounded-lg border border-dashed border-slate-300 flex items-center justify-center bg-slate-50 flex-shrink-0">
+              <ImagePlus className="w-7 h-7 text-slate-300" />
+            </div>
+          )}
+          <div className="flex-1 space-y-1.5">
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              {imageUploading ? 'Enviando…' : 'Selecionar imagem'}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={imageUploading}
+                onChange={handleImageUpload}
+              />
+            </label>
+            {imageError && <p className="text-xs text-red-600">{imageError}</p>}
+            <p className="text-[11px] text-slate-400">PNG, JPG ou WEBP. Máx. 5 MB.</p>
+          </div>
+        </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Disponibilidade</label>
