@@ -473,8 +473,8 @@ const CatalogProductList: React.FC<{
             {!listLoading && listItems.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="px-2 py-1 align-middle">
-                  {thumbnails[p.id] && (
-                    <img src={thumbnails[p.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
+                  {(p.primary_image_url || thumbnails[p.id]) && (
+                    <img src={p.primary_image_url || thumbnails[p.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
@@ -1275,8 +1275,8 @@ const CatalogServiceList: React.FC<{
             {!listLoading && listItems.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-2 py-1 align-middle">
-                  {thumbnails[s.id] && (
-                    <img src={thumbnails[s.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
+                  {(s.primary_image_url || thumbnails[s.id]) && (
+                    <img src={s.primary_image_url || thumbnails[s.id]} alt="" loading="lazy" className="w-6 h-6 rounded object-cover" />
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{s.name}</td>
