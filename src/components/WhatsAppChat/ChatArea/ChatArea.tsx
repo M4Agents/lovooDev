@@ -417,7 +417,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       await chatApi.setAiState(conversationId, companyId, newState)
     } catch (error) {
       console.error('Erro ao alterar estado da IA:', error)
-      setAiState(previous)     // rollback em caso de erro
+      setAiState(previous)
+      toast.error('Não foi possível alterar o estado da IA. Tente novamente.')
     } finally {
       setAiStateLoading(false)
     }

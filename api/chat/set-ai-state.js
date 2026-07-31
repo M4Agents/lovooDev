@@ -31,17 +31,19 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // Matriz de transições permitidas
 const ALLOWED_TRANSITIONS = {
   ai_inactive: ['ai_active'],
-  ai_active:   ['ai_paused'],
-  ai_paused:   ['ai_active']
+  ai_active:   ['ai_paused', 'ai_inactive'],
+  ai_paused:   ['ai_active', 'ai_inactive']
 };
 
 const VALID_STATES = ['ai_inactive', 'ai_active', 'ai_paused'];
 
 // Handoff type por transição
 const HANDOFF_TYPE_MAP = {
-  'ai_active:ai_paused':   'ai_to_human',
-  'ai_paused:ai_active':   'human_to_ai',
-  'ai_inactive:ai_active': 'human_to_ai'
+  'ai_active:ai_paused':    'ai_to_human',
+  'ai_active:ai_inactive':  'ai_to_human',
+  'ai_paused:ai_active':    'human_to_ai',
+  'ai_paused:ai_inactive':  'ai_to_human',
+  'ai_inactive:ai_active':  'human_to_ai'
 };
 
 // ── Validação de caller (JWT + membership) ────────────────────────────────────
@@ -155,9 +157,16 @@ export default async function handler(req, res) {
 
   // ── Aplicar UPDATE ─────────────────────────────────────────────────────────
 
+  const updatePayload = { ai_state: new_state, updated_at: new Date().toISOString() };
+  if (new_state === 'ai_inactive') updatePayload.ai_assignment_id = null;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b94851'},body:JSON.stringify({sessionId:'b94851',location:'set-ai-state.js:update',message:'transição aceita',data:{from:currentState,to:new_state,conversation_id,ai_assignment_id_cleared:new_state==='ai_inactive'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   const { error: updateErr } = await supabaseAdmin
     .from('chat_conversations')
-    .update({ ai_state: new_state, updated_at: new Date().toISOString() })
+    .update(updatePayload)
     .eq('id', conversation_id)
     .eq('company_id', company_id);
 
