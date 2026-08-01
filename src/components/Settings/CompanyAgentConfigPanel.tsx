@@ -8,8 +8,8 @@
  * Gate: canManageConversationalAgents (admin | system_admin | super_admin)
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, Plus, X, Repeat2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, Plus, X, Repeat2, HelpCircle } from 'lucide-react'
 import {
   companyAgentConfigApi,
   type CompanyAgentAssignment,
@@ -55,6 +55,163 @@ const CHANNEL_LABELS: Record<string, string> = {
   web:      'Web',
   email:    'E-mail',
   sms:      'SMS'
+}
+
+// ── Componente: Follow-up Proativo ───────────────────────────────────────────
+
+interface FollowUpDraft {
+  follow_up_enabled:        boolean
+  follow_up_absence_hours:  number
+  follow_up_max_attempts:   number
+  follow_up_interval_hours: number
+}
+
+interface FollowUpProativoCardProps {
+  draft:           FollowUpDraft
+  canManage:       boolean
+  onToggle:        () => void
+  onChangeAbsence: (v: number) => void
+  onChangeAttempts:(v: number) => void
+  onChangeInterval:(v: number) => void
+}
+
+function FollowUpProativoCard({
+  draft, canManage, onToggle, onChangeAbsence, onChangeAttempts, onChangeInterval
+}: FollowUpProativoCardProps) {
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpRef = useRef<HTMLDivElement>(null)
+
+  // Fecha ao clicar fora
+  useEffect(() => {
+    if (!helpOpen) return
+    const handler = (e: MouseEvent) => {
+      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
+        setHelpOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [helpOpen])
+
+  const steps = [
+    `Lead para de responder → após ${draft.follow_up_absence_hours}h o agente envia a 1ª mensagem de reengajamento.`,
+    ...(draft.follow_up_max_attempts >= 2
+      ? [`Se continuar sem resposta → após mais ${draft.follow_up_interval_hours}h envia a 2ª mensagem.`]
+      : []),
+    ...(draft.follow_up_max_attempts >= 3
+      ? [`Ainda sem resposta → após mais ${draft.follow_up_interval_hours}h envia a ${draft.follow_up_max_attempts}ª e última mensagem.`]
+      : []),
+    draft.follow_up_max_attempts === 0
+      ? 'Nenhuma mensagem será enviada (tentativas = 0).'
+      : 'Após as tentativas, o sistema para. Se o lead responder a qualquer momento, o agente retoma normalmente.',
+  ]
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <Repeat2 className="w-4 h-4 text-blue-500" />
+          <span className="text-sm font-semibold text-gray-800">Follow-up Proativo</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Ícone de ajuda com popover */}
+          <div ref={helpRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setHelpOpen((o) => !o)}
+              className="p-1 rounded-full text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              title="Como funciona"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
+            {helpOpen && (
+              <div className="absolute right-0 top-7 z-50 w-72 bg-white border border-blue-100 rounded-xl shadow-lg p-4 space-y-2">
+                <p className="text-xs font-semibold text-blue-700">Como funciona com a configuração atual</p>
+                <ol className="space-y-1.5">
+                  {steps.map((step, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
+                      <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center justify-center text-[10px]">
+                        {i === steps.length - 1 ? '✓' : i + 1}
+                      </span>
+                      <span dangerouslySetInnerHTML={{ __html: step.replace(/(\d+h)/g, '<strong>$1</strong>') }} />
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-[11px] text-blue-500 pt-0.5 border-t border-blue-50">
+                  As mensagens são geradas pelo agente com base no contexto real da conversa — não são templates fixos.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Toggle ativo/inativo */}
+          <button
+            onClick={onToggle}
+            disabled={!canManage}
+            className="flex items-center gap-1.5 text-sm font-medium transition-colors disabled:opacity-40"
+            title={draft.follow_up_enabled ? 'Desativar follow-up' : 'Ativar follow-up'}
+          >
+            {draft.follow_up_enabled ? (
+              <>
+                <ToggleRight className="w-6 h-6 text-green-500" />
+                <span className="text-green-600">Ativo</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-6 h-6 text-gray-400" />
+                <span className="text-gray-500">Inativo</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Campos */}
+      <div className={`px-4 py-4 space-y-4 transition-opacity ${draft.follow_up_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+        <p className="text-xs text-gray-500">
+          O agente enviará mensagens automáticas para leads que pararem de responder durante a conversa.
+        </p>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">Ausência (horas)</label>
+            <input
+              type="number" min={1} max={168}
+              value={draft.follow_up_absence_hours}
+              onChange={(e) => onChangeAbsence(Math.min(168, Math.max(1, Number(e.target.value) || 1)))}
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400">1 – 168h</p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">Tentativas</label>
+            <input
+              type="number" min={0} max={10}
+              value={draft.follow_up_max_attempts}
+              onChange={(e) => onChangeAttempts(Math.min(10, Math.max(0, Number(e.target.value) || 0)))}
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400">0 = sem limite</p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">Intervalo (horas)</label>
+            <input
+              type="number" min={1} max={720}
+              value={draft.follow_up_interval_hours}
+              onChange={(e) => onChangeInterval(Math.min(720, Math.max(1, Number(e.target.value) || 1)))}
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400">entre envios</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Componente: Card de Assignment ────────────────────────────────────────────
@@ -242,133 +399,15 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
       />
 
       {/* Follow-up Proativo */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
-        {/* Header da seção */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Repeat2 className="w-4 h-4 text-blue-500" />
-            <span className="text-sm font-semibold text-gray-800">Follow-up Proativo</span>
-          </div>
-          <button
-            onClick={() => setDraft((d) => ({ ...d, follow_up_enabled: !d.follow_up_enabled }))}
-            disabled={!canManageConversationalAgents}
-            className="flex items-center gap-1.5 text-sm font-medium transition-colors disabled:opacity-40"
-            title={draft.follow_up_enabled ? 'Desativar follow-up' : 'Ativar follow-up'}
-          >
-            {draft.follow_up_enabled ? (
-              <>
-                <ToggleRight className="w-6 h-6 text-green-500" />
-                <span className="text-green-600">Ativo</span>
-              </>
-            ) : (
-              <>
-                <ToggleLeft className="w-6 h-6 text-gray-400" />
-                <span className="text-gray-500">Inativo</span>
-              </>
-            )}
-          </button>
-        </div>
+      <FollowUpProativoCard
+        draft={draft}
+        canManage={canManageConversationalAgents}
+        onToggle={() => setDraft((d) => ({ ...d, follow_up_enabled: !d.follow_up_enabled }))}
+        onChangeAbsence={(v) => setDraft((d) => ({ ...d, follow_up_absence_hours: v }))}
+        onChangeAttempts={(v) => setDraft((d) => ({ ...d, follow_up_max_attempts: v }))}
+        onChangeInterval={(v) => setDraft((d) => ({ ...d, follow_up_interval_hours: v }))}
+      />
 
-        {/* Campos de configuração */}
-        <div className={`px-4 py-4 space-y-4 transition-opacity ${draft.follow_up_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-          <p className="text-xs text-gray-500">
-            O agente enviará mensagens automáticas para leads que pararem de responder durante a conversa.
-          </p>
-
-          <div className="grid grid-cols-3 gap-3">
-            {/* Ausência */}
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-600">
-                Ausência (horas)
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={168}
-                value={draft.follow_up_absence_hours}
-                onChange={(e) => setDraft((d) => ({
-                  ...d,
-                  follow_up_absence_hours: Math.min(168, Math.max(1, Number(e.target.value) || 1))
-                }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-400">1 – 168h</p>
-            </div>
-
-            {/* Tentativas */}
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-600">
-                Tentativas
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={10}
-                value={draft.follow_up_max_attempts}
-                onChange={(e) => setDraft((d) => ({
-                  ...d,
-                  follow_up_max_attempts: Math.min(10, Math.max(0, Number(e.target.value) || 0))
-                }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-400">0 = sem limite</p>
-            </div>
-
-            {/* Intervalo */}
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-600">
-                Intervalo (horas)
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={720}
-                value={draft.follow_up_interval_hours}
-                onChange={(e) => setDraft((d) => ({
-                  ...d,
-                  follow_up_interval_hours: Math.min(720, Math.max(1, Number(e.target.value) || 1))
-                }))}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-400">entre envios</p>
-            </div>
-          </div>
-
-          {/* Guia de ajuda */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-blue-700">Como funciona com a configuração atual</p>
-            <ol className="space-y-1.5">
-              <li className="flex items-start gap-2 text-xs text-blue-800">
-                <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">1</span>
-                <span>Lead para de responder → após <strong>{draft.follow_up_absence_hours}h</strong> o agente envia a 1ª mensagem de reengajamento.</span>
-              </li>
-              {draft.follow_up_max_attempts >= 2 && (
-                <li className="flex items-start gap-2 text-xs text-blue-800">
-                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">2</span>
-                  <span>Se continuar sem resposta → após mais <strong>{draft.follow_up_interval_hours}h</strong> envia a 2ª mensagem.</span>
-                </li>
-              )}
-              {draft.follow_up_max_attempts >= 3 && (
-                <li className="flex items-start gap-2 text-xs text-blue-800">
-                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">3</span>
-                  <span>Ainda sem resposta → após mais <strong>{draft.follow_up_interval_hours}h</strong> envia a {draft.follow_up_max_attempts}ª e última mensagem.</span>
-                </li>
-              )}
-              <li className="flex items-start gap-2 text-xs text-blue-800">
-                <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-[10px]">✓</span>
-                <span>
-                  {draft.follow_up_max_attempts === 0
-                    ? 'Nenhuma mensagem será enviada (tentativas = 0).'
-                    : 'Após as tentativas, o sistema para. Se o lead responder a qualquer momento, o agente retoma normalmente.'}
-                </span>
-              </li>
-            </ol>
-            <p className="text-[11px] text-blue-600 pt-0.5">
-              As mensagens são geradas pelo agente com base no contexto real da conversa — não são templates fixos.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Rodapé: erro + botão salvar */}
       {saveError && (
