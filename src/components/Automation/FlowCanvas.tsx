@@ -188,9 +188,21 @@ function FlowCanvasInner({
         x: rect.right - 4,
         y: rect.top + rect.height * 0.75
       }
+    } else if (handleId === 'responded') {
+      // DelayNode (time_or_response): handle "Lead respondeu" — superior direito
+      return {
+        x: rect.right - 4,
+        y: rect.top + rect.height * 0.68
+      }
+    } else if (handleId === 'timeout') {
+      // DelayNode (time_or_response): handle "Sem resposta" — inferior direito
+      return {
+        x: rect.right - 4,
+        y: rect.top + rect.height * 0.80
+      }
     }
     
-    return { x: rect.right, y: rect.top }
+    return { x: rect.right, y: rect.top + rect.height / 2 }
   }
 
   // Inicializar triggers do StartNode ao carregar
@@ -299,6 +311,12 @@ function FlowCanvasInner({
         color = '#9ca3af' // gray-400
       } else if (params.sourceHandle?.startsWith('route-')) {
         color = '#7c3aed' // purple-700
+      } else if (params.sourceHandle === 'responded') {
+        label = '💬 Respondeu'
+        color = '#16a34a' // green-600
+      } else if (params.sourceHandle === 'timeout') {
+        label = '⏱ Sem resposta'
+        color = '#f97316' // orange-500
       }
       
       const newEdge = {
@@ -322,6 +340,8 @@ function FlowCanvasInner({
         params.handleId === 'true' ||
         params.handleId === 'false' ||
         params.handleId === 'default' ||
+        params.handleId === 'responded' ||
+        params.handleId === 'timeout' ||
         params.handleId?.startsWith('route-')
       ) {
         setConnectingFromNode({
