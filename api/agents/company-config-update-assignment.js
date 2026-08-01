@@ -73,8 +73,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: 'Configuração interna inválida.' });
   }
 
-  const { company_id, assignment_id, is_active, agent_id, capabilities, price_display_policy, operating_schedule } =
-    req.body ?? {};
+  const {
+    company_id, assignment_id, is_active, agent_id, capabilities,
+    price_display_policy, operating_schedule,
+    follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours
+  } = req.body ?? {};
 
   // ── Validação de entrada ───────────────────────────────────────────────────
 
@@ -83,6 +86,29 @@ export default async function handler(req, res) {
       success: false,
       error: 'company_id e assignment_id são obrigatórios.'
     });
+  }
+
+  // ── Validação dos campos de follow-up ────────────────────────────────────
+
+  if (follow_up_absence_hours !== undefined) {
+    const v = Number(follow_up_absence_hours);
+    if (!Number.isInteger(v) || v < 1 || v > 168) {
+      return res.status(400).json({ success: false, error: 'follow_up_absence_hours deve ser inteiro entre 1 e 168.' });
+    }
+  }
+
+  if (follow_up_max_attempts !== undefined) {
+    const v = Number(follow_up_max_attempts);
+    if (!Number.isInteger(v) || v < 0 || v > 10) {
+      return res.status(400).json({ success: false, error: 'follow_up_max_attempts deve ser inteiro entre 0 e 10.' });
+    }
+  }
+
+  if (follow_up_interval_hours !== undefined) {
+    const v = Number(follow_up_interval_hours);
+    if (isNaN(v) || v < 1 || v > 720) {
+      return res.status(400).json({ success: false, error: 'follow_up_interval_hours deve ser número entre 1 e 720.' });
+    }
   }
 
   if (price_display_policy !== undefined && !VALID_PRICE_POLICIES.includes(price_display_policy)) {
@@ -154,6 +180,11 @@ export default async function handler(req, res) {
   if (price_display_policy !== undefined) updatePayload.price_display_policy = price_display_policy;
   // operating_schedule: null limpa o schedule (sem restrição); objeto = nova config validada
   if (operating_schedule !== undefined)   updatePayload.operating_schedule   = operating_schedule ?? null;
+  // follow-up proativo (whitelist explícita)
+  if (follow_up_enabled       !== undefined) updatePayload.follow_up_enabled       = Boolean(follow_up_enabled);
+  if (follow_up_absence_hours !== undefined) updatePayload.follow_up_absence_hours = Number(follow_up_absence_hours);
+  if (follow_up_max_attempts  !== undefined) updatePayload.follow_up_max_attempts  = Number(follow_up_max_attempts);
+  if (follow_up_interval_hours !== undefined) updatePayload.follow_up_interval_hours = Number(follow_up_interval_hours);
 
   if (capabilities !== undefined && typeof capabilities === 'object' && capabilities !== null) {
     // Merge apenas as capabilities conhecidas — nunca substituir com campos arbitrários
@@ -185,7 +216,7 @@ export default async function handler(req, res) {
     .update(updatePayload)
     .eq('id', assignment_id)
     .eq('company_id', company_id)
-    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, updated_at')
+    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, updated_at')
     .single();
 
   if (updateErr) {

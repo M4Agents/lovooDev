@@ -95,6 +95,10 @@ export default async function handler(req, res) {
       price_display_policy,
       operating_schedule,
       is_active,
+      follow_up_enabled,
+      follow_up_absence_hours,
+      follow_up_max_attempts,
+      follow_up_interval_hours,
       created_at,
       updated_at,
       lovoo_agents ( id, name )
@@ -162,10 +166,14 @@ export default async function handler(req, res) {
     display_name:         a.display_name,
     capabilities:         a.capabilities ?? {},
     price_display_policy: a.price_display_policy,
-    operating_schedule:   a.operating_schedule ?? null,
-    is_active:            a.is_active,
-    created_at:           a.created_at,
-    updated_at:           a.updated_at
+    operating_schedule:      a.operating_schedule ?? null,
+    is_active:               a.is_active,
+    follow_up_enabled:       a.follow_up_enabled       ?? false,
+    follow_up_absence_hours: a.follow_up_absence_hours ?? 2,
+    follow_up_max_attempts:  a.follow_up_max_attempts  ?? 3,
+    follow_up_interval_hours: a.follow_up_interval_hours ?? 24,
+    created_at:              a.created_at,
+    updated_at:              a.updated_at
   }));
 
   const normalizedRules = (routingRules ?? []).map((r) => ({

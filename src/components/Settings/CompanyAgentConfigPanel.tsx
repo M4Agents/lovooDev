@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, Plus, X } from 'lucide-react'
+import { Bot, AlertCircle, Loader2, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, Plus, X, Repeat2 } from 'lucide-react'
 import {
   companyAgentConfigApi,
   type CompanyAgentAssignment,
@@ -32,11 +32,15 @@ type Props = {
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface AssignmentDraft {
-  agent_id:             string
-  is_active:            boolean
-  capabilities:         AgentCapabilities
-  price_display_policy: PriceDisplayPolicy
-  operating_schedule:   OperatingSchedule | null
+  agent_id:                string
+  is_active:               boolean
+  capabilities:            AgentCapabilities
+  price_display_policy:    PriceDisplayPolicy
+  operating_schedule:      OperatingSchedule | null
+  follow_up_enabled:       boolean
+  follow_up_absence_hours: number
+  follow_up_max_attempts:  number
+  follow_up_interval_hours: number
 }
 
 const PRICE_POLICY_LABELS: Record<PriceDisplayPolicy, string> = {
@@ -66,15 +70,19 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
   const { canManageConversationalAgents } = useAccessControl()
 
   const [draft, setDraft] = useState<AssignmentDraft>({
-    agent_id:             assignment.agent_id,
-    is_active:            assignment.is_active,
-    capabilities:         {
+    agent_id:                assignment.agent_id,
+    is_active:               assignment.is_active,
+    capabilities:            {
       can_auto_reply:    assignment.capabilities?.can_auto_reply    ?? false,
       can_inform_prices: assignment.capabilities?.can_inform_prices ?? false,
       can_send_media:    true
     },
-    price_display_policy: assignment.price_display_policy,
-    operating_schedule:   assignment.operating_schedule ?? null,
+    price_display_policy:    assignment.price_display_policy,
+    operating_schedule:      assignment.operating_schedule ?? null,
+    follow_up_enabled:       assignment.follow_up_enabled       ?? false,
+    follow_up_absence_hours: assignment.follow_up_absence_hours ?? 2,
+    follow_up_max_attempts:  assignment.follow_up_max_attempts  ?? 3,
+    follow_up_interval_hours: assignment.follow_up_interval_hours ?? 24,
   })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -85,18 +93,26 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.price_display_policy !== assignment.price_display_policy ||
     draft.capabilities.can_auto_reply    !== (assignment.capabilities?.can_auto_reply    ?? false) ||
     draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false) ||
-    JSON.stringify(draft.operating_schedule) !== JSON.stringify(assignment.operating_schedule ?? null)
+    JSON.stringify(draft.operating_schedule) !== JSON.stringify(assignment.operating_schedule ?? null) ||
+    draft.follow_up_enabled       !== (assignment.follow_up_enabled       ?? false) ||
+    draft.follow_up_absence_hours !== (assignment.follow_up_absence_hours ?? 2)     ||
+    draft.follow_up_max_attempts  !== (assignment.follow_up_max_attempts  ?? 3)     ||
+    draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24)
 
   const handleSave = async () => {
     setSaveState('saving')
     setSaveError(null)
     try {
       const updated = await companyAgentConfigApi.updateAssignment(companyId, assignment.id, {
-        agent_id:             draft.agent_id,
-        is_active:            draft.is_active,
-        capabilities:         draft.capabilities,
-        price_display_policy: draft.price_display_policy,
-        operating_schedule:   draft.operating_schedule,
+        agent_id:                draft.agent_id,
+        is_active:               draft.is_active,
+        capabilities:            draft.capabilities,
+        price_display_policy:    draft.price_display_policy,
+        operating_schedule:      draft.operating_schedule,
+        follow_up_enabled:       draft.follow_up_enabled,
+        follow_up_absence_hours: draft.follow_up_absence_hours,
+        follow_up_max_attempts:  draft.follow_up_max_attempts,
+        follow_up_interval_hours: draft.follow_up_interval_hours,
       })
       setSaveState('saved')
       onSaved(updated)
@@ -224,6 +240,101 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         onChange={(v) => setDraft((d) => ({ ...d, operating_schedule: v }))}
         readOnly={!canManageConversationalAgents}
       />
+
+      {/* Follow-up Proativo */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {/* Header da seção */}
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Repeat2 className="w-4 h-4 text-blue-500" />
+            <span className="text-sm font-semibold text-gray-800">Follow-up Proativo</span>
+          </div>
+          <button
+            onClick={() => setDraft((d) => ({ ...d, follow_up_enabled: !d.follow_up_enabled }))}
+            disabled={!canManageConversationalAgents}
+            className="flex items-center gap-1.5 text-sm font-medium transition-colors disabled:opacity-40"
+            title={draft.follow_up_enabled ? 'Desativar follow-up' : 'Ativar follow-up'}
+          >
+            {draft.follow_up_enabled ? (
+              <>
+                <ToggleRight className="w-6 h-6 text-green-500" />
+                <span className="text-green-600">Ativo</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-6 h-6 text-gray-400" />
+                <span className="text-gray-500">Inativo</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Campos de configuração */}
+        <div className={`px-4 py-4 space-y-4 transition-opacity ${draft.follow_up_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+          <p className="text-xs text-gray-500">
+            O agente enviará mensagens automáticas para leads que pararem de responder durante a conversa.
+          </p>
+
+          <div className="grid grid-cols-3 gap-3">
+            {/* Ausência */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-600">
+                Ausência (horas)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={draft.follow_up_absence_hours}
+                onChange={(e) => setDraft((d) => ({
+                  ...d,
+                  follow_up_absence_hours: Math.min(168, Math.max(1, Number(e.target.value) || 1))
+                }))}
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400">1 – 168h</p>
+            </div>
+
+            {/* Tentativas */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-600">
+                Tentativas
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={draft.follow_up_max_attempts}
+                onChange={(e) => setDraft((d) => ({
+                  ...d,
+                  follow_up_max_attempts: Math.min(10, Math.max(0, Number(e.target.value) || 0))
+                }))}
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400">0 = sem limite</p>
+            </div>
+
+            {/* Intervalo */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-600">
+                Intervalo (horas)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={draft.follow_up_interval_hours}
+                onChange={(e) => setDraft((d) => ({
+                  ...d,
+                  follow_up_interval_hours: Math.min(720, Math.max(1, Number(e.target.value) || 1))
+                }))}
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400">entre envios</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Rodapé: erro + botão salvar */}
       {saveError && (

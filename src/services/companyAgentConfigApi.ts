@@ -35,18 +35,22 @@ export interface AgentCapabilities {
 export type PriceDisplayPolicy = 'disabled' | 'fixed_only' | 'range_allowed' | 'consult_only'
 
 export interface CompanyAgentAssignment {
-  id:                   string
-  company_id:           string
-  agent_id:             string
-  agent_name:           string | null
-  channel:              string
-  display_name:         string
-  capabilities:         AgentCapabilities
-  price_display_policy: PriceDisplayPolicy
-  operating_schedule:   OperatingSchedule | null
-  is_active:            boolean
-  created_at:           string
-  updated_at:           string
+  id:                      string
+  company_id:              string
+  agent_id:                string
+  agent_name:              string | null
+  channel:                 string
+  display_name:            string
+  capabilities:            AgentCapabilities
+  price_display_policy:    PriceDisplayPolicy
+  operating_schedule:      OperatingSchedule | null
+  is_active:               boolean
+  follow_up_enabled:       boolean
+  follow_up_absence_hours: number
+  follow_up_max_attempts:  number
+  follow_up_interval_hours: number
+  created_at:              string
+  updated_at:              string
 }
 
 export interface AgentRoutingRuleFallback {
@@ -76,11 +80,15 @@ export interface CompanyAgentConfig {
 }
 
 export interface UpdateAssignmentPayload {
-  is_active?:            boolean
-  agent_id?:             string
-  capabilities?:         Partial<AgentCapabilities>
-  price_display_policy?: PriceDisplayPolicy
-  operating_schedule?:   OperatingSchedule | null
+  is_active?:               boolean
+  agent_id?:                string
+  capabilities?:            Partial<AgentCapabilities>
+  price_display_policy?:    PriceDisplayPolicy
+  operating_schedule?:      OperatingSchedule | null
+  follow_up_enabled?:       boolean
+  follow_up_absence_hours?: number
+  follow_up_max_attempts?:  number
+  follow_up_interval_hours?: number
 }
 
 export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms'
