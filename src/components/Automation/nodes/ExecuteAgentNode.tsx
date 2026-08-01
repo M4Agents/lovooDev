@@ -114,6 +114,7 @@ export default function ExecuteAgentNode({ data, selected, id }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
+        id="next"
         className="absolute -right-1 w-2 h-2 rounded-full !bg-violet-500 !border-2 !border-white"
         style={{ top: '50%', transform: 'translateY(-50%)' }}
       />

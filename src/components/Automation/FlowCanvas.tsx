@@ -200,6 +200,12 @@ function FlowCanvasInner({
         x: rect.right - 4,
         y: rect.top + rect.height * 0.80
       }
+    } else if (handleId === 'error') {
+      // MessageNode/ActionNode: handle "Caso ocorrer erro" — superior direito
+      return {
+        x: rect.right - 4,
+        y: rect.top + rect.height * 0.68
+      }
     }
     
     return { x: rect.right, y: rect.top + rect.height / 2 }
@@ -317,6 +323,9 @@ function FlowCanvasInner({
       } else if (params.sourceHandle === 'timeout') {
         label = '⏱ Sem resposta'
         color = '#f97316' // orange-500
+      } else if (params.sourceHandle === 'error') {
+        label = '✗ Erro'
+        color = '#ef4444' // red-500
       }
       
       const newEdge = {
@@ -342,6 +351,7 @@ function FlowCanvasInner({
         params.handleId === 'default' ||
         params.handleId === 'responded' ||
         params.handleId === 'timeout' ||
+        params.handleId === 'error' ||
         params.handleId?.startsWith('route-')
       ) {
         setConnectingFromNode({
