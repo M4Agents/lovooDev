@@ -1581,6 +1581,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onToggleSuggestion={() => setShowSuggestionPanel(p => !p)}
           isSuggestionActive={showSuggestionPanel}
           leadName={conversation?.contact_name ?? ''}
+          leadPhone={conversation?.contact_phone ?? ''}
+          leadCompany={conversation?.company_name ?? ''}
           attendantName={attendantName}
         />
       </div>
@@ -2358,9 +2360,13 @@ interface MessageInputProps {
   onToggleSuggestion: () => void
   /** Indica se o painel de sugestões está visível — controla o visual ativo do botão. */
   isSuggestionActive: boolean
-  /** Nome do lead (contact_name da conversa) — para resolução de {{nome_lead}}. */
+  /** Nome do lead (contact_name da conversa) — para resolução de {{nome_lead}} / {{lead.nome}}. */
   leadName?: string
-  /** Nome do atendente logado — para resolução de {{nome_atendente}}. */
+  /** Telefone do lead (contact_phone da conversa) — para resolução de {{lead.telefone}}. */
+  leadPhone?: string
+  /** Empresa do lead (company_name da conversa) — para resolução de {{lead.empresa}}. */
+  leadCompany?: string
+  /** Nome do atendente logado — para resolução de {{nome_atendente}} / {{atendente.nome}}. */
   attendantName?: string
 }
 
@@ -2376,6 +2382,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onToggleSuggestion,
   isSuggestionActive,
   leadName = '',
+  leadPhone = '',
+  leadCompany = '',
   attendantName = '',
 }) => {
   const { t } = useTranslation('chat')
@@ -2848,6 +2856,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 const resolved = resolveTemplateVariables(payload.content, {
                   nome_lead:      leadName,
                   nome_atendente: attendantName,
+                  lead_telefone:  leadPhone,
+                  lead_empresa:   leadCompany,
                 })
                 setMessage(resolved)
 

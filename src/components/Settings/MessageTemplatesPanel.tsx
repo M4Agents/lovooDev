@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle, Paperclip, Image, FileVideo, FileAudio, FileText, Loader2, Library } from 'lucide-react'
+import { Plus, Edit2, Trash2, Tag, X, Check, ChevronDown, ChevronUp, FolderPlus, AlertCircle, Paperclip, Image, FileVideo, FileAudio, FileText, Loader2, Library, Info } from 'lucide-react'
+import { AVAILABLE_TEMPLATE_VARIABLES } from '../../utils/resolveTemplateVariables'
 import {
   listSettingsTemplates,
   createTemplate,
@@ -88,6 +89,7 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
   const [mediaError,            setMediaError]            = useState<string | null>(null)
   const [showMediaLibraryPicker, setShowMediaLibraryPicker] = useState(false)
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
+  const contentTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Colapso de categorias
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
@@ -121,6 +123,30 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
       const next = new Set(prev)
       next.has(catId) ? next.delete(catId) : next.add(catId)
       return next
+    })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inserção de variável no cursor do textarea de conteúdo
+  // ---------------------------------------------------------------------------
+
+  const insertVariable = (variable: string) => {
+    const el = contentTextareaRef.current
+    if (!el) {
+      setTemplateForm(f => ({ ...f, content: f.content + variable }))
+      return
+    }
+    const start = el.selectionStart ?? el.value.length
+    const end   = el.selectionEnd   ?? el.value.length
+    const before = el.value.slice(0, start)
+    const after  = el.value.slice(end)
+    const newValue = before + variable + after
+    setTemplateForm(f => ({ ...f, content: newValue }))
+    // Reposiciona o cursor após a variável inserida
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = start + variable.length
+      el.setSelectionRange(pos, pos)
     })
   }
 
@@ -523,12 +549,37 @@ export function MessageTemplatesPanel({ companyId }: MessageTemplatesPanelProps)
               </div>
             </div>
 
+            {/* Variáveis disponíveis */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                <span className="text-[11px] text-slate-500">
+                  Clique para inserir uma variável no cursor:
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {AVAILABLE_TEMPLATE_VARIABLES.map(({ variable, label, description }) => (
+                  <button
+                    key={variable}
+                    type="button"
+                    title={`${description}\n${variable}`}
+                    onClick={() => insertVariable(variable)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full hover:bg-green-100 hover:border-green-300 transition-colors cursor-pointer"
+                  >
+                    <span className="text-green-500 font-mono text-[10px]">{'{}'}</span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <textarea
+              ref={contentTextareaRef}
               placeholder="Conteúdo do modelo *"
               value={templateForm.content}
               onChange={e => setTemplateForm(f => ({ ...f, content: e.target.value }))}
               rows={4}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 resize-none bg-white"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 resize-y min-h-[96px] bg-white"
             />
 
             {/* Mídia opcional */}
