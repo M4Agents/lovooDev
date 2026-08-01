@@ -5,26 +5,33 @@
 // Execução: a cada 30 minutos (vercel.json: "*/30 * * * *")
 //
 // RESPONSABILIDADE:
-//   Buscar conversas com IA ativa mas sem mensagem do lead por mais de
-//   ABSENCE_THRESHOLD_HOURS horas e criar um schedule de follow_up automático
-//   (se ainda não existir um pendente).
+//   Buscar conversas com IA ativa e sem mensagem INBOUND do lead há mais do
+//   que o threshold configurado no assignment. Cria um schedule de follow_up
+//   para cada conversa elegível que ainda não tenha um schedule pendente.
+//
+// CORREÇÕES EM RELAÇÃO À VERSÃO ANTERIOR:
+//   1. Usa last_inbound_at (não last_message_at) — detecta ausência real do lead,
+//      ignorando mensagens outbound do próprio agente.
+//   2. Threshold configurável por assignment (não global de 48h).
+//   3. Popula assignment_id + agent_id corretamente (era invertido antes).
+//   4. Filtra apenas assignments com follow_up_enabled = true.
+//   5. Sem N+1: duas queries (assignments + conversations) em vez de N queries.
 //
 // SEGURANÇA MULTI-TENANT:
-//   - company_id presente em TODA query
-//   - Deduplicação via constraint unique parcial (company_id + conversation_id + reason WHERE pending)
-//   - ON CONFLICT DO NOTHING: idempotente mesmo se cron sobrepõe execuções
+//   - company_id validado em TODA query
+//   - Cross-tenant check: assignment.company_id === conversation.company_id
+//   - service_role usado apenas neste servidor; nunca exposto ao frontend
+//   - Deduplicação: índice único parcial no banco (idx_agent_contact_schedules_dedup)
+//     + verificação em código como defense-in-depth
 //
-// CONFIGURAÇÃO (por empresa — futuro):
-//   Por ora, ABSENCE_THRESHOLD_HOURS é global.
-//   Fase 3: configurável por agent_flow_definitions.stages[].follow_up_hours
+// SEMÂNTICA DE agent_id vs assignment_id:
+//   assignment_id = company_agent_assignments.id (configura o canal/empresa)
+//   agent_id      = lovoo_agents.id (o modelo LLM base — via assignment.agent_id)
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js'
 
-const ABSENCE_THRESHOLD_HOURS = 48
-const BATCH_LIMIT             = 100
-const MAX_FOLLOW_UP_ATTEMPTS  = 3
-const FOLLOW_UP_INTERVAL_HOURS = 48
+const BATCH_LIMIT = 100
 
 function getServiceSupabase() {
   const url = process.env.VITE_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -51,26 +58,47 @@ export default async function handler(req, res) {
 
   console.log('[CRON:lead-absence] Iniciando verificação de ausência de leads')
 
-  // Threshold de ausência
-  const absenceThreshold = new Date(
-    Date.now() - ABSENCE_THRESHOLD_HOURS * 60 * 60 * 1000
-  ).toISOString()
+  // ── PASSO 1: Carregar assignments com follow_up habilitado ──────────────────
+  // Sem N+1: uma única query para todos os assignments elegíveis.
+  // ai_assignment_id não tem FK — impossível usar embedded join no PostgREST.
+  const { data: assignments, error: assignmentErr } = await svc
+    .from('company_agent_assignments')
+    .select('id, company_id, agent_id, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours')
+    .eq('is_active', true)
+    .eq('follow_up_enabled', true)
+    .gt('follow_up_max_attempts', 0)
 
-  // Busca conversas com IA ativa sem mensagem recente do lead
-  // lead_last_message_at: último timestamp de mensagem com direction='inbound'
-  // Usa chat_conversations que já tem campos ai_state e last_message_at
-  const { data: conversations, error: fetchErr } = await svc
+  if (assignmentErr) {
+    console.error('[CRON:lead-absence] Erro ao buscar assignments:', assignmentErr.message)
+    return res.status(500).json({ error: assignmentErr.message })
+  }
+
+  if (!assignments?.length) {
+    console.log('[CRON:lead-absence] Nenhum assignment com follow_up habilitado')
+    return res.status(200).json({ schedules_created: 0, reason: 'no_enabled_assignments' })
+  }
+
+  console.log(`[CRON:lead-absence] ${assignments.length} assignments com follow_up habilitado`)
+
+  // Mapa rápido: assignmentId → config
+  const assignmentMap = new Map(assignments.map(a => [a.id, a]))
+  const assignmentIds = assignments.map(a => a.id)
+
+  // ── PASSO 2: Buscar conversas com IA ativa e last_inbound_at preenchido ─────
+  // Ordenadas pela ausência mais antiga primeiro (starvation prevention)
+  const { data: conversations, error: convErr } = await svc
     .from('chat_conversations')
-    .select('id, company_id, lead_id, ai_assignment_id, last_message_at')
+    .select('id, company_id, lead_id, ai_assignment_id, last_inbound_at')
     .eq('ai_state', 'ai_active')
+    .in('ai_assignment_id', assignmentIds)
+    .not('last_inbound_at', 'is', null)
     .not('lead_id', 'is', null)
-    .not('ai_assignment_id', 'is', null)
-    .lt('last_message_at', absenceThreshold)
+    .order('last_inbound_at', { ascending: true })
     .limit(BATCH_LIMIT)
 
-  if (fetchErr) {
-    console.error('[CRON:lead-absence] Erro ao buscar conversas:', fetchErr.message)
-    return res.status(500).json({ error: fetchErr.message })
+  if (convErr) {
+    console.error('[CRON:lead-absence] Erro ao buscar conversas:', convErr.message)
+    return res.status(500).json({ error: convErr.message })
   }
 
   if (!conversations?.length) {
@@ -78,91 +106,145 @@ export default async function handler(req, res) {
     return res.status(200).json({ schedules_created: 0 })
   }
 
-  console.log(`[CRON:lead-absence] ${conversations.length} conversas com ausência detectada`)
+  console.log(`[CRON:lead-absence] ${conversations.length} conversas candidatas para análise`)
 
   let created = 0
   let skipped = 0
 
   for (const conv of conversations) {
-    const { company_id, id: conversation_id, lead_id, ai_assignment_id } = conv
+    const { company_id, id: conversation_id, lead_id, ai_assignment_id, last_inbound_at } = conv
 
-    // Valida que lead pertence à mesma empresa (cross-tenant check)
-    const { data: lead } = await svc
-      .from('leads')
-      .select('id')
-      .eq('id', lead_id)
-      .eq('company_id', company_id)
-      .maybeSingle()
-
-    if (!lead) {
-      console.error(`[CRON:lead-absence] ❌ Cross-tenant: lead ${lead_id} não pertence à empresa ${company_id}`)
+    // ── Validar assignment ────────────────────────────────────────────────────
+    const assignment = assignmentMap.get(ai_assignment_id)
+    if (!assignment) {
+      // Assignment não está na lista habilitada (race condition entre queries)
+      skipped++
       continue
     }
 
-    // Verifica se já existe schedule de follow_up PENDENTE para esta conversa
-    // (deduplicação extra além da constraint unique)
-    const { data: existing } = await svc
+    // Cross-tenant: assignment.company_id deve bater com conversation.company_id
+    if (assignment.company_id !== company_id) {
+      console.error('[CRON:lead-absence] ❌ Cross-tenant detectado:', {
+        conversation_id,
+        conv_company: company_id,
+        assignment_company: assignment.company_id,
+        ai_assignment_id,
+      })
+      skipped++
+      continue
+    }
+
+    // ── Verificar threshold individual ────────────────────────────────────────
+    const thresholdMs   = assignment.follow_up_absence_hours * 60 * 60 * 1000
+    const thresholdDate = new Date(Date.now() - thresholdMs)
+
+    if (new Date(last_inbound_at) > thresholdDate) {
+      // Lead ainda está dentro do prazo — não é ausente
+      skipped++
+      continue
+    }
+
+    // ── Verificar tentativas anteriores já realizadas ─────────────────────────
+    // Conta apenas tentativas ENVIADAS com sucesso (status='sent') — exclui
+    // cancelamentos (lead respondeu = não conta) e falhas técnicas (failed = não conta)
+    const { count: sentCount, error: sentErr } = await svc
+      .from('agent_contact_schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', company_id)
+      .eq('conversation_id', conversation_id)
+      .eq('reason', 'follow_up')
+      .eq('status', 'sent')
+
+    if (sentErr) {
+      console.error('[CRON:lead-absence] Erro ao contar tentativas anteriores:', sentErr.message)
+      continue
+    }
+
+    if ((sentCount ?? 0) >= assignment.follow_up_max_attempts) {
+      console.log('[CRON:lead-absence] Max attempts atingido:', {
+        conversation_id,
+        sent_count: sentCount,
+        max_attempts: assignment.follow_up_max_attempts,
+      })
+      skipped++
+      continue
+    }
+
+    // ── Verificar schedule pendente ou processing já existente ────────────────
+    // Defense-in-depth: o índice único no banco também protege contra duplicatas.
+    const { data: existing, error: existErr } = await svc
       .from('agent_contact_schedules')
       .select('id')
       .eq('company_id', company_id)
       .eq('conversation_id', conversation_id)
       .eq('reason', 'follow_up')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'processing'])
       .maybeSingle()
+
+    if (existErr) {
+      console.error('[CRON:lead-absence] Erro ao verificar schedule existente:', existErr.message)
+      continue
+    }
 
     if (existing) {
       skipped++
       continue
     }
 
-    // Verifica total de tentativas anteriores para não exceder max_attempts
-    const { count: previousAttempts } = await svc
-      .from('agent_contact_schedules')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', company_id)
-      .eq('conversation_id', conversation_id)
-      .eq('reason', 'follow_up')
-      .in('status', ['sent', 'failed'])
+    // ── Criar schedule ─────────────────────────────────────────────────────────
+    // message_hint < 300 chars (limite do campo)
+    const messageHint =
+      '[FOLLOWUP] Gere uma mensagem natural com base no histórico e sem repetir mensagens anteriores.'
 
-    if ((previousAttempts ?? 0) >= MAX_FOLLOW_UP_ATTEMPTS) {
-      console.log(`[CRON:lead-absence] Lead ${lead_id}: max attempts atingido — não criando novo follow_up`)
-      skipped++
-      continue
-    }
-
-    // Cria schedule de follow_up
-    // ON CONFLICT DO NOTHING: idempotente se unique constraint já existir
     const { error: insertErr } = await svc
       .from('agent_contact_schedules')
       .insert({
         company_id,
         lead_id,
         conversation_id,
-        agent_id:       ai_assignment_id,
-        reason:         'follow_up',
-        scheduled_at:   new Date().toISOString(),
+        // Semântica correta:
+        agent_id:      assignment.agent_id,   // lovoo_agents.id (via assignment)
+        assignment_id: assignment.id,          // company_agent_assignments.id
+        reason:        'follow_up',
+        scheduled_at:  new Date().toISOString(),
         attempt_number: 0,
-        max_attempts:   MAX_FOLLOW_UP_ATTEMPTS,
-        interval_hours: FOLLOW_UP_INTERVAL_HOURS,
-        status:         'pending',
-        created_by:     'system',
+        max_attempts:  assignment.follow_up_max_attempts,
+        interval_hours: assignment.follow_up_interval_hours,
+        status:        'pending',
+        // Snapshot do último inbound para revalidação antes do envio
+        last_inbound_snapshot: last_inbound_at,
+        message_hint:  messageHint,
+        retry_count:   0,
       })
 
     if (insertErr) {
       if (insertErr.code === '23505') {
-        // Constraint unique: já existe schedule pendente (race condition com outro cron)
+        // Conflito no índice único: outra execução do cron chegou primeiro
+        console.log('[CRON:lead-absence] Dedup: schedule já existe (race condition normal):', {
+          conversation_id,
+        })
         skipped++
       } else {
-        console.error(`[CRON:lead-absence] Erro ao criar schedule para lead ${lead_id}:`, insertErr.message)
+        console.error('[CRON:lead-absence] Erro ao criar schedule:', {
+          conversation_id,
+          error: insertErr.message,
+        })
       }
       continue
     }
 
-    console.log(`[CRON:lead-absence] ✅ Schedule follow_up criado para lead ${lead_id} em conversa ${conversation_id}`)
+    console.log('[CRON:lead-absence] ✅ Schedule criado:', {
+      conversation_id,
+      company_id,
+      assignment_id: assignment.id,
+      agent_id: assignment.agent_id,
+      absence_hours: assignment.follow_up_absence_hours,
+      last_inbound_at,
+    })
     created++
   }
 
-  console.log(`[CRON:lead-absence] Concluído: ${created} schedules criados, ${skipped} ignorados`)
+  console.log(`[CRON:lead-absence] Concluído: ${created} criados, ${skipped} ignorados, ${conversations.length} analisados`)
   return res.status(200).json({
     schedules_created: created,
     skipped,

@@ -106,6 +106,7 @@ export async function sendBlocks(composerOutput) {
   // ── 3. Loop de envio bloco a bloco ─────────────────────────────────────────
   let successCount = 0;
   let abortReason  = null;
+  const messageIds = [];  // IDs Uazapi por bloco (para reconciliação)
 
   for (const block of blocks) {
 
@@ -168,6 +169,7 @@ export async function sendBlocks(composerOutput) {
 
     if (sendResult.ok) {
       successCount++;
+      if (sendResult.uazapi_message_id) messageIds.push(sendResult.uazapi_message_id);
       console.log(`🤖 [GATEWAY] ✅ Bloco ${block.index} enviado:`, {
         message_id,
         uazapi_message_id: sendResult.uazapi_message_id,
@@ -214,7 +216,8 @@ export async function sendBlocks(composerOutput) {
   return {
     success:      successCount > 0 || abortReason === null,
     successCount,
-    abortReason
+    abortReason,
+    messageIds,   // Array de IDs Uazapi por bloco (para reconciliação via send_idempotency_key)
   };
 }
 

@@ -516,19 +516,6 @@ export async function buildContext(orchestratorContext) {
     company_id:          companyId,
   });
 
-  // #region agent log
-  console.log('🤖 [CTX:debug-hist]', {
-    hypothesisId: 'H1',
-    conversation_id: conversationId,
-    messages_count: recentMessages.length,
-    has_memory_summary: Boolean(contactMemory?.summary),
-    first_preview: (recentMessages[0]?.content ?? '').slice(0, 80),
-    last_preview: (recentMessages[recentMessages.length - 1]?.content ?? '').slice(0, 80),
-    user_message: (userMessage ?? '').slice(0, 80),
-  });
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9ce309'},body:JSON.stringify({sessionId:'9ce309',runId:'hist-fix',hypothesisId:'H1',location:'contextBuilder.js:buildContext:exit',message:'histórico enviado ao executor',data:{conversationId,messagesCount:recentMessages.length,hasMemorySummary:Boolean(contactMemory?.summary),memoryFacts:contactMemory?.facts??null,firstPreview:(recentMessages[0]?.content??'').slice(0,80),lastPreview:(recentMessages[recentMessages.length-1]?.content??'').slice(0,80),userMessage:(userMessage??'').slice(0,80),directions:recentMessages.map(m=>m.direction)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   return { success: true, output };
 }
 
