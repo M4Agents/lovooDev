@@ -333,6 +333,40 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
               <p className="text-xs text-gray-400">entre envios</p>
             </div>
           </div>
+
+          {/* Guia de ajuda */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-blue-700">Como funciona com a configuração atual</p>
+            <ol className="space-y-1.5">
+              <li className="flex items-start gap-2 text-xs text-blue-800">
+                <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">1</span>
+                <span>Lead para de responder → após <strong>{draft.follow_up_absence_hours}h</strong> o agente envia a 1ª mensagem de reengajamento.</span>
+              </li>
+              {draft.follow_up_max_attempts >= 2 && (
+                <li className="flex items-start gap-2 text-xs text-blue-800">
+                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">2</span>
+                  <span>Se continuar sem resposta → após mais <strong>{draft.follow_up_interval_hours}h</strong> envia a 2ª mensagem.</span>
+                </li>
+              )}
+              {draft.follow_up_max_attempts >= 3 && (
+                <li className="flex items-start gap-2 text-xs text-blue-800">
+                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px]">3</span>
+                  <span>Ainda sem resposta → após mais <strong>{draft.follow_up_interval_hours}h</strong> envia a {draft.follow_up_max_attempts}ª e última mensagem.</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2 text-xs text-blue-800">
+                <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-[10px]">✓</span>
+                <span>
+                  {draft.follow_up_max_attempts === 0
+                    ? 'Nenhuma mensagem será enviada (tentativas = 0).'
+                    : 'Após as tentativas, o sistema para. Se o lead responder a qualquer momento, o agente retoma normalmente.'}
+                </span>
+              </li>
+            </ol>
+            <p className="text-[11px] text-blue-600 pt-0.5">
+              As mensagens são geradas pelo agente com base no contexto real da conversa — não são templates fixos.
+            </p>
+          </div>
         </div>
       </div>
 
