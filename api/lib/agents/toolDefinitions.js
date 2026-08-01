@@ -272,7 +272,11 @@ export const ALL_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'send_media',
-      description: 'Envia mídias relacionadas ao contexto atual',
+      description:
+        'Envia mídias do catálogo (fotos/vídeos do curso) para o lead no WhatsApp. '
+        + 'Use "presentation" quando o lead confirmar interesse no curso. '
+        + 'Use "detail" após entender o perfil do lead (experiência/objetivo). '
+        + 'Não avise o lead antes de enviar — envie e continue a conversa normalmente.',
       parameters: {
         type: 'object',
         properties: {
