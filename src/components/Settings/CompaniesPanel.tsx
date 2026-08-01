@@ -1,66 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import {
-  Plus, Building2, Globe, Clock, CalendarClock,
-  Edit2, Trash2, LogIn, Copy, Check, X, Gift, Layers,
-} from 'lucide-react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Plus, Building2, CalendarClock, Copy, Check, X, Gift, Layers } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { api } from '../../services/api'
-import { supabase, Company } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { CompanyCard, daysUntil, formatDate } from './CompanyCard'
+import { CompaniesFilter } from './CompaniesFilter'
+import type {
+  ClientCompany, TrialInfo, CreateResult, Plan,
+  ViewMode, CompanyFilters,
+} from './companiesTypes'
+import { DEFAULT_FILTERS } from './companiesTypes'
 
-// ── Tipos locais ──────────────────────────────────────────────────────────────
-
-interface TrialInfo {
-  company_id:        string
-  is_internal_trial: boolean
-  trial_start:       string | null
-  trial_end:         string | null
-  trial_extended:    boolean
-  can_extend:        boolean
-  days_remaining:    number | null
-}
-
-interface CreateResult {
-  company_id:    string
-  trial_started: boolean
-  trial_end:     string | null
-  admin_created: boolean
-  admin_email:   string | null
-  invite_link:   string | null
-}
-
-type ClientCompany = Company & { plans?: { name: string; slug: string } | null }
-
-interface Plan {
-  id:   string
-  name: string
-  slug: string
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function daysUntil(isoDate: string | null | undefined): number | null {
-  if (!isoDate) return null
-  const diff = new Date(isoDate).getTime() - Date.now()
-  return Math.ceil(diff / 86_400_000)
-}
-
-function formatDate(isoDate: string | null | undefined): string {
-  if (!isoDate) return '—'
-  return new Date(isoDate).toLocaleDateString('pt-BR')
-}
-
-function statusLabel(status: string) {
-  if (status === 'active')    return 'Ativo'
-  if (status === 'suspended') return 'Suspenso'
-  return 'Cancelado'
-}
-
-function statusColor(status: string) {
-  if (status === 'active')    return 'bg-green-100 text-green-800'
-  if (status === 'suspended') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-red-100 text-red-800'
-}
+// ── Mensagens de erro dos endpoints ───────────────────────────────────────────
 
 const EXTEND_ERROR_MSGS: Record<string, string> = {
   trial_already_extended: 'Este trial já foi estendido. Apenas 1 extensão por empresa.',
@@ -74,7 +26,7 @@ const EXTEND_ERROR_MSGS: Record<string, string> = {
 const FREE_PLAN_ERROR_MSGS: Record<string, string> = {
   forbidden:               'Você não tem permissão para executar esta ação.',
   company_not_found:       'Empresa não encontrada.',
-  not_a_client_company:   'Esta operação só é permitida para empresas clientes.',
+  not_a_client_company:    'Esta operação só é permitida para empresas clientes.',
   subscription_not_found:  'Empresa não possui assinatura registrada.',
   has_stripe_subscription: 'Esta empresa já possui uma assinatura Stripe ativa. Não é possível aplicar o plano gratuito.',
   growth_plan_not_found:   'Plano Growth não encontrado. Contate o suporte.',
@@ -95,10 +47,24 @@ export const CompaniesPanel: React.FC = () => {
   const { impersonateUser } = useAuth()
   const { isSaaSAdmin, isSystemAdmin, canAccessCompanies } = useAccessControl()
 
+  // ── Dados ─────────────────────────────────────────────────────────────────
   const [companies,       setCompanies]       = useState<ClientCompany[]>([])
   const [loading,         setLoading]         = useState(true)
   const [trialInfoMap,    setTrialInfoMap]     = useState<Record<string, TrialInfo | null>>({})
   const [trialLoadingIds, setTrialLoadingIds]  = useState<string[]>([])
+  const [freePlanMap,     setFreePlanMap]      = useState<Record<string, boolean>>({})
+  const [availablePlans,  setAvailablePlans]   = useState<Plan[]>([])
+
+  // ── Filtros e visualização ────────────────────────────────────────────────
+  const [filters,  setFilters]  = useState<CompanyFilters>(DEFAULT_FILTERS)
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    (localStorage.getItem('companies_view_mode') as ViewMode) ?? 'grid'
+  )
+
+  const handleViewModeChange = (m: ViewMode) => {
+    setViewMode(m)
+    localStorage.setItem('companies_view_mode', m)
+  }
 
   // ── Modal de criação ──────────────────────────────────────────────────────
   const [showCreate,    setShowCreate]    = useState(false)
@@ -114,37 +80,34 @@ export const CompaniesPanel: React.FC = () => {
   })
 
   // ── Modal de edição ───────────────────────────────────────────────────────
-  const [editCompany,  setEditCompany]  = useState<ClientCompany | null>(null)
-  const [editLoading,  setEditLoading]  = useState(false)
-  const [editError,    setEditError]    = useState<string | null>(null)
-  const [editForm,     setEditForm]     = useState({ name: '', domain: '', status: '' })
+  const [editCompany, setEditCompany] = useState<ClientCompany | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError,   setEditError]   = useState<string | null>(null)
+  const [editForm,    setEditForm]    = useState({ name: '', domain: '', status: '' })
 
   // ── Modal de exclusão ─────────────────────────────────────────────────────
-  const [deleteCompany,  setDeleteCompany]  = useState<ClientCompany | null>(null)
-  const [deleteLoading,  setDeleteLoading]  = useState(false)
-  const [deleteError,    setDeleteError]    = useState<string | null>(null)
+  const [deleteCompany, setDeleteCompany] = useState<ClientCompany | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError,   setDeleteError]   = useState<string | null>(null)
 
   // ── Modal de extensão de trial ────────────────────────────────────────────
-  const [extendCompany,  setExtendCompany]  = useState<ClientCompany | null>(null)
-  const [extending,      setExtending]      = useState(false)
-  const [extendError,    setExtendError]    = useState<string | null>(null)
-  const [extendSuccess,  setExtendSuccess]  = useState(false)
+  const [extendCompany, setExtendCompany] = useState<ClientCompany | null>(null)
+  const [extending,     setExtending]     = useState(false)
+  const [extendError,   setExtendError]   = useState<string | null>(null)
+  const [extendSuccess, setExtendSuccess] = useState(false)
 
   // ── Modal de plano gratuito ───────────────────────────────────────────────
-  // freePlanMap: cache local do estado is_free de cada empresa
-  const [freePlanCompany,  setFreePlanCompany]  = useState<ClientCompany | null>(null)
-  const [freePlanLoading,  setFreePlanLoading]  = useState(false)
-  const [freePlanError,    setFreePlanError]    = useState<string | null>(null)
-  const [freePlanSuccess,  setFreePlanSuccess]  = useState(false)
-  const [freePlanMap,      setFreePlanMap]      = useState<Record<string, boolean>>({})
+  const [freePlanCompany, setFreePlanCompany] = useState<ClientCompany | null>(null)
+  const [freePlanLoading, setFreePlanLoading] = useState(false)
+  const [freePlanError,   setFreePlanError]   = useState<string | null>(null)
+  const [freePlanSuccess, setFreePlanSuccess] = useState(false)
 
   // ── Modal de definição de plano ───────────────────────────────────────────
-  const [setPlanCompany,  setSetPlanCompany]  = useState<ClientCompany | null>(null)
-  const [setPlanLoading,  setSetPlanLoading]  = useState(false)
-  const [setPlanError,    setSetPlanError]    = useState<string | null>(null)
-  const [setPlanSuccess,  setSetPlanSuccess]  = useState(false)
-  const [setPlanId,       setSetPlanId]       = useState<string>('')
-  const [availablePlans,  setAvailablePlans]  = useState<Plan[]>([])
+  const [setPlanCompany, setSetPlanCompany] = useState<ClientCompany | null>(null)
+  const [setPlanLoading, setSetPlanLoading] = useState(false)
+  const [setPlanError,   setSetPlanError]   = useState<string | null>(null)
+  const [setPlanSuccess, setSetPlanSuccess] = useState(false)
+  const [setPlanId,      setSetPlanId]      = useState<string>('')
 
   // ── Copiar invite link ────────────────────────────────────────────────────
   const [copiedLink, setCopiedLink] = useState(false)
@@ -156,14 +119,12 @@ export const CompaniesPanel: React.FC = () => {
     setLoading(true)
     try {
       const data = await api.getAllCompanies() as ClientCompany[]
-      // Filtrar: somente client e não deletadas
       const clients = data.filter(
         c => c.company_type === 'client' && !(c as any).deleted_at
       )
       setCompanies(clients)
       clients.forEach(c => fetchTrialInfo(c.id))
 
-      // Carregar is_free de todas as empresas client de uma vez
       if (clients.length > 0) {
         const ids = clients.map(c => c.id)
         const { data: subs } = await supabase
@@ -177,7 +138,6 @@ export const CompaniesPanel: React.FC = () => {
         }
       }
 
-      // Carregar planos ativos para o modal de definição de plano
       const { data: plans } = await supabase
         .from('plans')
         .select('id, name, slug')
@@ -212,20 +172,45 @@ export const CompaniesPanel: React.FC = () => {
     }
   }
 
+  // ── Filtragem client-side ─────────────────────────────────────────────────
+
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(comp => {
+      const trial = trialInfoMap[comp.id]
+      const isFree = freePlanMap[comp.id] ?? false
+      const days = trial ? daysUntil(trial.trial_end) : null
+
+      if (filters.search) {
+        const q = filters.search.toLowerCase()
+        const matchName   = comp.name.toLowerCase().includes(q)
+        const matchDomain = comp.domain?.toLowerCase().includes(q) ?? false
+        if (!matchName && !matchDomain) return false
+      }
+
+      if (filters.status !== 'all' && comp.status !== filters.status) return false
+
+      if (filters.planSlug === 'none' && (comp as any).plans?.slug) return false
+      if (filters.planSlug && filters.planSlug !== 'none' && (comp as any).plans?.slug !== filters.planSlug) return false
+
+      if (filters.type === 'free'         && !isFree) return false
+      if (filters.type === 'trial'        && !(trial?.is_internal_trial && days !== null && days > 0)) return false
+      if (filters.type === 'trial_expired'&& !(trial?.is_internal_trial && days !== null && days <= 0)) return false
+
+      return true
+    })
+  }, [companies, filters, trialInfoMap, freePlanMap])
+
   // ── Criar empresa ─────────────────────────────────────────────────────────
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canAccessCompanies) return
-
     setCreateLoading(true)
     setCreateError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const res = await fetch('/api/companies/create', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -236,14 +221,8 @@ export const CompaniesPanel: React.FC = () => {
           adminEmail:  createForm.createAdmin ? createForm.adminEmail.trim() : undefined,
         }),
       })
-
       const json = await res.json()
-
-      if (!res.ok) {
-        setCreateError(json?.error ?? 'Erro ao criar empresa')
-        return
-      }
-
+      if (!res.ok) { setCreateError(json?.error ?? 'Erro ao criar empresa'); return }
       setCreateResult(json as CreateResult)
       setCreateStep('result')
       loadCompanies()
@@ -280,32 +259,23 @@ export const CompaniesPanel: React.FC = () => {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canAccessCompanies || !editCompany) return
-
     setEditLoading(true)
     setEditError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const updates: Record<string, string> = {}
-      if (editForm.name.trim())   updates.name   = editForm.name.trim()
+      if (editForm.name.trim())          updates.name   = editForm.name.trim()
       if (editForm.domain !== undefined) updates.domain = editForm.domain.trim() || ''
-      if (editForm.status) updates.status = editForm.status
-
+      if (editForm.status)               updates.status = editForm.status
       const res = await fetch('/api/companies/update', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ companyId: editCompany.id, updates }),
       })
-
       const json = await res.json()
-      if (!res.ok) {
-        setEditError(json?.error ?? 'Erro ao salvar')
-        return
-      }
-
+      if (!res.ok) { setEditError(json?.error ?? 'Erro ao salvar'); return }
       setEditCompany(null)
       loadCompanies()
     } catch (err: any) {
@@ -319,26 +289,18 @@ export const CompaniesPanel: React.FC = () => {
 
   const handleDelete = async () => {
     if (!canAccessCompanies || !deleteCompany) return
-
     setDeleteLoading(true)
     setDeleteError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const res = await fetch(`/api/companies/${deleteCompany.id}`, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-
       const json = await res.json()
-      if (!res.ok) {
-        setDeleteError(json?.error ?? 'Erro ao excluir')
-        return
-      }
-
+      if (!res.ok) { setDeleteError(json?.error ?? 'Erro ao excluir'); return }
       setDeleteCompany(null)
       setCompanies(prev => prev.filter(c => c.id !== deleteCompany.id))
     } catch (err: any) {
@@ -352,35 +314,25 @@ export const CompaniesPanel: React.FC = () => {
 
   const handleExtend = async () => {
     if (!canAccessCompanies || !extendCompany) return
-
     setExtending(true)
     setExtendError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const res = await fetch('/api/admin/trials/extend', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ company_id: extendCompany.id }),
       })
-
       const json = await res.json()
       if (!res.ok) {
-        const msg = EXTEND_ERROR_MSGS[json?.error] ?? 'Erro ao estender trial.'
-        setExtendError(msg)
+        setExtendError(EXTEND_ERROR_MSGS[json?.error] ?? 'Erro ao estender trial.')
         return
       }
-
       setExtendSuccess(true)
       await fetchTrialInfo(extendCompany.id)
-      setTimeout(() => {
-        setExtendCompany(null)
-        setExtendSuccess(false)
-        setExtendError(null)
-      }, 2200)
+      setTimeout(() => { setExtendCompany(null); setExtendSuccess(false); setExtendError(null) }, 2200)
     } catch {
       setExtendError('Erro interno ao processar extensão.')
     } finally {
@@ -392,37 +344,26 @@ export const CompaniesPanel: React.FC = () => {
 
   const handleFreePlan = async () => {
     if (!isSaaSAdmin || !freePlanCompany) return
-
     const targetIsFree = !freePlanMap[freePlanCompany.id]
-
     setFreePlanLoading(true)
     setFreePlanError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const res = await fetch('/api/admin/companies/free-plan', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ company_id: freePlanCompany.id, is_free: targetIsFree }),
       })
-
       const json = await res.json()
       if (!res.ok) {
-        const msg = FREE_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao processar operação.'
-        setFreePlanError(msg)
+        setFreePlanError(FREE_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao processar operação.')
         return
       }
-
       setFreePlanMap(prev => ({ ...prev, [freePlanCompany.id]: targetIsFree }))
       setFreePlanSuccess(true)
-      setTimeout(() => {
-        setFreePlanCompany(null)
-        setFreePlanSuccess(false)
-        setFreePlanError(null)
-      }, 2200)
+      setTimeout(() => { setFreePlanCompany(null); setFreePlanSuccess(false); setFreePlanError(null) }, 2200)
     } catch {
       setFreePlanError('Erro interno ao processar operação.')
     } finally {
@@ -430,40 +371,29 @@ export const CompaniesPanel: React.FC = () => {
     }
   }
 
-  // ── Definir plano direto ──────────────────────────────────────────────────
+  // ── Definir plano ─────────────────────────────────────────────────────────
 
   const handleSetPlan = async () => {
     if (!isSaaSAdmin || !setPlanCompany || !setPlanId) return
-
     setSetPlanLoading(true)
     setSetPlanError(null)
-
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Sessão inválida')
-
       const res = await fetch('/api/admin/companies/set-plan', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ company_id: setPlanCompany.id, plan_id: setPlanId }),
       })
-
       const json = await res.json()
       if (!res.ok) {
-        const msg = SET_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao definir plano.'
-        setSetPlanError(msg)
+        setSetPlanError(SET_PLAN_ERROR_MSGS[json?.error] ?? 'Erro ao definir plano.')
         return
       }
-
       setSetPlanSuccess(true)
       loadCompanies()
-      setTimeout(() => {
-        setSetPlanCompany(null)
-        setSetPlanSuccess(false)
-        setSetPlanError(null)
-        setSetPlanId('')
-      }, 2200)
+      setTimeout(() => { setSetPlanCompany(null); setSetPlanSuccess(false); setSetPlanError(null); setSetPlanId('') }, 2200)
     } catch {
       setSetPlanError('Erro interno ao processar operação.')
     } finally {
@@ -482,6 +412,17 @@ export const CompaniesPanel: React.FC = () => {
     } catch (err: any) {
       alert('Erro ao impersonar: ' + err?.message)
     }
+  }
+
+  // ── Callbacks para o card ─────────────────────────────────────────────────
+
+  const cardCallbacks = {
+    onEdit:        openEdit,
+    onDelete:      (comp: ClientCompany) => { setDeleteCompany(comp); setDeleteError(null) },
+    onExtend:      (comp: ClientCompany) => { setExtendCompany(comp); setExtendError(null); setExtendSuccess(false) },
+    onFreePlan:    (comp: ClientCompany) => { setFreePlanCompany(comp); setFreePlanError(null); setFreePlanSuccess(false) },
+    onSetPlan:     (comp: ClientCompany) => { setSetPlanCompany(comp); setSetPlanError(null); setSetPlanSuccess(false); setSetPlanId('') },
+    onImpersonate: handleImpersonate,
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -512,7 +453,20 @@ export const CompaniesPanel: React.FC = () => {
         </button>
       </div>
 
-      {/* Lista */}
+      {/* Filtros + toggle */}
+      {!loading && companies.length > 0 && (
+        <CompaniesFilter
+          filters={filters}
+          onFiltersChange={setFilters}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          availablePlans={availablePlans}
+          totalCount={companies.length}
+          filteredCount={filteredCompanies.length}
+        />
+      )}
+
+      {/* Lista / grade */}
       {loading ? (
         <div className="flex items-center justify-center h-48">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -522,131 +476,42 @@ export const CompaniesPanel: React.FC = () => {
           <Building2 className="w-10 h-10 text-slate-300" />
           <p>Nenhuma empresa cadastrada</p>
         </div>
-      ) : (
+      ) : filteredCompanies.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-32 text-slate-500 gap-2">
+          <Building2 className="w-8 h-8 text-slate-300" />
+          <p className="text-sm">Nenhuma empresa encontrada com os filtros aplicados</p>
+        </div>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {companies.map(comp => {
-            const trial    = trialInfoMap[comp.id]
-            const days     = trial ? daysUntil(trial.trial_end) : null
-            const isLoadingTrial = trialLoadingIds.includes(comp.id)
-            const isFree   = freePlanMap[comp.id] ?? false
-
-            return (
-              <div
-                key={comp.id}
-                className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow space-y-3"
-              >
-                {/* Header do card */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 bg-blue-50 rounded-lg shrink-0">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 truncate">{comp.name}</p>
-                      {comp.domain && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 truncate">
-                          <Globe className="w-3 h-3" />{comp.domain}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {isFree && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                        <Gift className="w-3 h-3" /> Gratuito
-                      </span>
-                    )}
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(comp.status)}`}>
-                      {statusLabel(comp.status)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Plano */}
-                {(comp as any).plans?.name && (
-                  <p className="text-xs text-slate-500">Plano: <span className="font-medium">{(comp as any).plans.name}</span></p>
-                )}
-
-                {/* Trial badge — oculto quando empresa é gratuita */}
-                {!isFree && (isLoadingTrial ? (
-                  <div className="h-5 w-24 bg-slate-100 rounded animate-pulse" />
-                ) : trial?.is_internal_trial ? (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <CalendarClock className="w-3.5 h-3.5 text-amber-500" />
-                    {days !== null && days > 0 ? (
-                      <span className="text-amber-700 font-medium">{days} dias de trial</span>
-                    ) : days !== null && days <= 0 ? (
-                      <span className="text-red-600 font-medium">Trial expirado</span>
-                    ) : (
-                      <span className="text-slate-500">Expira {formatDate(trial.trial_end)}</span>
-                    )}
-                    {trial.trial_extended && (
-                      <span className="ml-1 text-slate-400">(estendido)</span>
-                    )}
-                  </div>
-                ) : null)}
-
-                {/* Ações */}
-                <div className="flex items-center gap-1 pt-1 flex-wrap">
-                  <button
-                    onClick={() => openEdit(comp)}
-                    className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                    title="Editar"
-                  >
-                    <Edit2 className="w-3 h-3" /> Editar
-                  </button>
-                  {trial?.can_extend && !isFree && (
-                    <button
-                      onClick={() => { setExtendCompany(comp); setExtendError(null); setExtendSuccess(false) }}
-                      className="flex items-center gap-1 text-xs text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
-                      title="Estender trial"
-                    >
-                      <Clock className="w-3 h-3" /> +14 dias
-                    </button>
-                  )}
-                  {isSaaSAdmin && (
-                    <button
-                      onClick={() => { setFreePlanCompany(comp); setFreePlanError(null); setFreePlanSuccess(false) }}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-                        isFree
-                          ? 'text-emerald-700 hover:bg-emerald-50'
-                          : 'text-slate-500 hover:bg-slate-100'
-                      }`}
-                      title={isFree ? 'Revogar plano gratuito' : 'Marcar como gratuito'}
-                    >
-                      <Gift className="w-3 h-3" />
-                      {isFree ? 'Gratuito ✓' : 'Gratuito'}
-                    </button>
-                  )}
-                  {isSaaSAdmin && (
-                    <button
-                      onClick={() => { setSetPlanCompany(comp); setSetPlanError(null); setSetPlanSuccess(false); setSetPlanId('') }}
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                      title="Definir plano diretamente"
-                    >
-                      <Layers className="w-3 h-3" /> Plano
-                    </button>
-                  )}
-                  {(isSaaSAdmin || isSystemAdmin) && (
-                    <button
-                      onClick={() => handleImpersonate(comp)}
-                      className="flex items-center gap-1 text-xs text-purple-600 hover:bg-purple-50 px-2 py-1 rounded transition-colors"
-                      title="Entrar como"
-                    >
-                      <LogIn className="w-3 h-3" /> Entrar
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setDeleteCompany(comp); setDeleteError(null) }}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors ml-auto"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+          {filteredCompanies.map(comp => (
+            <CompanyCard
+              key={comp.id}
+              comp={comp}
+              trial={trialInfoMap[comp.id]}
+              isLoadingTrial={trialLoadingIds.includes(comp.id)}
+              isFree={freePlanMap[comp.id] ?? false}
+              isSaaSAdmin={isSaaSAdmin}
+              isSystemAdmin={isSystemAdmin}
+              viewMode="grid"
+              {...cardCallbacks}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filteredCompanies.map(comp => (
+            <CompanyCard
+              key={comp.id}
+              comp={comp}
+              trial={trialInfoMap[comp.id]}
+              isLoadingTrial={trialLoadingIds.includes(comp.id)}
+              isFree={freePlanMap[comp.id] ?? false}
+              isSaaSAdmin={isSaaSAdmin}
+              isSystemAdmin={isSystemAdmin}
+              viewMode="list"
+              {...cardCallbacks}
+            />
+          ))}
         </div>
       )}
 
@@ -890,7 +755,7 @@ export const CompaniesPanel: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-start gap-3">
               <div className="p-2 bg-red-100 rounded-lg shrink-0">
-                <Trash2 className="w-5 h-5 text-red-600" />
+                <Building2 className="w-5 h-5 text-red-600" />
               </div>
               <div>
                 <h3 className="font-semibold text-slate-900">Excluir empresa</h3>
@@ -959,7 +824,6 @@ export const CompaniesPanel: React.FC = () => {
                   : 'Plano gratuito revogado com sucesso!'}
               </p>
             )}
-
             {freePlanError && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{freePlanError}</p>
             )}
@@ -1029,7 +893,6 @@ export const CompaniesPanel: React.FC = () => {
                 Plano atribuído com sucesso!
               </p>
             )}
-
             {setPlanError && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{setPlanError}</p>
             )}
@@ -1077,7 +940,6 @@ export const CompaniesPanel: React.FC = () => {
                 Trial estendido com sucesso!
               </p>
             )}
-
             {extendError && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{extendError}</p>
             )}
