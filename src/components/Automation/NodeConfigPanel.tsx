@@ -10,6 +10,7 @@ import KeywordRouterForm from './KeywordRouterForm'
 import { DistributionForm } from './DistributionForm'
 import ExecuteAgentForm from './forms/ExecuteAgentForm'
 import UpdateOpportunityForm from './forms/UpdateOpportunityForm'
+import DelayForm from './forms/DelayForm'
 import NodeExecutionStatus from './NodeExecutionStatus'
 import { useState, useEffect } from 'react'
 import { X, Save, ArrowLeft } from 'lucide-react'
@@ -1008,48 +1009,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
         return <KeywordRouterForm config={config as any} setConfig={setConfig} />
 
       case 'delay':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Duração
-              </label>
-              <input
-                type="number"
-                value={config.duration || 1}
-                onChange={(e) => setConfig({ ...config, duration: parseInt(e.target.value) })}
-                min="1"
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Unidade
-              </label>
-              <select
-                value={config.unit || 'minutes'}
-                onChange={(e) => setConfig({ ...config, unit: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="seconds">Segundos</option>
-                <option value="minutes">Minutos</option>
-                <option value="hours">Horas</option>
-                <option value="days">Dias</option>
-              </select>
-            </div>
-            <div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={config.businessHoursOnly || false}
-                  onChange={(e) => setConfig({ ...config, businessHoursOnly: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Apenas em horário comercial</span>
-              </label>
-            </div>
-          </div>
-        )
+        return <DelayForm config={config} onChange={setConfig} />
 
       case 'distribution':
         return <DistributionForm config={config} setConfig={setConfig} />
