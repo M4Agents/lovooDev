@@ -22,6 +22,8 @@ interface TriggerOption {
   color: string
   /** Quando true: visível mas desabilitado — backend ainda não implementado */
   comingSoon?: boolean
+  /** Config padrão aplicado ao criar o trigger (ex: { channel: 'instagram' }) */
+  defaultConfig?: Record<string, any>
 }
 
 interface TriggerCategory {
@@ -37,12 +39,20 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
     title: 'Mensagens',
     icon: '💬',
     triggers: [
-      {
+    {
         type: 'message.received',
-        label: 'Mensagem Recebida',
+        label: 'Mensagem Recebida — WhatsApp',
         description: 'Dispara quando uma mensagem do WhatsApp é recebida',
         icon: MessageCircle,
         color: 'green'
+      },
+      {
+        type: 'message.received',
+        label: 'Mensagem Recebida — Instagram Direct',
+        description: 'Dispara quando uma DM do Instagram é recebida. As automações podem levar até aproximadamente um minuto para iniciar.',
+        icon: MessageCircle,
+        color: 'pink',
+        defaultConfig: { channel: 'instagram' }
       }
     ]
   },
@@ -149,19 +159,27 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
 
 export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: TriggerSelectorModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('messages')
-  const [selectedType, setSelectedType] = useState<string | null>(null)
+  // selectedKey = tipo composto: "type:defaultConfig.channel" (ex: "message.received:instagram")
+  // Necessário porque dois triggers podem ter o mesmo type com channel diferente.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   if (!isOpen) return null
 
   const currentCategory = TRIGGER_CATEGORIES.find(cat => cat.id === selectedCategory)
 
-  const handleSelect = () => {
-    if (!selectedType) return
+  // Gera chave única para cada trigger option
+  const getTriggerKey = (trigger: TriggerOption) =>
+    trigger.defaultConfig?.channel
+      ? `${trigger.type}:${trigger.defaultConfig.channel}`
+      : trigger.type
 
-    // Buscar o gatilho em todas as categorias
+  const handleSelect = () => {
+    if (!selectedKey) return
+
+    // Buscar o gatilho em todas as categorias pela chave composta
     let triggerType: TriggerOption | undefined
     for (const category of TRIGGER_CATEGORIES) {
-      triggerType = category.triggers.find(t => t.type === selectedType)
+      triggerType = category.triggers.find(t => getTriggerKey(t) === selectedKey)
       if (triggerType) break
     }
 
@@ -173,17 +191,17 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
       label: triggerType.label,
       description: triggerType.description,
       enabled: true,
-      config: {}
+      config: { ...(triggerType.defaultConfig ?? {}) }
     }
 
     onSelect(newTrigger)
-    setSelectedType(null)
+    setSelectedKey(null)
     setSelectedCategory('messages')
     onClose()
   }
 
   const handleClose = () => {
-    setSelectedType(null)
+    setSelectedKey(null)
     setSelectedCategory('messages')
     onClose()
   }
@@ -243,13 +261,14 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
                 {currentCategory?.triggers.map((trigger) => {
                   const Icon = trigger.icon
                   const isDisabled = trigger.comingSoon
+                  const triggerKey = getTriggerKey(trigger)
                   return (
                     <label
-                      key={trigger.type}
+                      key={triggerKey}
                       className={`relative flex items-start p-3 border rounded-lg transition-colors ${
                         isDisabled
                           ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
-                          : selectedType === trigger.type
+                          : selectedKey === triggerKey
                             ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500 cursor-pointer'
                             : 'border-gray-300 hover:bg-gray-50 cursor-pointer'
                       }`}
@@ -257,9 +276,9 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
                       <input
                         type="radio"
                         name="trigger_type"
-                        value={trigger.type}
-                        checked={selectedType === trigger.type}
-                        onChange={(e) => !isDisabled && setSelectedType(e.target.value)}
+                        value={triggerKey}
+                        checked={selectedKey === triggerKey}
+                        onChange={(e) => !isDisabled && setSelectedKey(e.target.value)}
                         disabled={isDisabled}
                         className="sr-only"
                       />
@@ -282,7 +301,7 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
                           <p className="text-xs text-gray-500 mt-1 ml-6">{trigger.description}</p>
                         </div>
                       </div>
-                      {!isDisabled && selectedType === trigger.type && (
+                      {!isDisabled && selectedKey === triggerKey && (
                         <div className="flex-shrink-0 ml-3">
                           <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center">
                             <svg

@@ -18,7 +18,8 @@
     "api/instagram/data-deletion/index.js": { "maxDuration": 30 },
     "api/instagram/data-deletion/status.js": { "maxDuration": 10 },
     "api/cron/refresh-instagram-tokens.js": { "maxDuration": 60 },
-    "api/agents/process-message-buffer.js": { "maxDuration": 60 }
+    "api/agents/process-message-buffer.js": { "maxDuration": 60 },
+    "api/automation/process-instagram-triggers.ts": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -39,6 +40,10 @@
     },
     {
       "path": "/api/automation/process-schedules",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/automation/process-instagram-triggers",
       "schedule": "* * * * *"
     },
     {

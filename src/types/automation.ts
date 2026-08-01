@@ -162,19 +162,27 @@ export interface AutomationLog {
 
 export interface AutomationSchedule {
   id: string
-  flow_id: string
-  execution_id?: string
+  // Nullable após migration 20260801170000: schedules de delay continuam
+  // preenchendo flow_id; schedules de evento externo (instagram_dm_received)
+  // têm flow_id = null até o cron resolver o flow no processamento.
+  flow_id: string | null
+  // Nullable: preenchido apenas quando o schedule está vinculado a uma
+  // execution existente (ex.: delay). null para novos eventos externos.
+  execution_id: string | null
   company_id: string
   
   // Agendamento
   scheduled_for: string
   trigger_data: Record<string, any>
   
-  // Status
-  status: 'pending' | 'executed' | 'cancelled'
+  // Status — alinhado com CHECK constraint do banco:
+  // automation_schedules_status_check: pending|processing|processed|failed
+  status: 'pending' | 'processing' | 'processed' | 'failed'
   executed_at?: string
   
-  // Referência
+  // Referência polimórfica por entity_type:
+  //   delay_resume / delay_response_timeout → entity_id = node.id
+  //   instagram_dm_received                → entity_id = ig_message_id
   entity_type?: string
   entity_id?: string
   

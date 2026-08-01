@@ -183,14 +183,39 @@ export async function executeAgentNode(node, context, supabase) {
   const renderedPrompt = substituteVariables(config.promptTemplate.trim(), safeVars)
 
   // ----------------------------------------------------------------
+  // E2. Contexto de histórico por canal
+  //     Instagram: carregar últimas mensagens da conversa (sem lead necessário)
+  //     WhatsApp/outros: sem histórico inline no prompt (comportamento atual)
+  // ----------------------------------------------------------------
+  let historyPrefix = ''
+
+  if (
+    context.triggerData?.channel === 'instagram' &&
+    context.triggerData?.conversation_id &&
+    context.companyId
+  ) {
+    historyPrefix = await loadInstagramHistory(
+      supabase,
+      context.triggerData.conversation_id,
+      context.companyId,
+      context.triggerData.ig_message_id ?? null,
+    )
+  }
+
+  // Mensagem efetiva para o runner: histórico (se disponível) + prompt renderizado
+  const effectiveUserMessage = historyPrefix
+    ? `${historyPrefix}\n\n---\n${renderedPrompt}`
+    : renderedPrompt
+
+  // ----------------------------------------------------------------
   // F. Montar AgentRunContext
   // ----------------------------------------------------------------
   const agentCtx = {
-    userMessage:     renderedPrompt,
+    userMessage:     effectiveUserMessage,
     company_id:      context.companyId,
     lead_id:         context.leadId          ?? null,
-    conversation_id: context.conversationId  ?? null,
-    channel:         'automation',
+    conversation_id: context.conversationId  ?? context.triggerData?.conversation_id ?? null,
+    channel:         context.triggerData?.channel ?? 'automation',
     variables:       safeVars,
     user_id:         null,
   }
@@ -297,5 +322,69 @@ export async function executeAgentNode(node, context, supabase) {
     output_tokens:      runResult.output_tokens       ?? null,
     estimated_cost_usd: runResult.estimated_cost_usd  ?? null,
     duration_ms:        durationMs,
+  }
+}
+
+// =============================================================================
+// loadInstagramHistory — carrega contexto da conversa Instagram para o agente
+//
+// Busca as últimas mensagens da conversa com company_id obrigatório.
+// Formata como texto legível (alternando [Usuário]/[Assistente]).
+// Exclui a mensagem atual (ig_message_id) do histórico para evitar duplicação.
+// Limita por quantidade (MAX_HISTORY_MESSAGES) e comprimento total (MAX_HISTORY_CHARS).
+//
+// Retorna string vazia se não houver histórico ou em caso de erro.
+// Nunca lança exceção.
+// =============================================================================
+
+const MAX_HISTORY_MESSAGES = 15
+const MAX_HISTORY_CHARS    = 6_000  // ~1.5k tokens — seguro para maioria dos modelos
+
+async function loadInstagramHistory(supabase, conversationId, companyId, currentIgMessageId) {
+  try {
+    const { data: messages, error } = await supabase
+      .from('instagram_messages')
+      .select('id, ig_message_id, direction, content, message_type, timestamp')
+      .eq('conversation_id', conversationId)
+      .eq('company_id', companyId)     // guard multi-tenant obrigatório
+      .neq('message_type', 'unsupported')
+      .not('content', 'is', null)
+      .order('timestamp', { ascending: true })
+      .limit(MAX_HISTORY_MESSAGES + 1)  // +1 para detectar truncagem
+
+    if (error || !messages || messages.length === 0) {
+      return ''
+    }
+
+    // Excluir mensagem atual do histórico para evitar duplicação
+    const filtered = messages.filter(m =>
+      !currentIgMessageId || m.ig_message_id !== currentIgMessageId
+    )
+
+    if (filtered.length === 0) return ''
+
+    // Formatar como conversa
+    const lines = []
+    let totalChars = 0
+
+    for (const msg of filtered) {
+      const role    = msg.direction === 'inbound' ? '[Usuário]' : '[Assistente]'
+      const content = (msg.content ?? '').trim().slice(0, 500)  // limitar por mensagem
+      if (!content) continue
+
+      const line = `${role}: ${content}`
+      if (totalChars + line.length > MAX_HISTORY_CHARS) break
+
+      lines.push(line)
+      totalChars += line.length + 1
+    }
+
+    if (lines.length === 0) return ''
+
+    return `--- Histórico da conversa ---\n${lines.join('\n')}\n--- Fim do histórico ---`
+
+  } catch (err) {
+    console.warn('[agentNodeHandler] loadInstagramHistory: erro ao carregar histórico:', err?.message)
+    return ''
   }
 }

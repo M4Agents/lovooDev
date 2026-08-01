@@ -79,13 +79,19 @@ const DEDUP_WINDOW_MS = 60 * 1000  // 60 s — mesma janela de trigger-event.ts
  * Dispara automações para o evento message.received diretamente no servidor.
  *
  * @param {object} params
- * @param {string}  params.companyId       - UUID da empresa (obrigatório)
- * @param {number}  [params.leadId]        - ID numérico do lead (opcional)
+ * @param {string}  params.companyId        - UUID da empresa (obrigatório)
+ * @param {number}  [params.leadId]         - ID numérico do lead (opcional; null para Instagram)
  * @param {string}  [params.conversationId] - UUID da conversa (opcional)
- * @param {string}  [params.instanceId]    - UUID/string da instância WhatsApp (opcional)
- * @param {string}  [params.messageId]     - ID da mensagem salva no banco (opcional)
- * @param {string}  [params.text]          - Texto da mensagem (opcional, uso futuro em filtros)
- * @param {object}  [supabaseOverride]     - Cliente Supabase alternativo (testes)
+ * @param {string}  [params.instanceId]     - UUID/string da instância WhatsApp (opcional)
+ * @param {string}  [params.connectionId]   - UUID da conexão Instagram (opcional)
+ * @param {string}  [params.messageId]      - ID da mensagem salva no banco (opcional)
+ * @param {string}  [params.igMessageId]    - ig_message_id da Meta — chave de idempotência (Instagram)
+ * @param {string}  [params.channel]        - 'whatsapp' | 'instagram' (default: 'whatsapp')
+ * @param {string}  [params.text]           - Texto da mensagem (opcional)
+ * @param {object}  [supabaseOverride]      - Cliente Supabase alternativo (testes)
+ *
+ * @returns {Promise<DispatchResult>} Resultado estruturado. Nunca lança exceção para o caller.
+ *   { matchedFlows, createdExecutions, existingExecutions, skippedFlows, failedFlows, errors }
  */
 export async function dispatchMessageReceivedTrigger(
   {
@@ -93,7 +99,10 @@ export async function dispatchMessageReceivedTrigger(
     leadId             = null,
     conversationId     = null,
     instanceId         = null,
+    connectionId       = null,  // UUID da conexão Instagram
     messageId          = null,
+    igMessageId        = null,  // ig_message_id da Meta — chave de idempotência
+    channel            = 'whatsapp',  // default retrocompatível: ausente = WhatsApp
     text               = null,
     direction          = null,
     from_agent         = null,
@@ -107,14 +116,24 @@ export async function dispatchMessageReceivedTrigger(
   },
   supabaseOverride
 ) {
-  const tag = `[dispatchMessageReceivedTrigger][company:${companyId}][lead:${leadId}][conv:${conversationId}]`
+  const tag = `[dispatchMessageReceivedTrigger][company:${companyId}][channel:${channel}][lead:${leadId}][conv:${conversationId}]`
 
   if (!companyId) {
     console.warn(`${tag} companyId é obrigatório — abortando`)
-    return
+    return { matchedFlows: 0, createdExecutions: 0, existingExecutions: 0, skippedFlows: 0, failedFlows: 0, errors: [] }
   }
 
   const supabase = supabaseOverride ?? getSupabaseAdmin()
+
+  // Resultado agregado — retornado ao caller (cron) para auditoria
+  const dispatchResult = {
+    matchedFlows:      0,
+    createdExecutions: 0,
+    existingExecutions:0,
+    skippedFlows:      0,
+    failedFlows:       0,
+    errors:            [],
+  }
 
   try {
     // 1. Buscar flows ativos da empresa (is_over_plan incluso para enforcement de plano)
@@ -126,12 +145,12 @@ export async function dispatchMessageReceivedTrigger(
 
     if (flowsErr) {
       console.error(`${tag} erro ao buscar flows:`, flowsErr.message)
-      return
+      return dispatchResult
     }
 
     if (!flows || flows.length === 0) {
       console.log(`${tag} nenhum flow ativo encontrado`)
-      return
+      return dispatchResult
     }
 
     // 2. Montar evento e filtrar flows compatíveis com message.received
@@ -140,20 +159,18 @@ export async function dispatchMessageReceivedTrigger(
       data: {
         lead_id:             leadId,
         conversation_id:     conversationId,
-        instance_id:         instanceId,
+        instance_id:         instanceId ?? connectionId,  // WhatsApp usa instanceId, Instagram usa connectionId
+        connection_id:       connectionId,
         message_id:          messageId,
+        ig_message_id:       igMessageId,
         text,
-        channel:             'whatsapp',
+        channel,             // paramétrico — 'whatsapp' | 'instagram'
         // Campos de origem — permitem que triggerEvaluator filtre loops
-        // independentemente de quem chamar este dispatcher no futuro
         direction,
         from_agent,
         sender_type,
-        origin,
+        origin:              origin ?? channel,
         is_from_me,
-        // Origem da mensagem: 'click_to_chat_link' ou null.
-        // null = mensagem normal OU integração sem suporte a esse metadata.
-        // O triggerEvaluator usa esse campo para o filtro linkOriginFilter.
         entry_point_source,
       },
     }
@@ -162,9 +179,10 @@ export async function dispatchMessageReceivedTrigger(
 
     if (matchedFlows.length === 0) {
       console.log(`${tag} nenhum flow corresponde ao evento — total avaliados: ${flows.length}`)
-      return
+      return dispatchResult
     }
 
+    dispatchResult.matchedFlows = matchedFlows.length
     console.log(`${tag} ${matchedFlows.length} flow(s) correspondente(s) — iniciando execuções`)
 
     // 3. Para cada flow compatível: deduplicar, criar execução e processar
@@ -172,12 +190,31 @@ export async function dispatchMessageReceivedTrigger(
       // Enforcement de plano: flow acima do limite não executa
       if (flow.is_over_plan === true) {
         console.warn(`${tag} flow=${flow.id} is_over_plan=true — ignorado (plano excedido)`)
+        dispatchResult.skippedFlows++
         continue
       }
 
       try {
-        // Deduplicação: checar execução recente para o mesmo lead + flow (quando leadId disponível)
-        if (leadId) {
+        // Deduplicação por ig_message_id (Instagram) — garantia contra retry do schedule
+        if (channel === 'instagram' && igMessageId) {
+          const { data: existingIg } = await supabase
+            .from('automation_executions')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('flow_id', flow.id)
+            .eq('trigger_data->>ig_message_id', igMessageId)
+            .eq('trigger_data->>channel', 'instagram')
+            .maybeSingle()
+
+          if (existingIg) {
+            console.warn(`${tag} flow=${flow.id} — execution Instagram já criada para ig_message_id=${igMessageId} — skip`)
+            dispatchResult.existingExecutions++
+            continue
+          }
+        }
+
+        // Deduplicação legada por lead_id + flow (WhatsApp, quando leadId disponível)
+        if (channel !== 'instagram' && leadId) {
           const since = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString()
           const { data: existing } = await supabase
             .from('automation_executions')
@@ -191,6 +228,7 @@ export async function dispatchMessageReceivedTrigger(
 
           if (existing) {
             console.warn(`${tag} flow=${flow.id} ignorado — execução duplicada na janela de ${DEDUP_WINDOW_MS / 1000}s`)
+            dispatchResult.existingExecutions++
             continue
           }
         }
@@ -199,30 +237,45 @@ export async function dispatchMessageReceivedTrigger(
         const triggerData = {
           lead_id:         leadId,
           conversation_id: conversationId,
-          instance_id:     instanceId,
+          instance_id:     instanceId ?? connectionId,
+          connection_id:   connectionId,
           message_id:      messageId,
+          ig_message_id:   igMessageId,
           text,
-          channel:         'whatsapp',
+          channel,
         }
         const execution = await createExecution(flow, triggerData, companyId, supabase)
 
         if (!execution) {
           console.error(`${tag} flow=${flow.id} — createExecution retornou null`)
+          dispatchResult.failedFlows++
           continue
         }
 
         console.log(`${tag} flow=${flow.id} execution=${execution.id} — disparado`)
+        dispatchResult.createdExecutions++
 
         // Processar flow (processFlowAsync já é assíncrono internamente)
         await processFlowAsync(flow, execution, supabase)
 
       } catch (flowErr) {
-        console.error(`${tag} flow=${flow.id} — erro ao processar:`, flowErr?.message)
+        // Erros 23505 do índice de dedup de execution = já existe — não é falha operacional
+        if (flowErr?.code === '23505') {
+          console.warn(`${tag} flow=${flow.id} — 23505: execution já existe para ig_message_id=${igMessageId}`)
+          dispatchResult.existingExecutions++
+        } else {
+          console.error(`${tag} flow=${flow.id} — erro ao processar:`, flowErr?.message)
+          dispatchResult.failedFlows++
+          dispatchResult.errors.push(`flow:${flow.id}:${flowErr?.message?.substring(0, 200) ?? 'unknown'}`)
+        }
       }
     }
 
   } catch (err) {
     // Fail-safe: nunca quebra o caller
     console.error(`${tag} erro inesperado:`, err?.message)
+    dispatchResult.errors.push(`global:${err?.message?.substring(0, 200) ?? 'unknown'}`)
   }
+
+  return dispatchResult
 }

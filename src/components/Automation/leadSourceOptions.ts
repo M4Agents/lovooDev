@@ -14,12 +14,13 @@
 export const LEAD_SOURCE_ANY = 'any'
 
 export const LEAD_SOURCE_OPTIONS = [
-  { value: 'any',      label: 'Qualquer origem'      },
-  { value: 'manual',   label: 'Manual'               },
-  { value: 'whatsapp', label: 'WhatsApp'             },
-  { value: 'import',   label: 'Importação em massa'  },
-  { value: 'api',      label: 'Via API interna'      },
-  { value: 'webhook',  label: 'Via Webhook externo'  },
+  { value: 'any',       label: 'Qualquer origem'        },
+  { value: 'manual',    label: 'Manual'                 },
+  { value: 'whatsapp',  label: 'WhatsApp'               },
+  { value: 'instagram', label: 'Instagram Direct'       },
+  { value: 'import',    label: 'Importação em massa'    },
+  { value: 'api',       label: 'Via API interna'        },
+  { value: 'webhook',   label: 'Via Webhook externo'    },
 ] as const
 
 export type LeadSource = typeof LEAD_SOURCE_OPTIONS[number]['value']

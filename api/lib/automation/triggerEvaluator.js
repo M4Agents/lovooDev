@@ -131,8 +131,36 @@ function matchesMessageReceived(trigger, eventData) {
   if (eventData.origin === 'system')             return false
   if (eventData.is_from_me === true)             return false
 
-  // Filtro por instância WhatsApp
-  if (config.instanceId && config.instanceId !== eventData.instance_id) return false
+  // ── Filtro de canal ─────────────────────────────────────────────────────
+  // config.channel ausente → retrocompatibilidade → 'whatsapp' (nunca 'any')
+  // 'instagram' deve ser configurado EXPLICITAMENTE.
+  // 'any' só vale quando definido de forma explícita no config.
+  const configuredChannel = config.channel ?? 'whatsapp'
+
+  if (
+    configuredChannel !== 'any' &&
+    eventData.channel !== configuredChannel
+  ) {
+    return false
+  }
+
+  // ── Filtro por instância / conexão ──────────────────────────────────────
+  // WhatsApp: validar instance_id configurado
+  if (configuredChannel === 'whatsapp' || configuredChannel === 'any') {
+    if (config.instanceId && config.instanceId !== eventData.instance_id) return false
+  }
+
+  // Instagram: validar connection_id configurado
+  // Impede que um flow da conta A processe mensagens da conta B da mesma empresa.
+  if (configuredChannel === 'instagram' || configuredChannel === 'any') {
+    if (
+      config.connectionId &&
+      config.connectionId !== (eventData.connection_id ?? eventData.instance_id)
+    ) {
+      return false
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   // Filtro por tipo de sessão: só dispara em novas conversas
   // Somente bloqueia se o dispatcher explicitamente marcou is_new_conversation = false

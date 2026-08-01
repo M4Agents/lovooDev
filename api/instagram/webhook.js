@@ -288,6 +288,149 @@ async function processDmEvent(ev, companyId, connectionId, connection, svc) {
   if (rpc?.ok && rpc?.conversation_id && ev.participantIgUserId && connection) {
     await enrichParticipantIfNeeded(rpc.conversation_id, ev.participantIgUserId, connection, svc);
   }
+
+  // ── Enfileirar automação Instagram (apenas DMs inbound, não eco) ─────────
+  // Condições:
+  //   - RPC ok (mensagem persistida com sucesso)
+  //   - Não é duplicata (rpc.skipped = false)
+  //   - Direção inbound (não echo da própria plataforma)
+  //   - company_id, connectionId, igMessageId e conversation_id presentes
+  //
+  // Idempotência garantida pelo índice idx_ig_dm_dedup (Migration B).
+  // Erro 23505 = schedule já existe para este ig_message_id → sucesso.
+  // Webhook retorna 200 independentemente — schedule processado pelo cron.
+  if (
+    rpc?.ok
+    && !rpc?.skipped
+    && ev.direction === 'inbound'
+    && companyId
+    && connectionId
+    && ev.igMessageId
+    && rpc?.conversation_id
+  ) {
+    await enqueueInstagramAutomationSchedule({
+      svc,
+      companyId,
+      connectionId,
+      conversationId:     rpc.conversation_id,
+      igMessageId:        ev.igMessageId,
+      internalMessageId:  rpc.message_id ?? null,
+      leadId:             rpc.lead_id   ?? null,
+      text:               ev.content    ?? null,
+      participantId:      ev.participantIgUserId,
+      eventTimestamp:     ev.timestamp.toISOString(),
+      messageType:        ev.messageType,
+    });
+  }
+}
+
+// =============================================================================
+// Enfileirar automation_schedule para DM inbound do Instagram
+// =============================================================================
+// Chamado após a RPC process_instagram_dm_webhook confirmar ok=true.
+// Cria um schedule com entity_type='instagram_dm_received' e
+// entity_id=igMessageId para processamento assíncrono pelo cron.
+//
+// Idempotência: índice UNIQUE idx_ig_dm_dedup (company_id, entity_id)
+// para entity_type = 'instagram_dm_received'. Erro 23505 = já enfileirado.
+//
+// Nunca lança exceção — falha de enqueue não deve impactar o webhook.
+// O webhook já retornou 200; o cron recupera schedules pendentes.
+
+async function enqueueInstagramAutomationSchedule({
+  svc,
+  companyId,
+  connectionId,
+  conversationId,
+  igMessageId,
+  internalMessageId,
+  leadId,
+  text,
+  participantId,
+  eventTimestamp,
+  messageType,
+}) {
+  try {
+    // Validações defensivas — campos obrigatórios
+    if (!companyId || !connectionId || !conversationId || !igMessageId) {
+      console.error('[instagram-webhook] enqueue: campo obrigatório ausente', {
+        hasCompanyId:       !!companyId,
+        hasConnectionId:    !!connectionId,
+        hasConversationId:  !!conversationId,
+        hasIgMessageId:     !!igMessageId,
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const { error } = await svc
+      .from('automation_schedules')
+      .insert({
+        company_id:    companyId,
+        flow_id:       null,       // resolvido pelo cron via dispatchMessageReceivedTrigger
+        execution_id:  null,       // ainda não existe execution
+        entity_type:   'instagram_dm_received',
+        entity_id:     igMessageId, // chave de idempotência (idx_ig_dm_dedup)
+        scheduled_for: now,
+        status:        'pending',
+        trigger_data: {
+          // Canal e origem
+          channel:          'instagram',
+          origin:           'instagram',
+          direction:        'inbound',
+          // Identificadores externos
+          ig_message_id:    igMessageId,
+          message_id:       internalMessageId,
+          conversation_id:  conversationId,
+          connection_id:    connectionId,
+          company_id:       companyId,
+          // Contexto do participante
+          lead_id:          leadId ?? null,
+          participant_id:   participantId ?? null,
+          // Conteúdo
+          text:             text ?? null,
+          message_type:     messageType ?? 'text',
+          event_timestamp:  eventTimestamp,
+          // Anti-loop — garantem que echoes não disparam automação
+          is_from_me:       false,
+          from_agent:       false,
+          is_echo:          false,
+          sender_type:      'lead',
+          // Controle de retry (gerenciado pelo cron; não incrementar aqui)
+          attempt_count:    0,
+        },
+        created_at: now,
+      });
+
+    if (error) {
+      // 23505 = violação de unicidade → schedule já existe para este ig_message_id
+      // Trata como sucesso idempotente: Meta pode reenviar o mesmo evento.
+      if (error.code === '23505') {
+        console.log('[instagram-webhook] enqueue: schedule já existe para ig_message_id=%s — ignorado', igMessageId);
+        return;
+      }
+      // Qualquer outro erro é registrado, mas não interrompe o webhook
+      console.error('[instagram-webhook] enqueue: erro ao criar schedule', {
+        igMessageId,
+        conversationId,
+        companyId,
+        errorCode:    error.code,
+        errorMessage: error.message,
+      });
+      return;
+    }
+
+    console.log('[instagram-webhook] enqueue: schedule criado para ig_message_id=%s conversation_id=%s',
+      igMessageId, conversationId);
+
+  } catch (err) {
+    // Silencioso — nunca deve impactar o fluxo do webhook
+    console.error('[instagram-webhook] enqueue: exceção inesperada', {
+      igMessageId,
+      err: err?.message,
+    });
+  }
 }
 
 // =============================================================================

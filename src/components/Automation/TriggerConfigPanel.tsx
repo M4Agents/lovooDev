@@ -54,6 +54,25 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
   const { funnels, loading: loadingFunnels } = useSalesFunnels(company?.id)
   const { stages, loading: loadingStages } = useFunnelStages(config.funnelId || '')
 
+  // Conexões Instagram — carregadas apenas para o trigger Instagram Direct
+  const [igConnections, setIgConnections] = useState<{ id: string; name: string | null; instagram_username: string | null; status: string }[]>([])
+  const [loadingIgConnections, setLoadingIgConnections] = useState(false)
+
+  // Carregar conexões Instagram quando canal = instagram
+  useEffect(() => {
+    if (config.triggerType === 'message.received' && config.channel === 'instagram' && company?.id) {
+      setLoadingIgConnections(true)
+      supabase
+        .from('instagram_connections')
+        .select('id, name, instagram_username, status')
+        .eq('company_id', company.id)
+        .eq('status', 'active')
+        .order('name')
+        .then(({ data }) => setIgConnections(data ?? []))
+        .finally(() => setLoadingIgConnections(false))
+    }
+  }, [config.triggerType, config.channel, company?.id])
+
   useEffect(() => {
     const type = config.triggerType
     if ((type === 'tag.added' || type === 'tag.removed') && company?.id && tags.length === 0) {
@@ -101,6 +120,9 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         tagId: nodeConfig.tagId || '',
         tagName: nodeConfig.tagName || '',
         keywordMatch: nodeConfig.keywordMatch || 'any',
+        channel: nodeConfig.channel || '',
+        connectionId: nodeConfig.connectionId || '',
+        connectionName: nodeConfig.connectionName || '',
       })
     }
   }, [selectedNode])
@@ -643,9 +665,84 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     </div>
   )
 
-  const renderMessageReceivedConfig = () => (
+  const renderMessageReceivedConfig = () => {
+    // Canal configurado: ausente = WhatsApp (retrocompatibilidade)
+    const configuredChannel = config.channel || 'whatsapp'
+    const isInstagram = configuredChannel === 'instagram'
+
+    return (
     <div className="space-y-4">
-      {/* Instância WhatsApp */}
+      {/* Seletor de Canal */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Canal *
+        </label>
+        <select
+          value={configuredChannel}
+          onChange={(e) => {
+            setConfig({
+              ...config,
+              channel:        e.target.value,
+              // Limpar campos do canal anterior ao trocar
+              instanceId:     '',
+              instanceName:   '',
+              connectionId:   '',
+              connectionName: '',
+            })
+          }}
+          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        >
+          <option value="whatsapp">WhatsApp</option>
+          <option value="instagram">Instagram Direct</option>
+        </select>
+        {isInstagram && (
+          <p className="text-xs text-amber-600 mt-1">
+            ℹ️ As automações do Instagram podem levar até aproximadamente um minuto para iniciar.
+          </p>
+        )}
+      </div>
+
+      {/* Conta Instagram */}
+      {isInstagram && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Conta Instagram *
+          </label>
+          {loadingIgConnections ? (
+            <div className="text-sm text-gray-500">Carregando conexões...</div>
+          ) : igConnections.length === 0 ? (
+            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-md">
+              ⚠️ Nenhuma conta Instagram ativa. Conecte uma conta em Configurações → Integrações.
+            </div>
+          ) : (
+            <select
+              value={config.connectionId || ''}
+              onChange={(e) => {
+                const selected = igConnections.find(c => c.id === e.target.value)
+                setConfig({
+                  ...config,
+                  connectionId:   e.target.value,
+                  connectionName: selected?.instagram_username || selected?.name || '',
+                })
+              }}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500"
+            >
+              <option value="">Selecione uma conta Instagram</option>
+              {igConnections.map(conn => (
+                <option key={conn.id} value={conn.id}>
+                  📷 {conn.instagram_username ? `@${conn.instagram_username}` : conn.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {config.triggerType === 'message.received' && isInstagram && !config.connectionId && (
+            <p className="text-xs text-red-500 mt-1">Selecione uma conta Instagram para salvar.</p>
+          )}
+        </div>
+      )}
+
+      {/* Instância WhatsApp — oculta para Instagram */}
+      {!isInstagram && (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Instância WhatsApp *
@@ -680,6 +777,7 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           </select>
         )}
       </div>
+      )}
 
       {/* Tipo de Comparação */}
       <div>
@@ -808,7 +906,8 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
         )}
       </div>
 
-      {/* Opções Avançadas */}
+      {/* Opções Avançadas — apenas WhatsApp */}
+      {!isInstagram && (
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
           Opções Avançadas
@@ -834,8 +933,10 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           <span className="text-sm text-gray-700">Receber metadados da mensagem</span>
         </label>
       </div>
+      )}
     </div>
   )
+}
 
   return (
     <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl border-l border-gray-200 z-50 flex flex-col">

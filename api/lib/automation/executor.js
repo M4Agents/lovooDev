@@ -301,7 +301,7 @@ async function pauseAtUserInput(node, context, supabase) {
   let questionError = null
 
   try {
-    // Nó sintético de texto — reutiliza toda a infra de sendMessageNode
+    // Nó sintético de texto — reutiliza toda a infra de envio por canal
     const questionNode = {
       id:   node.id,
       type: 'message',
@@ -311,8 +311,15 @@ async function pauseAtUserInput(node, context, supabase) {
       },
     }
 
-    const { sendMessageNode } = await import('./whatsappSender.js')
-    const sendResult = await sendMessageNode(questionNode, context, supabase)
+    const channelForQuestion = context.triggerData?.channel ?? 'whatsapp'
+    let sendResult
+    if (channelForQuestion === 'instagram') {
+      const { sendInstagramMessageNode } = await import('./instagramSender.js')
+      sendResult = await sendInstagramMessageNode(questionNode, context, supabase)
+    } else {
+      const { sendMessageNode } = await import('./whatsappSender.js')
+      sendResult = await sendMessageNode(questionNode, context, supabase)
+    }
 
     if (sendResult?.sent) {
       questionSent = true
@@ -407,6 +414,15 @@ async function executeNodeAction(node, context, supabase) {
       if (node.data?.config?.messageType === 'user_input') {
         return await pauseAtUserInput(node, context, supabase)
       }
+
+      // Roteamento por canal — Instagram usa sender dedicado sem lead.phone
+      const channel = context.triggerData?.channel ?? 'whatsapp'
+      if (channel === 'instagram') {
+        const { sendInstagramMessageNode } = await import('./instagramSender.js')
+        return await sendInstagramMessageNode(node, context, supabase)
+      }
+
+      // Default: WhatsApp (retrocompatibilidade)
       const { sendMessageNode } = await import('./whatsappSender.js')
       return await sendMessageNode(node, context, supabase)
     }
