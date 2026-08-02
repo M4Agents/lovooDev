@@ -441,7 +441,20 @@ export const Settings: React.FC = () => {
       console.log('🔄 Salvando dados da empresa:', { companyId: company.id, updateData });
 
       // #region agent log
-      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'70efd5'},body:JSON.stringify({sessionId:'70efd5',location:'Settings.tsx:handleSaveCompany',message:'updateData being sent to API',data:{companyId:company.id,activeTab:empresasTab,fields:Object.keys(updateData),updateData},hypothesisId:'H-A,H-B,H-C,H-D,H-E',timestamp:Date.now()})}).catch(()=>{});
+      console.log('[DEBUG-70efd5] handleSaveCompany → aba ativa:', empresasTab);
+      console.log('[DEBUG-70efd5] campos enviados:', Object.keys(updateData));
+      console.log('[DEBUG-70efd5] valores de campos validados:', {
+        cep: updateData.cep,
+        cnpj: updateData.cnpj,
+        email_principal: updateData.email_principal,
+        email_comercial: updateData.email_comercial,
+        email_financeiro: updateData.email_financeiro,
+        email_suporte: updateData.email_suporte,
+        telefone_principal: updateData.telefone_principal,
+        telefone_secundario: updateData.telefone_secundario,
+        site_principal: updateData.site_principal,
+        horario_atendimento: updateData.horario_atendimento,
+      });
       // #endregion
 
       await api.updateCompany(company.id, updateData);
@@ -451,6 +464,12 @@ export const Settings: React.FC = () => {
       alert(t('company.messages.saveSuccess'));
     } catch (error) {
       console.error('❌ Error saving company data:', error);
+      // #region agent log
+      console.error('[DEBUG-70efd5] erro completo:', JSON.stringify(error, null, 2));
+      if (typeof error === 'object' && error !== null && 'details' in error) {
+        console.error('[DEBUG-70efd5] campos com erro de validação (422):', (error as any).details);
+      }
+      // #endregion
       const msg =
         error instanceof Error
           ? error.message

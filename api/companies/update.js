@@ -184,7 +184,14 @@ export default async function handler(req, res) {
   const validationErrors = validateFields(safe);
   // #region agent log
   if (validationErrors.length > 0) {
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'70efd5'},body:JSON.stringify({sessionId:'70efd5',location:'api/companies/update.js:validateFields',message:'422 validation errors',data:{validationErrors,safeFields:Object.keys(safe),safeValues:Object.fromEntries(Object.entries(safe).filter(([k])=>['cep','cnpj','email_principal','email_comercial','email_financeiro','email_suporte','telefone_principal','telefone_secundario','site_principal'].includes(k)))},hypothesisId:'H-A,H-B,H-C,H-D,H-E',timestamp:Date.now()})}).catch(()=>{});
+    console.error('[DEBUG-70efd5] 422 validation errors:', JSON.stringify({
+      validationErrors,
+      validatedFieldValues: Object.fromEntries(
+        Object.entries(safe).filter(([k]) =>
+          ['cep','cnpj','email_principal','email_comercial','email_financeiro','email_suporte','telefone_principal','telefone_secundario','site_principal','horario_atendimento'].includes(k)
+        )
+      ),
+    }));
   }
   // #endregion
   if (validationErrors.length > 0) {
