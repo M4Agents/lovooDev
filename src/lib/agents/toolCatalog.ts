@@ -26,6 +26,16 @@ export interface ToolDefinitionUI {
    * (que são instruções técnicas para o LLM). Mantenha o conteúdo coerente com o backend.
    */
   promptSuggestion?: string
+  /**
+   * Nota sobre restrição de canal (ex: "Apenas WhatsApp").
+   * Exibida como badge informativo no seletor — não bloqueia o uso.
+   */
+  channelNote?: string
+  /**
+   * Parâmetros aceitos pela tool, em linguagem legível para o usuário.
+   * Exibido abaixo da descrição quando a tool está selecionada.
+   */
+  params?: string
 }
 
 export const TOOL_CATALOG: ToolDefinitionUI[] = [
@@ -36,6 +46,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Salva informações do cliente como nome, e-mail, telefone ou empresa quando informados durante a conversa.',
     category:          'crm',
     promptSuggestion:  'Quando o cliente informar nome, e-mail, telefone ou empresa, use update_lead para salvar automaticamente no CRM.',
+    params:            'Campos: nome, e-mail, telefone, empresa, cargo, observações',
   },
   {
     key:               'add_tag',
@@ -43,6 +54,15 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Marca o cliente com etiquetas como "qualificado", "sem interesse" ou outras tags configuradas no CRM.',
     category:          'crm',
     promptSuggestion:  'Quando identificar o perfil do cliente, use add_tag — por exemplo: "qualificado", "sem interesse" ou "aguardando retorno".',
+    params:            'Parâmetro: nome da etiqueta (criada automaticamente se não existir)',
+  },
+  {
+    key:               'remove_tag',
+    label:             'Remover etiqueta do cliente',
+    description:       'Remove uma etiqueta existente do perfil do cliente quando ela não for mais aplicável.',
+    category:          'crm',
+    promptSuggestion:  'Quando uma etiqueta do cliente não for mais válida, use remove_tag informando o nome exato da etiqueta a remover.',
+    params:            'Parâmetro: nome exato da etiqueta a remover',
   },
   {
     key:               'add_note',
@@ -50,6 +70,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Grava observações da conversa no perfil do cliente ou na oportunidade para a equipe visualizar.',
     category:          'crm',
     promptSuggestion:  'Quando precisar registrar algo importante da conversa para a equipe visualizar, use add_note.',
+    params:            'Destino: perfil do cliente ou oportunidade ativa',
   },
 
   // ── Oportunidade ─────────────────────────────────────────────────────────────
@@ -59,6 +80,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Edita informações da oportunidade como valor estimado, probabilidade de fechamento ou previsão.',
     category:          'oportunidade',
     promptSuggestion:  'Quando o cliente informar valor esperado ou prazo de fechamento, use update_opportunity para atualizar a oportunidade.',
+    params:            'Campos: valor, probabilidade (0–100%), previsão de fechamento, título',
   },
   {
     key:               'move_opportunity',
@@ -66,6 +88,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Move o card da oportunidade para a próxima etapa do funil quando o cliente demonstrar progresso.',
     category:          'oportunidade',
     promptSuggestion:  'Quando o cliente avançar no processo — como pedir proposta ou confirmar interesse — use move_opportunity para mover o card no funil.',
+    params:            'Parâmetro: nome exato da etapa de destino (veja etapas do funil abaixo)',
   },
 
   // ── Agenda ────────────────────────────────────────────────────────────────────
@@ -75,6 +98,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Agenda reuniões, ligações e compromissos confirmados pelo cliente durante a conversa.',
     category:          'agenda',
     promptSuggestion:  'Quando o cliente confirmar uma reunião, ligação ou compromisso, use create_activity para registrar.',
+    params:            'Tipos: ligação, reunião, follow-up, tarefa, e-mail — requer data e hora confirmadas',
   },
   {
     key:               'schedule_contact',
@@ -82,6 +106,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Programa o agente para retomar o contato automaticamente em uma data futura definida.',
     category:          'agenda',
     promptSuggestion:  'Quando o cliente pedir para ser contatado em uma data futura, use schedule_contact para programar o retorno.',
+    params:            'Motivos: contatar depois, follow-up, nova tentativa, reengajamento',
   },
 
   // ── Atendimento ───────────────────────────────────────────────────────────────
@@ -91,6 +116,7 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Encaminha a conversa para um atendente da equipe quando solicitado ou quando necessário.',
     category:          'atendimento',
     promptSuggestion:  'Quando o cliente pedir para falar com um atendente humano ou a situação exigir intervenção, use request_handoff.',
+    params:            'Parâmetro: motivo da transferência (para registro interno)',
   },
   {
     key:               'send_media',
@@ -98,6 +124,8 @@ export const TOOL_CATALOG: ToolDefinitionUI[] = [
     description:       'Envia imagens ou vídeos do produto ou serviço em foco, conforme a intenção definida (apresentação, prova social ou detalhe técnico).',
     category:          'atendimento',
     promptSuggestion:  'Quando identificar que deve enviar uma imagem ou vídeo do produto em foco, use send_media.',
+    channelNote:       'Apenas WhatsApp',
+    params:            'Intenções: apresentação, prova social, detalhe técnico',
   },
 ]
 

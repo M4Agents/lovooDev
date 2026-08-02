@@ -11,7 +11,7 @@
  *   - Estado totalmente controlado via props (selectedTools / onChange)
  */
 
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Wifi } from 'lucide-react'
 import {
   TOOL_CATALOG,
   TOOL_CATEGORY_LABELS,
@@ -96,13 +96,33 @@ export function AgentToolsSelector({ selectedTools, onChange, disabled = false }
                         className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600
                                    focus:ring-blue-500 cursor-pointer flex-shrink-0"
                       />
-                      <div className="min-w-0">
-                        <p className={`text-sm font-medium ${isChecked ? 'text-blue-800' : 'text-gray-700'}`}>
-                          {tool.label}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        {/* Linha de título + badge de canal */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`text-sm font-medium ${isChecked ? 'text-blue-800' : 'text-gray-700'}`}>
+                            {tool.label}
+                          </p>
+                          {tool.channelNote && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]
+                                             font-medium bg-gray-100 text-gray-500 border border-gray-200
+                                             leading-none flex-shrink-0">
+                              <Wifi className="w-2.5 h-2.5" />
+                              {tool.channelNote}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Descrição */}
                         <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                           {tool.description}
                         </p>
+
+                        {/* Parâmetros — visíveis apenas quando a tool está selecionada */}
+                        {isChecked && tool.params && (
+                          <p className="text-[11px] text-blue-600/80 italic mt-1 leading-relaxed">
+                            {tool.params}
+                          </p>
+                        )}
                       </div>
                     </label>
                   )

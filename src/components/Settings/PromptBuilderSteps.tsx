@@ -1369,6 +1369,15 @@ function AgentToolsSection({
 
   const showEnrichButtons = advancedManualActive && allowedTools.length > 0 && !saving
 
+  // Aviso: tools ativas mas sem instruções no prompt
+  // Verifica se o campo tool_instructions está vazio no texto atual
+  const hasToolInstructions = (() => {
+    if (!advancedText) return false
+    const parsed = parseAdvancedText(advancedText)
+    return !!parsed.tool_instructions?.trim()
+  })()
+  const showMissingInstructionsWarning = allowedTools.length > 0 && !hasToolInstructions && open
+
   // Fechar painel manual ao iniciar fluxo IA e vice-versa
   function startAiFlow() {
     setManualOpen(false)
@@ -1444,6 +1453,34 @@ function AgentToolsSection({
                 disabled={saving}
               />
             </div>
+
+            {/* Aviso: tools ativas sem instruções no prompt */}
+            {showMissingInstructionsWarning && (
+              <div className="mx-4 mb-3 flex items-start gap-2.5 bg-blue-50 border border-blue-200
+                              rounded-lg px-3 py-2.5">
+                <Zap className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-blue-800">
+                    {allowedTools.length === 1 ? '1 ação ativada' : `${allowedTools.length} ações ativadas`} — o prompt ainda não tem instruções de uso
+                  </p>
+                  <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
+                    Para o agente saber quando usar essas ações, adicione instruções no prompt.
+                    {advancedManualActive && (
+                      <> Use{' '}
+                        <button
+                          type="button"
+                          onClick={() => { setManualOpen(true); setEnrichState('idle') }}
+                          className="underline font-medium hover:text-blue-900 transition-colors"
+                        >
+                          Ver sugestões manuais
+                        </button>
+                        {' '}para gerar automaticamente.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Botões de enriquecimento — apenas no modo avançado com tools ativas */}
             {showEnrichButtons && (
