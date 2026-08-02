@@ -84,24 +84,46 @@ export default async function handler(req, res) {
   const assignmentMap = new Map(assignments.map(a => [a.id, a]))
   const assignmentIds = assignments.map(a => a.id)
 
-  // ── PASSO 2: Buscar conversas com IA ativa e last_inbound_at preenchido ─────
-  // Ordenadas pela ausência mais antiga primeiro (starvation prevention)
-  const { data: conversations, error: convErr } = await svc
-    .from('chat_conversations')
-    .select('id, company_id, lead_id, ai_assignment_id, last_inbound_at')
-    .eq('ai_state', 'ai_active')
-    .in('ai_assignment_id', assignmentIds)
-    .not('last_inbound_at', 'is', null)
-    .not('lead_id', 'is', null)
-    .order('last_inbound_at', { ascending: true })
-    .limit(BATCH_LIMIT)
+  // ── PASSO 2: Buscar conversas elegíveis por assignment ───────────────────────
+  // CORREÇÃO: query feita por assignment com threshold pré-filtrado no SQL.
+  // Isso garante que o BATCH_LIMIT só se aplique às conversas já elegíveis,
+  // não a todas as ativas. Sem esse filtro, conversas recentes eram descartadas
+  // pelo LIMIT antes de chegar na verificação de threshold no JS.
+  const allConversations = []
+  for (const assignment of assignments) {
+    const thresholdMs  = assignment.follow_up_absence_hours * 60 * 60 * 1000
+    const thresholdISO = new Date(Date.now() - thresholdMs).toISOString()
 
-  if (convErr) {
-    console.error('[CRON:lead-absence] Erro ao buscar conversas:', convErr.message)
-    return res.status(500).json({ error: convErr.message })
+    const { data: convs, error: convErr } = await svc
+      .from('chat_conversations')
+      .select('id, company_id, lead_id, ai_assignment_id, last_inbound_at')
+      .eq('ai_state', 'ai_active')
+      .eq('ai_assignment_id', assignment.id)
+      .not('last_inbound_at', 'is', null)
+      .not('lead_id', 'is', null)
+      .lt('last_inbound_at', thresholdISO)
+      .order('last_inbound_at', { ascending: true })
+      .limit(BATCH_LIMIT)
+
+    if (convErr) {
+      console.error('[CRON:lead-absence] Erro ao buscar conversas para assignment:', {
+        assignment_id: assignment.id,
+        error: convErr.message,
+      })
+      continue
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'acb88e'},body:JSON.stringify({sessionId:'acb88e',location:'check-lead-absence.js:passo2',message:'conversas_por_assignment',data:{assignment_id:assignment.id,threshold_iso:thresholdISO,total_found:convs?.length??0,conv_ids:(convs??[]).map(c=>c.id)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    console.log(`[CRON:lead-absence] Assignment ${assignment.id}: ${convs?.length ?? 0} conversas elegíveis (threshold: ${thresholdISO})`)
+    allConversations.push(...(convs ?? []))
   }
 
-  if (!conversations?.length) {
+  const conversations = allConversations
+
+  if (!conversations.length) {
     console.log('[CRON:lead-absence] Nenhuma conversa com ausência detectada')
     return res.status(200).json({ schedules_created: 0 })
   }
