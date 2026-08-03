@@ -1025,7 +1025,7 @@ class FunnelApiService {
     funnelId: string,
     stageId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id' | 'contact_attempts_state'>,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id' | 'contact_attempts_state'>,
     limit = 20,
     offset = 0
   ): Promise<OpportunityFunnelPosition[]> {
@@ -1045,7 +1045,8 @@ class FunnelApiService {
         p_offset:                   offset,
         p_sort_by:                  filter?.sort_by                         ?? null,
         p_owner_user_id:            filter?.owner_user_id                  ?? null,
-        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null
+        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null,
+        p_date_field:               filter?.date_field                     ?? 'created_at'
       })
 
       if (error) throw error
@@ -1069,7 +1070,7 @@ class FunnelApiService {
   async getStageCounts(
     funnelId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'tags' | 'tags_mode' | 'owner_user_id' | 'contact_attempts_state'>
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'owner_user_id' | 'contact_attempts_state'>
   ): Promise<StageCount[]> {
     try {
       const { data, error } = await supabase.rpc('get_funnel_stage_counts', {
@@ -1083,7 +1084,8 @@ class FunnelApiService {
         p_tag_ids:                  filter?.tags?.length ? filter.tags      : null,
         p_tag_mode:                 filter?.tags?.length ? (filter.tags_mode ?? 'or') : 'or',
         p_owner_user_id:            filter?.owner_user_id                  ?? null,
-        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null
+        p_contact_attempts_state:   filter?.contact_attempts_state         ?? null,
+        p_date_field:               filter?.date_field                     ?? 'created_at'
       })
 
       if (error) throw error

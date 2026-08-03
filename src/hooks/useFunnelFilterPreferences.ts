@@ -21,7 +21,7 @@
 // =====================================================
 
 import { useState, useEffect, useMemo } from 'react'
-import type { SortOption } from '../types/sales-funnel'
+import type { SortOption, DateField } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType, PeriodType } from '../types/analytics'
 import type { ContactAttemptsState } from '../types/contact-cycles'
 
@@ -36,6 +36,8 @@ export interface FunnelFilterSnapshot {
   selectedTagsMode: 'or' | 'and'
   selectedOrigin: string
   selectedPeriod: PeriodFilterType | null
+  /** Campo de data usado no filtro de período. Default: 'created_at'. */
+  selectedDateField: DateField
   globalSort: SortOption | undefined
   selectedOwner: string
   selectedCycleState: ContactAttemptsState | null
@@ -59,6 +61,7 @@ interface StoredSnapshot {
   selectedTagsMode: 'or' | 'and'
   selectedOrigin: string
   selectedPeriod: StoredPeriod | null
+  selectedDateField?: DateField
   globalSort?: SortOption
   selectedOwner: string
   selectedCycleState?: ContactAttemptsState
@@ -88,6 +91,8 @@ const VALID_CYCLE_STATES = new Set<string>([
   'none', 'cycle_open', 'waiting', 'eligible',
 ])
 
+const VALID_DATE_FIELDS = new Set<string>(['created_at', 'closed_at'])
+
 export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   version: 1,
   searchTerm: '',
@@ -95,6 +100,7 @@ export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   selectedTagsMode: 'or',
   selectedOrigin: '',
   selectedPeriod: null,
+  selectedDateField: 'created_at',
   globalSort: undefined,
   selectedOwner: '',
   selectedCycleState: null,
@@ -168,6 +174,11 @@ function isValidStoredSnapshot(raw: unknown): raw is StoredSnapshot {
     !VALID_CYCLE_STATES.has(String(s.selectedCycleState))
   ) return false
 
+  if (
+    s.selectedDateField !== undefined &&
+    !VALID_DATE_FIELDS.has(String(s.selectedDateField))
+  ) return false
+
   return true
 }
 
@@ -188,6 +199,7 @@ export function normalizeForStorage(s: FunnelFilterSnapshot): FunnelFilterSnapsh
     selectedTagsMode: s.selectedTagsMode ?? 'or',
     selectedOrigin: s.selectedOrigin ?? '',
     selectedPeriod: s.selectedPeriod ?? null,
+    selectedDateField: s.selectedDateField ?? 'created_at',
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
     selectedCycleState: s.selectedCycleState ?? null,
@@ -215,6 +227,7 @@ export function normalizeForCompare(s: FunnelFilterSnapshot): string {
           label: s.selectedPeriod.label,
         }
       : null,
+    selectedDateField: s.selectedDateField ?? 'created_at',
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
     selectedCycleState: s.selectedCycleState ?? null,
@@ -256,6 +269,7 @@ function readFromStorage(key: string | null): FunnelFilterSnapshot | null {
       selectedTagsMode: parsed.selectedTagsMode,
       selectedOrigin: parsed.selectedOrigin,
       selectedPeriod: parsed.selectedPeriod ? deserializePeriod(parsed.selectedPeriod) : null,
+      selectedDateField: (parsed.selectedDateField as DateField | undefined) ?? 'created_at',
       globalSort: parsed.globalSort,
       selectedOwner: parsed.selectedOwner,
       selectedCycleState: parsed.selectedCycleState ?? null,
@@ -279,6 +293,7 @@ function writeToStorage(key: string, snapshot: FunnelFilterSnapshot): void {
     selectedTagsMode: normalized.selectedTagsMode,
     selectedOrigin: normalized.selectedOrigin,
     selectedPeriod: normalized.selectedPeriod ? serializePeriod(normalized.selectedPeriod) : null,
+    selectedDateField: normalized.selectedDateField,
     globalSort: normalized.globalSort,
     selectedOwner: normalized.selectedOwner,
     ...(normalized.selectedCycleState ? { selectedCycleState: normalized.selectedCycleState } : {}),

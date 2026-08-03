@@ -23,7 +23,7 @@ import { useAccessControl } from '../hooks/useAccessControl'
 import { useContactCycleConfig } from '../hooks/useContactCycleConfig'
 import { funnelApi } from '../services/funnelApi'
 import { supabase } from '../lib/supabase'
-import type { CreateFunnelForm, FunnelStage, SortOption } from '../types/sales-funnel'
+import type { CreateFunnelForm, FunnelStage, SortOption, DateField } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { ContactAttemptsState } from '../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
@@ -85,6 +85,7 @@ export default function SalesFunnel() {
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
   const [selectedOrigin, setSelectedOrigin] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilterType | null>(null)
+  const [selectedDateField, setSelectedDateField] = useState<DateField>('created_at')
   const [globalSort, setGlobalSort] = useState<SortOption | undefined>(undefined)
   const [selectedOwner, setSelectedOwner] = useState<string>('')
   const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
@@ -135,6 +136,7 @@ export default function SalesFunnel() {
       setSelectedTagsMode(DEFAULT_FILTER_SNAPSHOT.selectedTagsMode)
       setSelectedOrigin(DEFAULT_FILTER_SNAPSHOT.selectedOrigin)
       setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
+      setSelectedDateField(DEFAULT_FILTER_SNAPSHOT.selectedDateField)
       setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
       setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
       setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
@@ -147,6 +149,7 @@ export default function SalesFunnel() {
     setSelectedTagsMode(savedFilters.selectedTagsMode)
     setSelectedOrigin(savedFilters.selectedOrigin)
     setSelectedPeriod(savedFilters.selectedPeriod)
+    setSelectedDateField(savedFilters.selectedDateField ?? 'created_at')
     setGlobalSort(savedFilters.globalSort)
     // selectedOwner é restaurado aqui e revalidado quando ownerOptions carregar
     setSelectedOwner(savedFilters.selectedOwner)
@@ -230,10 +233,11 @@ export default function SalesFunnel() {
     selectedTagsMode,
     selectedOrigin,
     selectedPeriod,
+    selectedDateField,
     globalSort,
     selectedOwner,
     selectedCycleState,
-  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, globalSort, selectedOwner, selectedCycleState])
+  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, selectedDateField, globalSort, selectedOwner, selectedCycleState])
 
   // ─── Controle do painel de filtros ──────────────────────────────────────────
   // Ao tentar fechar, verifica se há alterações não salvas. Se houver, mantém
@@ -272,6 +276,7 @@ export default function SalesFunnel() {
     setSelectedTagsMode(DEFAULT_FILTER_SNAPSHOT.selectedTagsMode)
     setSelectedOrigin(DEFAULT_FILTER_SNAPSHOT.selectedOrigin)
     setSelectedPeriod(DEFAULT_FILTER_SNAPSHOT.selectedPeriod)
+    setSelectedDateField(DEFAULT_FILTER_SNAPSHOT.selectedDateField)
     setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
     setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
     setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
@@ -691,6 +696,37 @@ export default function SalesFunnel() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('filters.periodLabel')}
                 </label>
+
+                {/* Seletor de campo de data */}
+                <div className="flex items-center gap-1 mb-2">
+                  {(
+                    [
+                      { value: 'created_at', label: 'Data de criação' },
+                      { value: 'closed_at',  label: 'Data da venda'   },
+                    ] as { value: DateField; label: string }[]
+                  ).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setSelectedDateField(opt.value)}
+                      className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                        selectedDateField === opt.value
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Aviso quando filtrar por data da venda */}
+                {selectedDateField === 'closed_at' && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
+                    Filtrando por data da venda. Etapas ativas podem aparecer vazias.
+                  </p>
+                )}
+
                 <div className="flex items-center gap-2">
                   {selectedPeriod === null ? (
                     <button
@@ -845,6 +881,7 @@ export default function SalesFunnel() {
             searchTerm={debouncedSearch}
             selectedOrigin={selectedOrigin}
             selectedPeriod={selectedPeriod}
+            selectedDateField={selectedDateField}
             selectedTags={selectedTags}
             selectedTagsMode={selectedTagsMode}
             globalSort={globalSort}

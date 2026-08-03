@@ -37,6 +37,7 @@ import type {
   LeadPositionFilter,
   FunnelStage,
   SortOption,
+  DateField,
   CreateStageForm,
   UpdateStageForm,
   CloseOpportunityParams,
@@ -75,6 +76,8 @@ interface FunnelBoardProps {
   selectedOwner?: string
   /** Filtro por estado do ciclo de contato. Null = todos. */
   selectedCycleState?: ContactAttemptsState | null
+  /** Campo de data usado no filtro de período. Default: 'created_at'. */
+  selectedDateField?: DateField
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -92,6 +95,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   globalSort,
   selectedOwner,
   selectedCycleState = null,
+  selectedDateField = 'created_at',
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -163,12 +167,13 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     origin:                  selectedOrigin || undefined,
     period_start:            selectedPeriod?.type !== 'all' ? (selectedPeriod?.startDate?.toISOString() ?? undefined) : undefined,
     period_end:              selectedPeriod?.type !== 'all' ? (selectedPeriod?.endDate?.toISOString()   ?? undefined) : undefined,
+    date_field:              selectedDateField,
     tags:                    selectedTags.length ? selectedTags : undefined,
     tags_mode:               selectedTags.length ? selectedTagsMode : undefined,
     sort_by:                 globalSort,
     owner_user_id:           selectedOwner || undefined,
     contact_attempts_state:  selectedCycleState || undefined,
-  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState])
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA
@@ -228,11 +233,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         origin:       selectedOrigin || undefined,
         period_start: periodStart,
         period_end:   periodEnd,
+        date_field:   selectedDateField,
         tags:         selectedTags.length ? selectedTags : undefined,
         tags_mode:    selectedTags.length ? selectedTagsMode : undefined,
       },
     })
-  }, [searchTerm, selectedOrigin, selectedPeriod, selectedTags, selectedTagsMode])
+  }, [searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode])
 
   const handleBulkMoveSuccess = useCallback((movedCount: number) => {
     setBulkMoveRequest(null)

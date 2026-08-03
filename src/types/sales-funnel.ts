@@ -664,6 +664,13 @@ export type SortOption =
   | 'lead_created_at'
   | 'last_interaction_at'
 
+/**
+ * Campo de data usado no filtro de período do Kanban.
+ *   'created_at' → data de criação da oportunidade (padrão)
+ *   'closed_at'  → data da venda (quando movida para ganhou/perdeu)
+ */
+export type DateField = 'created_at' | 'closed_at'
+
 export interface LeadPositionFilter {
   funnel_id: string
   stage_id?: string
@@ -673,6 +680,12 @@ export interface LeadPositionFilter {
   period_days?: number
   period_start?: string
   period_end?: string
+  /**
+   * Campo de data a ser aplicado no filtro de período.
+   * 'created_at' = data de criação (padrão).
+   * 'closed_at'  = data da venda (fechado - ganhou/perdeu).
+   */
+  date_field?: DateField
   tags?: string[]
   /** Condição aplicada ao filtro de tags: 'or' = qualquer tag, 'and' = todas as tags. */
   tags_mode?: 'or' | 'and'
