@@ -44,6 +44,7 @@ export function useStageCounts(
         origin:                  filter.origin,
         period_start:            filter.period_start,
         period_end:              filter.period_end,
+        date_field:              filter.date_field,
         tags:                    filter.tags,
         tags_mode:               filter.tags_mode,
         owner_user_id:           filter.owner_user_id,

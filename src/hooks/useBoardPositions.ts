@@ -94,6 +94,7 @@ export function useBoardPositions(
             origin:                  filter.origin,
             period_start:            filter.period_start,
             period_end:              filter.period_end,
+            date_field:              filter.date_field,
             tags:                    filter.tags,
             tags_mode:               filter.tags_mode,
             // Override por etapa tem precedência sobre o sort global (filter.sort_by)
