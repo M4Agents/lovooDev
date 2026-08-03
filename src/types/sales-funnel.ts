@@ -124,6 +124,16 @@ export interface Opportunity {
 
   // Joins
   lead?: LeadCardData
+
+  // ── Campos Nuvemshop (opcionais — presentes somente em oportunidades da integração) ──
+  nuvemshop_order_id?:           string | null
+  nuvemshop_store_id?:           string | null
+  nuvemshop_sync_status?:        string | null
+  nuvemshop_raw_status?:         string | null
+  nuvemshop_fulfillment_status?: string | null
+  nuvemshop_tracking_number?:    string | null
+  nuvemshop_tracking_url?:       string | null
+  nuvemshop_shipping_carrier?:   string | null
 }
 
 export interface CatalogCategory {

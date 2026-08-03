@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2, RefreshCw
+  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2, RefreshCw, ShoppingBag
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -28,7 +28,8 @@ import { useContactCyclePanel } from '../../hooks/useContactCyclePanel'
 import { OpportunityStageTimeline } from './OpportunityStageTimeline'
 import { OpportunityItemsSection } from './OpportunityItemsSection'
 import { InternalNotes } from '../InternalNotes'
-import { ContactCyclePanel } from './ContactCyclePanel'
+import { ContactCyclePanel }        from './ContactCyclePanel'
+import { NuvemshopOpportunityTab } from '../Nuvemshop/NuvemshopOpportunityTab'
 import type { Opportunity, OpportunityStatusHistory, UpdateOpportunityForm, OpportunitySaleTypeLink } from '../../types/sales-funnel'
 import {
   parseOpportunityCompositionError,
@@ -36,7 +37,7 @@ import {
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
 
-type TabType = 'details' | 'journey' | 'status' | 'notes' | 'cycles'
+type TabType = 'details' | 'journey' | 'status' | 'notes' | 'cycles' | 'nuvemshop'
 
 interface OpportunityDetailModalProps {
   isOpen: boolean
@@ -189,7 +190,13 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   onUpdate
 }) => {
   const { t } = useTranslation('funnel')
-  const { hasPlatformElevatedRole, canViewAllLeads, canViewContactCycles, canOperateContactCycles } = useAccessControl()
+  const {
+    hasPlatformElevatedRole,
+    canViewAllLeads,
+    canViewContactCycles,
+    canOperateContactCycles,
+    canViewNuvemshopData,
+  } = useAccessControl()
   const isManager = canViewAllLeads || hasPlatformElevatedRole
 
   const [activeTab, setActiveTab]         = useState<TabType>(initialTab)
@@ -389,6 +396,10 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
 
   const statusCfg = statusConfigResolved[opportunity.status] ?? statusConfigResolved.open
 
+  // Aba Nuvemshop: visível para todos que podem ver dados NS (inclui seller) + oportunidade tem vínculo
+  const hasNuvemshopOrder = !!opportunity.nuvemshop_order_id
+  const canViewNuvemshop  = canViewNuvemshopData && hasNuvemshopOrder
+
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
     { key: 'details', label: t('opportunityDetail.tabs.details'), icon: <FileText className="w-3.5 h-3.5" /> },
     { key: 'journey', label: t('opportunityDetail.tabs.journey'), icon: <Route className="w-3.5 h-3.5" /> },
@@ -396,6 +407,9 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     { key: 'notes', label: 'Notas', icon: <StickyNote className="w-3.5 h-3.5" /> },
     ...(canViewContactCycles
       ? [{ key: 'cycles' as TabType, label: t('opportunityDetail.tabs.cycles'), icon: <RefreshCw className="w-3.5 h-3.5" /> }]
+      : []),
+    ...(canViewNuvemshop
+      ? [{ key: 'nuvemshop' as TabType, label: 'Nuvemshop', icon: <ShoppingBag className="w-3.5 h-3.5" /> }]
       : []),
   ]
 
@@ -832,6 +846,16 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
               companyId={companyId}
               canOperate={canOperateContactCycles}
             />
+          )}
+
+          {/* ABA: Nuvemshop — somente leitura, dados históricos preservados mesmo após desconexão */}
+          {activeTab === 'nuvemshop' && canViewNuvemshop && (
+            <div className="p-4">
+              <NuvemshopOpportunityTab
+                opportunityId={opportunity.id}
+                companyId={companyId}
+              />
+            </div>
           )}
         </div>
 

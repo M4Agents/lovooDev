@@ -10,8 +10,13 @@ import { api } from '../services/api'
 export interface Variable {
   key: string
   label: string
-  category: 'lead' | 'oportunidade' | 'empresa' | 'custom' | 'sistema'
+  category: 'lead' | 'oportunidade' | 'empresa' | 'custom' | 'sistema' | 'nuvemshop'
   description?: string
+}
+
+interface UseVariablesOptions {
+  /** Se true, inclui variáveis da integração Nuvemshop (apenas para empresas que já conectaram) */
+  hasNuvemshopIntegration?: boolean
 }
 
 interface UseVariablesReturn {
@@ -21,17 +26,26 @@ interface UseVariablesReturn {
 }
 
 /**
- * Hook para buscar todas as variáveis disponíveis para uso em mensagens
- * Inclui: campos de lead, empresa, campos personalizados e variáveis de sistema
+ * Hook para buscar todas as variáveis disponíveis para uso em mensagens.
+ * Inclui: campos de lead, empresa, campos personalizados, variáveis de sistema
+ * e (condicionalmente) variáveis de integração Nuvemshop.
+ *
+ * @param companyId UUID da empresa
+ * @param options.hasNuvemshopIntegration true se a empresa já conectou Nuvemshop (active ou disconnected)
  */
-export function useVariables(companyId: string): UseVariablesReturn {
+export function useVariables(companyId: string, options: UseVariablesOptions = {}): UseVariablesReturn {
   const [variables, setVariables] = useState<Variable[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const { hasNuvemshopIntegration = false } = options
+
   useEffect(() => {
     if (!companyId) {
-      setVariables(getStaticVariables())
+      setVariables([
+        ...getStaticVariables(),
+        ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
+      ])
       setLoading(false)
       return
     }
@@ -41,10 +55,8 @@ export function useVariables(companyId: string): UseVariablesReturn {
         setLoading(true)
         setError(null)
 
-        // Buscar campos personalizados da empresa
         const customFields = await api.getCustomFields(companyId)
 
-        // Combinar variáveis estáticas com campos personalizados
         const allVariables = [
           ...getStaticVariables(),
           ...customFields.map(field => ({
@@ -52,22 +64,27 @@ export function useVariables(companyId: string): UseVariablesReturn {
             label: field.field_label,
             category: 'custom' as const,
             description: `Campo personalizado: ${field.field_label}`
-          }))
+          })),
+          // Variáveis Nuvemshop: apenas se a empresa já conectou (active OU disconnected)
+          ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
         ]
 
         setVariables(allVariables)
       } catch (err) {
         console.error('Erro ao buscar variáveis:', err)
         setError(err instanceof Error ? err.message : 'Erro ao carregar variáveis')
-        // Em caso de erro, usar apenas variáveis estáticas
-        setVariables(getStaticVariables())
+        setVariables([
+          ...getStaticVariables(),
+          ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
+        ])
       } finally {
         setLoading(false)
       }
     }
 
     fetchVariables()
-  }, [companyId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, hasNuvemshopIntegration])
 
   return { variables, loading, error }
 }
@@ -214,6 +231,73 @@ function getStaticVariables(): Variable[] {
 }
 
 /**
+ * Retorna variáveis específicas da integração Nuvemshop.
+ * Só deve ser incluído para empresas que já conectaram (hasNuvemshopIntegration = true).
+ * Empresas que nunca conectaram não devem ver estas variáveis no autocomplete.
+ */
+export function getNuvemshopVariables(): Variable[] {
+  return [
+    // Lead / Cliente
+    {
+      key:         'nuvemshop.customer_id',
+      label:       'ID do Cliente (NS)',
+      category:    'nuvemshop',
+      description: 'Identificador único do cliente na Nuvemshop',
+    },
+    {
+      key:         'nuvemshop.store_id',
+      label:       'ID da Loja (NS)',
+      category:    'nuvemshop',
+      description: 'Identificador da loja Nuvemshop vinculada',
+    },
+    // Carrinho Abandonado
+    {
+      key:         'nuvemshop.checkout_id',
+      label:       'ID do Carrinho Abandonado (NS)',
+      category:    'nuvemshop',
+      description: 'Identificador do carrinho abandonado na Nuvemshop',
+    },
+    {
+      key:         'nuvemshop.cart_total',
+      label:       'Valor do Carrinho (NS)',
+      category:    'nuvemshop',
+      description: 'Valor total do carrinho abandonado',
+    },
+    // Pedido / Oportunidade
+    {
+      key:         'nuvemshop.order_id',
+      label:       'ID do Pedido (NS)',
+      category:    'nuvemshop',
+      description: 'Identificador do pedido na Nuvemshop',
+    },
+    {
+      key:         'nuvemshop.order_status',
+      label:       'Status do Pedido (NS)',
+      category:    'nuvemshop',
+      description: 'Status atual do pedido (open, closed, cancelled)',
+    },
+    {
+      key:         'nuvemshop.payment_status',
+      label:       'Status de Pagamento (NS)',
+      category:    'nuvemshop',
+      description: 'Status do pagamento do pedido',
+    },
+    {
+      key:         'nuvemshop.tracking_number',
+      label:       'Código de Rastreio (NS)',
+      category:    'nuvemshop',
+      description: 'Código de rastreio do envio',
+    },
+    {
+      key:         'nuvemshop.shipping_carrier',
+      label:       'Transportadora (NS)',
+      category:    'nuvemshop',
+      description: 'Transportadora responsável pelo envio',
+    },
+  ]
+}
+
+/**
  * Retorna ícone para cada categoria
  */
 export function getCategoryIcon(category: Variable['category']): string {
@@ -223,6 +307,7 @@ export function getCategoryIcon(category: Variable['category']): string {
     empresa:     '🏢',
     custom:      '⚙️',
     sistema:     '📅',
+    nuvemshop:   '🛒',
   }
   return icons[category] || '📝'
 }
@@ -237,6 +322,7 @@ export function getCategoryLabel(category: Variable['category']): string {
     empresa:     'EMPRESA',
     custom:      'CAMPOS PERSONALIZADOS',
     sistema:     'SISTEMA',
+    nuvemshop:   'NUVEMSHOP',
   }
   return labels[category] || 'OUTROS'
 }

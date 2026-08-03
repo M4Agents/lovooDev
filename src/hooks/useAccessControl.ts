@@ -178,6 +178,57 @@ export function useAccessControl() {
     currentRole === 'system_admin' ||
     isImpersonating
 
+  // ── Integração Nuvemshop ────────────────────────────────────
+  // Espelha a matriz do backend (validateNuvemshopCaller.js):
+  //   VIEW_DATA_ROLES      → ver dados NS em Leads e Oportunidades (inclui seller)
+  //   ALLOWED_ROLES        → gerenciar painel de integração nas Configurações
+  //   CONNECT_ROLES        → conectar/desconectar OAuth
+  //   SENSITIVE_DATA_ROLES → acessar dados sensíveis (checkout_url)
+
+  // Visualizar dados Nuvemshop dentro de Leads e Oportunidades — VIEW_DATA_ROLES
+  // IMPORTANTE: partner é incluído aqui apenas para UX (visibilidade de elementos).
+  // O backend (validateNuvemshopCaller.js) valida OBRIGATORIAMENTE o assignment ativo
+  // em partner_company_assignments. Este hook NÃO garante acesso — apenas mostra UI.
+  const canViewNuvemshopData =
+    currentRole === 'seller'       ||
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'partner'      ||   // assignment validado pelo backend, não aqui
+    isImpersonating
+
+  // Gerenciar painel de integração nas Configurações — ALLOWED_ROLES (sem seller)
+  const canManageNuvemshopIntegration =
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'partner'      ||
+    isImpersonating
+
+  // Acessar dados sensíveis como checkout_url — SENSITIVE_DATA_ROLES
+  // Partner excluído deliberadamente: checkout_url contém link direto ao carrinho do
+  // cliente final. Partner administra a empresa mas não deve ter acesso irrestrito
+  // a dados sensíveis de clientes sem validação de empresa atribuída explícita.
+  // Seller excluído por razões óbvias de hierarquia.
+  // ATENÇÃO: validação definitiva de partner assignment SEMPRE ocorre no backend.
+  const canViewNuvemshopSensitiveData =
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    isImpersonating
+
+  // Conectar/reconectar/desconectar: admin+ e partner (com assignment ativo validado no backend)
+  // manager visualiza mas NÃO pode conectar/desconectar
+  const canConnectNuvemshop =
+    currentRole === 'admin'        ||
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'partner'      ||
+    isImpersonating
+
   // ── Landing pages ──────────────────────────────────────────
   const canSeeLandingPageOwner = currentRole === 'super_admin'
 
@@ -328,6 +379,12 @@ export function useAccessControl() {
     // Integração Instagram
     canManageInstagramIntegration,
     canConnectInstagram,
+
+    // Integração Nuvemshop
+    canViewNuvemshopData,
+    canManageNuvemshopIntegration,
+    canViewNuvemshopSensitiveData,
+    canConnectNuvemshop,
 
     // Dashboard — visibilidade de blocos por role
     canViewTeamDashboard,

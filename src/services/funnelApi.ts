@@ -418,7 +418,9 @@ class FunnelApiService {
             origin,
             status,
             record_type,
-            deleted_at
+            deleted_at,
+            nuvemshop_customer_id,
+            nuvemshop_checkout_id
           )
         `)
         .eq('funnel_id', funnelId)

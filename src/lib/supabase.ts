@@ -227,6 +227,14 @@ export type Lead = {
   company_site?: string;
 
   lead_custom_values?: LeadCustomValue[];
+
+  // ── Campos Nuvemshop (opcionais — presentes somente em leads sincronizados) ──
+  nuvemshop_customer_id?: string | null;
+  nuvemshop_store_id?:    string | null;
+  nuvemshop_checkout_id?: string | null;
+  nuvemshop_sync_status?: string | null;
+  cart_total?:            number | null;
+  cart_items?:            unknown[] | null;
 };
 
 export type WebhookLog = {

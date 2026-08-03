@@ -18,10 +18,13 @@ import {
   Globe,
   Hash,
   RefreshCw,
+  ShoppingCart,
 } from 'lucide-react';
-import { LeadEntriesSection } from './LeadEntriesSection';
-import { useAuth } from '../contexts/AuthContext';
-import { chatApi } from '../services/chat/chatApi';
+import { LeadEntriesSection }      from './LeadEntriesSection';
+import { NuvemshopLeadTab }         from './Nuvemshop/NuvemshopLeadTab';
+import { useAuth }                  from '../contexts/AuthContext';
+import { useAccessControl }         from '../hooks/useAccessControl';
+import { chatApi }                  from '../services/chat/chatApi';
 import type { Lead as CanonicalLead } from '../lib/supabase';
 
 type Lead = CanonicalLead & {
@@ -125,13 +128,15 @@ const getStatusConfig = (status: string) => {
 
 const getOriginConfig = (origin: string) => {
   switch (origin) {
-    case 'landing_page':          return { label: 'Landing Page', cls: 'bg-purple-100 text-purple-800' };
-    case 'whatsapp':              return { label: 'WhatsApp',     cls: 'bg-green-100 text-green-800' };
-    case 'manual':                return { label: 'Manual',       cls: 'bg-blue-100 text-blue-800' };
-    case 'import':                return { label: 'Importação',   cls: 'bg-orange-100 text-orange-800' };
-    case 'api':                   return { label: 'API Externa',  cls: 'bg-indigo-100 text-indigo-800' };
-    case 'webhook_ultra_simples': return { label: 'Webhook',      cls: 'bg-teal-100 text-teal-800' };
-    default:                      return { label: origin,         cls: 'bg-slate-100 text-slate-700' };
+    case 'landing_page':          return { label: 'Landing Page',            cls: 'bg-purple-100 text-purple-800' };
+    case 'whatsapp':              return { label: 'WhatsApp',                cls: 'bg-green-100 text-green-800' };
+    case 'manual':                return { label: 'Manual',                  cls: 'bg-blue-100 text-blue-800' };
+    case 'import':                return { label: 'Importação',              cls: 'bg-orange-100 text-orange-800' };
+    case 'api':                   return { label: 'API Externa',             cls: 'bg-indigo-100 text-indigo-800' };
+    case 'webhook_ultra_simples': return { label: 'Webhook',                 cls: 'bg-teal-100 text-teal-800' };
+    case 'nuvemshop':             return { label: 'Nuvemshop',               cls: 'bg-sky-100 text-sky-800' };
+    case 'nuvemshop_abandoned':   return { label: 'Carrinho Abandonado (NS)',cls: 'bg-amber-100 text-amber-800' };
+    default:                      return { label: origin,                    cls: 'bg-slate-100 text-slate-700' };
   }
 };
 
@@ -182,7 +187,8 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   onEdit,
   companyUsers = [],
 }) => {
-  const { company } = useAuth();
+  const { company }                     = useAuth();
+  const { canViewNuvemshopData }        = useAccessControl();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -214,6 +220,11 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   // #region agent log
   fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b812bc'},body:JSON.stringify({sessionId:'b812bc',location:'LeadViewModal.tsx:263',message:'responsible resolve',data:{responsible_user_id:lead.responsible_user_id,found:!!responsible,found_name:responsible?.display_name,found_email:responsible?.email,users_count:companyUsers.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
   // #endregion
+
+  // Nuvemshop section: visível para todos que podem ver dados NS (inclui seller) + lead tem vínculo
+  const hasNuvemshopData = canViewNuvemshopData && (
+    !!(lead.nuvemshop_customer_id || lead.nuvemshop_checkout_id)
+  );
 
   // section visibility flags
   const hasCompany = !!(
@@ -434,6 +445,23 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
               )}
             </div>
           </Section>
+
+          {/* ── Integração Nuvemshop ─────────────────────────────────────── */}
+          {hasNuvemshopData && company?.id && (
+            <Section
+              title="Nuvemshop"
+              icon={<ShoppingCart className="w-4 h-4" />}
+              collapsible
+              defaultOpen
+            >
+              <div className="sm:col-span-2">
+                <NuvemshopLeadTab
+                  leadId={String(lead.id)}
+                  companyId={company.id}
+                />
+              </div>
+            </Section>
+          )}
 
           {/* ── Informações Técnicas (colapsável) ───────────────────────── */}
           <Section

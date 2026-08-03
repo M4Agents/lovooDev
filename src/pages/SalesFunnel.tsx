@@ -20,7 +20,8 @@ import { useFunnels } from '../hooks/useFunnels'
 import { useAuth } from '../contexts/AuthContext'
 import { useAvailableTags } from '../hooks/useAvailableTags'
 import { useAccessControl } from '../hooks/useAccessControl'
-import { useContactCycleConfig } from '../hooks/useContactCycleConfig'
+import { useContactCycleConfig }   from '../hooks/useContactCycleConfig'
+import { useCompanyIntegration }   from '../hooks/useCompanyIntegration'
 import { funnelApi } from '../services/funnelApi'
 import { supabase } from '../lib/supabase'
 import type { CreateFunnelForm, FunnelStage, SortOption, DateField } from '../types/sales-funnel'
@@ -91,7 +92,9 @@ export default function SalesFunnel() {
   const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
   const [selectedCycleState, setSelectedCycleState] = useState<ContactAttemptsState | null>(null)
 
-  const { canViewContactCycles } = useAccessControl()
+  const { canViewContactCycles }  = useAccessControl()
+  // Visibilidade condicional — integração Nuvemshop (UX apenas; segurança no backend)
+  const { hasNuvemshopEver }      = useCompanyIntegration()
   const { config: cycleConfig } = useContactCycleConfig(companyId ?? null)
   const showCycleFilter = canViewContactCycles && cycleConfig?.enabled === true
 
@@ -689,6 +692,13 @@ export default function SalesFunnel() {
                   <option value="whatsapp">{t('filters.originWhatsapp')}</option>
                   <option value="site">{t('filters.originSite')}</option>
                   <option value="indicacao">{t('filters.originReferral')}</option>
+                  {/* Opções Nuvemshop: exibidas apenas para empresas que já conectaram */}
+                  {hasNuvemshopEver && (
+                    <>
+                      <option value="nuvemshop">Nuvemshop</option>
+                      <option value="nuvemshop_abandoned">Carrinho Abandonado (NS)</option>
+                    </>
+                  )}
                 </select>
               </div>
 

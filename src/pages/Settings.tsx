@@ -28,11 +28,13 @@ import { AdminConsultingPackagesEditor } from '../components/Settings/AdminConsu
 import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegrationPanel';
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { InstagramConnectionPanel } from '../components/Settings/InstagramConnectionPanel';
+import { NuvemshopConnectionPanel } from '../components/Settings/NuvemshopConnectionPanel';
 import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
 import { ApiImportHistory } from '../components/Settings/ApiImportHistory';
 import { ApiFullDocumentation } from '../components/Settings/ApiFullDocumentation';
 import { CompanyUser } from '../types/user';
-import { useAccessControl } from '../hooks/useAccessControl';
+import { useAccessControl }       from '../hooks/useAccessControl';
+import { useCompanyIntegration }  from '../hooks/useCompanyIntegration';
 import Automations from './Automations';
 // import { Companies } from './Companies'; // Legado — substituído por CompaniesPanel
 import { CompaniesPanel } from '../components/Settings/CompaniesPanel';
@@ -52,7 +54,9 @@ const BRAZIL_UF_CODES = [
 export const Settings: React.FC = () => {
   const { t } = useTranslation('settings.app');
   const { company, refreshCompany, hasPermission, loading: authLoading, isLoadingCompany } = useAuth();
-  const { canManageOpenAI, isSaaSAdmin, isSystemAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours, canViewImportHistory, canManageInstagramIntegration, canAccessUsersTab, canAccessPlanUsageTab, canAccessAutomations, canAccessSystemSettings, canAccessTrackingSite, canAccessCompanyData } = useAccessControl();
+  const { canManageOpenAI, isSaaSAdmin, isSystemAdmin, canManageConversationalAgents, canManageAiGovernance, canAccessCompanies, canAccessPlans, canPurchaseAiCredits, canManageNotifications, canPurchaseConsulting, canManageConsultingCatalog, canLogConsultingHours, canViewImportHistory, canManageInstagramIntegration, canManageNuvemshopIntegration, canAccessUsersTab, canAccessPlanUsageTab, canAccessAutomations, canAccessSystemSettings, canAccessTrackingSite, canAccessCompanyData } = useAccessControl();
+  // Estado da integração Nuvemshop para badge no card de configurações (UX apenas)
+  const { integrationState: nvState, storeName: nvStoreName } = useCompanyIntegration();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,7 +137,7 @@ export const Settings: React.FC = () => {
   const [planUsageSubTab, setPlanUsageSubTab] = useState<'plano-atual' | 'consumo-ia' | 'comprar-creditos' | 'consultoria'>('plano-atual');
 
   const [integracoesTab, setIntegracoesTab] = useState<
-    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'instagram'
+    'whatsapp' | 'webhook-simples' | 'webhook-avancado' | 'funil-api' | 'instagram' | 'nuvemshop'
   >('whatsapp');
 
   // Sub-navegação interna da área de API
@@ -237,6 +241,46 @@ export const Settings: React.FC = () => {
         account_not_page_backed:  'Esta conta Instagram não está vinculada a uma Página do Facebook. Para conectar, acesse as configurações da conta no Instagram, converta para conta Profissional (Empresa ou Criador) e vincule a uma Página do Facebook.',
       };
       const msg = errorMessages[igError] ?? 'Erro ao conectar conta Instagram. Tente novamente.';
+      setTimeout(() => alert(`Erro: ${msg}`), 300);
+    }
+
+    navigate('/settings', { replace: true });
+  }, [searchParams, authLoading, isLoadingCompany, navigate]);
+
+  // Detectar retorno do OAuth Nuvemshop (connected=1 ou nv_error=CODE)
+  useEffect(() => {
+    const integration = searchParams.get('integration');
+    const connected   = searchParams.get('connected');
+    const nvError     = searchParams.get('nv_error');
+    const store       = searchParams.get('store');
+
+    if (integration !== 'nuvemshop') return;
+    if (authLoading || isLoadingCompany) return;
+
+    setActiveTab('integracoes');
+    setIntegracoesTab('nuvemshop');
+
+    if (connected === '1') {
+      const msg = store
+        ? `Loja "${store}" conectada com sucesso!`
+        : 'Loja Nuvemshop conectada com sucesso!';
+      setTimeout(() => alert(msg), 300);
+    } else if (nvError) {
+      const errorMessages: Record<string, string> = {
+        user_denied:              'Autorização negada pelo usuário.',
+        invalid_params:           'Parâmetros inválidos retornados pela Nuvemshop.',
+        invalid_state:            'Estado OAuth inválido. Tente novamente.',
+        expired_state:            'Sessão de autorização expirada. Tente novamente.',
+        state_already_used:       'Esta autorização já foi utilizada. Inicie o processo novamente.',
+        membership_revoked:       'Seu acesso foi revogado durante o processo.',
+        company_inactive:         'Empresa inativa.',
+        token_exchange_failed:    'Falha na troca de token com a Nuvemshop.',
+        nuvemshop_api_unavailable: 'API da Nuvemshop indisponível. Tente novamente.',
+        connection_already_active: 'Já existe uma loja conectada. Desconecte antes de reconectar.',
+        connection_save_failed:   'Erro ao salvar a conexão. Tente novamente.',
+        configuration_error:      'Erro de configuração do servidor.',
+      };
+      const msg = errorMessages[nvError] ?? 'Erro ao conectar loja Nuvemshop. Tente novamente.';
       setTimeout(() => alert(`Erro: ${msg}`), 300);
     }
 
@@ -1449,6 +1493,52 @@ export const Settings: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-slate-600">{t('integrations.cards.instagram.description')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
+
+            {/* Card: Nuvemshop */}
+            {canManageNuvemshopIntegration && (
+            <div
+              onClick={() => setIntegracoesTab('nuvemshop')}
+              className="group cursor-pointer"
+            >
+              <div className={`bg-gradient-to-br from-purple-50 to-pink-50 border-2 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${
+                integracoesTab === 'nuvemshop'
+                  ? 'border-purple-400 shadow-md scale-[1.02]'
+                  : 'border-transparent hover:border-purple-400'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                    integracoesTab === 'nuvemshop'
+                      ? 'bg-gradient-to-br from-purple-600 to-pink-600'
+                      : 'bg-gradient-to-br from-purple-500 to-pink-500'
+                  }`}>
+                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19 7h-1V5A4 4 0 0 0 7 5v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM9 5a2 2 0 0 1 4 0v2H9V5zm10 14H6V9h13v10zm-6-7h-2v-1a1 1 0 0 0-2 0v1H7l1 5h8l1-5h-2v-1a1 1 0 0 0-2 0v1z"/>
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-base font-semibold text-slate-900">Nuvemshop</h3>
+                      {/* Badge reflete os três estados previstos no plano v5.1 */}
+                      {nvState === 'active' ? (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                          Conectada{nvStoreName ? ` · ${nvStoreName}` : ''}
+                        </span>
+                      ) : nvState === 'disconnected' ? (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">
+                          Desconectada
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                          E-commerce
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600">Sincronize clientes, pedidos e produtos com sua loja Nuvemshop.</p>
                   </div>
                 </div>
               </div>
@@ -2786,6 +2876,17 @@ export const Settings: React.FC = () => {
             </div>
           )}
 
+          {integracoesTab === 'nuvemshop' && company?.id && canManageNuvemshopIntegration && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="mb-5">
+                <h2 className="text-base font-semibold text-slate-900">Integração Nuvemshop</h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Conecte sua loja para sincronizar clientes, pedidos, produtos e carrinhos abandonados.
+                </p>
+              </div>
+              <NuvemshopConnectionPanel companyId={company.id} />
+            </div>
+          )}
 
         </div>
       )}

@@ -8,6 +8,15 @@
     "api/webhook/uazapi/[company_id].js": { "maxDuration": 60 },
     "api/uazapi-webhook-final.js": { "maxDuration": 60 },
     "api/instagram/webhook.js": { "maxDuration": 30 },
+    "api/nuvemshop/webhook.js": { "maxDuration": 15 },
+    "api/cron/nuvemshop-process-events.js": { "maxDuration": 60 },
+    "api/cron/nuvemshop-retry-failed.js": { "maxDuration": 30 },
+    "api/cron/nuvemshop-process-media.js": { "maxDuration": 60 },
+    "api/cron/nuvemshop-install-scripts.js": { "maxDuration": 30 },
+    "api/cron/nuvemshop-reconcile.js":       { "maxDuration": 60 },
+    "api/nuvemshop/connect/metrics.js":      { "maxDuration": 15 },
+    "api/nuvemshop/admin/validate-connection.js": { "maxDuration": 15 },
+    "api/nuvemshop/admin/validate-script.js":     { "maxDuration": 15 },
     "api/instagram/comments/index.js": { "maxDuration": 15 },
     "api/instagram/comments/[commentId]/reply.js": { "maxDuration": 20 },
     "api/instagram/comments/[commentId]/hide.js": { "maxDuration": 20 },
@@ -77,6 +86,26 @@
     {
       "path": "/api/agents/process-message-buffer",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/nuvemshop-process-events",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/nuvemshop-retry-failed",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/nuvemshop-process-media",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/nuvemshop-install-scripts",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/nuvemshop-reconcile",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [

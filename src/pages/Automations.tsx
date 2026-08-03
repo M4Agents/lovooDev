@@ -5,13 +5,14 @@
 // =====================================================
 
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { automationApi, statsApi } from '../services/automationApi'
+import { useNavigate, useLocation }    from 'react-router-dom'
+import { useAuth }                     from '../contexts/AuthContext'
+import { automationApi, statsApi }     from '../services/automationApi'
 import type { AutomationFlow, CreateFlowForm } from '../types/automation'
-import { Plus, Zap, Activity, TrendingUp, AlertCircle } from 'lucide-react'
-import CreateFlowModal from '../components/Automation/CreateFlowModal'
-import { supabase } from '../lib/supabase'
+import { Plus, Zap, Activity, TrendingUp, AlertCircle, WifiOff } from 'lucide-react'
+import CreateFlowModal                 from '../components/Automation/CreateFlowModal'
+import { supabase }                    from '../lib/supabase'
+import { useCompanyIntegration }       from '../hooks/useCompanyIntegration'
 
 export default function Automations() {
   const { user, company } = useAuth()
@@ -32,6 +33,9 @@ export default function Automations() {
   // Limite de flows ativos do plano (null = ilimitado)
   const activeFlowCount = useMemo(() => flows.filter(f => f.is_active).length, [flows])
   const isAtFlowLimit   = planFlowLimit !== null && activeFlowCount >= planFlowLimit
+
+  // Estado da integração Nuvemshop para avisos em automações (UX apenas)
+  const { isDisconnected: nvDisconnected, hasNuvemshopEver: nvHasEver } = useCompanyIntegration()
 
   useEffect(() => {
     loadFlows()
@@ -132,6 +136,25 @@ export default function Automations() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Banner: integração Nuvemshop desconectada — automações históricas podem estar inativas */}
+      {nvHasEver && nvDisconnected && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-start gap-3">
+            <WifiOff className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Integração Nuvemshop desconectada
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Automações que utilizam dados, variáveis ou gatilhos da Nuvemshop (carrinho abandonado,
+                pedidos, clientes) são exibidas como históricas e não dispararão novos eventos até
+                que a integração seja reconectada em <strong>Configurações → Integrações → Nuvemshop</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

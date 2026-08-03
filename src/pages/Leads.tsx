@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams }         from 'react-router-dom';
+import { useCompanyIntegration }   from '../hooks/useCompanyIntegration';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -95,10 +96,12 @@ function getCustomFieldValue(
 }
 
 export const Leads: React.FC = () => {
-  const { company, user } = useAuth();
+  const { company, user }                     = useAuth();
   const { canViewLead, canEditLead, canDeleteLead, isRestrictedToOwnLeads } = useLeadPermissions();
-  const { canImportLeads, canEditAllLeads } = useAccessControl();
-  const { leadStats } = usePlanLeadStats(company?.id);
+  const { canImportLeads, canEditAllLeads }    = useAccessControl();
+  const { leadStats }                          = usePlanLeadStats(company?.id);
+  // Visibilidade condicional — integração Nuvemshop (UX apenas; segurança no backend)
+  const { hasNuvemshopEver }                   = useCompanyIntegration();
 
   // Deep-link do Dashboard: /leads?lead_id=xxx
   // TODO: auto-abertura do modal de lead aguarda padronização de IDs.
@@ -455,6 +458,8 @@ export const Leads: React.FC = () => {
       case 'import':                return 'Importação';
       case 'api':                   return 'API Externa';
       case 'webhook_ultra_simples': return 'Webhook';
+      case 'nuvemshop':             return 'Nuvemshop';
+      case 'nuvemshop_abandoned':   return 'Carrinho Abandonado (NS)';
       default: return origin;
     }
   };
@@ -466,6 +471,8 @@ export const Leads: React.FC = () => {
       case 'manual':                return 'text-blue-700';
       case 'import':                return 'text-orange-600';
       case 'webhook_ultra_simples': return 'text-indigo-700';
+      case 'nuvemshop':             return 'text-sky-700';
+      case 'nuvemshop_abandoned':   return 'text-amber-700';
       default:                      return 'text-gray-500';
     }
   };
@@ -728,6 +735,13 @@ export const Leads: React.FC = () => {
             <option value="manual">Manual</option>
             <option value="import">Importação</option>
             <option value="webhook_ultra_simples">Webhook</option>
+            {/* Opções Nuvemshop: exibidas apenas para empresas que já conectaram */}
+            {hasNuvemshopEver && (
+              <>
+                <option value="nuvemshop">Nuvemshop</option>
+                <option value="nuvemshop_abandoned">Carrinho Abandonado (NS)</option>
+              </>
+            )}
           </select>
 
           {/* Dropdown de responsável: oculto para usuários restritos aos próprios leads */}

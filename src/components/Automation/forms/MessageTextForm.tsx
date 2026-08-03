@@ -7,9 +7,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { Plus, X, Bold, Italic, Strikethrough, Code, Link as LinkIcon, Smile } from 'lucide-react'
 import { formatWhatsAppText, applyFormatting, insertEmoji, COMMON_EMOJIS } from '../../../utils/whatsappFormatter'
-import { useVariables } from '../../../hooks/useVariables'
-import VariableAutocomplete from '../VariableAutocomplete'
-import { useAuth } from '../../../contexts/AuthContext'
+import { useVariables }          from '../../../hooks/useVariables'
+import VariableAutocomplete      from '../VariableAutocomplete'
+import { useAuth }               from '../../../contexts/AuthContext'
+import { useCompanyIntegration } from '../../../hooks/useCompanyIntegration'
 
 interface MessageTextFormProps {
   config: {
@@ -27,9 +28,14 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
   const [showVariableAutocomplete, setShowVariableAutocomplete] = useState(false)
   const [autocompleteFilter, setAutocompleteFilter] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  
-  // Buscar variáveis disponíveis
-  const { variables } = useVariables(company?.id || '')
+
+  // Estado da integração Nuvemshop para variáveis condicionais (UX apenas)
+  const { hasNuvemshopEver } = useCompanyIntegration()
+
+  // Buscar variáveis disponíveis — inclui NS apenas se a empresa já conectou
+  const { variables } = useVariables(company?.id || '', {
+    hasNuvemshopIntegration: hasNuvemshopEver,
+  })
   
 
   const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
