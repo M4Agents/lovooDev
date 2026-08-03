@@ -64,6 +64,37 @@ function validateCronAuth(req) {
   return auth === expected
 }
 
+// ── Hints progressivos por tentativa ─────────────────────────────────────────
+//
+// Cada tentativa de follow-up recebe uma instrução diferente para o LLM,
+// forçando abordagens progressivamente distintas e evitando mensagens repetidas.
+// attemptNumber = valor ANTES de incrementar (0 = 1ª tentativa, 1 = 2ª, etc.)
+function getFollowUpHint(attemptNumber) {
+  switch (attemptNumber) {
+    case 0:
+      return (
+        '[FOLLOWUP-1/REENGAJAMENTO] O lead parou de responder. ' +
+        'Retome a conversa de forma natural, fazendo referência ao último ponto ' +
+        'discutido. Use uma única pergunta curta e direta para reengajar. ' +
+        'Não repita informações já enviadas. Seja caloroso e conciso.'
+      )
+    case 1:
+      return (
+        '[FOLLOWUP-2/NOVO-ANGULO] Segunda tentativa. O lead não respondeu ao primeiro follow-up. ' +
+        'Use um ângulo COMPLETAMENTE DIFERENTE do anterior — não repita os mesmos argumentos. ' +
+        'Destaque um benefício ou ponto de valor que ainda não foi mencionado na conversa. ' +
+        'Crie leveza e senso de oportunidade sem ser invasivo. Seja breve.'
+      )
+    default:
+      return (
+        '[FOLLOWUP-FINAL/ENCERRAMENTO] Última tentativa de contato. ' +
+        'Seja objetivo e empático. Faça uma pergunta simples e fácil de responder. ' +
+        'Não pressione. Deixe a porta aberta para retomada futura caso o lead ' +
+        'queira continuar depois. Não repita nada do que já foi dito antes.'
+      )
+  }
+}
+
 // ── Handler principal ──────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -312,8 +343,11 @@ async function processFollowUpSchedule(svc, schedule, processingToken) {
   //   - session_id: null — gateway não incrementa contador de sessão
 
   const runId = randomUUID()
-  const proactiveInstruction =
-    message_hint ?? '[FOLLOWUP] Gere uma mensagem natural de follow-up com base no histórico.'
+  const proactiveInstruction = getFollowUpHint(attempt_number)
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'acb88e'},body:JSON.stringify({sessionId:'acb88e',location:'process-agent-schedules.js:proactive-hint',message:'hint_por_tentativa',data:{schedule_id:id,attempt_number,hint_used:proactiveInstruction.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const proactiveContext = {
     run_id:                runId,
