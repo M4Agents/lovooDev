@@ -26,7 +26,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 const WRITE_ROLES        = ['admin', 'system_admin', 'super_admin'];
-const VALID_CHANNELS     = ['whatsapp', 'web', 'email', 'sms'];
+const VALID_CHANNELS     = ['whatsapp', 'web', 'email', 'sms', 'instagram'];
 const VALID_PRICE_POLICIES = ['disabled', 'fixed_only', 'range_allowed', 'consult_only'];
 
 // ── Validação de caller (JWT + membership + role) ─────────────────────────────

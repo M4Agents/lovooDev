@@ -51,10 +51,11 @@ const PRICE_POLICY_LABELS: Record<PriceDisplayPolicy, string> = {
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
-  whatsapp: 'WhatsApp',
-  web:      'Web',
-  email:    'E-mail',
-  sms:      'SMS'
+  whatsapp:  'WhatsApp',
+  web:       'Web',
+  email:     'E-mail',
+  sms:       'SMS',
+  instagram: 'Instagram',
 }
 
 // ── Componente: Follow-up Proativo ───────────────────────────────────────────
@@ -521,10 +522,11 @@ function RoutingRuleFallbackCard({ rule, companyId, onSaved }: RoutingRuleCardPr
 // ── Tipos internos do modal de criação ───────────────────────────────────────
 
 const CHANNEL_OPTIONS: { value: AgentChannel; label: string }[] = [
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'web',      label: 'Web' },
-  { value: 'email',    label: 'E-mail' },
-  { value: 'sms',      label: 'SMS' },
+  { value: 'whatsapp',  label: 'WhatsApp' },
+  { value: 'web',       label: 'Web' },
+  { value: 'email',     label: 'E-mail' },
+  { value: 'sms',       label: 'SMS' },
+  { value: 'instagram', label: 'Instagram' },
 ]
 
 interface CreateForm {

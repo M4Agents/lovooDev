@@ -91,7 +91,7 @@ export interface UpdateAssignmentPayload {
   follow_up_interval_hours?: number
 }
 
-export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms'
+export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms' | 'instagram'
 
 export interface CreateAssignmentPayload {
   agent_id:              string
