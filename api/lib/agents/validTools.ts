@@ -22,4 +22,7 @@ export const VALID_TOOL_NAMES = new Set([
   'schedule_contact',
   'request_handoff',
   'send_media',
+  // Instagram exclusivo: converte contato Instagram em lead do CRM.
+  // Requer instagram_conversation_id no contexto — rejeitada pelo executor fora do canal.
+  'create_lead',
 ])

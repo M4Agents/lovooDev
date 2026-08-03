@@ -291,6 +291,42 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+
+  // ── Instagram exclusivo ───────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'create_lead',
+      description:
+        'Converte o contato atual do Instagram em lead no CRM. '
+        + 'Use somente quando o contato fornecer explicitamente telefone ou e-mail. '
+        + 'Nunca invente ou infira dados não confirmados pelo contato. '
+        + 'Não chame esta função mais de uma vez por conversa.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description:
+              'Nome confirmado pelo contato durante a conversa. '
+              + 'Nunca inventar ou usar nome do perfil Instagram sem confirmação explícita.',
+            maxLength: 200,
+          },
+          phone: {
+            type: 'string',
+            description: 'Telefone ou WhatsApp informado explicitamente pelo contato.',
+            maxLength: 30,
+          },
+          email: {
+            type: 'string',
+            description: 'E-mail informado explicitamente pelo contato.',
+            maxLength: 254,
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
 ]
 
 /**

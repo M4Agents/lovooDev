@@ -37,6 +37,14 @@ export const AGENT_USE_META: Record<string, AgentUseMeta> = {
     fallback_mode:    'none',
     risk_level:       'high',
   },
+  // Agente conversacional Instagram DM — resolvido via company_agent_assignments.
+  // Mesma semântica do WhatsApp: sem fallback, contexto obrigatório, risco alto.
+  // Canal distinto: usa instagram_conversation_id no AgentRunContext.
+  'chat:conversational_agent:instagram': {
+    requires_context: true,
+    fallback_mode:    'none',
+    risk_level:       'high',
+  },
 }
 
 /** Default para usos sem metadados explícitos. */
@@ -62,6 +70,7 @@ export const VALID_USE_IDS = new Set<string>([
   'system:support_assistant:general_help',
   // Agente de suporte ao usuário na tela de configuração de agentes
   'system:support_assistant:agent_config',
-  // Agente conversacional — usado por runAgentWithConfig (bypassa resolver)
+  // Agentes conversacionais — usados por runAgentWithConfig (bypassam resolver)
   'chat:conversational_agent:whatsapp',
+  'chat:conversational_agent:instagram',
 ])

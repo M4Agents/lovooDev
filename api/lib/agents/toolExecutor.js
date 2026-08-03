@@ -33,6 +33,7 @@ import { createClient } from '@supabase/supabase-js'
 import { CRITICAL_TOOLS, FORBIDDEN_ARG_FIELDS } from './toolDefinitions.js'
 import { INTENT_TO_USAGE_ROLE } from './mediaConstants.js'
 import { mediaSelector } from './mediaSelector.js'
+import { dispatchLeadCreatedTrigger } from '../automation/dispatchLeadCreatedTrigger.js'
 
 const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
 const UAZAPI_TIMEOUT_MS = 30_000
@@ -1230,6 +1231,298 @@ async function execRequestHandoff(svc, args, ctx) {
   return { success: true, handoff_type: 'ai_to_human', reason, deferred_ai_state: 'ai_paused' }
 }
 
+// ── Instagram: create_lead ─────────────────────────────────────────────────────
+
+/**
+ * Resolve o usuário que executou a ação de IA para fins de auditoria.
+ * Ordem de preferência:
+ *   1. assigned_to da conversa Instagram (se ativo na empresa)
+ *   2. default_assignee das configurações Instagram da empresa (se ativo)
+ *   3. Primeiro admin ativo da empresa por created_at ASC (fallback explícito)
+ *
+ * @param {any} svc     - Cliente service_role Supabase
+ * @param {string} companyId
+ * @param {string|null} assignedTo - instagram_conversations.assigned_to
+ * @returns {Promise<{ strategy: string, user_id: string|null }>}
+ */
+async function resolvePerformedBy(svc, companyId, assignedTo) {
+  // Estratégia 1: assigned_to da conversa Instagram.
+  // Se ausente (null), inativo (is_active=false) ou pertencente a outra empresa,
+  // a query retorna vazio e o fluxo continua para a estratégia 2 — sem erro.
+  if (assignedTo) {
+    const { data: user } = await svc
+      .from('company_users')
+      .select('user_id')
+      .eq('user_id', assignedTo)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (user?.user_id) {
+      return { strategy: 'conversation_assigned_to', user_id: user.user_id }
+    }
+    // assigned_to inativo ou inválido: cai para estratégia 2 silenciosamente
+  }
+
+  // Estratégia 2: default_assignee das configurações Instagram da empresa.
+  // Se ausente ou inativo, o fluxo continua para a estratégia 3 — sem erro.
+  const { data: settings } = await svc
+    .from('instagram_company_settings')
+    .select('default_assignee')
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (settings?.default_assignee) {
+    const { data: user } = await svc
+      .from('company_users')
+      .select('user_id')
+      .eq('user_id', settings.default_assignee)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (user?.user_id) {
+      return { strategy: 'company_default_assignee', user_id: user.user_id }
+    }
+    // default_assignee inativo ou inválido: cai para estratégia 3 silenciosamente
+  }
+
+  // Estratégia 3: primeiro admin ativo da empresa por created_at ASC (fallback determinístico).
+  // Roles permitidos conforme matriz explícita: admin, system_admin, super_admin.
+  // Nunca usa template de permissão como autorização.
+  const { data: admin } = await svc
+    .from('company_users')
+    .select('user_id')
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .in('role', ['admin', 'system_admin', 'super_admin'])
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (admin?.user_id) {
+    return { strategy: 'fallback_company_admin', user_id: admin.user_id }
+  }
+
+  // Nenhuma estratégia resolveu — caller deve rejeitar a ação
+  return { strategy: 'none', user_id: null }
+}
+
+/**
+ * Tool create_lead — converte contato Instagram em lead do CRM.
+ *
+ * Exclusiva para o canal Instagram: exige instagram_conversation_id no contexto.
+ * O backend valida independentemente do que o LLM enviou nos argumentos.
+ *
+ * Fluxo:
+ *   1. Validar presença de instagram_conversation_id
+ *   2. Normalizar e validar args (name, phone, email)
+ *   3. Buscar conversa e validar ownership (company_id)
+ *   4. Idempotência: se já tem lead_id, retornar already_linked
+ *   5. Resolver p_performed_by (assigned_to → default_assignee → admin)
+ *   6. Chamar RPC create_or_link_instagram_lead
+ *   7. Atualizar ctx.lead_id no runtime context para tools posteriores
+ *   8. Disparar dispatchLeadCreatedTrigger com await + try/catch (falha não reverte lead)
+ */
+async function execCreateLead(svc, args, ctx) {
+  // 1. Validar contexto Instagram
+  const igConvId = ctx.instagram_conversation_id
+  if (!igConvId || typeof igConvId !== 'string' || igConvId.trim() === '') {
+    return {
+      success:         false,
+      error:           'create_lead é permitida apenas em conversas Instagram — instagram_conversation_id ausente',
+      error_code:      'invalid_channel',
+      context_updated: false,
+    }
+  }
+
+  // 2. Normalizar args — strings vazias viram null; nunca confiar no LLM para IDs
+  const rawName  = String(args.name  ?? '').trim()
+  const rawPhone = String(args.phone ?? '').trim() || null
+  const rawEmail = String(args.email ?? '').trim() || null
+
+  // 3a. Validar nome obrigatório
+  if (!rawName) {
+    return {
+      success:         false,
+      error:           'name é obrigatório e não pode ser vazio',
+      error_code:      'validation_error',
+      context_updated: false,
+    }
+  }
+  if (rawName.length > 200) {
+    return {
+      success:         false,
+      error:           'name não pode ter mais de 200 caracteres',
+      error_code:      'validation_error',
+      context_updated: false,
+    }
+  }
+
+  // 3b. Validar telefone ou e-mail obrigatório (backend — independente do schema da tool)
+  if (!rawPhone && !rawEmail) {
+    return {
+      success:         false,
+      error:           'Telefone ou e-mail é obrigatório para criar o lead',
+      error_code:      'validation_error',
+      context_updated: false,
+    }
+  }
+
+  // 3c. Validar tamanhos
+  if (rawPhone && rawPhone.length > 30) {
+    return {
+      success:         false,
+      error:           'Telefone excede o limite de 30 caracteres',
+      error_code:      'validation_error',
+      context_updated: false,
+    }
+  }
+  if (rawEmail && rawEmail.length > 254) {
+    return {
+      success:         false,
+      error:           'E-mail excede o limite de 254 caracteres',
+      error_code:      'validation_error',
+      context_updated: false,
+    }
+  }
+  // Formato de e-mail: validado pela RPC (source of truth).
+  // Não duplicar regex aqui — evita divergência entre backend e banco.
+
+  // 4. Buscar conversa — ownership check obrigatório (id + company_id)
+  const { data: conv, error: convErr } = await svc
+    .from('instagram_conversations')
+    .select('id, company_id, lead_id, assigned_to')
+    .eq('id', igConvId)
+    .eq('company_id', ctx.company_id)
+    .maybeSingle()
+
+  if (convErr || !conv) {
+    return {
+      success:         false,
+      error:           'Conversa Instagram não encontrada ou pertence a outra empresa',
+      error_code:      'conversation_not_found',
+      context_updated: false,
+    }
+  }
+
+  // 5. Idempotência: conversa já tem lead vinculado
+  if (conv.lead_id !== null && conv.lead_id !== undefined) {
+    // Atualiza runtime context com os dados disponíveis no caminho already_linked.
+    // name/phone/email não são relidos do banco para evitar query extra:
+    // o context builder já os carregou antes da execução do agente.
+    ctx.lead_id      = String(conv.lead_id)
+    ctx.contact      ??= {}
+    ctx.contact.lead_id = conv.lead_id
+    return {
+      success:         true,
+      action:          'already_linked',
+      lead_id:         conv.lead_id,
+      context_updated: true,
+    }
+  }
+
+  // 6. Resolver p_performed_by para auditoria
+  const performedBy = await resolvePerformedBy(svc, ctx.company_id, conv.assigned_to ?? null)
+
+  console.log('[AGENT] create_lead: performed_by resolved', {
+    strategy:   performedBy.strategy,
+    user_id:    performedBy.user_id ?? null,
+    company_id: ctx.company_id,
+    automated:  true,
+  })
+
+  if (!performedBy.user_id) {
+    console.error('[TOOL:create_lead] p_performed_by não resolvido — sem usuário ativo elegível', {
+      strategy:   performedBy.strategy,
+      company_id: ctx.company_id,
+      automated:  true,
+    })
+    return {
+      success:         false,
+      error:           'Não foi possível determinar o executor da ação — sem usuário ativo elegível na empresa',
+      error_code:      'no_performed_by',
+      context_updated: false,
+    }
+  }
+
+  // 7. Chamar RPC create_or_link_instagram_lead (service_role — validado internamente)
+  const { data: rpcResult, error: rpcErr } = await svc.rpc('create_or_link_instagram_lead', {
+    p_conversation_id: igConvId,
+    p_name:            rawName,
+    p_performed_by:    performedBy.user_id,
+    p_phone:           rawPhone,
+    p_email:           rawEmail,
+  })
+
+  if (rpcErr) {
+    console.error('[TOOL:create_lead] RPC erro:', rpcErr.message, {
+      company_id:                ctx.company_id,
+      instagram_conversation_id: igConvId,
+      automated:                 true,
+    })
+    return {
+      success:         false,
+      error:           'Falha ao processar criação do lead — tente novamente',
+      error_code:      'rpc_error',
+      context_updated: false,
+    }
+  }
+
+  if (!rpcResult?.success) {
+    const detail = rpcResult?.detail ?? rpcResult?.error ?? 'rpc_failed'
+    console.warn('[TOOL:create_lead] RPC retornou success=false:', detail, {
+      company_id:                ctx.company_id,
+      instagram_conversation_id: igConvId,
+    })
+    return {
+      success:         false,
+      error:           detail,
+      error_code:      rpcResult?.error ?? 'rpc_failed',
+      context_updated: false,
+    }
+  }
+
+  const leadId = rpcResult.lead_id
+  const action = rpcResult.action // 'lead_created' | 'lead_linked' | 'already_linked'
+
+  // 8. Atualizar runtime context — mutação do objeto toolContext compartilhado.
+  // Garante que tools posteriores no mesmo executeToolCalls() enxergam o lead_id
+  // e os dados de contato normalizados confirmados nesta execução.
+  // ctx.contact ??= {} é seguro mesmo quando o campo não existe no toolContext original.
+  ctx.lead_id         = String(leadId)
+  ctx.contact         ??= {}
+  ctx.contact.lead_id = leadId
+  ctx.contact.name    = rawName
+  ctx.contact.phone   = rawPhone ?? null
+  ctx.contact.email   = rawEmail ?? null
+
+  // 9. dispatchLeadCreatedTrigger — apenas para lead recém-criado ou vinculado
+  // Falha do trigger NÃO desfaz a criação do lead.
+  if (action === 'lead_created' || action === 'lead_linked') {
+    try {
+      await dispatchLeadCreatedTrigger({
+        companyId: ctx.company_id,
+        leadId,
+        source:    'instagram',
+      })
+    } catch (triggerErr) {
+      console.error('[TOOL:create_lead] dispatchLeadCreatedTrigger falhou (lead já criado — ignorado):', triggerErr?.message, {
+        company_id:                ctx.company_id,
+        lead_id:                   leadId,
+        instagram_conversation_id: igConvId,
+      })
+    }
+  }
+
+  return {
+    success:         true,
+    action,
+    lead_id:         leadId,
+    context_updated: true,
+  }
+}
+
 // ── Dispatcher principal ──────────────────────────────────────────────────────
 
 /** @type {Record<string, (svc: any, args: any, ctx: any) => Promise<any>>} */
@@ -1244,6 +1537,8 @@ const TOOL_HANDLERS = {
   schedule_contact:   execScheduleContact,
   request_handoff:    execRequestHandoff,
   send_media:         execSendMedia,
+  // Instagram exclusivo — rejeita execução fora do contexto Instagram
+  create_lead:        execCreateLead,
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -1261,6 +1556,7 @@ const TOOL_HANDLERS = {
  *   company_id: string,
  *   lead_id: string | null,
  *   conversation_id: string,
+ *   instagram_conversation_id?: string | null,
  *   agent_id: string,
  *   locked_opportunity_id?: string | null,
  *   allowed_tools: string[],
@@ -1347,6 +1643,12 @@ function buildSandboxToolLabel(toolName, args) {
     send_media:         () => {
       const intent = args.intent ?? 'imagem/vídeo'
       return `O agente enviaria uma mídia (${intent}) referente ao produto em foco`
+    },
+    create_lead:        () => {
+      const name = String(args.name ?? '').trim().slice(0, 80)
+      return name
+        ? `O agente criaria um lead para o contato "${name}"`
+        : 'O agente converteria este contato Instagram em lead no CRM'
     },
   }
 

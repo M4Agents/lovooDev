@@ -41,6 +41,15 @@ export interface ToolDefinitionUI {
 export const TOOL_CATALOG: ToolDefinitionUI[] = [
   // ── CRM ──────────────────────────────────────────────────────────────────────
   {
+    key:               'create_lead',
+    label:             'Converter contato em lead',
+    description:       'Converte um contato do Instagram em lead no CRM quando ele fornecer telefone ou e-mail durante a conversa.',
+    category:          'crm',
+    channelNote:       'Apenas Instagram',
+    promptSuggestion:  'Quando o contato fornecer telefone ou e-mail, use create_lead para registrá-lo como lead no CRM.',
+    params:            'Campos: nome obrigatório; telefone ou e-mail obrigatório (ao menos um dos dois).',
+  },
+  {
     key:               'update_lead',
     label:             'Atualizar dados do cliente',
     description:       'Salva informações do cliente como nome, e-mail, telefone ou empresa quando informados durante a conversa.',

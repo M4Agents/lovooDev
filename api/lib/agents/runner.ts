@@ -83,6 +83,12 @@ export type AgentRunContext = {
    */
   conversation_id?: string | null
   /**
+   * ID da conversa Instagram (instagram_conversations.id) — canal distinto de conversation_id.
+   * Obrigatório para a tool create_lead; rejeitado em todos os outros canais.
+   * NUNCA aceitar do LLM. Sempre vem do contexto autenticado do agente executor Instagram.
+   */
+  instagram_conversation_id?: string | null
+  /**
    * ID da oportunidade travada para esta conversa (Phase 3: vem do flow state).
    * null = toolExecutor busca a mais recente aberta do lead.
    */
@@ -590,14 +596,17 @@ export async function runAgentWithConfig(
     // Se o LLM retornou tool calls, executa e faz second turn
     if (hasTools && toolCalls.length > 0) {
       const toolContext = {
-        company_id:            ctx.company_id ?? '',
-        lead_id:               ctx.lead_id ?? null,
-        conversation_id:       ctx.conversation_id ?? '',
-        agent_id:              agent.id,
-        locked_opportunity_id: ctx.locked_opportunity_id ?? null,
-        allowed_tools:         agentAllowedTools,
-        item_of_interest:      ctx.item_of_interest ?? null,
-        model_config:          (agent.model_config as Record<string, unknown> | undefined) ?? ctx.model_config ?? {},
+        company_id:                ctx.company_id ?? '',
+        lead_id:                   ctx.lead_id ?? null,
+        conversation_id:           ctx.conversation_id ?? '',
+        // Canal Instagram: campo separado para não colidir com conversation_id (WhatsApp).
+        // Necessário para a tool create_lead. Jamais vem do LLM.
+        instagram_conversation_id: ctx.instagram_conversation_id ?? null,
+        agent_id:                  agent.id,
+        locked_opportunity_id:     ctx.locked_opportunity_id ?? null,
+        allowed_tools:             agentAllowedTools,
+        item_of_interest:          ctx.item_of_interest ?? null,
+        model_config:              (agent.model_config as Record<string, unknown> | undefined) ?? ctx.model_config ?? {},
       }
 
       if (options?.sandboxMode) {
