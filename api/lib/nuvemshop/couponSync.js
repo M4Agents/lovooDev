@@ -51,7 +51,7 @@ const CODE_REGEX           = /^[A-Za-z0-9_-]+$/;
 async function resolveClient({ svc, companyId, storeId, correlationId }) {
   const { data: conn, error } = await svc
     .from('nuvemshop_connections')
-    .select('id, encrypted_access_token, status')
+    .select('id, access_token_enc, status')
     .eq('company_id', companyId)
     .eq('nuvemshop_store_id', storeId)
     .eq('status', 'active')
@@ -69,7 +69,7 @@ async function resolveClient({ svc, companyId, storeId, correlationId }) {
 
   let accessToken;
   try {
-    accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
+    accessToken = decryptNuvemshopToken(conn.access_token_enc);
   } catch {
     throw { code: 'token_decrypt_error', message: 'Erro interno de configuração.', status: 500 };
   }
