@@ -276,7 +276,7 @@ export default async function handler(req, res) {
       .update({
         status:          newStatus,
         last_error:      result.error,
-        last_error_at:   new Date().toISOString(),
+        // last_attempt_at já foi atualizado pelo claim RPC (não duplicar)
         next_attempt_at: next_retry_at,
         worker_id:       null,
         updated_at:      new Date().toISOString(),
