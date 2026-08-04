@@ -21,6 +21,7 @@ import { validateNuvemshopCaller,
          CONNECT_ROLES }             from '../../lib/nuvemshop/validateNuvemshopCaller.js';
 import { deleteWebhooks }            from '../../lib/nuvemshop/webhookSync.js';
 import { deleteScript }              from '../../lib/nuvemshop/scriptSync.js';
+import { decryptNuvemshopToken }     from '../../lib/nuvemshop/tokenCrypto.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -55,13 +56,24 @@ export default async function handler(req, res) {
   }
 
   // ── Remover webhooks e script (best-effort — não bloqueia desconexão) ────
+  let accessToken;
+  try { accessToken = decryptNuvemshopToken(connection.access_token_enc); } catch { /* best-effort */ }
+
   await Promise.allSettled([
     deleteWebhooks(connection, companyId).catch(err =>
       console.warn('[nuvemshop/disconnect] webhook_delete_failed companyId=%s err=%s',
         companyId, err?.message)),
-    deleteScript(connection, svc).catch(err =>
-      console.warn('[nuvemshop/disconnect] script_delete_failed companyId=%s err=%s',
-        companyId, err?.message)),
+    accessToken
+      ? deleteScript({
+          companyId,
+          storeId:       connection.nuvemshop_store_id,
+          accessToken,
+          correlationId: auth.userId,
+          svc,
+        }).catch(err =>
+          console.warn('[nuvemshop/disconnect] script_delete_failed companyId=%s err=%s',
+            companyId, err?.message))
+      : Promise.resolve(),
   ]);
 
   // ── Marcar como desconectada ──────────────────────────────────────────────
