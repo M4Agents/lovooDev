@@ -68,6 +68,50 @@ function extractMultilingual(obj) {
     ?? null;
 }
 
+/**
+ * Remove tags HTML e decodifica entidades HTML para texto limpo.
+ * A Nuvemshop retorna description como HTML bruto (ex: <p>&eacute;</p>).
+ * O campo description do CRM é texto puro — sem markup.
+ */
+function stripHtml(html) {
+  if (!html || typeof html !== 'string') return html;
+
+  // Tabela de entidades HTML comuns (incluindo português)
+  const entities = {
+    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+    '&apos;': "'", '&nbsp;': ' ',
+    '&agrave;': 'à', '&aacute;': 'á', '&acirc;': 'â', '&atilde;': 'ã', '&auml;': 'ä',
+    '&egrave;': 'è', '&eacute;': 'é', '&ecirc;': 'ê', '&euml;': 'ë',
+    '&igrave;': 'ì', '&iacute;': 'í', '&icirc;': 'î', '&iuml;': 'ï',
+    '&ograve;': 'ò', '&oacute;': 'ó', '&ocirc;': 'ô', '&otilde;': 'õ', '&ouml;': 'ö',
+    '&ugrave;': 'ù', '&uacute;': 'ú', '&ucirc;': 'û', '&uuml;': 'ü',
+    '&ccedil;': 'ç', '&ntilde;': 'ñ',
+    '&Agrave;': 'À', '&Aacute;': 'Á', '&Acirc;': 'Â', '&Atilde;': 'Ã',
+    '&Eacute;': 'É', '&Ecirc;': 'Ê',
+    '&Iacute;': 'Í', '&Oacute;': 'Ó', '&Ocirc;': 'Ô', '&Otilde;': 'Õ',
+    '&Uacute;': 'Ú', '&Ccedil;': 'Ç',
+    '&laquo;': '«', '&raquo;': '»', '&mdash;': '—', '&ndash;': '–',
+    '&ldquo;': '"', '&rdquo;': '"', '&lsquo;': ''', '&rsquo;': ''',
+    '&hellip;': '…', '&trade;': '™', '&copy;': '©', '&reg;': '®',
+  };
+
+  return html
+    // Substituir <br>, <p>, <div>, <li> por quebra de linha antes de remover tags
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(p|div|li|h[1-6]|tr)[^>]*>/gi, '\n')
+    // Remover todas as tags HTML restantes
+    .replace(/<[^>]+>/g, '')
+    // Decodificar entidades nomeadas
+    .replace(/&[a-zA-Z]+;/g, match => entities[match] ?? match)
+    // Decodificar entidades numéricas (ex: &#233; → é, &#xE9; → é)
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    // Normalizar espaços e quebras de linha
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function normalizeVariants(variants) {
   if (!Array.isArray(variants)) return [];
 
@@ -249,7 +293,7 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
     external_reference:    mainSku,
 
     name:                  extractMultilingual(productData.name) ?? `Produto #${nuvemshopId}`,
-    description:           extractMultilingual(productData.description) ?? null,
+    description:           stripHtml(extractMultilingual(productData.description)) ?? null,
     default_price:         defaultPrice,
 
     is_active:             productData.published ?? true,
