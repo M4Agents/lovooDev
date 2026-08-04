@@ -178,7 +178,13 @@ export default async function handler(req, res) {
     let accessToken;
     try {
       accessToken = decryptNuvemshopToken(access_token_enc);
+      // #region agent log
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',runId:'script-debug',hypothesisId:'H1',location:'nuvemshop-install-scripts.js:decrypt',message:'token decrypt SUCCESS',data:{company_id:companyId,store_id:storeId,tokenLength:accessToken?.length??0,enc_defined:!!access_token_enc},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',runId:'script-debug',hypothesisId:'H1',location:'nuvemshop-install-scripts.js:decrypt-fail',message:'token decrypt FAILED -> config_error',data:{company_id:companyId,store_id:storeId,error:err?.message,enc_defined:!!access_token_enc},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       console.warn(JSON.stringify({
         level:          'warn',
         event:          'install_scripts_token_decrypt_failed',
@@ -221,6 +227,9 @@ export default async function handler(req, res) {
     }
 
     // ── 2d. Atualizar status com base no resultado ────────────────────────
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',runId:'script-debug',hypothesisId:'H2',location:'nuvemshop-install-scripts.js:result',message:'createScript result',data:{company_id:companyId,store_id:storeId,ok:result?.ok,reason:result?.reason,error:result?.error},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (result.ok) {
       await updateScriptStatus({ svc, connectionId, outcome: 'success', currentRetryCount: retryCount });
       results.success++;

@@ -107,6 +107,9 @@ export async function createScript({ companyId, storeId, accessToken, correlatio
   const svc = _svc ?? getSupabaseAdmin();
 
   const scriptSrc = process.env.NUVEMSHOP_TRACKING_SCRIPT_URL;
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',runId:'script-debug',hypothesisId:'H2',location:'scriptSync.js:env-check',message:'NUVEMSHOP_TRACKING_SCRIPT_URL check',data:{isSet:!!scriptSrc,length:scriptSrc?.length??0,startsWithHttp:scriptSrc?.startsWith('http')??false},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!scriptSrc) {
     console.warn(JSON.stringify({
       level:          'warn',
