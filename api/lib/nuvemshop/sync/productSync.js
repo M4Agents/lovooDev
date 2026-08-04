@@ -91,7 +91,7 @@ function stripHtml(html) {
     '&Iacute;': 'Í', '&Oacute;': 'Ó', '&Ocirc;': 'Ô', '&Otilde;': 'Õ',
     '&Uacute;': 'Ú', '&Ccedil;': 'Ç',
     '&laquo;': '«', '&raquo;': '»', '&mdash;': '—', '&ndash;': '–',
-    '&ldquo;': '"', '&rdquo;': '"', '&lsquo;': ''', '&rsquo;': ''',
+    '&ldquo;': '\u201C', '&rdquo;': '\u201D', '&lsquo;': '\u2018', '&rsquo;': '\u2019',
     '&hellip;': '…', '&trade;': '™', '&copy;': '©', '&reg;': '®',
   };
 
