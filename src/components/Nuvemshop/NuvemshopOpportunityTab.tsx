@@ -20,10 +20,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  ShoppingBag, Store, Hash, CreditCard, Truck, Package,
+  Store, Hash, CreditCard, Truck, Package,
   RefreshCw, AlertTriangle, Loader2, CheckCircle2, Clock,
   ExternalLink,
 } from 'lucide-react';
+import { NuvemshopBrandIcon, NuvemshopCloudIcon } from '../icons/NuvemshopIcon';
 import {
   getNuvemshopOpportunityTab,
   type NuvemshopOpportunityTabData,
@@ -216,7 +217,7 @@ export function NuvemshopOpportunityTab({ opportunityId, companyId }: NuvemshopO
   if (!data || !data.has_nuvemshop) {
     return (
       <div className="text-center py-10 text-slate-400">
-        <ShoppingBag className="w-8 h-8 mx-auto mb-2 opacity-40" />
+        <NuvemshopBrandIcon className="w-10 h-10 mx-auto mb-2 opacity-40" rounded="rounded-xl" />
         <p className="text-sm">Esta oportunidade não possui vínculo com a Nuvemshop.</p>
       </div>
     );
@@ -240,7 +241,7 @@ export function NuvemshopOpportunityTab({ opportunityId, companyId }: NuvemshopO
       )}
 
       {/* Seção: Pedido */}
-      <SectionCard icon={<ShoppingBag className="w-4 h-4" />} title="Pedido">
+      <SectionCard icon={<NuvemshopCloudIcon className="w-4 h-4" />} title="Pedido">
         <InfoRow
           icon={<Store className="w-4 h-4" />}
           label="Loja"

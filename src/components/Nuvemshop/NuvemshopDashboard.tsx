@@ -19,9 +19,10 @@
 import React, { useState, useCallback } from 'react';
 import {
   RefreshCw, CheckCircle2, AlertTriangle, AlertCircle,
-  WifiOff, ShoppingBag, Zap, BarChart3, Settings2,
+  WifiOff, Zap, BarChart3, Settings2,
   RotateCcw, Link2, FileCode2, Loader2, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { NuvemshopCloudIcon } from '../icons/NuvemshopIcon';
 import {
   getNuvemshopMetrics,
   forceNuvemshopResync,
@@ -156,7 +157,7 @@ export function NuvemshopDashboard({ companyId, metrics, onRefresh }: Props) {
     <div className="space-y-3">
 
       {/* Seção Conexão */}
-      <Section title="Conexão" icon={<ShoppingBag className="w-4 h-4 text-indigo-500" />}>
+      <Section title="Conexão" icon={<NuvemshopCloudIcon className="w-4 h-4 text-indigo-500" />}>
         <MetricRow label="Loja"             value={conn?.store_name   ?? '—'} />
         <MetricRow label="Domínio"          value={conn?.store_domain ?? '—'} />
         <MetricRow label="Plano"            value={conn?.plan_name    ?? '—'} />

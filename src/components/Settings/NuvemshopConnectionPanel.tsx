@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShoppingBag,
   Plus,
   Unlink,
   RefreshCw,
@@ -16,6 +15,7 @@ import {
   BarChart3,
   Tag,
 } from 'lucide-react';
+import { NuvemshopBrandIcon, NuvemshopCloudIcon } from '../icons/NuvemshopIcon';
 import { useNuvemshopConnection } from '../../hooks/useNuvemshopConnection';
 import {
   getNuvemshopMetrics,
@@ -220,8 +220,8 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
       {/* Estado: Não conectada ────────────────────────────────────────────────── */}
       {!isConnected && (
         <div className="flex flex-col items-center gap-5 py-8 text-center">
-          <div className="p-4 bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl">
-            <ShoppingBag className="w-10 h-10 text-purple-600" />
+          <div className="p-1 rounded-2xl">
+            <NuvemshopBrandIcon className="w-16 h-16" rounded="rounded-2xl" />
           </div>
 
           <div className="space-y-1.5">
@@ -270,9 +270,7 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
           {/* Cabeçalho da loja */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-sm">
-                <ShoppingBag className="w-5 h-5 text-white" />
-              </div>
+              <NuvemshopBrandIcon className="w-9 h-9" rounded="rounded-lg" />
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   {status.store_name ?? 'Loja Nuvemshop'}
@@ -307,7 +305,7 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
             {status.plan_name && (
               <div className="bg-slate-50 rounded-lg p-3">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-0.5">
-                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <NuvemshopCloudIcon className="w-3.5 h-3.5" />
                   Plano
                 </div>
                 <p className="text-sm font-medium text-slate-700 truncate">{status.plan_name}</p>

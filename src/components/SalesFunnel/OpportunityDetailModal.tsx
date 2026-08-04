@@ -13,8 +13,9 @@ import { useTranslation } from 'react-i18next'
 import {
   X, Briefcase, DollarSign, Calendar, TrendingUp,
   FileText, Tag, CheckCircle2, XCircle, RotateCcw,
-  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2, RefreshCw, ShoppingBag
+  Clock, AlertCircle, Route, Pencil, Save, User, Check, StickyNote, Loader2, RefreshCw
 } from 'lucide-react'
+import { NuvemshopCloudIcon } from '../icons/NuvemshopIcon'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
@@ -409,7 +410,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       ? [{ key: 'cycles' as TabType, label: t('opportunityDetail.tabs.cycles'), icon: <RefreshCw className="w-3.5 h-3.5" /> }]
       : []),
     ...(canViewNuvemshop
-      ? [{ key: 'nuvemshop' as TabType, label: 'Nuvemshop', icon: <ShoppingBag className="w-3.5 h-3.5" /> }]
+      ? [{ key: 'nuvemshop' as TabType, label: 'Nuvemshop', icon: <NuvemshopCloudIcon className="w-3.5 h-3.5" /> }]
       : []),
   ]
 
