@@ -27,6 +27,23 @@ import { verifyNuvemshopHmac } from '../lib/nuvemshop/webhookVerifier.js';
 import { getSupabaseAdmin }    from '../lib/automation/supabaseAdmin.js';
 import { randomBytes }         from 'crypto';
 
+// CRÍTICO: desabilitar body parser da Vercel para manter raw body intacto.
+// O HMAC é calculado sobre o payload exato enviado pela Nuvemshop.
+// Qualquer re-serialização (JSON.stringify do objeto parseado) quebra a assinatura.
+export const config = {
+  api: { bodyParser: false },
+};
+
+/** Lê o raw body do stream como string UTF-8. */
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end',  ()    => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
 /**
  * Extrai resource_type a partir do topic (ex: 'customer/created' → 'customer').
  * Usado para geração de idempotency_key e logs.
@@ -42,16 +59,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // ── 1. Ler raw body ────────────────────────────────────────────────────────
-  // Vercel disponibiliza o raw body em req.body como string quando content-type
-  // é application/json (sem bodyParser customizado). Se vier parseado, serializar.
+  // ── 1. Ler raw body (stream — body parser desabilitado) ───────────────────
   let rawBody;
-  if (typeof req.body === 'string') {
-    rawBody = req.body;
-  } else if (req.body && typeof req.body === 'object') {
-    rawBody = JSON.stringify(req.body);
-  } else {
-    rawBody = '';
+  try {
+    rawBody = await readRawBody(req);
+  } catch (err) {
+    console.error('[nuvemshop/webhook] raw_body_read_failed err=%s', err?.message);
+    return res.status(500).json({ error: 'Body read error' });
   }
 
   // ── 2. Verificar assinatura HMAC ────────────────────────────────────────────
@@ -67,7 +81,7 @@ export default async function handler(req, res) {
   // Payload Nuvemshop (thin): { store_id: number, event: string, id: number }
   let payload;
   try {
-    payload = typeof req.body === 'object' ? req.body : JSON.parse(rawBody);
+    payload = JSON.parse(rawBody);
   } catch {
     console.warn('[nuvemshop/webhook] invalid_json');
     return res.status(400).json({ error: 'Invalid JSON' });
