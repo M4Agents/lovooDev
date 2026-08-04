@@ -261,8 +261,9 @@ export const Settings: React.FC = () => {
     setIntegracoesTab('nuvemshop');
 
     if (connected === '1') {
-      const msg = store
-        ? `Loja "${store}" conectada com sucesso!`
+      const storeName = store ? decodeURIComponent(store) : null;
+      const msg = storeName
+        ? `Loja "${storeName}" conectada com sucesso!`
         : 'Loja Nuvemshop conectada com sucesso!';
       setTimeout(() => alert(msg), 300);
     } else if (nvError) {

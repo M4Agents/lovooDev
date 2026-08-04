@@ -190,7 +190,11 @@ export default async function handler(req, res) {
            const client    = createNuvemshopClient({ storeId, accessToken });
            const storeData = await client.get('store');
 
-           storeName     = storeData.name             ?? null;
+           // name é multilíngue: { pt: 'Lovoo', es: 'Lovoo' } — extrair string
+          const rawName = storeData.name;
+          storeName     = typeof rawName === 'string'
+            ? rawName
+            : (rawName?.pt ?? rawName?.es ?? rawName?.en ?? Object.values(rawName ?? {})[0] ?? null);
            storeDomain   = storeData.original_domain  ?? null;
            currency      = storeData.currency         ?? null;
            country       = storeData.country          ?? null;
