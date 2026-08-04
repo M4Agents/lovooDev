@@ -9,11 +9,6 @@
 //   - Marca conexão como 'disconnected'
 //   - Registra quem desconectou e quando
 //
-// NÃO implementado nesta fase (deferred):
-//   - Remoção de webhooks na Nuvemshop (Fase 4)
-//   - Remoção de script de rastreamento (Fase 12)
-//   - Suspensão de automações (Fase 15)
-//
 // Segurança:
 //   - company_id validado contra company_users (nunca confiado do body)
 //   - Preserva histórico: status = 'disconnected' (não deleta o registro)
@@ -24,6 +19,8 @@
 import { getSupabaseAdmin }          from '../../lib/automation/supabaseAdmin.js';
 import { validateNuvemshopCaller,
          CONNECT_ROLES }             from '../../lib/nuvemshop/validateNuvemshopCaller.js';
+import { deleteWebhooks }            from '../../lib/nuvemshop/webhookSync.js';
+import { deleteScript }              from '../../lib/nuvemshop/scriptSync.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -46,7 +43,7 @@ export default async function handler(req, res) {
   // ── Buscar conexão ativa ───────────────────────────────────────────────────
   const { data: connection } = await svc
     .from('nuvemshop_connections')
-    .select('id, nuvemshop_store_id, store_name')
+    .select('id, nuvemshop_store_id, store_name, access_token_enc, webhook_ids, script_id')
     .eq('company_id', companyId)
     .eq('status', 'active')
     .maybeSingle();
@@ -56,6 +53,16 @@ export default async function handler(req, res) {
       error: 'Nenhuma loja Nuvemshop ativa encontrada para esta empresa',
     });
   }
+
+  // ── Remover webhooks e script (best-effort — não bloqueia desconexão) ────
+  await Promise.allSettled([
+    deleteWebhooks(connection, companyId).catch(err =>
+      console.warn('[nuvemshop/disconnect] webhook_delete_failed companyId=%s err=%s',
+        companyId, err?.message)),
+    deleteScript(connection, svc).catch(err =>
+      console.warn('[nuvemshop/disconnect] script_delete_failed companyId=%s err=%s',
+        companyId, err?.message)),
+  ]);
 
   // ── Marcar como desconectada ──────────────────────────────────────────────
   const { error: updateErr } = await svc

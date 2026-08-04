@@ -31,6 +31,7 @@ import { getSupabaseAdmin }         from '../../lib/automation/supabaseAdmin.js'
 import { verifyState }              from '../../lib/nuvemshop/nuvemshopState.js';
 import { encryptNuvemshopToken }    from '../../lib/nuvemshop/tokenCrypto.js';
 import { createNuvemshopClient }    from '../../lib/nuvemshop/nuvemshopClient.js';
+import { registerWebhooks }         from '../../lib/nuvemshop/webhookSync.js';
 
 const CONNECT_ROLES = ['super_admin', 'system_admin', 'admin', 'partner'];
 
@@ -266,7 +267,26 @@ export default async function handler(req, res) {
 
   console.log('[nuvemshop/callback] connected companyId=%s storeId=%s storeName=%s',
     companyId, storeId, storeName);
+
+  // ── 8. Registrar webhooks na Nuvemshop (não-bloqueante) ───────────────────
+  // Falhas parciais não cancelam a conexão — webhook_ids atualizado em best-effort.
   // Script de rastreamento instalado pelo cron nuvemshop-install-scripts (script_status = 'pending').
+  try {
+    const connForWebhooks = { nuvemshop_store_id: storeId, access_token_enc: accessTokenEnc };
+    const { webhookIds }  = await registerWebhooks(connForWebhooks, companyId);
+
+    if (webhookIds.length > 0) {
+      await svc
+        .from('nuvemshop_connections')
+        .update({ webhook_ids: webhookIds, updated_at: new Date().toISOString() })
+        .eq('company_id', companyId)
+        .eq('nuvemshop_store_id', storeId);
+    }
+  } catch (err) {
+    console.warn('[nuvemshop/callback] webhook_register_failed companyId=%s err=%s',
+      companyId, err?.message);
+    // Não cancela a conexão — cron ou admin pode re-registrar depois
+  }
 
   return redirectSuccess(res, storeName);
 }
