@@ -48,7 +48,7 @@ export async function orderHandler(ctx) {
   // ── Buscar conexão e token ────────────────────────────────────────────────
   const { data: conn, error: connErr } = await svc
     .from('nuvemshop_connections')
-    .select('id, nuvemshop_store_id, encrypted_access_token, status')
+    .select('id, nuvemshop_store_id, access_token_enc, status')
     .eq('company_id', companyId)
     .eq('nuvemshop_store_id', storeId)
     .eq('status', 'active')
@@ -57,7 +57,7 @@ export async function orderHandler(ctx) {
   if (connErr) throw new Error(`[orderHandler] connection_lookup_failed: ${connErr.message}`);
   if (!conn)   throw new Error(`[orderHandler] Conexão ativa não encontrada para company=${companyId} store=${storeId}`);
 
-  const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
+  const accessToken = decryptNuvemshopToken(conn.access_token_enc);
   const client      = createNuvemshopClient({ storeId, accessToken, correlationId });
 
   // ── Buscar pedido completo ─────────────────────────────────────────────────

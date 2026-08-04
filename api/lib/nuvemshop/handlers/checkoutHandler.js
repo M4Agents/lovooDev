@@ -52,7 +52,7 @@ export async function checkoutHandler(ctx) {
   // ── Buscar conexão ────────────────────────────────────────────────────────
   const { data: conn, error: connErr } = await svc
     .from('nuvemshop_connections')
-    .select('id, nuvemshop_store_id, encrypted_access_token, status')
+    .select('id, nuvemshop_store_id, access_token_enc, status')
     .eq('company_id', companyId)
     .eq('nuvemshop_store_id', storeId)
     .eq('status', 'active')
@@ -61,7 +61,7 @@ export async function checkoutHandler(ctx) {
   if (connErr) throw new Error(`[checkoutHandler] connection_lookup_failed: ${connErr.message}`);
   if (!conn)   throw new Error(`[checkoutHandler] Conexão ativa não encontrada para company=${companyId} store=${storeId}`);
 
-  const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
+  const accessToken = decryptNuvemshopToken(conn.access_token_enc);
   const client      = createNuvemshopClient({ storeId, accessToken, correlationId });
 
   // ── Buscar checkout completo via API ──────────────────────────────────────

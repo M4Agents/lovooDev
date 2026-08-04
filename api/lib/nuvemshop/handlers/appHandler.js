@@ -40,7 +40,7 @@ export async function appHandler(ctx) {
   // ── 1. Buscar conexão ativa para recuperar access_token ───────────────────
   const { data: conn } = await svc
     .from('nuvemshop_connections')
-    .select('id, encrypted_access_token, script_id')
+    .select('id, access_token_enc, script_id')
     .eq('company_id', companyId)
     .eq('nuvemshop_store_id', storeId)
     .eq('status', 'active')
@@ -48,9 +48,9 @@ export async function appHandler(ctx) {
 
   // ── 2. Remover script de rastreamento (best-effort) ───────────────────────
   // A desconexão prossegue independente do resultado.
-  if (conn?.encrypted_access_token && conn?.script_id) {
+  if (conn?.access_token_enc && conn?.script_id) {
     try {
-      const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
+      const accessToken = decryptNuvemshopToken(conn.access_token_enc);
       await deleteScript({ companyId, storeId, accessToken, correlationId, svc });
     } catch (err) {
       // Erros inesperados de deleteScript não bloqueam a desconexão
