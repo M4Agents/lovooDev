@@ -31,7 +31,8 @@
 // - marketing_opt_in: nunca inferir; persistir apenas quando retornado explicitamente
 // =============================================================================
 
-import { getSupabaseAdmin } from '../../automation/supabaseAdmin.js';
+import { getSupabaseAdmin }                     from '../../automation/supabaseAdmin.js';
+import { handleLeadReentry, hashPayload }       from '../../leads/handleLeadReentry.js';
 
 const GENERIC_NAMES = new Set(['lead', 'lead sem nome', 'lead sem nome', 'unknown', 'usuário']);
 
@@ -262,6 +263,33 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
       .single();
 
     if (error) throw new Error(`[customerSync] update_failed: ${error.message}`);
+
+    // Registrar reentrada no histórico do lead.
+    // externalEventId fixo por customer → idempotente: uma entrada por vínculo,
+    // evitando spam em re-syncs repetidos do mesmo cliente.
+    await handleLeadReentry({
+      newLeadId:      existing.id,
+      existingLeadId: existing.id,
+      companyId,
+      source:         'nuvemshop',
+      originChannel:  'nuvemshop',
+      externalEventId: `ns-cust-${nuvemshopCustomerId}`,
+      metadata: {
+        nuvemshop_customer_id: nuvemshopCustomerId,
+        store_id:              storeId,
+        matched_by:            matchedBy,
+      },
+      supabase: svc,
+    }).catch(err =>
+      console.warn(JSON.stringify({
+        level:                 'warn',
+        event:                 'customer_reentry_failed',
+        company_id:            companyId,
+        nuvemshop_customer_id: nuvemshopCustomerId,
+        error:                 err.message,
+      }))
+    );
+
     return { ok: true, leadId: updated.id, action: 'updated', matchedBy };
   }
 

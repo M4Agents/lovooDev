@@ -13,7 +13,9 @@ import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername
 import { LeadTagsField } from './LeadTagsField';
 import { Tag as TagType } from '../types/tags';
 import { tagsApi } from '../services/tagsApi';
-import { LeadEntriesSection } from './LeadEntriesSection';
+import { LeadEntriesSection }    from './LeadEntriesSection';
+import { NuvemshopLeadTab }      from './Nuvemshop/NuvemshopLeadTab';
+import { useAccessControl }      from '../hooks/useAccessControl';
 import {
   X,
   Save,
@@ -29,7 +31,8 @@ import {
   Globe,
   Share2,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  ShoppingCart,
 } from 'lucide-react';
 
 interface CustomField {
@@ -57,10 +60,11 @@ export const LeadModal: React.FC<LeadModalProps> = ({
 }) => {
   const { company } = useAuth();
   const { canAssignLead, currentUserId, isRestrictedToOwnLeads } = useLeadPermissions();
+  const { canViewNuvemshopData } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
-  const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'entries'>('lead');
+  const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'entries' | 'nuvemshop'>('lead');
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -892,6 +896,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   Histórico de Entradas
                 </button>
               )}
+              {activeLead?.id && activeLead?.nuvemshop_customer_id && canViewNuvemshopData && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('nuvemshop')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-1.5 ${
+                    activeTab === 'nuvemshop'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  Nuvemshop
+                </button>
+              )}
             </nav>
           </div>
 
@@ -1605,6 +1623,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 Linha do tempo de visitas na LP e entradas no CRM (mais recente primeiro).
               </p>
               <LeadEntriesSection leadId={activeLead.id} companyId={company.id} />
+            </div>
+          )}
+
+          {/* Conteúdo da Aba - Nuvemshop */}
+          {activeTab === 'nuvemshop' && activeLead?.id && company?.id && canViewNuvemshopData && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-indigo-500" />
+                Nuvemshop
+              </h3>
+              <NuvemshopLeadTab
+                leadId={String(activeLead.id)}
+                companyId={company.id}
+              />
             </div>
           )}
 

@@ -217,10 +217,6 @@ export const LeadViewModal: React.FC<LeadViewModalProps> = ({
   const responsible = companyUsers.find(
     u => u.user_id === lead.responsible_user_id
   );
-  // #region agent log
-  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b812bc'},body:JSON.stringify({sessionId:'b812bc',location:'LeadViewModal.tsx:263',message:'responsible resolve',data:{responsible_user_id:lead.responsible_user_id,found:!!responsible,found_name:responsible?.display_name,found_email:responsible?.email,users_count:companyUsers.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-
   // Nuvemshop section: visível para todos que podem ver dados NS (inclui seller) + lead tem vínculo
   const hasNuvemshopData = canViewNuvemshopData && (
     !!(lead.nuvemshop_customer_id || lead.nuvemshop_checkout_id)
