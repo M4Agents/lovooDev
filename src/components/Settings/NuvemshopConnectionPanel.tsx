@@ -109,6 +109,46 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
     if (showDashboard) loadMetrics();
   }, [showDashboard]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lê parâmetros retornados pelo callback OAuth e limpa a URL
+  useEffect(() => {
+    const params  = new URLSearchParams(window.location.search);
+    const nvError = params.get('nv_error');
+    const connected = params.get('connected');
+    const storeName = params.get('store');
+
+    if (nvError) {
+      const messages: Record<string, string> = {
+        configuration_error:      'Erro de configuração da integração. Contate o suporte.',
+        token_exchange_failed:    'Falha ao obter token de acesso da Nuvemshop. Tente novamente.',
+        invalid_state:            'Sessão expirada ou inválida. Inicie o processo novamente.',
+        state_already_used:       'Link de autorização já utilizado. Inicie o processo novamente.',
+        membership_revoked:       'Suas permissões foram alteradas durante o processo.',
+        connection_already_active:'Já existe uma loja conectada. Desconecte antes de conectar outra.',
+        nuvemshop_api_unavailable:'API da Nuvemshop indisponível no momento. Tente novamente.',
+        user_denied:              'Autorização cancelada na Nuvemshop.',
+        company_inactive:         'Empresa inativa — não é possível conectar.',
+        connection_save_failed:   'Erro ao salvar a conexão. Tente novamente.',
+      };
+      setActionError(messages[nvError] ?? 'Erro ao conectar a loja. Tente novamente.');
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('nv_error');
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+
+    if (connected === '1') {
+      const msg = storeName
+        ? `Loja "${decodeURIComponent(storeName)}" conectada com sucesso!`
+        : 'Loja Nuvemshop conectada com sucesso!';
+      setSuccessMsg(msg);
+      refetch();
+
+      const newUrl = new URL(window.location.href);
+      ['connected', 'store', 'integration'].forEach(k => newUrl.searchParams.delete(k));
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleConnect() {
     setActionError(null);
     setSuccessMsg(null);
