@@ -203,6 +203,8 @@ export interface CatalogProduct {
   external_source?: string | null
   external_id?: string | null
   external_reference?: string | null
+  /** URL pública do produto na loja de origem (ex: canonical_url da Nuvemshop). Somente leitura — gerenciado pela integração. */
+  product_url?: string | null
   created_at: string
   updated_at: string
 }

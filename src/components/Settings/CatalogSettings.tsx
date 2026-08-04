@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Package, Plus, Pencil, RefreshCw, Tag, Trash2,
   ChevronDown, Search, SlidersHorizontal, X as XIcon,
-  Download, Upload, Sparkles, Building2, ImagePlus,
+  Download, Upload, Sparkles, Building2, ImagePlus, ExternalLink,
 } from 'lucide-react'
 import { catalogApi } from '../../services/catalogApi'
 import { lovooAgentsApi } from '../../services/lovooAgentsApi'
@@ -566,8 +566,9 @@ const ProductForm: React.FC<{
   const [externalSource, setExternalSource] = useState(initial?.external_source ?? '')
   const [externalId, setExternalId] = useState(initial?.external_id ?? '')
   const [externalReference, setExternalReference] = useState(initial?.external_reference ?? '')
+  const productUrl = initial?.product_url ?? null
   const [integrationOpen, setIntegrationOpen] = useState(
-    Boolean(initial?.external_source || initial?.external_id || initial?.external_reference)
+    Boolean(initial?.external_source || initial?.external_id || initial?.external_reference || productUrl)
   )
   const [saving, setSaving] = useState(false)
   const [generatingNotes, setGeneratingNotes] = useState(false)
@@ -972,6 +973,28 @@ const ProductForm: React.FC<{
         </button>
         {integrationOpen && (
           <div className="p-3 space-y-3 border-t border-slate-100">
+            {productUrl && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">URL do produto na loja</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 text-slate-600 select-all cursor-default"
+                    value={productUrl}
+                  />
+                  <a
+                    href={productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir na loja"
+                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 text-slate-500 hover:text-indigo-600 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Gerenciada automaticamente pela integração Nuvemshop.</p>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Origem da integração</label>
               <input
