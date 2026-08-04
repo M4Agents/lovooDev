@@ -136,7 +136,7 @@ function CreateCouponModal({ onClose, onCreate, creating, error }: CreateModalPr
               <input
                 type="number"
                 required
-                min={0.01}
+                min={form.type === 'percentage' ? 1 : 0.01}
                 max={form.type === 'percentage' ? 100 : undefined}
                 step={form.type === 'percentage' ? 1 : 0.01}
                 value={form.value}
