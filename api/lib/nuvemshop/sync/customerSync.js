@@ -82,6 +82,8 @@ async function findExistingLead({ svc, companyId, nuvemshopCustomerId, email, ph
       .eq('company_id', companyId)
       .eq('email', email)
       .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     if (data) {
@@ -103,6 +105,8 @@ async function findExistingLead({ svc, companyId, nuvemshopCustomerId, email, ph
         .eq('company_id', companyId)
         .eq('phone_normalized', phoneNorm)
         .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       if (data) {

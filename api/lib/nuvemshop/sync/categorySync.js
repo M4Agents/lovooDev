@@ -116,6 +116,10 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
     const isNew = Math.abs(
       new Date(upserted.created_at).getTime() - new Date(upserted.updated_at).getTime()
     ) < 2000;
+
+    // Vincular retroativamente produtos que chegaram antes desta categoria ser sincronizada.
+    await linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: upserted.id });
+
     return { ok: true, categoryUuid: upserted.id, action: isNew ? 'created' : 'updated', name: rawName };
   }
 
@@ -162,7 +166,62 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
     throw new Error(`[categorySync.upsertCategory] suffix_insert_failed: ${fallbackErr.message}`);
   }
 
+  // Vincular retroativamente mesmo no caso de sufixo aplicado.
+  await linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: fallback.id });
+
   return { ok: true, categoryUuid: fallback.id, action: 'created_with_suffix', name: nameWithSuffix };
+}
+
+// ── linkOrphanProducts ────────────────────────────────────────────────────────
+
+/**
+ * Após o upsert de uma categoria, vincula retroativamente produtos que:
+ *   - Têm esta categoria em nuvemshop_categories (JSONB) mas category_id = null
+ *
+ * Cenário típico: produto chegou via webhook antes da categoria ser sincronizada.
+ * O productSync salva nuvemshop_categories para exatamente este caso.
+ *
+ * Idempotente: só atualiza produtos que ainda não têm category_id.
+ * Não sobrescreve category_id já definido (respeitando vínculo anterior).
+ *
+ * @param {{ svc, companyId, nuvemshopCategoryId: string, categoryUuid: string }}
+ * @returns {Promise<number>} — quantidade de produtos vinculados
+ */
+async function linkOrphanProducts({ svc, companyId, nuvemshopCategoryId, categoryUuid }) {
+  const { data, error } = await svc
+    .from('products')
+    .update({ category_id: categoryUuid, updated_at: new Date().toISOString() })
+    .eq('company_id', companyId)
+    .eq('external_source', 'nuvemshop')
+    .is('category_id', null)
+    .contains('nuvemshop_categories', [nuvemshopCategoryId])
+    .select('id');
+
+  if (error) {
+    console.warn(JSON.stringify({
+      level:                  'warn',
+      event:                  'category_orphan_link_failed',
+      company_id:             companyId,
+      nuvemshop_category_id:  nuvemshopCategoryId,
+      category_uuid:          categoryUuid,
+      error:                  error.message,
+    }));
+    return 0;
+  }
+
+  const linked = data?.length ?? 0;
+  if (linked > 0) {
+    console.log(JSON.stringify({
+      level:                  'info',
+      event:                  'category_orphan_products_linked',
+      company_id:             companyId,
+      nuvemshop_category_id:  nuvemshopCategoryId,
+      category_uuid:          categoryUuid,
+      products_linked:        linked,
+    }));
+  }
+
+  return linked;
 }
 
 // ── softDeleteCategory ─────────────────────────────────────────────────────────

@@ -335,9 +335,10 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
 
     // ── 5. Determinar filtro temporal ──────────────────────────────────
     // Usa last_activity_at como ponto de corte para busca incremental.
-    // Primeira execução (sem checkpoint): busca os últimos 7 dias como bootstrap.
-    const lastSyncAt = checkpoint?.last_activity_at
-      ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    // Primeira execução (sem checkpoint): data antiga = full scan de toda a loja.
+    // Garante que produtos criados antes da conexão também sejam importados.
+    // 2010-01-01 cobre todo o histórico possível de uma loja Nuvemshop.
+    const lastSyncAt = checkpoint?.last_activity_at ?? '2010-01-01T00:00:00.000Z';
 
     // ── 6. Decriptar token e criar cliente NS ──────────────────────────
     const plainToken = decrypt(conn.access_token_enc);

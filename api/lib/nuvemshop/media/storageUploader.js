@@ -109,7 +109,10 @@ export async function uploadAndUpsertLibrary({
  * O trigger trg_validate_catalog_item_media_company valida no banco que
  * produto, asset e empresa coincidem (proteção multi-tenant).
  *
- * Idempotente: unique index em (company_id, product_id, library_asset_id, usage_role).
+ * Idempotente: SELECT + INSERT/UPDATE explícito.
+ * Motivo: o índice único uq_catalog_item_media_product_asset_role é parcial
+ * (WHERE product_id IS NOT NULL), e o Supabase JS não suporta ON CONFLICT
+ * com índices parciais via lista de colunas.
  *
  * @param {{
  *   svc:            object,
@@ -120,10 +123,36 @@ export async function uploadAndUpsertLibrary({
  * }} params
  */
 export async function upsertCatalogItemMedia({ svc, companyId, productId, libraryAssetId, sortOrder }) {
-  const { error } = await svc
+  // Verificar se o vínculo já existe
+  const { data: existing, error: selectErr } = await svc
     .from('catalog_item_media')
-    .upsert(
-      {
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('product_id', productId)
+    .eq('library_asset_id', libraryAssetId)
+    .eq('usage_role', 'presentation')
+    .maybeSingle();
+
+  if (selectErr) {
+    throw new Error(`catalog_item_media_select_failed: ${selectErr.message}`);
+  }
+
+  if (existing) {
+    // UPDATE: atualiza sort_order e flags se o vínculo já existe
+    const { error: updateErr } = await svc
+      .from('catalog_item_media')
+      .update({ sort_order: sortOrder, is_active: true, use_in_ai: true })
+      .eq('id', existing.id)
+      .eq('company_id', companyId);
+
+    if (updateErr) {
+      throw new Error(`catalog_item_media_update_failed: ${updateErr.message}`);
+    }
+  } else {
+    // INSERT: novo vínculo produto ↔ asset
+    const { error: insertErr } = await svc
+      .from('catalog_item_media')
+      .insert({
         company_id:       companyId,
         product_id:       productId,
         library_asset_id: libraryAssetId,
@@ -133,11 +162,10 @@ export async function upsertCatalogItemMedia({ svc, companyId, productId, librar
         is_active:        true,
         use_in_ai:        true,
         metadata:         {},
-      },
-      { onConflict: 'company_id,product_id,library_asset_id,usage_role', ignoreDuplicates: false },
-    );
+      });
 
-  if (error) {
-    throw new Error(`catalog_item_media_upsert_failed: ${error.message}`);
+    if (insertErr) {
+      throw new Error(`catalog_item_media_insert_failed: ${insertErr.message}`);
+    }
   }
 }
