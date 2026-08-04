@@ -277,6 +277,139 @@ function buildOpportunityRow({
   };
 }
 
+// ── Posicionamento no funil ───────────────────────────────────────────────────
+
+/**
+ * Posiciona uma oportunidade recém-criada no funil padrão da empresa.
+ *
+ * Estratégia:
+ *   1. Busca funil padrão (is_default = true, is_active = true)
+ *   2. Fallback: primeiro funil ativo por data de criação
+ *   3. Busca primeira etapa do funil (position ASC)
+ *   4. Insere em opportunity_funnel_positions
+ *
+ * Falha silenciosa: um erro aqui não cancela a criação da oportunidade.
+ * A oportunidade pode ser posicionada manualmente via UI.
+ *
+ * @param {{ svc, companyId, opportunityId, leadId, now }}
+ */
+async function positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, now }) {
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:entry',message:'funnel positioning start',data:{companyId,opportunityId,leadId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+  // #endregion
+
+  try {
+    // 1. Funil padrão
+    let { data: funnel } = await svc
+      .from('sales_funnels')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    // 2. Fallback: primeiro funil ativo
+    if (!funnel) {
+      const { data: fallback } = await svc
+        .from('sales_funnels')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      funnel = fallback;
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:funnel',message:'funnel resolved',data:{funnelId:funnel?.id??null,found:!!funnel},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    // #endregion
+
+    if (!funnel?.id) {
+      console.warn(JSON.stringify({
+        level:          'warn',
+        event:          'order_opportunity_no_funnel_found',
+        company_id:     companyId,
+        opportunity_id: opportunityId,
+        resolution:     'opportunity_created_without_funnel_position',
+      }));
+      return;
+    }
+
+    // 3. Primeira etapa do funil
+    const { data: firstStage } = await svc
+      .from('funnel_stages')
+      .select('id')
+      .eq('funnel_id', funnel.id)
+      .order('position', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:stage',message:'first stage resolved',data:{stageId:firstStage?.id??null,found:!!firstStage},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    // #endregion
+
+    if (!firstStage?.id) {
+      console.warn(JSON.stringify({
+        level:          'warn',
+        event:          'order_opportunity_no_stage_found',
+        company_id:     companyId,
+        funnel_id:      funnel.id,
+        opportunity_id: opportunityId,
+      }));
+      return;
+    }
+
+    // 4. Posicionar no funil
+    const { error: posErr } = await svc
+      .from('opportunity_funnel_positions')
+      .insert({
+        lead_id:          leadId,
+        opportunity_id:   opportunityId,
+        funnel_id:        funnel.id,
+        stage_id:         firstStage.id,
+        position_in_stage: 0,
+        entered_stage_at: now,
+        updated_at:       now,
+      });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:insert',message:'funnel position insert result',data:{error:posErr?.message??null,funnelId:funnel.id,stageId:firstStage.id,opportunityId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+    // #endregion
+
+    if (posErr) {
+      console.error(JSON.stringify({
+        level:          'error',
+        event:          'order_opportunity_funnel_position_failed',
+        company_id:     companyId,
+        opportunity_id: opportunityId,
+        funnel_id:      funnel.id,
+        stage_id:       firstStage.id,
+        error:          posErr.message,
+      }));
+    } else {
+      console.log(JSON.stringify({
+        level:          'info',
+        event:          'order_opportunity_positioned_in_funnel',
+        company_id:     companyId,
+        opportunity_id: opportunityId,
+        funnel_id:      funnel.id,
+        stage_id:       firstStage.id,
+      }));
+    }
+  } catch (err) {
+    // Falha silenciosa — não cancela a criação da oportunidade
+    console.error(JSON.stringify({
+      level:          'error',
+      event:          'order_opportunity_funnel_position_exception',
+      company_id:     companyId,
+      opportunity_id: opportunityId,
+      error:          err.message,
+    }));
+  }
+}
+
 // ── API pública ───────────────────────────────────────────────────────────────
 
 /**
@@ -360,6 +493,13 @@ export async function upsertOrder({ companyId, storeId, orderData, transactionDa
     if (insertErr) throw new Error(`[orderSync] opportunity_insert_failed: ${insertErr.message}`);
     opportunityId = inserted.id;
     action        = 'created';
+
+    // ── Posicionar no funil padrão da empresa ─────────────────────────────────
+    // Toda oportunidade criada pela integração Nuvemshop deve entrar no funil
+    // padrão da empresa (is_default = true) ou no primeiro funil ativo disponível.
+    // Sem este registro em opportunity_funnel_positions, a oportunidade fica
+    // "flutuante" — visível no banco mas sem funil na UI.
+    await positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, now });
   }
 
   // 4. Sincronizar itens de forma incremental (UUIDs existentes preservados)
