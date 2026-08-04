@@ -248,9 +248,21 @@ function buildOpportunityRow({
   const closedAtStr = closed ? now : null;
   const todayDate   = closed ? now.slice(0, 10) : null;
 
-  const safePayment = extractSafePaymentData(
+  const txPayment   = extractSafePaymentData(
     Array.isArray(transactionData) ? transactionData[0] : null,
   );
+
+  // Enriquecer payment_data com payment_status do pedido como fallback.
+  // Quando não há transação (pagamento manual ou gateway sem registro),
+  // order.payment_status ('paid', 'pending', etc.) é a única fonte disponível.
+  const safePayment = txPayment
+    ? {
+        ...txPayment,
+        payment_status: txPayment.payment_status ?? orderData.payment_status ?? null,
+      }
+    : orderData.payment_status
+      ? { payment_status: orderData.payment_status }
+      : null;
 
   return {
     company_id:            companyId,

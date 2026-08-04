@@ -47,13 +47,17 @@ const SAFE_PAYMENT_FIELDS = ['payment_method', 'installments', 'brand', 'capture
 
 function extractSafePaymentFields(paymentData) {
   if (!paymentData || typeof paymentData !== 'object') {
-    return { payment_method: null, installments: null, brand: null, captured_amount: null };
+    return { payment_status: null, payment_method: null, installments: null, brand: null, captured_amount: null };
   }
   return {
+    // payment_status: status do pagamento ('paid', 'pending', 'open', etc.)
+    // Pode vir da transação (transaction.status) ou do order.payment_status como fallback.
+    payment_status:  paymentData.payment_status  ?? null,
     payment_method:  paymentData.payment_method  ?? null,
     installments:    paymentData.installments    ?? null,
     brand:           paymentData.brand           ?? null,
-    captured_amount: paymentData.captured_amount ?? null,
+    // captured_amount: campo 'amount' no JSONB (armazenado por extractSafePaymentData)
+    captured_amount: paymentData.amount          ?? null,
   };
 }
 

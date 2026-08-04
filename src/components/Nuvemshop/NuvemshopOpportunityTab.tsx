@@ -277,13 +277,14 @@ export function NuvemshopOpportunityTab({ opportunityId, companyId }: NuvemshopO
         <InfoRow
           icon={<CreditCard className="w-4 h-4" />}
           label="Status pagamento"
-          value={
-            data.nuvemshop_raw_status ? (
-              <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${orderStatus.cls}`}>
-                {data.nuvemshop_raw_status}
+          value={(() => {
+            const ps = statusLabel(data.payment_status ?? null);
+            return data.payment_status ? (
+              <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${ps.cls}`}>
+                {ps.label}
               </span>
-            ) : null
-          }
+            ) : null;
+          })()}
         />
         <InfoRow
           icon={<CreditCard className="w-4 h-4" />}

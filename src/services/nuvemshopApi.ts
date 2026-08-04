@@ -164,6 +164,7 @@ export interface NuvemshopOpportunityTabData {
   nuvemshop_tracking_number:    string | null;
   nuvemshop_tracking_url:       string | null;
   nuvemshop_shipping_carrier:   string | null;
+  payment_status:               string | null;
   payment_method:               string | null;
   installments:                 number | null;
   brand:                        string | null;
