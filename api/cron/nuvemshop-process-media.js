@@ -137,6 +137,23 @@ async function processMediaItem({ svc, item, workerId }) {
       svc, companyId, productId, libraryAssetId, sortOrder: position ?? 0,
     });
 
+    // ── 4b. Foto principal do produto (position = 0) ───────────────────────────
+    // A primeira imagem (position=0) define o visual do card do produto no CRM.
+    // Usamos a URL permanente do Storage (nunca a CDN da Nuvemshop).
+    if ((position ?? 0) === 0) {
+      const { data: { publicUrl } } = svc.storage
+        .from('aws-lovoocrm-media')
+        .getPublicUrl(s3Key);
+
+      await svc
+        .from('products')
+        .update({ primary_image_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', productId)
+        .eq('company_id', companyId);
+
+      log('info', 'media_primary_image_set', { product_id: productId });
+    }
+
     // ── 5. Marcar como processed ──────────────────────────────────────────────
     await svc
       .from('nuvemshop_media_queue')

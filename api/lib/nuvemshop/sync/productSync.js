@@ -299,6 +299,8 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
   const mainSku      = extractMainSku(productData);
   const defaultPrice = extractDefaultPrice(productData);
   const costPrice    = extractCostPrice(productData);
+  // canonical_url é multilíngue — extrair PT com fallback
+  const productUrl   = extractMultilingual(productData.canonical_url) ?? null;
 
   // ── Montar row ────────────────────────────────────────────────────────────
   const productRow = {
@@ -310,7 +312,8 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
     name:                  extractMultilingual(productData.name) ?? `Produto #${nuvemshopId}`,
     description:           stripHtml(extractMultilingual(productData.description)) ?? null,
     default_price:         defaultPrice,
-    ...(costPrice !== null ? { cost_price: costPrice } : {}),
+    ...(costPrice    !== null ? { cost_price:   costPrice  } : {}),
+    ...(productUrl   !== null ? { product_url:  productUrl } : {}),
 
     is_active:             productData.published ?? true,
     availability_status:   mapAvailabilityStatus(productData),
