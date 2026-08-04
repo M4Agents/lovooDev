@@ -29,6 +29,7 @@ import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegration
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { InstagramConnectionPanel } from '../components/Settings/InstagramConnectionPanel';
 import { NuvemshopConnectionPanel } from '../components/Settings/NuvemshopConnectionPanel';
+import { NuvemshopBrandIcon } from '../components/icons/NuvemshopIcon';
 import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
 import { ApiImportHistory } from '../components/Settings/ApiImportHistory';
 import { ApiFullDocumentation } from '../components/Settings/ApiFullDocumentation';
@@ -1514,15 +1515,7 @@ export const Settings: React.FC = () => {
                   : 'border-transparent hover:border-purple-400'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
-                    integracoesTab === 'nuvemshop'
-                      ? 'bg-gradient-to-br from-purple-600 to-pink-600'
-                      : 'bg-gradient-to-br from-purple-500 to-pink-500'
-                  }`}>
-                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 7h-1V5A4 4 0 0 0 7 5v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM9 5a2 2 0 0 1 4 0v2H9V5zm10 14H6V9h13v10zm-6-7h-2v-1a1 1 0 0 0-2 0v1H7l1 5h8l1-5h-2v-1a1 1 0 0 0-2 0v1z"/>
-                    </svg>
-                  </div>
+                  <NuvemshopBrandIcon className="w-11 h-11" rounded="rounded-lg" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-base font-semibold text-slate-900">Nuvemshop</h3>
