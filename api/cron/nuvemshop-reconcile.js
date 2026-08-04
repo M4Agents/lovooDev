@@ -310,7 +310,7 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
     return { found: 0, enqueued: 0, skipped: 0, errors: 1, lockBusy: false };
   }
 
-  if (!lockResult?.acquired) {
+  if (!lockResult?.ok) {
     // Registrar evento estruturado de skip por lock ativo — permite diagnóstico de contention
     log('info', 'reconcile_skipped_lock_active', {
       company_id: companyId,
