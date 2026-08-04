@@ -103,16 +103,30 @@ export default async function handler(req, res) {
   const svc = getSupabaseAdmin();
 
   // ── 4. Validar loja e obter company_id ────────────────────────────────────
-  const { data: connection } = await svc
+  // Tópicos LGPD chegam DEPOIS da desconexão (ex: store/redact após uninstall).
+  // Para esses tópicos, aceitar conexões 'disconnected' também — nunca descartar.
+  const LGPD_TOPICS = new Set(['store/redact', 'customers/redact', 'customers/data_request']);
+  const isLgpdTopic = LGPD_TOPICS.has(topic);
+
+  const connectionQuery = svc
     .from('nuvemshop_connections')
     .select('id, company_id, status')
     .eq('nuvemshop_store_id', storeId)
-    .eq('status', 'active')
-    .maybeSingle();
+    .order('connected_at', { ascending: false })
+    .limit(1);
+
+  if (isLgpdTopic) {
+    connectionQuery.in('status', ['active', 'disconnected']);
+  } else {
+    connectionQuery.eq('status', 'active');
+  }
+
+  const { data: connection } = await connectionQuery.maybeSingle();
 
   if (!connection) {
-    // Loja desconhecida ou inativa — responder 200 para não gerar retries da Nuvemshop
-    console.warn('[nuvemshop/webhook] unknown_store storeId=%s topic=%s', storeId, topic);
+    // Loja desconhecida — responder 200 para não gerar retries da Nuvemshop
+    console.warn('[nuvemshop/webhook] unknown_store storeId=%s topic=%s lgpd=%s',
+      storeId, topic, isLgpdTopic);
     return res.status(200).json({ ok: true, queued: false, reason: 'unknown_store' });
   }
 
