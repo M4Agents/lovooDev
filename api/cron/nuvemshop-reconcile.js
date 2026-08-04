@@ -540,24 +540,59 @@ export default async function handler(req, res) {
   const svc = getSupabaseAdmin();
 
   try {
-    // ── Buscar conexões ativas para reconciliação ──────────────────────
-    // Ordena por last_activity_at (ASC) para priorizar empresas menos recentemente sincronizadas
-    const { data: connections, error: connErr } = await svc
+    // ── Prioridade 1: conexões com initial_sync_needed = true ──────────
+    // Novas conexões OAuth aguardam sincronização imediata (a cada 5 min).
+    const { data: priorityConns, error: priorityErr } = await svc
       .from('nuvemshop_connections')
-      .select('id, company_id, store_id: nuvemshop_store_id, access_token_enc')
+      .select('id, company_id, store_id: nuvemshop_store_id, access_token_enc, initial_sync_needed')
       .eq('status', 'active')
-      .order('updated_at', { ascending: true })
+      .eq('initial_sync_needed', true)
       .limit(MAX_COMPANIES_PER_RUN);
 
-    if (connErr) {
-      log('error', 'fetch_connections_error', { error: connErr.message });
-      return res.status(500).json({ error: 'Falha ao buscar conexões ativas' });
+    if (priorityErr) {
+      log('error', 'fetch_priority_connections_error', { error: priorityErr.message });
     }
 
-    if (!connections?.length) {
-      log('info', 'no_active_connections', { worker_id: workerId });
-      return res.status(200).json({ ok: true, message: 'Nenhuma conexão ativa para reconciliar' });
+    // ── Prioridade 2: reconciliação horária normal ────────────────────
+    // Executa apenas quando o minuto é 0 (topo da hora), mesmo o cron rodando a cada 5 min.
+    const isHourlyRun    = new Date().getMinutes() === 0;
+    const priorityIds    = (priorityConns ?? []).map(c => c.company_id);
+
+    let regularConns = [];
+    if (isHourlyRun) {
+      const regularQuery = svc
+        .from('nuvemshop_connections')
+        .select('id, company_id, store_id: nuvemshop_store_id, access_token_enc, initial_sync_needed')
+        .eq('status', 'active')
+        .eq('initial_sync_needed', false)
+        .order('updated_at', { ascending: true })
+        .limit(MAX_COMPANIES_PER_RUN);
+
+      // Excluir empresas já cobertas na prioridade 1 para evitar duplicidade
+      if (priorityIds.length > 0) regularQuery.not('company_id', 'in', `(${priorityIds.join(',')})`);
+
+      const { data: reg, error: regErr } = await regularQuery;
+      if (regErr) log('error', 'fetch_regular_connections_error', { error: regErr.message });
+      regularConns = reg ?? [];
     }
+
+    const connections = [...(priorityConns ?? []), ...regularConns];
+
+    if (!connections.length) {
+      log('info', 'no_connections_to_reconcile', {
+        worker_id: workerId,
+        is_hourly_run: isHourlyRun,
+        priority_count: (priorityConns ?? []).length,
+      });
+      return res.status(200).json({ ok: true, message: 'Nenhuma conexão para reconciliar neste ciclo' });
+    }
+
+    log('info', 'connections_selected', {
+      worker_id: workerId,
+      priority: (priorityConns ?? []).length,
+      regular:  regularConns.length,
+      is_hourly_run: isHourlyRun,
+    });
 
     // ── Processar cada empresa ─────────────────────────────────────────
     const results = [];
@@ -571,7 +606,24 @@ export default async function handler(req, res) {
         runTotals.enqueued += result.enqueued;
         runTotals.skipped  += result.skipped;
         runTotals.errors   += result.errors;
-        results.push({ company_id: conn.company_id, ...result });
+        results.push({ company_id: conn.company_id, initial_sync: conn.initial_sync_needed, ...result });
+
+        // Resetar flag após sincronização inicial completa
+        if (conn.initial_sync_needed) {
+          await svc
+            .from('nuvemshop_connections')
+            .update({ initial_sync_needed: false, updated_at: new Date().toISOString() })
+            .eq('id', conn.id)
+            .catch(e => log('error', 'reset_initial_sync_failed', {
+              company_id: conn.company_id, error: e.message,
+            }));
+
+          log('info', 'initial_sync_completed', {
+            company_id: conn.company_id,
+            store_id:   conn.store_id,
+            worker_id:  workerId,
+          });
+        }
       } catch (err) {
         runTotals.errors++;
         log('error', 'company_fatal', {

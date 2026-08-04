@@ -244,6 +244,7 @@ export default async function handler(req, res) {
                // Script desacoplado: instalação acontece no cron nuvemshop-install-scripts.
                // O callback apenas marca como 'pending' — sem chamada à Scripts API aqui.
                script_status:      'pending',
+               initial_sync_needed: true,
                connected_by:       userId,
                connected_at:       new Date().toISOString(),
                disconnected_by:    null,

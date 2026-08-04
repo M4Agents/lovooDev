@@ -106,7 +106,7 @@
     },
     {
       "path": "/api/cron/nuvemshop-reconcile",
-      "schedule": "0 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "rewrites": [
