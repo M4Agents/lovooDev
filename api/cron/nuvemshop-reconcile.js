@@ -462,13 +462,24 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
     errors++;
     log('error', 'resource_error', {
       company_id: companyId, store_id: storeId, sync_type: syncType,
-      error: err.message,
+      error: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' | '),
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'nuvemshop-reconcile.js:catch',message:'reconcile resource_error',data:{sync_type:syncType,error:err.message,stack:err.stack?.split('\n').slice(0,4).join('|')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const prevCheckpoint = await getCheckpoint(svc, companyId, storeId, syncType).catch(() => null);
     await upsertCheckpoint(svc, companyId, storeId, syncType, {
       status:          'failed',
       last_activity_at: new Date().toISOString(),
-      total_errors:    (await getCheckpoint(svc, companyId, storeId, syncType))?.total_errors ?? 0 + 1,
+      total_errors:    (prevCheckpoint?.total_errors ?? 0) + 1,
+      checkpoint_data: {
+        ...(prevCheckpoint?.checkpoint_data ?? {}),
+        last_error:       err.message,
+        last_error_stack: err.stack?.split('\n').slice(0, 3).join(' | '),
+        last_error_at:    new Date().toISOString(),
+      },
     }).catch(() => {}); // Ignorar falha na atualização do checkpoint de erro
 
     return { found, enqueued, skipped, errors };
