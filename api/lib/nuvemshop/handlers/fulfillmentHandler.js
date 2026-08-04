@@ -25,6 +25,24 @@ import { dispatchNuvemshopTrigger }     from '../../automation/dispatchNuvemshop
 
 const SUPPORTED_TOPICS = new Set(['order/packed', 'order/fulfilled']);
 
+/**
+ * Formata os itens do pedido como texto legível para uso em mensagens de automação.
+ * Cada linha: "Nome × Qtd — R$ Preço"
+ * Retorna string vazia se não houver itens.
+ */
+function formatOrderItems(products) {
+  if (!Array.isArray(products) || products.length === 0) return '';
+  return products
+    .map(p => {
+      const name  = p.name    || p.product_name || 'Produto';
+      const qty   = Number(p.quantity) || 1;
+      const price = Number(p.price)    || 0;
+      const formattedPrice = price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      return `${name} × ${qty} — ${formattedPrice}`;
+    })
+    .join('\n');
+}
+
 export async function fulfillmentHandler(ctx) {
   const { companyId, storeId, topic, payload, correlationId } = ctx;
 
@@ -139,9 +157,12 @@ export async function fulfillmentHandler(ctx) {
       nuvemshopVars: {
         store_id:         storeId,
         order_id:         nuvemshopOrderId,
+        order_number:     String(orderData?.number                      ?? ''),
         order_status:     String(orderData?.status                      ?? ''),
         payment_status:   String(orderData?.payment_status              ?? ''),
+        order_items:      formatOrderItems(orderData?.products),
         tracking_number:  String(orderData?.shipping_tracking_number    ?? ''),
+        tracking_url:     String(orderData?.shipping_tracking_url       ?? ''),
         shipping_carrier: String(orderData?.shipping_carrier_name       ?? ''),
         customer_id:      String(orderData?.customer?.id                ?? ''),
       },

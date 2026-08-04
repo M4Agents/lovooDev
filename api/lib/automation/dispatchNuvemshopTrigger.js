@@ -134,11 +134,33 @@ export async function dispatchNuvemshopTrigger(
       'nuvemshop.checkout_id':      String(nuvemshopVars?.checkout_id      ?? ''),
       'nuvemshop.cart_total':       String(nuvemshopVars?.cart_total       ?? ''),
       'nuvemshop.order_id':         String(nuvemshopVars?.order_id         ?? ''),
+      'nuvemshop.order_number':     String(nuvemshopVars?.order_number     ?? ''),
       'nuvemshop.order_status':     String(nuvemshopVars?.order_status     ?? ''),
       'nuvemshop.payment_status':   String(nuvemshopVars?.payment_status   ?? ''),
+      'nuvemshop.order_items':      String(nuvemshopVars?.order_items      ?? ''),
       'nuvemshop.tracking_number':  String(nuvemshopVars?.tracking_number  ?? ''),
+      'nuvemshop.tracking_url':     String(nuvemshopVars?.tracking_url     ?? ''),
       'nuvemshop.shipping_carrier': String(nuvemshopVars?.shipping_carrier ?? ''),
       'nuvemshop.customer_id':      String(nuvemshopVars?.customer_id      ?? ''),
+      'nuvemshop.checkout_url':     '',  // preenchido abaixo apenas para checkout_abandoned
+    }
+
+    // checkout_url: dado sensível — buscado do banco apenas para o trigger de carrinho abandonado.
+    // Nunca logado. Enviado exclusivamente ao próprio cliente via WhatsApp.
+    if (triggerType === 'nuvemshop.checkout_abandoned' && resolvedLeadId) {
+      try {
+        const { data: leadRow } = await supabase
+          .from('leads')
+          .select('nuvemshop_checkout_url')
+          .eq('id', resolvedLeadId)
+          .eq('company_id', companyId)
+          .maybeSingle()
+
+        nuvemshopLayer['nuvemshop.checkout_url'] = leadRow?.nuvemshop_checkout_url ?? ''
+      } catch (urlErr) {
+        // Falha não deve bloquear o dispatch — a variável permanece vazia
+        console.warn(`${tag} erro ao buscar checkout_url (não crítico):`, urlErr?.message)
+      }
     }
 
     // 5. Montar camada custom_* — campos personalizados do lead

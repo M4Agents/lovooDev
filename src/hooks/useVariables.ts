@@ -264,6 +264,12 @@ const NS_VARS_CHECKOUT: Variable[] = [
     category:    'nuvemshop',
     description: 'Valor total do carrinho abandonado',
   },
+  {
+    key:         'nuvemshop.checkout_url',
+    label:       'Link do Carrinho Abandonado (NS)',
+    category:    'nuvemshop',
+    description: 'Link para o cliente retomar o carrinho e finalizar a compra',
+  },
 ]
 
 const NS_VARS_ORDER: Variable[] = [
@@ -271,7 +277,19 @@ const NS_VARS_ORDER: Variable[] = [
     key:         'nuvemshop.order_id',
     label:       'ID do Pedido (NS)',
     category:    'nuvemshop',
-    description: 'Identificador do pedido na Nuvemshop',
+    description: 'Identificador interno do pedido na Nuvemshop',
+  },
+  {
+    key:         'nuvemshop.order_number',
+    label:       'Número do Pedido (NS)',
+    category:    'nuvemshop',
+    description: 'Número sequencial do pedido exibido ao cliente (ex: 42)',
+  },
+  {
+    key:         'nuvemshop.order_items',
+    label:       'Itens do Pedido (NS)',
+    category:    'nuvemshop',
+    description: 'Lista dos produtos do pedido formatada (nome × qtd — valor)',
   },
   {
     key:         'nuvemshop.order_status',
@@ -293,6 +311,12 @@ const NS_VARS_FULFILLMENT: Variable[] = [
     label:       'Código de Rastreio (NS)',
     category:    'nuvemshop',
     description: 'Código de rastreio do envio',
+  },
+  {
+    key:         'nuvemshop.tracking_url',
+    label:       'Link de Rastreio (NS)',
+    category:    'nuvemshop',
+    description: 'Link da transportadora para acompanhar o envio em tempo real',
   },
   {
     key:         'nuvemshop.shipping_carrier',

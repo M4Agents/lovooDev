@@ -18,9 +18,10 @@ interface MessageTextFormProps {
     buttons?: Array<{ id: string; text: string }>
   }
   onChange: (config: any) => void
+  activeTriggerType?: string
 }
 
-export default function MessageTextForm({ config, onChange }: MessageTextFormProps) {
+export default function MessageTextForm({ config, onChange, activeTriggerType }: MessageTextFormProps) {
   const { company } = useAuth()
   const [message, setMessage] = useState(config.message || '')
   const [buttons, setButtons] = useState(config.buttons || [])
@@ -32,9 +33,11 @@ export default function MessageTextForm({ config, onChange }: MessageTextFormPro
   // Estado da integração Nuvemshop para variáveis condicionais (UX apenas)
   const { hasNuvemshopEver } = useCompanyIntegration()
 
-  // Buscar variáveis disponíveis — inclui NS apenas se a empresa já conectou
+  // Buscar variáveis disponíveis — inclui NS apenas se a empresa já conectou.
+  // activeTriggerType filtra as vars NS para exibir apenas as relevantes ao gatilho ativo.
   const { variables } = useVariables(company?.id || '', {
     hasNuvemshopIntegration: hasNuvemshopEver,
+    activeTriggerType,
   })
   
 

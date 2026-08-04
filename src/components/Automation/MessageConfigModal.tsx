@@ -21,9 +21,10 @@ interface MessageConfigModalProps {
   onClose: () => void
   config: any
   onSave: (config: any) => void
+  activeTriggerType?: string
 }
 
-export default function MessageConfigModal({ isOpen, onClose, config, onSave }: MessageConfigModalProps) {
+export default function MessageConfigModal({ isOpen, onClose, config, onSave, activeTriggerType }: MessageConfigModalProps) {
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   const [selectedType, setSelectedType] = useState<MessageType['id'] | null>(config.messageType || null)
@@ -105,7 +106,7 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave }: 
   const renderForm = () => {
     switch (selectedType) {
       case 'text':
-        return <MessageTextForm config={currentConfig} onChange={handleConfigChange} />
+        return <MessageTextForm config={currentConfig} onChange={handleConfigChange} activeTriggerType={activeTriggerType} />
       case 'user_input':
         return <UserInputForm config={currentConfig} onChange={handleConfigChange} />
       case 'delay':
