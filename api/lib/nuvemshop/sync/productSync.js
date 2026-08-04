@@ -146,6 +146,20 @@ function extractDefaultPrice(product) {
   return isNaN(price) || price < 0 ? 0 : price;
 }
 
+/**
+ * Extrai o preço de custo da variante principal (position=0) ou da primeira variante.
+ * A Nuvemshop retorna cost_price por variante. Usamos a variante principal.
+ * Retorna null se não informado (campo opcional na Nuvemshop).
+ */
+function extractCostPrice(product) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const main     = variants.find(v => v.position === 0) ?? variants[0];
+  const raw      = main?.cost_price ?? product.cost_price ?? null;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const parsed = parseFloat(raw);
+  return isNaN(parsed) || parsed < 0 ? null : parsed;
+}
+
 // ── Resolução de categorias ────────────────────────────────────────────────────
 
 /**
@@ -284,6 +298,7 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
   const variants     = normalizeVariants(productData.variants);
   const mainSku      = extractMainSku(productData);
   const defaultPrice = extractDefaultPrice(productData);
+  const costPrice    = extractCostPrice(productData);
 
   // ── Montar row ────────────────────────────────────────────────────────────
   const productRow = {
@@ -295,6 +310,7 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
     name:                  extractMultilingual(productData.name) ?? `Produto #${nuvemshopId}`,
     description:           stripHtml(extractMultilingual(productData.description)) ?? null,
     default_price:         defaultPrice,
+    ...(costPrice !== null ? { cost_price: costPrice } : {}),
 
     is_active:             productData.published ?? true,
     availability_status:   mapAvailabilityStatus(productData),
