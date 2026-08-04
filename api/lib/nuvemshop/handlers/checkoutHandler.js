@@ -24,7 +24,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin }       from '../../automation/supabaseAdmin.js';
-import { decryptToken }           from '../tokenCrypto.js';
+import { decryptNuvemshopToken }           from '../tokenCrypto.js';
 import { createNuvemshopClient }  from '../nuvemshopClient.js';
 import { upsertCheckout }         from '../sync/checkoutSync.js';
 
@@ -61,7 +61,7 @@ export async function checkoutHandler(ctx) {
   if (connErr) throw new Error(`[checkoutHandler] connection_lookup_failed: ${connErr.message}`);
   if (!conn)   throw new Error(`[checkoutHandler] Conexão ativa não encontrada para company=${companyId} store=${storeId}`);
 
-  const accessToken = decryptToken(conn.encrypted_access_token);
+  const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
   const client      = createNuvemshopClient({ storeId, accessToken, correlationId });
 
   // ── Buscar checkout completo via API ──────────────────────────────────────

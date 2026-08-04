@@ -14,7 +14,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin } from '../../automation/supabaseAdmin.js';
-import { decryptToken }     from '../tokenCrypto.js';
+import { decryptNuvemshopToken }     from '../tokenCrypto.js';
 import { deleteScript }     from '../scriptSync.js';
 
 /**
@@ -50,7 +50,7 @@ export async function appHandler(ctx) {
   // A desconexão prossegue independente do resultado.
   if (conn?.encrypted_access_token && conn?.script_id) {
     try {
-      const accessToken = decryptToken(conn.encrypted_access_token);
+      const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
       await deleteScript({ companyId, storeId, accessToken, correlationId, svc });
     } catch (err) {
       // Erros inesperados de deleteScript não bloqueam a desconexão

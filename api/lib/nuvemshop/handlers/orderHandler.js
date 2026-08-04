@@ -17,7 +17,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin }        from '../../automation/supabaseAdmin.js';
-import { decryptToken }            from '../tokenCrypto.js';
+import { decryptNuvemshopToken }            from '../tokenCrypto.js';
 import { createNuvemshopClient }   from '../nuvemshopClient.js';
 import { upsertOrder }             from '../sync/orderSync.js';
 
@@ -57,7 +57,7 @@ export async function orderHandler(ctx) {
   if (connErr) throw new Error(`[orderHandler] connection_lookup_failed: ${connErr.message}`);
   if (!conn)   throw new Error(`[orderHandler] Conexão ativa não encontrada para company=${companyId} store=${storeId}`);
 
-  const accessToken = decryptToken(conn.encrypted_access_token);
+  const accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
   const client      = createNuvemshopClient({ storeId, accessToken, correlationId });
 
   // ── Buscar pedido completo ─────────────────────────────────────────────────

@@ -31,7 +31,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js';
-import { decryptToken }     from '../lib/nuvemshop/tokenCrypto.js';
+import { decryptNuvemshopToken }     from '../lib/nuvemshop/tokenCrypto.js';
 import { createScript }     from '../lib/nuvemshop/scriptSync.js';
 
 const MAX_BATCH       = 10;  // Máx. scripts instalados por execução
@@ -177,7 +177,7 @@ export default async function handler(req, res) {
     // ── 2b. Descriptografar token ─────────────────────────────────────────
     let accessToken;
     try {
-      accessToken = decryptToken(access_token_enc);
+      accessToken = decryptNuvemshopToken(access_token_enc);
     } catch (err) {
       console.warn(JSON.stringify({
         level:          'warn',

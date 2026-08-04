@@ -31,7 +31,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin }       from '../automation/supabaseAdmin.js';
-import { decryptToken }           from './tokenCrypto.js';
+import { decryptNuvemshopToken }           from './tokenCrypto.js';
 import { createNuvemshopClient }  from './nuvemshopClient.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ async function resolveClient({ svc, companyId, storeId, correlationId }) {
 
   let accessToken;
   try {
-    accessToken = decryptToken(conn.encrypted_access_token);
+    accessToken = decryptNuvemshopToken(conn.encrypted_access_token);
   } catch {
     throw { code: 'token_decrypt_error', message: 'Erro interno de configuração.', status: 500 };
   }
