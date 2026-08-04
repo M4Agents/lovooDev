@@ -138,8 +138,9 @@ export default async function handler(req, res) {
     ?? 'https://app.lovoocrm.com/api/nuvemshop/connect/callback';
 
   if (!clientId || !clientSecret) {
-    console.error('[nuvemshop/callback] Credenciais de app não configuradas');
-    return redirectError(res, 'configuration_error');
+    console.error('[nuvemshop/callback] missing_credentials clientId=%s hasSecret=%s',
+      !!clientId, !!clientSecret);
+    return redirectError(res, 'missing_credentials');
   }
 
   // ── 4. Trocar code → access_token ────────────────────────────────────────
@@ -210,7 +211,7 @@ export default async function handler(req, res) {
     accessTokenEnc = encryptNuvemshopToken(accessToken);
   } catch (err) {
     console.error('[nuvemshop/callback] encrypt_failed:', err?.message);
-    return redirectError(res, 'configuration_error');
+    return redirectError(res, 'encrypt_failed');
   }
 
          // ── 7. UPSERT nuvemshop_connections ───────────────────────────────────────

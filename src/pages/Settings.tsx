@@ -279,6 +279,8 @@ export const Settings: React.FC = () => {
         connection_already_active: 'Já existe uma loja conectada. Desconecte antes de reconectar.',
         connection_save_failed:   'Erro ao salvar a conexão. Tente novamente.',
         configuration_error:      'Erro de configuração do servidor.',
+        missing_credentials:      'Credenciais do app Nuvemshop não configuradas no servidor.',
+        encrypt_failed:           'Falha na criptografia do token. Verifique NUVEMSHOP_TOKEN_ENC_KEY_V1 (deve ser 64 chars hex).',
       };
       const msg = errorMessages[nvError] ?? 'Erro ao conectar loja Nuvemshop. Tente novamente.';
       setTimeout(() => alert(`Erro: ${msg}`), 300);
