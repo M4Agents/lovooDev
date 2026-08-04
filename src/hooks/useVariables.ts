@@ -17,6 +17,13 @@ export interface Variable {
 interface UseVariablesOptions {
   /** Se true, inclui variáveis da integração Nuvemshop (apenas para empresas que já conectaram) */
   hasNuvemshopIntegration?: boolean
+  /**
+   * Tipo do gatilho ativo no editor.
+   * Quando informado e é um gatilho nuvemshop.*, filtra as variáveis NS para
+   * exibir apenas as que serão populadas em runtime naquele contexto.
+   * Quando ausente ou não é nuvemshop.*, retorna todas as variáveis NS disponíveis.
+   */
+  activeTriggerType?: string
 }
 
 interface UseVariablesReturn {
@@ -38,14 +45,15 @@ export function useVariables(companyId: string, options: UseVariablesOptions = {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const { hasNuvemshopIntegration = false } = options
+  const { hasNuvemshopIntegration = false, activeTriggerType } = options
 
   useEffect(() => {
+    const nuvemshopVars = hasNuvemshopIntegration
+      ? getNuvemshopVariables(activeTriggerType)
+      : []
+
     if (!companyId) {
-      setVariables([
-        ...getStaticVariables(),
-        ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
-      ])
+      setVariables([...getStaticVariables(), ...nuvemshopVars])
       setLoading(false)
       return
     }
@@ -65,18 +73,15 @@ export function useVariables(companyId: string, options: UseVariablesOptions = {
             category: 'custom' as const,
             description: `Campo personalizado: ${field.field_label}`
           })),
-          // Variáveis Nuvemshop: apenas se a empresa já conectou (active OU disconnected)
-          ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
+          // Variáveis Nuvemshop filtradas pelo trigger ativo
+          ...nuvemshopVars,
         ]
 
         setVariables(allVariables)
       } catch (err) {
         console.error('Erro ao buscar variáveis:', err)
         setError(err instanceof Error ? err.message : 'Erro ao carregar variáveis')
-        setVariables([
-          ...getStaticVariables(),
-          ...(hasNuvemshopIntegration ? getNuvemshopVariables() : []),
-        ])
+        setVariables([...getStaticVariables(), ...nuvemshopVars])
       } finally {
         setLoading(false)
       }
@@ -84,7 +89,7 @@ export function useVariables(companyId: string, options: UseVariablesOptions = {
 
     fetchVariables()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, hasNuvemshopIntegration])
+  }, [companyId, hasNuvemshopIntegration, activeTriggerType])
 
   return { variables, loading, error }
 }
@@ -230,71 +235,106 @@ function getStaticVariables(): Variable[] {
   ]
 }
 
+// Variáveis disponíveis por família de trigger Nuvemshop
+const NS_VARS_BASE: Variable[] = [
+  {
+    key:         'nuvemshop.customer_id',
+    label:       'ID do Cliente (NS)',
+    category:    'nuvemshop',
+    description: 'Identificador único do cliente na Nuvemshop',
+  },
+  {
+    key:         'nuvemshop.store_id',
+    label:       'ID da Loja (NS)',
+    category:    'nuvemshop',
+    description: 'Identificador da loja Nuvemshop vinculada',
+  },
+]
+
+const NS_VARS_CHECKOUT: Variable[] = [
+  {
+    key:         'nuvemshop.checkout_id',
+    label:       'ID do Carrinho Abandonado (NS)',
+    category:    'nuvemshop',
+    description: 'Identificador do carrinho abandonado na Nuvemshop',
+  },
+  {
+    key:         'nuvemshop.cart_total',
+    label:       'Valor do Carrinho (NS)',
+    category:    'nuvemshop',
+    description: 'Valor total do carrinho abandonado',
+  },
+]
+
+const NS_VARS_ORDER: Variable[] = [
+  {
+    key:         'nuvemshop.order_id',
+    label:       'ID do Pedido (NS)',
+    category:    'nuvemshop',
+    description: 'Identificador do pedido na Nuvemshop',
+  },
+  {
+    key:         'nuvemshop.order_status',
+    label:       'Status do Pedido (NS)',
+    category:    'nuvemshop',
+    description: 'Status atual do pedido (open, closed, cancelled)',
+  },
+  {
+    key:         'nuvemshop.payment_status',
+    label:       'Status de Pagamento (NS)',
+    category:    'nuvemshop',
+    description: 'Status do pagamento do pedido',
+  },
+]
+
+const NS_VARS_FULFILLMENT: Variable[] = [
+  {
+    key:         'nuvemshop.tracking_number',
+    label:       'Código de Rastreio (NS)',
+    category:    'nuvemshop',
+    description: 'Código de rastreio do envio',
+  },
+  {
+    key:         'nuvemshop.shipping_carrier',
+    label:       'Transportadora (NS)',
+    category:    'nuvemshop',
+    description: 'Transportadora responsável pelo envio',
+  },
+]
+
 /**
  * Retorna variáveis específicas da integração Nuvemshop.
  * Só deve ser incluído para empresas que já conectaram (hasNuvemshopIntegration = true).
- * Empresas que nunca conectaram não devem ver estas variáveis no autocomplete.
+ *
+ * Quando `activeTriggerType` é um gatilho nuvemshop.*, filtra para exibir apenas
+ * variáveis que serão populadas em runtime — evita sugerir tracking_number em checkout,
+ * ou checkout_id em pedidos.
+ *
+ * @param activeTriggerType Tipo do gatilho ativo no editor (opcional)
  */
-export function getNuvemshopVariables(): Variable[] {
-  return [
-    // Lead / Cliente
-    {
-      key:         'nuvemshop.customer_id',
-      label:       'ID do Cliente (NS)',
-      category:    'nuvemshop',
-      description: 'Identificador único do cliente na Nuvemshop',
-    },
-    {
-      key:         'nuvemshop.store_id',
-      label:       'ID da Loja (NS)',
-      category:    'nuvemshop',
-      description: 'Identificador da loja Nuvemshop vinculada',
-    },
-    // Carrinho Abandonado
-    {
-      key:         'nuvemshop.checkout_id',
-      label:       'ID do Carrinho Abandonado (NS)',
-      category:    'nuvemshop',
-      description: 'Identificador do carrinho abandonado na Nuvemshop',
-    },
-    {
-      key:         'nuvemshop.cart_total',
-      label:       'Valor do Carrinho (NS)',
-      category:    'nuvemshop',
-      description: 'Valor total do carrinho abandonado',
-    },
-    // Pedido / Oportunidade
-    {
-      key:         'nuvemshop.order_id',
-      label:       'ID do Pedido (NS)',
-      category:    'nuvemshop',
-      description: 'Identificador do pedido na Nuvemshop',
-    },
-    {
-      key:         'nuvemshop.order_status',
-      label:       'Status do Pedido (NS)',
-      category:    'nuvemshop',
-      description: 'Status atual do pedido (open, closed, cancelled)',
-    },
-    {
-      key:         'nuvemshop.payment_status',
-      label:       'Status de Pagamento (NS)',
-      category:    'nuvemshop',
-      description: 'Status do pagamento do pedido',
-    },
-    {
-      key:         'nuvemshop.tracking_number',
-      label:       'Código de Rastreio (NS)',
-      category:    'nuvemshop',
-      description: 'Código de rastreio do envio',
-    },
-    {
-      key:         'nuvemshop.shipping_carrier',
-      label:       'Transportadora (NS)',
-      category:    'nuvemshop',
-      description: 'Transportadora responsável pelo envio',
-    },
-  ]
+export function getNuvemshopVariables(activeTriggerType?: string): Variable[] {
+  // Sem filtro: retornar todas as variáveis (context desconhecido)
+  if (!activeTriggerType || !activeTriggerType.startsWith('nuvemshop.')) {
+    return [
+      ...NS_VARS_BASE,
+      ...NS_VARS_CHECKOUT,
+      ...NS_VARS_ORDER,
+      ...NS_VARS_FULFILLMENT,
+    ]
+  }
+
+  // checkout_abandoned → customer_id, store_id, checkout_id, cart_total
+  if (activeTriggerType === 'nuvemshop.checkout_abandoned') {
+    return [...NS_VARS_BASE, ...NS_VARS_CHECKOUT]
+  }
+
+  // order_fulfilled / order_packed → + tracking_number, shipping_carrier
+  if (activeTriggerType === 'nuvemshop.order_fulfilled' || activeTriggerType === 'nuvemshop.order_packed') {
+    return [...NS_VARS_BASE, ...NS_VARS_ORDER, ...NS_VARS_FULFILLMENT]
+  }
+
+  // order_created / order_paid / order_cancelled → customer_id, store_id, order_id, status, payment_status
+  return [...NS_VARS_BASE, ...NS_VARS_ORDER]
 }
 
 /**

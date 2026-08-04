@@ -17,10 +17,11 @@
 // - Não converte status manualmente (delega ao statusMapper via fulfillmentSync)
 // =============================================================================
 
-import { getSupabaseAdmin }       from '../../automation/supabaseAdmin.js';
-import { decryptNuvemshopToken }           from '../tokenCrypto.js';
-import { createNuvemshopClient }  from '../nuvemshopClient.js';
-import { upsertFulfillment }      from '../sync/fulfillmentSync.js';
+import { getSupabaseAdmin }             from '../../automation/supabaseAdmin.js';
+import { decryptNuvemshopToken }        from '../tokenCrypto.js';
+import { createNuvemshopClient }        from '../nuvemshopClient.js';
+import { upsertFulfillment }            from '../sync/fulfillmentSync.js';
+import { dispatchNuvemshopTrigger }     from '../../automation/dispatchNuvemshopTrigger.js';
 
 const SUPPORTED_TOPICS = new Set(['order/packed', 'order/fulfilled']);
 
@@ -117,6 +118,43 @@ export async function fulfillmentHandler(ctx) {
     timeline_inserted:   syncResult.timelineInserted,
     correlation_id:      correlationId,
   }));
+
+  // ── Disparar automações (fire-and-forget) ─────────────────────────────────
+  // leadId não está disponível neste handler — o dispatcher resolve via opportunityId
+  const TOPIC_TO_TRIGGER = {
+    'order/packed':    'nuvemshop.order_packed',
+    'order/fulfilled': 'nuvemshop.order_fulfilled',
+  };
+  const triggerType = TOPIC_TO_TRIGGER[topic];
+
+  if (triggerType && syncResult.opportunityId) {
+    // Aguardado (await) para garantir conclusão dentro do lifetime da Vercel Function.
+    // O dispatcher tem fail-safe total (try/catch externo) — nunca lança exceção.
+    // leadId é resolvido internamente pelo dispatcher via opportunityId.
+    await dispatchNuvemshopTrigger({
+      companyId,
+      triggerType,
+      leadId:        null,
+      opportunityId: syncResult.opportunityId,
+      nuvemshopVars: {
+        store_id:         storeId,
+        order_id:         nuvemshopOrderId,
+        order_status:     String(orderData?.status                      ?? ''),
+        payment_status:   String(orderData?.payment_status              ?? ''),
+        tracking_number:  String(orderData?.shipping_tracking_number    ?? ''),
+        shipping_carrier: String(orderData?.shipping_carrier_name       ?? ''),
+        customer_id:      String(orderData?.customer?.id                ?? ''),
+      },
+    }).catch(err => console.error(JSON.stringify({
+      level:              'error',
+      event:              'fulfillment_automation_dispatch_failed',
+      trigger:            triggerType,
+      company_id:         companyId,
+      nuvemshop_order_id: nuvemshopOrderId,
+      correlation_id:     correlationId,
+      message:            err?.message,
+    })));
+  }
 
   return {
     ok:               true,

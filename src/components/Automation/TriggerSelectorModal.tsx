@@ -5,8 +5,9 @@
 // =====================================================
 
 import { useState } from 'react'
-import { X, UserPlus, MessageCircle, TrendingUp, Tag, Clock, RefreshCw, UserCheck, UserMinus, RotateCcw, ChevronRight } from 'lucide-react'
+import { X, UserPlus, MessageCircle, TrendingUp, Tag, Clock, RefreshCw, UserCheck, UserMinus, RotateCcw, ChevronRight, ShoppingCart, Package, Truck, XCircle, DollarSign } from 'lucide-react'
 import type { TriggerConfig } from '../../types/automation'
+import { useCompanyIntegration } from '../../hooks/useCompanyIntegration'
 
 interface TriggerSelectorModalProps {
   isOpen: boolean
@@ -33,7 +34,7 @@ interface TriggerCategory {
   triggers: TriggerOption[]
 }
 
-const TRIGGER_CATEGORIES: TriggerCategory[] = [
+const BASE_TRIGGER_CATEGORIES: TriggerCategory[] = [
   {
     id: 'messages',
     title: 'Mensagens',
@@ -157,13 +158,70 @@ const TRIGGER_CATEGORIES: TriggerCategory[] = [
   }
 ]
 
+const NUVEMSHOP_CATEGORY: TriggerCategory = {
+  id: 'nuvemshop',
+  title: 'Nuvemshop',
+  icon: '🛒',
+  triggers: [
+    {
+      type: 'nuvemshop.checkout_abandoned',
+      label: 'Carrinho Abandonado',
+      description: 'Dispara quando um cliente abandona o carrinho na loja Nuvemshop',
+      icon: ShoppingCart,
+      color: 'orange',
+    },
+    {
+      type: 'nuvemshop.order_created',
+      label: 'Pedido Criado',
+      description: 'Dispara quando um novo pedido é criado na loja',
+      icon: Package,
+      color: 'blue',
+    },
+    {
+      type: 'nuvemshop.order_paid',
+      label: 'Pedido Pago',
+      description: 'Dispara quando o pagamento do pedido é confirmado',
+      icon: DollarSign,
+      color: 'green',
+    },
+    {
+      type: 'nuvemshop.order_cancelled',
+      label: 'Pedido Cancelado',
+      description: 'Dispara quando um pedido é cancelado na loja',
+      icon: XCircle,
+      color: 'red',
+    },
+    {
+      type: 'nuvemshop.order_fulfilled',
+      label: 'Pedido Enviado (com rastreio)',
+      description: 'Dispara quando o pedido é enviado com código de rastreio',
+      icon: Truck,
+      color: 'purple',
+    },
+    {
+      type: 'nuvemshop.order_packed',
+      label: 'Pedido Embalado',
+      description: 'Dispara quando o pedido é embalado e está pronto para envio',
+      icon: Package,
+      color: 'indigo',
+    },
+  ]
+}
+
 export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: TriggerSelectorModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('messages')
   // selectedKey = tipo composto: "type:defaultConfig.channel" (ex: "message.received:instagram")
   // Necessário porque dois triggers podem ter o mesmo type com channel diferente.
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
+  const { hasNuvemshopEver, isDisconnected } = useCompanyIntegration()
+
   if (!isOpen) return null
+
+  // Montar lista de categorias dinamicamente: inclui Nuvemshop apenas se a empresa já conectou
+  const TRIGGER_CATEGORIES: TriggerCategory[] = hasNuvemshopEver
+    ? [...BASE_TRIGGER_CATEGORIES, NUVEMSHOP_CATEGORY]
+    : BASE_TRIGGER_CATEGORIES
 
   const currentCategory = TRIGGER_CATEGORIES.find(cat => cat.id === selectedCategory)
 
@@ -250,13 +308,24 @@ export default function TriggerSelectorModal({ isOpen, onClose, onSelect }: Trig
                   }`}
                 >
                   <span className="text-xl">{category.icon}</span>
-                  <span className="text-sm font-medium">{category.title}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{category.title}</span>
+                    {category.id === 'nuvemshop' && isDisconnected && (
+                      <span className="block text-[10px] text-amber-600 leading-tight">desconectada</span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
 
             {/* Triggers List */}
             <div className="flex-1 overflow-y-auto p-6">
+              {selectedCategory === 'nuvemshop' && isDisconnected && (
+                <div className="mb-4 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <span className="mt-0.5">⚠️</span>
+                  <span>A integração Nuvemshop está desconectada. Automações criadas aqui não receberão novos eventos até a reconexão. Gatilhos configurados continuam disponíveis para replay manual.</span>
+                </div>
+              )}
               <div className="space-y-3">
                 {currentCategory?.triggers.map((trigger) => {
                   const Icon = trigger.icon

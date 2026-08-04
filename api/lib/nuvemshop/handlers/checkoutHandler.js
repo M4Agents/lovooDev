@@ -23,10 +23,11 @@
 // 'checkout_abandoned'. Fluxo de WhatsApp/IA não é implementado nesta fase.
 // =============================================================================
 
-import { getSupabaseAdmin }       from '../../automation/supabaseAdmin.js';
-import { decryptNuvemshopToken }           from '../tokenCrypto.js';
-import { createNuvemshopClient }  from '../nuvemshopClient.js';
-import { upsertCheckout }         from '../sync/checkoutSync.js';
+import { getSupabaseAdmin }                  from '../../automation/supabaseAdmin.js';
+import { decryptNuvemshopToken }             from '../tokenCrypto.js';
+import { createNuvemshopClient }             from '../nuvemshopClient.js';
+import { upsertCheckout }                    from '../sync/checkoutSync.js';
+import { dispatchNuvemshopTrigger }          from '../../automation/dispatchNuvemshopTrigger.js';
 
 export async function checkoutHandler(ctx) {
   const { companyId, storeId, topic, payload, correlationId } = ctx;
@@ -114,23 +115,45 @@ export async function checkoutHandler(ctx) {
     // Nunca logar: abandoned_checkout_url, nuvemshop_checkout_url
   }));
 
-  // ── Preparar gatilho de automação ────────────────────────────────────────
-  // Payload mínimo: apenas os campos necessários para identificar o evento.
-  // checkout_url NUNCA incluído — permanece exclusivamente no banco.
-  // O engine de automações acessa a URL via lead_id quando necessário.
-  // Não implementado nesta fase: fluxo de WhatsApp/IA.
-  const automationPayload = {
-    event:       'checkout_abandoned',
-    company_id:  companyId,
-    store_id:    storeId,
-    lead_id:     syncResult.leadId,
-    checkout_id: syncResult.checkoutId,
-  };
+  // ── Disparar automações ───────────────────────────────────────────────────
+  // Aguardado (await) para garantir conclusão dentro do lifetime da Vercel Function.
+  // O dispatcher tem fail-safe total (try/catch externo) — nunca lança exceção.
+  // checkout_url NUNCA incluído nas variáveis de automação.
+  if (syncResult.leadId) {
+    await dispatchNuvemshopTrigger({
+      companyId,
+      triggerType: 'nuvemshop.checkout_abandoned',
+      leadId:      syncResult.leadId,
+      opportunityId: null,
+      nuvemshopVars: {
+        store_id:    storeId,
+        checkout_id: String(syncResult.checkoutId ?? ''),
+        cart_total:  String(syncResult.cartTotal   ?? checkoutData?.total_price ?? ''),
+        customer_id: String(checkoutData?.customer?.id ?? ''),
+      },
+    }).catch(err => console.error(JSON.stringify({
+      level:          'error',
+      event:          'checkout_automation_dispatch_failed',
+      company_id:     companyId,
+      checkout_id:    syncResult.checkoutId,
+      correlation_id: correlationId,
+      message:        err?.message,
+    })));
+  } else {
+    console.warn(JSON.stringify({
+      level:          'warn',
+      event:          'automation_skipped_no_lead',
+      trigger:        'nuvemshop.checkout_abandoned',
+      company_id:     companyId,
+      checkout_id:    syncResult.checkoutId,
+      reason:         'checkoutSync did not return leadId',
+      correlation_id: correlationId,
+    }));
+  }
 
   return {
-    ok:              true,
-    leadId:          syncResult.leadId,
-    action:          syncResult.action,
-    automationReady: automationPayload,
+    ok:     true,
+    leadId: syncResult.leadId,
+    action: syncResult.action,
   };
 }

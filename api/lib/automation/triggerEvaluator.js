@@ -31,6 +31,13 @@ function matchesTriggerConditions(flow, event) {
       case 'tag.added':
       case 'tag.removed':               return matchesTag(trigger, event.data)
       case 'message.received':          return matchesMessageReceived(trigger, event.data)
+      // Nuvemshop — cases explícitos para auditabilidade e filtros futuros
+      case 'nuvemshop.checkout_abandoned': return matchesNuvemshopCheckoutAbandoned(trigger, event.data)
+      case 'nuvemshop.order_created':
+      case 'nuvemshop.order_paid':
+      case 'nuvemshop.order_cancelled':
+      case 'nuvemshop.order_fulfilled':
+      case 'nuvemshop.order_packed':      return true // sem filtros na v1
       default: return true
     }
   })
@@ -220,6 +227,13 @@ function matchesMessageReceived(trigger, eventData) {
   return true
 }
 
+// nuvemshop.checkout_abandoned — filtro opcional por valor mínimo do carrinho
+function matchesNuvemshopCheckoutAbandoned(trigger, eventData) {
+  const config = trigger.config || {}
+  if (config.minCartTotal && Number(eventData?.cart_total) < Number(config.minCartTotal)) return false
+  return true
+}
+
 export {
   CLICK_TO_CHAT_LINK_SOURCE,
   matchesTriggerConditions,
@@ -231,6 +245,7 @@ export {
   matchesOpportunityOwner,
   matchesTag,
   matchesMessageReceived,
+  matchesNuvemshopCheckoutAbandoned,
   normalizeText,
   extractInlineFlags,
 }

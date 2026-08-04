@@ -16,10 +16,11 @@
 // Não cria produtos automaticamente (responsabilidade do productHandler/reconciliação).
 // =============================================================================
 
-import { getSupabaseAdmin }        from '../../automation/supabaseAdmin.js';
-import { decryptNuvemshopToken }            from '../tokenCrypto.js';
-import { createNuvemshopClient }   from '../nuvemshopClient.js';
-import { upsertOrder }             from '../sync/orderSync.js';
+import { getSupabaseAdmin }              from '../../automation/supabaseAdmin.js';
+import { decryptNuvemshopToken }         from '../tokenCrypto.js';
+import { createNuvemshopClient }         from '../nuvemshopClient.js';
+import { upsertOrder }                   from '../sync/orderSync.js';
+import { dispatchNuvemshopTrigger }      from '../../automation/dispatchNuvemshopTrigger.js';
 
 const SUPPORTED_TOPICS = new Set(['order/created', 'order/paid', 'order/updated', 'order/cancelled']);
 
@@ -124,5 +125,51 @@ export async function orderHandler(ctx) {
     correlation_id:     correlationId,
   }));
 
-  return { ok: true, opportunityId: syncResult.opportunityId, action: syncResult.action };
+  // ── Disparar automações (fire-and-forget) ─────────────────────────────────
+  const TOPIC_TO_TRIGGER = {
+    'order/created':   'nuvemshop.order_created',
+    'order/paid':      'nuvemshop.order_paid',
+    'order/cancelled': 'nuvemshop.order_cancelled',
+  };
+  const triggerType = TOPIC_TO_TRIGGER[topic];
+
+  if (triggerType) {
+    if (syncResult.leadId) {
+      // Aguardado (await) para garantir conclusão dentro do lifetime da Vercel Function.
+      // O dispatcher tem fail-safe total (try/catch externo) — nunca lança exceção.
+      await dispatchNuvemshopTrigger({
+        companyId,
+        triggerType,
+        leadId:        syncResult.leadId,
+        opportunityId: syncResult.opportunityId ?? null,
+        nuvemshopVars: {
+          store_id:       storeId,
+          order_id:       nuvemshopOrderId,
+          order_status:   String(orderData?.status          ?? ''),
+          payment_status: String(orderData?.payment_status  ?? ''),
+          customer_id:    String(orderData?.customer?.id    ?? ''),
+        },
+      }).catch(err => console.error(JSON.stringify({
+        level:              'error',
+        event:              'order_automation_dispatch_failed',
+        trigger:            triggerType,
+        company_id:         companyId,
+        nuvemshop_order_id: nuvemshopOrderId,
+        correlation_id:     correlationId,
+        message:            err?.message,
+      })));
+    } else {
+      console.warn(JSON.stringify({
+        level:              'warn',
+        event:              'automation_skipped_no_lead',
+        trigger:            triggerType,
+        company_id:         companyId,
+        nuvemshop_order_id: nuvemshopOrderId,
+        reason:             'orderSync did not return leadId',
+        correlation_id:     correlationId,
+      }));
+    }
+  }
+
+  return { ok: true, opportunityId: syncResult.opportunityId, leadId: syncResult.leadId, action: syncResult.action };
 }

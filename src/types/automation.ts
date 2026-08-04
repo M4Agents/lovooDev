@@ -315,6 +315,13 @@ export type TriggerType =
   | 'opportunity.restored'
   | 'manual.execution'
   | 'schedule.time'
+  // Nuvemshop — visíveis apenas para empresas com integração (active ou disconnected)
+  | 'nuvemshop.checkout_abandoned'
+  | 'nuvemshop.order_created'
+  | 'nuvemshop.order_paid'
+  | 'nuvemshop.order_cancelled'
+  | 'nuvemshop.order_fulfilled'
+  | 'nuvemshop.order_packed'
 
 export type ComparisonType = 
   | 'contains'
