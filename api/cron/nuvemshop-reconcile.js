@@ -48,7 +48,7 @@
 import { randomBytes }              from 'crypto';
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js';
 import { createNuvemshopClient }    from '../lib/nuvemshop/nuvemshopClient.js';
-import { decrypt }                  from '../lib/nuvemshop/tokenCrypto.js';
+import { decryptNuvemshopToken }    from '../lib/nuvemshop/tokenCrypto.js';
 // Versões centralizadas — única fonte de verdade para controle de schema
 import { CURRENT_SYNC_VERSION,
          SCHEMA_VERSION }           from '../lib/nuvemshop/syncVersion.js';
@@ -227,8 +227,11 @@ async function upsertCheckpoint(svc, companyId, storeId, syncType, patch) {
  * — protege contra operações pesadas não planejadas.
  */
 async function checkVersion(svc, companyId, storeId, syncType, checkpoint) {
-  const storedVersion = checkpoint?.checkpoint_data?.sync_version;
-  const storedSchema  = checkpoint?.checkpoint_data?.schema_version;
+  // Sem checkpoint (primeira execução): nenhuma versão para validar — prosseguir.
+  if (!checkpoint) return true;
+
+  const storedVersion = checkpoint.checkpoint_data?.sync_version;
+  const storedSchema  = checkpoint.checkpoint_data?.schema_version;
 
   const versionOk = storedVersion === CURRENT_SYNC_VERSION;
   const schemaOk  = storedSchema  === SCHEMA_VERSION;
@@ -290,13 +293,22 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
 
   // ── 1. Adquirir lock para evitar reconciliação paralela do mesmo tipo ──
   // Reutiliza a infraestrutura de lock existente com resource_type='reconcile'
-  const { data: lockResult } = await svc.rpc('acquire_nuvemshop_lock', {
+  const { data: lockResult, error: lockErr } = await svc.rpc('acquire_nuvemshop_lock', {
     p_company_id:    companyId,
+    p_store_id:      storeId,
     p_resource_type: 'reconcile',
     p_resource_id:   syncType,
     p_worker_id:     workerId,
     p_ttl_seconds:   LOCK_TTL_SECONDS,
   });
+
+  if (lockErr) {
+    log('error', 'lock_acquire_rpc_error', {
+      company_id: companyId, store_id: storeId, sync_type: syncType,
+      error: lockErr.message,
+    });
+    return { found: 0, enqueued: 0, skipped: 0, errors: 1, lockBusy: false };
+  }
 
   if (!lockResult?.acquired) {
     // Registrar evento estruturado de skip por lock ativo — permite diagnóstico de contention
@@ -341,7 +353,7 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
     const lastSyncAt = checkpoint?.last_activity_at ?? '2010-01-01T00:00:00.000Z';
 
     // ── 6. Decriptar token e criar cliente NS ──────────────────────────
-    const plainToken = decrypt(conn.access_token_enc);
+    const plainToken = decryptNuvemshopToken(conn.access_token_enc);
     const client     = createNuvemshopClient({
       storeId:       storeId,
       accessToken:   plainToken,
