@@ -106,9 +106,10 @@ const FULFILLMENT_STATUS_CRM = {
  * @returns {'open'|'won'|'lost'}
  */
 export function mapOrderStatusToCrm({ topic, orderStatus, paymentStatus }) {
-  // Topic overrides: eventos com semântica positiva definitiva
+  // Topic overrides: eventos com semântica definitiva (maior prioridade)
   if (topic === 'order/paid')      return 'won';
-  if (topic === 'order/fulfilled') return 'won';  // Entrega = ciclo concluído
+  if (topic === 'order/fulfilled') return 'won';      // Entrega = ciclo concluído
+  if (topic === 'order/cancelled') return 'lost';     // Cancelamento = venda perdida
 
   // order/packed: sem override — status deriva de order.status (geralmente 'open')
   // O packed é registrado na timeline mas não altera o status da oportunidade

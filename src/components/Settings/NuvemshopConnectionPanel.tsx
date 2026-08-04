@@ -14,6 +14,7 @@ import {
   Clock,
   DollarSign,
   BarChart3,
+  Tag,
 } from 'lucide-react';
 import { useNuvemshopConnection } from '../../hooks/useNuvemshopConnection';
 import {
@@ -21,7 +22,8 @@ import {
   type NuvemshopHealthStatus,
   type NuvemshopMetrics,
 } from '../../services/nuvemshopApi';
-import { NuvemshopDashboard } from '../Nuvemshop/NuvemshopDashboard';
+import { NuvemshopDashboard }      from '../Nuvemshop/NuvemshopDashboard';
+import { NuvemshopCouponsPanel }   from '../Nuvemshop/NuvemshopCouponsPanel';
 
 // ── Componente de badge de saúde ─────────────────────────────────────────────
 
@@ -90,6 +92,7 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
   const [actionError, setActionError]             = useState<string | null>(null);
   const [successMsg, setSuccessMsg]               = useState<string | null>(null);
   const [showDashboard, setShowDashboard]         = useState(false);
+  const [showCoupons, setShowCoupons]             = useState(false);
   const [metrics, setMetrics]                     = useState<NuvemshopMetrics | null>(null);
   const [metricsLoading, setMetricsLoading]       = useState(false);
 
@@ -402,6 +405,28 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
               Atualizar
             </button>
           </div>
+
+          {/* Cupons — expansível */}
+          {status.store_id && (
+            <div className="border-t border-slate-100 pt-4">
+              <button
+                onClick={() => setShowCoupons(v => !v)}
+                className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <Tag className="w-3.5 h-3.5" />
+                {showCoupons ? 'Ocultar Cupons' : 'Gerenciar Cupons de Desconto'}
+              </button>
+
+              {showCoupons && (
+                <div className="mt-4">
+                  <NuvemshopCouponsPanel
+                    companyId={companyId}
+                    storeId={status.store_id}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Dashboard Operacional — expansível */}
           <div className="border-t border-slate-100 pt-4">

@@ -21,7 +21,7 @@ import { decryptNuvemshopToken }            from '../tokenCrypto.js';
 import { createNuvemshopClient }   from '../nuvemshopClient.js';
 import { upsertOrder }             from '../sync/orderSync.js';
 
-const SUPPORTED_TOPICS = new Set(['order/created', 'order/paid', 'order/updated']);
+const SUPPORTED_TOPICS = new Set(['order/created', 'order/paid', 'order/updated', 'order/cancelled']);
 
 export async function orderHandler(ctx) {
   const { companyId, storeId, topic, payload, correlationId } = ctx;

@@ -306,10 +306,6 @@ function buildOpportunityRow({
  * @param {{ svc, companyId, opportunityId, leadId, now }}
  */
 async function positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, now }) {
-  // #region agent log
-  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:entry',message:'funnel positioning start',data:{companyId,opportunityId,leadId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
-  // #endregion
-
   try {
     // 1. Funil padrão
     let { data: funnel } = await svc
@@ -334,10 +330,6 @@ async function positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, 
       funnel = fallback;
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:funnel',message:'funnel resolved',data:{funnelId:funnel?.id??null,found:!!funnel},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
-    // #endregion
-
     if (!funnel?.id) {
       console.warn(JSON.stringify({
         level:          'warn',
@@ -357,10 +349,6 @@ async function positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, 
       .order('position', { ascending: true })
       .limit(1)
       .maybeSingle();
-
-    // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:stage',message:'first stage resolved',data:{stageId:firstStage?.id??null,found:!!firstStage},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
-    // #endregion
 
     if (!firstStage?.id) {
       console.warn(JSON.stringify({
@@ -385,10 +373,6 @@ async function positionInDefaultFunnel({ svc, companyId, opportunityId, leadId, 
         entered_stage_at: now,
         updated_at:       now,
       });
-
-    // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'orderSync.js:positionInDefaultFunnel:insert',message:'funnel position insert result',data:{error:posErr?.message??null,funnelId:funnel.id,stageId:firstStage.id,opportunityId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
-    // #endregion
 
     if (posErr) {
       console.error(JSON.stringify({

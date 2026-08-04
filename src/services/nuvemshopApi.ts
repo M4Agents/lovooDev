@@ -30,6 +30,7 @@ export interface NuvemshopConnectionStatus {
   metadata_status: string | null;
   store_name:      string | null;
   store_domain:    string | null;
+  store_id:        string | null;
   currency:        string | null;
   country:         string | null;
   plan_name:       string | null;
@@ -46,6 +47,36 @@ export interface NuvemshopConnectionStatus {
     can_sync:       boolean;
     can_replay:     boolean;
   };
+}
+
+// ── Cupons ────────────────────────────────────────────────────────────────────
+
+export type CouponType = 'percentage' | 'absolute' | 'shipping';
+
+export interface NuvemshopCoupon {
+  id:               number;
+  code:             string;
+  type:             CouponType;
+  value:            number;
+  valid:            boolean;
+  used_times:       number;
+  max_uses:         number | null;
+  min_price:        number | null;
+  start_date:       string | null;
+  end_date:         string | null;
+  includes_shipping: boolean;
+}
+
+export interface CreateCouponPayload {
+  code:              string;
+  type:              CouponType;
+  value:             number;
+  max_uses?:         number | null;
+  min_price?:        number | null;
+  start_date?:       string | null;
+  end_date?:         string | null;
+  includes_shipping?: boolean;
+  valid?:            boolean;
 }
 
 // ── Funções ───────────────────────────────────────────────────────────────────
@@ -358,4 +389,39 @@ export async function validateNuvemshopConnection(companyId: string) {
 
 export async function validateNuvemshopScript(companyId: string) {
   return adminPost('/api/nuvemshop/admin/validate-script', { company_id: companyId });
+}
+
+// ── Cupons ────────────────────────────────────────────────────────────────────
+
+export async function listNuvemshopCoupons(
+  companyId: string,
+  storeId: string,
+  page = 1,
+): Promise<{ coupons: NuvemshopCoupon[]; page: number; per_page: number }> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const params = new URLSearchParams({ company_id: companyId, store_id: storeId, page: String(page) });
+  const res = await fetch(`/api/nuvemshop/coupons/list?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? 'Erro ao listar cupons.');
+  return json;
+}
+
+export async function createNuvemshopCoupon(
+  companyId: string,
+  storeId: string,
+  payload: CreateCouponPayload,
+): Promise<NuvemshopCoupon> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const res = await fetch('/api/nuvemshop/coupons/create', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body:    JSON.stringify({ company_id: companyId, store_id: storeId, ...payload }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? 'Erro ao criar cupom.');
+  return json.coupon ?? json;
 }
