@@ -82,11 +82,12 @@ function buildName(categoryData) {
  * }>}
  */
 export async function upsertCategory({ companyId, storeId, categoryData, svc: _svc }) {
-  const svc         = _svc ?? getSupabaseAdmin();
-  const nuvemshopId = String(categoryData.id);
-  const rawName     = buildName(categoryData);
-  const type        = 'product';
-  const now         = new Date().toISOString();
+  const svc              = _svc ?? getSupabaseAdmin();
+  const nuvemshopId      = String(categoryData.id);
+  const rawName          = buildName(categoryData);
+  const type             = 'product';
+  const now              = new Date().toISOString();
+  const nsParentId       = categoryData.parent?.id ? String(categoryData.parent.id) : null;
 
   // ── Passo 1: Upsert autoritativo por (company_id, nuvemshop_category_id) ──
   // UPDATE se já existir (sem alterar UUID — preserva relacionamentos e histórico).
@@ -99,6 +100,7 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
         company_id:            companyId,
         nuvemshop_category_id: nuvemshopId,
         nuvemshop_store_id:    storeId,
+        nuvemshop_parent_id:   nsParentId,
         type,
         name:                  rawName,
         is_active:             true,
@@ -117,8 +119,11 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
       new Date(upserted.created_at).getTime() - new Date(upserted.updated_at).getTime()
     ) < 2000;
 
-    // Vincular retroativamente produtos que chegaram antes desta categoria ser sincronizada.
-    await linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: upserted.id });
+    // Resolver parent_id interno e vincular produtos órfãos em paralelo.
+    await Promise.all([
+      resolveParentId({ svc, companyId, categoryUuid: upserted.id, nsParentId }),
+      linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: upserted.id }),
+    ]);
 
     return { ok: true, categoryUuid: upserted.id, action: isNew ? 'created' : 'updated', name: rawName };
   }
@@ -149,6 +154,7 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
         company_id:            companyId,
         nuvemshop_category_id: nuvemshopId,
         nuvemshop_store_id:    storeId,
+        nuvemshop_parent_id:   nsParentId,
         type,
         name:                  nameWithSuffix,
         is_active:             true,
@@ -166,10 +172,40 @@ export async function upsertCategory({ companyId, storeId, categoryData, svc: _s
     throw new Error(`[categorySync.upsertCategory] suffix_insert_failed: ${fallbackErr.message}`);
   }
 
-  // Vincular retroativamente mesmo no caso de sufixo aplicado.
-  await linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: fallback.id });
+  await Promise.all([
+    resolveParentId({ svc, companyId, categoryUuid: fallback.id, nsParentId }),
+    linkOrphanProducts({ svc, companyId, nuvemshopCategoryId: nuvemshopId, categoryUuid: fallback.id }),
+  ]);
 
   return { ok: true, categoryUuid: fallback.id, action: 'created_with_suffix', name: nameWithSuffix };
+}
+
+// ── resolveParentId ───────────────────────────────────────────────────────────
+
+/**
+ * Resolve o UUID interno da categoria-pai e o salva em parent_id.
+ *
+ * Quando a categoria-pai ainda não foi sincronizada, o campo fica null
+ * e será resolvido no próximo ciclo de sync (idempotente).
+ *
+ * @param {{ svc, companyId, categoryUuid: string, nsParentId: string|null }}
+ */
+async function resolveParentId({ svc, companyId, categoryUuid, nsParentId }) {
+  if (!nsParentId) return; // categoria raiz — sem pai
+
+  const { data: parent } = await svc
+    .from('catalog_categories')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('nuvemshop_category_id', nsParentId)
+    .maybeSingle();
+
+  if (!parent) return; // pai ainda não sincronizado — será resolvido depois
+
+  await svc
+    .from('catalog_categories')
+    .update({ parent_id: parent.id, updated_at: new Date().toISOString() })
+    .eq('id', categoryUuid);
 }
 
 // ── linkOrphanProducts ────────────────────────────────────────────────────────

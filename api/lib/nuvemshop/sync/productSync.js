@@ -164,24 +164,27 @@ function extractCostPrice(product) {
 
 /**
  * Busca todos os nuvemshop_category_ids do produto no banco.
- * Retorna o UUID interno da primeira categoria encontrada (categoria principal).
- * Todas as categorias não sincronizadas são logadas.
+ *
+ * Retorna:
+ *   - primaryCategoryId: UUID da primeira categoria-raiz encontrada (sem parent_id)
+ *                        Se nenhuma for raiz, usa a primeira encontrada.
+ *   - allCategoryIds:    Array com TODOS os UUIDs internos encontrados.
+ *   - nuvemshopCategoryIds: Array original de IDs da Nuvemshop (para persistência no JSONB).
  *
  * @param {{ svc, companyId, categories: Array, nuvemshopProductId: string }}
- * @returns {Promise<{ primaryCategoryId: string|null, nuvemshopCategoryIds: string[] }>}
+ * @returns {Promise<{ primaryCategoryId: string|null, allCategoryIds: string[], nuvemshopCategoryIds: string[] }>}
  */
 async function resolveCategories({ svc, companyId, categories, nuvemshopProductId }) {
   if (!Array.isArray(categories) || categories.length === 0) {
-    return { primaryCategoryId: null, nuvemshopCategoryIds: [] };
+    return { primaryCategoryId: null, allCategoryIds: [], nuvemshopCategoryIds: [] };
   }
 
-  // Todos os nuvemshop_category_id associados ao produto
   const nuvemshopCategoryIds = categories.map(c => String(c.id));
 
-  // Lookup de todas as categorias em uma única query
+  // Busca todas as categorias de uma vez, incluindo parent_id para identificar raízes
   const { data: found, error } = await svc
     .from('catalog_categories')
-    .select('id, nuvemshop_category_id')
+    .select('id, nuvemshop_category_id, parent_id')
     .eq('company_id', companyId)
     .in('nuvemshop_category_id', nuvemshopCategoryIds)
     .eq('is_active', true);
@@ -194,10 +197,11 @@ async function resolveCategories({ svc, companyId, categories, nuvemshopProductI
       company_id:          companyId,
       error:               error.message,
     }));
-    return { primaryCategoryId: null, nuvemshopCategoryIds };
+    return { primaryCategoryId: null, allCategoryIds: [], nuvemshopCategoryIds };
   }
 
-  const foundIds = new Set((found ?? []).map(c => c.nuvemshop_category_id));
+  const foundList = found ?? [];
+  const foundIds  = new Set(foundList.map(c => c.nuvemshop_category_id));
 
   // Registrar categorias ainda não sincronizadas
   const notSynced = nuvemshopCategoryIds.filter(id => !foundIds.has(id));
@@ -212,14 +216,30 @@ async function resolveCategories({ svc, companyId, categories, nuvemshopProductI
     }));
   }
 
-  // Categoria principal: primeira do array original que já exista no banco
+  // Todos os UUIDs internos encontrados (preservando a ordem do array original)
+  const allCategoryIds = nuvemshopCategoryIds
+    .map(nsId => foundList.find(c => c.nuvemshop_category_id === nsId)?.id)
+    .filter(Boolean);
+
+  // Categoria principal: preferir categorias-raiz (parent_id = null) sobre subcategorias
+  const rootCategories = foundList.filter(c => !c.parent_id);
   let primaryCategoryId = null;
-  for (const nsCatId of nuvemshopCategoryIds) {
-    const match = (found ?? []).find(c => c.nuvemshop_category_id === nsCatId);
-    if (match) { primaryCategoryId = match.id; break; }
+
+  if (rootCategories.length > 0) {
+    // Usar a primeira categoria-raiz na ordem original do produto
+    for (const nsId of nuvemshopCategoryIds) {
+      const match = rootCategories.find(c => c.nuvemshop_category_id === nsId);
+      if (match) { primaryCategoryId = match.id; break; }
+    }
+  } else if (foundList.length > 0) {
+    // Nenhuma raiz encontrada: usar a primeira disponível
+    for (const nsId of nuvemshopCategoryIds) {
+      const match = foundList.find(c => c.nuvemshop_category_id === nsId);
+      if (match) { primaryCategoryId = match.id; break; }
+    }
   }
 
-  return { primaryCategoryId, nuvemshopCategoryIds };
+  return { primaryCategoryId, allCategoryIds, nuvemshopCategoryIds };
 }
 
 // ── Enqueue de mídias ─────────────────────────────────────────────────────────
@@ -287,7 +307,7 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
   const now         = new Date().toISOString();
 
   // ── Resolver categorias (todas preservadas) ────────────────────────────────
-  const { primaryCategoryId, nuvemshopCategoryIds } = await resolveCategories({
+  const { primaryCategoryId, allCategoryIds, nuvemshopCategoryIds } = await resolveCategories({
     svc,
     companyId,
     categories:          productData.categories ?? [],
@@ -324,15 +344,20 @@ export async function upsertProduct({ companyId, storeId, productData, svc: _svc
     nuvemshop_sync_status: 'synced',
     nuvemshop_variants:    variants.length > 0 ? variants : null,
 
-    // Todas as categorias Nuvemshop do produto (para reconciliação)
+    // Todas as categorias Nuvemshop do produto (para reconciliação e retroativo)
     nuvemshop_categories:  nuvemshopCategoryIds.length > 0 ? nuvemshopCategoryIds : null,
 
     updated_at:            now,
   };
 
-  // category_id apenas se categoria encontrada no banco
+  // category_id: UUID da categoria-raiz principal (tipo do produto)
   if (primaryCategoryId !== null) {
     productRow.category_id = primaryCategoryId;
+  }
+
+  // category_ids: todos os UUIDs internos resolvidos (raiz + subcategorias)
+  if (allCategoryIds.length > 0) {
+    productRow.category_ids = allCategoryIds;
   }
 
   const { data: upserted, error } = await svc
