@@ -104,6 +104,9 @@ export async function productHandler(ctx) {
   }
 
   // ── Descriptografar token ─────────────────────────────────────────────────
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'productHandler.js:decrypt',message:'env check before decrypt',data:{keyDefined:!!process.env.NUVEMSHOP_TOKEN_ENC_KEY_V1,keyLength:process.env.NUVEMSHOP_TOKEN_ENC_KEY_V1?.length??0,tokenPrefix:connection.access_token_enc?.slice(0,3),company_id:companyId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   let accessToken;
   try {
     accessToken = decryptNuvemshopToken(connection.access_token_enc);
