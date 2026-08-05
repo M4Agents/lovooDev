@@ -171,7 +171,10 @@ function buildCheckoutFields({ storeId, checkoutData, nuvemshopCustomerId, cartI
     nuvemshop_store_id:    storeId,
     nuvemshop_checkout_id: String(checkoutData.id),
     nuvemshop_checkout_url: checkoutData.abandoned_checkout_url ?? null,  // SENSÍVEL — não logar
-    cart_total:            Number(checkoutData.total_price) || null,
+    // API usa `total` (inclui frete), não `total_price`
+    cart_total:            checkoutData.total != null
+      ? parseFloat(checkoutData.total) || null
+      : null,
     cart_items:            cartItems.length > 0 ? cartItems : null,
     nuvemshop_sync_status: 'synced',
     ...(nuvemshopCustomerId ? { nuvemshop_customer_id: nuvemshopCustomerId } : {}),
@@ -207,12 +210,14 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
     ? String(checkoutData.customer.id)
     : null;
 
-  // Dados de contato — podem estar no customer ou no root do checkout
-  const email = (checkoutData.customer?.email ?? checkoutData.email ?? '').trim() || null;
-  const phone = (checkoutData.customer?.phone ?? checkoutData.phone ?? '').trim() || null;
-  const name  = (checkoutData.customer?.name  ?? '').trim() || null;
+  // Dados de contato — a API de checkouts usa contact_* no root do objeto.
+  // customer.* só é populado quando o visitante tem conta e está logado.
+  const email = (checkoutData.contact_email ?? checkoutData.customer?.email ?? '').trim() || null;
+  const phone = (checkoutData.contact_phone ?? checkoutData.customer?.phone ?? '').trim() || null;
+  const name  = (checkoutData.contact_name  ?? checkoutData.customer?.name  ?? '').trim() || null;
   const currency  = checkoutData.currency ?? null;
-  const cartItems = sanitizeCartItems(checkoutData.line_items, currency);
+  // A API retorna itens em `products`, não em `line_items`
+  const cartItems = sanitizeCartItems(checkoutData.products ?? checkoutData.line_items, currency);
   const checkoutFields = buildCheckoutFields({
     storeId, checkoutData, nuvemshopCustomerId, cartItems,
   });

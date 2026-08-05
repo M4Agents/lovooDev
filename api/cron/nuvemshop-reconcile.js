@@ -112,8 +112,11 @@ const RESOURCE_CONFIG = {
     // é tratado como checkout/abandoned (já filtrado por pós-filtro abaixo).
     updatedTopic:  'checkout/abandoned',
     idField:       'id',
-    supportsDateFilter: true,
-    dateFilterParam:   'created_at_min',
+    // LIMITAÇÃO DA API NUVEMSHOP: GET /checkouts não suporta updated_at_min/created_at_min.
+    // Parâmetros suportados: since_id, created_at_max, updated_at_max, page, per_page.
+    // Usamos full scan via since_id (como categories). A idempotência diária
+    // (rec:{date}:...) garante que o mesmo checkout não seja re-enfileirado no mesmo dia.
+    supportsDateFilter: false,
     // Pós-filtro aplicado após o fetch — a API não suporta esses parâmetros:
     //   - completed_at: null  → checkout ainda não foi convertido em pedido
     //   - created_at < agora - 60min → checkout tem idade suficiente para ser abandonado
