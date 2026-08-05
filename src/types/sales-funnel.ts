@@ -145,6 +145,10 @@ export interface CatalogCategory {
   sort_order: number
   created_at: string
   updated_at: string
+  /** UUID interno da categoria-pai (null = categoria raiz). */
+  parent_id?: string | null
+  /** ID externo da categoria na Nuvemshop (null = categoria manual). */
+  nuvemshop_category_id?: string | null
 }
 
 /** Fornecedor cadastrado no sistema — tabela suppliers. */
@@ -205,6 +209,10 @@ export interface CatalogProduct {
   external_reference?: string | null
   /** URL pública do produto na loja de origem (ex: canonical_url da Nuvemshop). Somente leitura — gerenciado pela integração. */
   product_url?: string | null
+  /** Array com todos os UUIDs internos de categorias vinculadas ao produto (raiz + subcategorias). */
+  category_ids?: string[] | null
+  /** Array com todos os IDs de categorias na Nuvemshop (para reconciliação). */
+  nuvemshop_categories?: string[] | null
   created_at: string
   updated_at: string
 }

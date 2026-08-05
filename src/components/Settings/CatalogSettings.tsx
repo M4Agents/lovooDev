@@ -478,7 +478,9 @@ const CatalogProductList: React.FC<{
                   )}
                 </td>
                 <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
-                <td className="px-3 py-2 text-slate-500">{p.catalog_categories?.name ?? '—'}</td>
+                <td className="px-3 py-2">
+                  <ProductCategoryCell product={p} allCategories={categories} />
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatMoney(p.default_price, defaultCurrency)}</td>
                 <td className="px-3 py-2">{p.is_active ? 'Sim' : 'Não'}</td>
                 <td className="px-3 py-2">{p.availability_status}</td>
@@ -530,6 +532,49 @@ const CatalogProductList: React.FC<{
     </div>
   )
 }
+
+// ── ProductCategoryCell ───────────────────────────────────────────────────────
+// Exibe categorias de um produto na listagem:
+//   - Produtos Nuvemshop: todos os nomes de categoria como badges
+//   - Produtos manuais: nome da categoria primária (ou '—')
+
+const ProductCategoryCell: React.FC<{
+  product: CatalogProduct
+  allCategories: CatalogCategory[]
+}> = ({ product, allCategories }) => {
+  const isNuvemshop = product.external_source === 'nuvemshop'
+
+  if (isNuvemshop && product.category_ids && product.category_ids.length > 0) {
+    const names = product.category_ids
+      .map(id => allCategories.find(c => c.id === id)?.name)
+      .filter(Boolean) as string[]
+
+    if (names.length === 0) {
+      return <span className="text-slate-400 text-xs">—</span>
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {names.map((name) => (
+          <span
+            key={name}
+            className="inline-block px-1.5 py-0.5 rounded text-[11px] bg-violet-50 text-violet-700 border border-violet-100 leading-tight"
+          >
+            {name}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <span className="text-slate-500 text-sm">
+      {product.catalog_categories?.name ?? '—'}
+    </span>
+  )
+}
+
+// ── ProductForm ───────────────────────────────────────────────────────────────
 
 const ProductForm: React.FC<{
   companyId: string
@@ -716,16 +761,41 @@ const ProductForm: React.FC<{
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Categoria</label>
-        <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-        >
-          <option value="">Sem categoria</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
-        </select>
+        {externalSource === 'nuvemshop' && initial?.category_ids && initial.category_ids.length > 0 ? (
+          // Produtos Nuvemshop: categorias são gerenciadas pela integração — somente leitura
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              {initial.category_ids
+                .map(id => categories.find(c => c.id === id))
+                .filter(Boolean)
+                .map((cat) => (
+                  <span
+                    key={cat!.id}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-violet-50 text-violet-700 border border-violet-200"
+                  >
+                    {cat!.nuvemshop_category_id && !cat!.parent_id && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" title="Categoria raiz" />
+                    )}
+                    {cat!.name}
+                  </span>
+                ))}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Gerenciado pela integração Nuvemshop — edite na loja de origem.
+            </p>
+          </div>
+        ) : (
+          <select
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+          >
+            <option value="">Sem categoria</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Fornecedor + preços */}
