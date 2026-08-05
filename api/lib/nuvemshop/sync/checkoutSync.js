@@ -294,6 +294,21 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
   }
 
   // ── INSERT novo lead ──────────────────────────────────────────────────────
+  // #region agent log — debug temporário: gravar estrutura real do checkout no campo interest
+  const _debugInterest = JSON.stringify({
+    _debug: true,
+    contact_email:  checkoutData.contact_email  ?? '__missing__',
+    contact_name:   checkoutData.contact_name   ?? '__missing__',
+    contact_phone:  checkoutData.contact_phone  ?? '__missing__',
+    email_resolved: email,
+    name_resolved:  name,
+    total:          checkoutData.total          ?? '__missing__',
+    subtotal:       checkoutData.subtotal       ?? '__missing__',
+    products_count: Array.isArray(checkoutData.products)   ? checkoutData.products.length   : '__missing__',
+    line_items_count: Array.isArray(checkoutData.line_items) ? checkoutData.line_items.length : '__missing__',
+    all_keys:       Object.keys(checkoutData),
+  });
+  // #endregion
   const newRow = {
     company_id:   companyId,
     name:         name || 'Lead',
@@ -301,6 +316,7 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
     phone,
     origin:       'nuvemshop_abandoned',   // Apenas para leads criados pelo checkout
     status:       'novo',
+    interest:     _debugInterest,          // DEBUG TEMPORÁRIO — remover após diagnóstico
     ...checkoutFields,
     created_at:   now,
     updated_at:   now,

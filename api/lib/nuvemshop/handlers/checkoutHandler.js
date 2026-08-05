@@ -109,27 +109,6 @@ export async function checkoutHandler(ctx) {
     throw new Error(`[checkoutHandler] Resposta vazia para checkout ${nuvemshopCheckoutId}`);
   }
 
-  // #region agent log — estrutura real do checkout via banco (debug temporário)
-  try {
-    await svc.from('nuvemshop_webhook_events').update({
-      last_error: JSON.stringify({
-        _debug: true,
-        keys: Object.keys(checkoutData),
-        contact_email:   checkoutData.contact_email   ?? '__missing__',
-        contact_name:    checkoutData.contact_name    ?? '__missing__',
-        contact_phone:   checkoutData.contact_phone   ?? '__missing__',
-        total:           checkoutData.total            ?? '__missing__',
-        subtotal:        checkoutData.subtotal         ?? '__missing__',
-        currency:        checkoutData.currency         ?? '__missing__',
-        products_count:  Array.isArray(checkoutData.products) ? checkoutData.products.length : '__missing__',
-        has_products:    checkoutData.products !== undefined,
-        customer_id:     checkoutData.customer?.id    ?? null,
-        has_url:         !!checkoutData.abandoned_checkout_url,
-      }),
-    }).eq('company_id', companyId).eq('topic', 'checkout/abandoned').eq('status', 'pending').limit(1);
-  } catch (_) { /* ignorar erros de debug */ }
-  // #endregion
-
   // ── Delegar ao Sync Service ───────────────────────────────────────────────
   const syncResult = await upsertCheckout({
     companyId,
