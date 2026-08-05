@@ -5,7 +5,7 @@
 //
 // ── Responsabilidades (Plano v5.1) ───────────────────────────────────────────
 //   1. Para cada empresa com conexão Nuvemshop ativa:
-//      a. Para cada tipo de recurso (categories, products, customers, orders):
+//      a. Para cada tipo de recurso (categories, products, customers, orders, checkouts):
 //         i.  Ler checkpoint (último since_id e timestamp de sync)
 //         ii. Verificar compatibilidade de versão (CURRENT_SYNC_VERSION)
 //         iii.Buscar recursos alterados desde last_sync_at via API Nuvemshop
@@ -61,6 +61,10 @@ const PAGE_SIZE             = 100;  // Itens por página na API Nuvemshop
 const LOCK_TTL_SECONDS      = 90;   // TTL do lock de reconciliação por sync_type
 const WORKER_PREFIX         = 'nv-rec';
 
+// Tempo mínimo (ms) para um checkout ser considerado abandonado.
+// Nuvemshop lista carrinhos na interface após 60 minutos — usamos o mesmo critério.
+const CHECKOUT_ABANDON_MIN_AGE_MS = 60 * 60 * 1000;
+
 /**
  * Mapeamento: sync_type → endpoint NS + topic para evento sintético.
  * Chave matches exatas de nuvemshop_sync_checkpoints.sync_type CHECK constraint.
@@ -101,6 +105,23 @@ const RESOURCE_CONFIG = {
     idField:       'id',
     supportsDateFilter: true,
     dateFilterParam:   'updated_at_min',
+  },
+  checkouts: {
+    endpoint:      'checkouts',
+    // Checkouts não têm created/updated distintos — qualquer checkout encontrado
+    // é tratado como checkout/abandoned (já filtrado por pós-filtro abaixo).
+    updatedTopic:  'checkout/abandoned',
+    idField:       'id',
+    supportsDateFilter: true,
+    dateFilterParam:   'created_at_min',
+    // Pós-filtro aplicado após o fetch — a API não suporta esses parâmetros:
+    //   - completed_at: null  → checkout ainda não foi convertido em pedido
+    //   - created_at < agora - 60min → checkout tem idade suficiente para ser abandonado
+    postFilter: (checkout) => {
+      if (checkout.completed_at) return false; // já virou pedido
+      const createdAt = new Date(checkout.created_at).getTime();
+      return (Date.now() - createdAt) >= CHECKOUT_ABANDON_MIN_AGE_MS;
+    },
   },
 };
 
@@ -376,14 +397,26 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
       { maxItems: MAX_ITEMS_PER_TYPE, perPage: PAGE_SIZE },
     );
 
-    found = resources.length;
+    const totalFromApi = resources.length;
+
+    // Pós-filtro opcional (ex: checkouts → apenas abandonados com 60+ min, sem completed_at)
+    const resourcesToProcess = config.postFilter
+      ? resources.filter(config.postFilter)
+      : resources;
+
+    found = resourcesToProcess.length;
+
     log('info', 'resources_found', {
-      company_id: companyId, store_id: storeId, sync_type: syncType,
-      found, last_sync_at: lastSyncAt,
+      company_id:   companyId,
+      store_id:     storeId,
+      sync_type:    syncType,
+      total_api:    totalFromApi,
+      after_filter: found,
+      last_sync_at: lastSyncAt,
     });
 
     if (found === 0) {
-      // Nenhum recurso alterado — atualizar apenas o timestamp
+      // Nenhum recurso para processar — atualizar apenas o timestamp
       await upsertCheckpoint(svc, companyId, storeId, syncType, {
         status:          'completed',
         completed_at:    new Date().toISOString(),
@@ -394,6 +427,7 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
           last_run_started:   syncStartedAt,
           last_run_completed: new Date().toISOString(),
           resources_found:    0,
+          total_api:          totalFromApi,
         },
       });
       return { found: 0, enqueued: 0, skipped: 0, errors: 0 };
@@ -404,7 +438,7 @@ async function reconcileResourceType(conn, syncType, svc, workerId, correlationI
     // O pipeline normal (nuvemshop-process-events) processa via handlers existentes.
     const topic = getTopicForResource(config);
 
-    for (const resource of resources) {
+    for (const resource of resourcesToProcess) {
       const resourceId = resource[config.idField];
       if (!resourceId) continue;
 

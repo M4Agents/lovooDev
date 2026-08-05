@@ -42,7 +42,9 @@ const SUPPORTED_TOPICS = [
   'order/updated',
   'order/packed',
   'order/fulfilled',
-  'checkout/abandoned',
+  // NOTA: 'checkout/abandoned' não existe como webhook na API Nuvemshop.
+  // Carrinhos abandonados são detectados via polling GET /checkouts
+  // no cron nuvemshop-reconcile (sync_type='checkouts').
   'app/uninstalled',
   'store/redact',
   'customers/redact',
