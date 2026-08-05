@@ -109,6 +109,10 @@ export async function checkoutHandler(ctx) {
     throw new Error(`[checkoutHandler] Resposta vazia para checkout ${nuvemshopCheckoutId}`);
   }
 
+  // #region agent log — inspecionar estrutura real do objeto checkout
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c830cd'},body:JSON.stringify({sessionId:'c830cd',location:'checkoutHandler.js:checkout_structure',message:'checkout_data_keys',hypothesisId:'field_names',data:{keys:Object.keys(checkoutData),customer_keys:checkoutData.customer?Object.keys(checkoutData.customer):null,contact_email:checkoutData.contact_email??'__missing__',contact_name:checkoutData.contact_name??'__missing__',email:checkoutData.email??'__missing__',name:checkoutData.name??'__missing__',total_price:checkoutData.total_price??'__missing__',subtotal_price:checkoutData.subtotal_price??'__missing__',total:checkoutData.total??'__missing__',currency:checkoutData.currency??'__missing__',customer_id:checkoutData.customer?.id??null,customer_email:checkoutData.customer?.email??null,line_items_count:Array.isArray(checkoutData.line_items)?checkoutData.line_items.length:null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // ── Delegar ao Sync Service ───────────────────────────────────────────────
   const syncResult = await upsertCheckout({
     companyId,
