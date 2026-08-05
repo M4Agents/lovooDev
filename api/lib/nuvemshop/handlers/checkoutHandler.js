@@ -29,6 +29,23 @@ import { createNuvemshopClient }             from '../nuvemshopClient.js';
 import { upsertCheckout }                    from '../sync/checkoutSync.js';
 import { dispatchNuvemshopTrigger }          from '../../automation/dispatchNuvemshopTrigger.js';
 
+/**
+ * Formata os itens do carrinho abandonado para uso em automações.
+ * Estrutura Nuvemshop: checkoutData.line_items[].{ name, quantity, price }
+ */
+function formatCartItems(lineItems) {
+  if (!Array.isArray(lineItems) || lineItems.length === 0) return '';
+  return lineItems
+    .map(item => {
+      const name  = item.name    || item.product_name || 'Produto';
+      const qty   = Number(item.quantity) || 1;
+      const price = Number(item.price)    || 0;
+      const formattedPrice = price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      return `${name} × ${qty} — ${formattedPrice}`;
+    })
+    .join('\n');
+}
+
 export async function checkoutHandler(ctx) {
   const { companyId, storeId, topic, payload, correlationId } = ctx;
 
@@ -130,6 +147,7 @@ export async function checkoutHandler(ctx) {
         checkout_id: String(syncResult.checkoutId ?? ''),
         cart_total:  String(syncResult.cartTotal   ?? checkoutData?.total_price ?? ''),
         customer_id: String(checkoutData?.customer?.id ?? ''),
+        order_items: formatCartItems(checkoutData?.line_items),
       },
     }).catch(err => console.error(JSON.stringify({
       level:          'error',

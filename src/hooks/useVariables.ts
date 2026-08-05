@@ -265,6 +265,12 @@ const NS_VARS_CHECKOUT: Variable[] = [
     description: 'Valor total do carrinho abandonado',
   },
   {
+    key:         'nuvemshop.order_items',
+    label:       'Itens do Carrinho (NS)',
+    category:    'nuvemshop',
+    description: 'Lista dos produtos no carrinho formatada (nome × qtd — valor)',
+  },
+  {
     key:         'nuvemshop.checkout_url',
     label:       'Link do Carrinho Abandonado (NS)',
     category:    'nuvemshop',
