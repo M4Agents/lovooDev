@@ -101,6 +101,24 @@ export async function dispatchNuvemshopTrigger(
       .eq('is_active', true)
       .filter('nodes::text', 'ilike', `%${triggerType}%`)
 
+    // #region agent log — debug H-A/H-B: PostgREST nodes::text filter result
+    try {
+      const dbgPayload = JSON.stringify({
+        dbg: 'dispatch_flows_query',
+        sessionId: 'c830cd',
+        trigger: triggerType,
+        flows_err: flowsErr ? (flowsErr.message ?? flowsErr.code ?? String(flowsErr)) : null,
+        flows_count: flows?.length ?? -1,
+        ts: new Date().toISOString(),
+      })
+      await supabase
+        .from('nuvemshop_connections')
+        .update({ last_error_message: dbgPayload })
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+    } catch (_dbgErr) {}
+    // #endregion
+
     if (flowsErr) {
       console.error(`${tag} erro ao buscar flows:`, flowsErr.message)
       return
@@ -118,6 +136,24 @@ export async function dispatchNuvemshopTrigger(
     }
 
     const matchedFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
+
+    // #region agent log — debug H-C: matchedFlows count
+    try {
+      const dbgPayload2 = JSON.stringify({
+        dbg: 'dispatch_matched_flows',
+        sessionId: 'c830cd',
+        trigger: triggerType,
+        flows_found: flows.length,
+        matched: matchedFlows.length,
+        ts: new Date().toISOString(),
+      })
+      await supabase
+        .from('nuvemshop_connections')
+        .update({ last_error_message: dbgPayload2 })
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+    } catch (_dbgErr) {}
+    // #endregion
 
     if (matchedFlows.length === 0) {
       console.log(`${tag} nenhum flow corresponde ao evento — total avaliados: ${flows.length}`)
