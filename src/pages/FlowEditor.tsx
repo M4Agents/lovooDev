@@ -239,7 +239,10 @@ export default function FlowEditor() {
       edges: edges as any
     })
 
-    await loadFlow()
+    // Atualiza flow state diretamente em vez de chamar loadFlow().
+    // loadFlow() seta loading=true, desmontando o FlowCanvas e descartando
+    // edições ainda não salvas feitas entre o clique em Salvar e o retorno da API.
+    setFlow(prev => prev ? { ...prev, nodes: nodes as any, edges: edges as any } : prev)
   }
 
   const handleToggleActive = async (isActive: boolean) => {

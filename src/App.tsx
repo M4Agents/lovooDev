@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
@@ -54,16 +54,23 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 /**
  * Protege rotas que exigem um papel específico além da autenticação.
- * Aguarda o carregamento de company antes de avaliar o guard para
- * evitar redirecionamentos incorretos durante a hidratação.
+ * Aguarda o carregamento de company APENAS na carga inicial.
+ * Reloads posteriores de isLoadingCompany (ex: TOKEN_REFRESHED do Supabase)
+ * não desmontan os filhos, evitando perda de estado em páginas de edição.
  */
 const RoleProtectedRoute: React.FC<{
   guard: boolean;
   children: React.ReactNode;
 }> = ({ guard, children }) => {
   const { isLoadingCompany } = useAuth();
+  const hasEverLoadedRef = useRef(false);
 
-  if (isLoadingCompany) {
+  if (!isLoadingCompany) {
+    hasEverLoadedRef.current = true;
+  }
+
+  // Bloqueia apenas enquanto company nunca foi carregada ainda
+  if (isLoadingCompany && !hasEverLoadedRef.current) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

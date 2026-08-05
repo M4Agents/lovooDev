@@ -104,6 +104,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // true = usuário clicou em "Sair"; false = sessão expirou inesperadamente.
   const isSigningOutRef = React.useRef(false);
 
+  // Ref para evitar stale closure no onAuthStateChange (useEffect com []).
+  // company capturado na montagem é sempre null; este ref reflete o valor atual.
+  const companyRef = React.useRef<Company | null>(null);
+
+  // Manter companyRef sempre atualizado para uso em closures estáticas (onAuthStateChange).
+  useEffect(() => { companyRef.current = company; }, [company]);
+
   // Sincronizar currentRole sempre que company ou userRoles mudam.
   // Corrige o problema de stale closure: refreshUserRoles pode ser chamado
   // quando company ainda é null (closure capturada antes do setCompany).
@@ -475,22 +482,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         
         setUser(session?.user ?? null);
-        
+
+        // TOKEN_REFRESHED é um refresh automático do token — empresa e roles não mudam.
+        // Ignorar para evitar que fetchCompany seja chamado desnecessariamente,
+        // o que causaria isLoadingCompany=true e desmontaria páginas em edição.
+        if (_event === 'TOKEN_REFRESHED') return;
+
         // 🔧 VERIFICAR SE EMPRESA JÁ FOI CARREGADA ANTES DE CHAMAR fetchCompany
+        // Usa companyRef (sempre atualizado) em vez de company da closure (sempre null na montagem).
         if (session?.user) {
-          if (company && company.id) {
+          if (companyRef.current && companyRef.current.id) {
             console.log('🔧 AuthContext: Company already loaded, skipping onAuthStateChange fetchCompany call:', {
-              companyId: company.id,
-              companyName: company.name,
+              companyId: companyRef.current.id,
               userId: session.user.id,
               event: _event
             });
-            // Roles serão carregados automaticamente após fetchCompany
-            console.log('🔧 AuthContext: Company already loaded, roles will be refreshed automatically');
           } else {
             console.log('🔍 AuthContext: Auth change - Calling fetchCompany with userId:', session.user.id);
             await fetchCompany(session.user.id);
-            // Roles serão carregados automaticamente após fetchCompany
             console.log('🔧 AuthContext: fetchCompany called, roles will be refreshed automatically');
           }
         } else {
@@ -505,13 +514,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           // 🔧 PROTEÇÃO: NÃO SOBRESCREVER EMPRESA JÁ CARREGADA
-          if (!company || !company.id) {
+          if (!companyRef.current || !companyRef.current.id) {
             console.log('🔧 AuthContext: No session user, clearing company state');
             setCompany(null);
           } else {
             console.log('🔧 AuthContext: No session user, but company already loaded - preserving company:', {
-              companyId: company.id,
-              companyName: company.name,
+              companyId: companyRef.current.id,
               event: _event
             });
           }
