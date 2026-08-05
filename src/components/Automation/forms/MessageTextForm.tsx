@@ -245,9 +245,10 @@ export default function MessageTextForm({ config, onChange, activeTriggerType }:
             ref={textareaRef}
             value={message}
             onChange={handleMessageChange}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="Digite a mensagem que será enviada..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+            rows={6}
           />
           
           {/* Autocomplete de variáveis */}

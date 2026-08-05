@@ -92,7 +92,7 @@ export default function VariableAutocomplete({
                       {variable.label}
                     </p>
                     {variable.description && (
-                      <p className="text-xs text-gray-500 truncate">
+                      <p className="text-xs text-gray-500 line-clamp-2">
                         {variable.description}
                       </p>
                     )}
