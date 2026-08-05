@@ -92,32 +92,16 @@ export async function dispatchNuvemshopTrigger(
       return
     }
 
-    // 2. Buscar flows ativos — pré-filtro por triggerType como hint de índice textual.
-    //    matchesTriggerConditions abaixo é a verificação definitiva.
+    // 2. Buscar flows ativos da empresa.
+    //    NOTA: .filter('nodes::text', 'ilike', ...) foi removido — o PostgREST não aplica
+    //    o cast ::text via REST API e retorna "operator does not exist: jsonb ~~* unknown".
+    //    O filtro por triggerType é feito em JS via matchesTriggerConditions (padrão dos
+    //    demais dispatchers: dispatchLeadCreatedTrigger, dispatchOpportunityTrigger, etc.)
     const { data: flows, error: flowsErr } = await supabase
       .from('automation_flows')
       .select('id, name, nodes, edges, trigger_operator, is_over_plan')
       .eq('company_id', companyId)
       .eq('is_active', true)
-      .filter('nodes::text', 'ilike', `%${triggerType}%`)
-
-    // #region agent log — debug H-A/H-B: PostgREST nodes::text filter result
-    try {
-      const dbgPayload = JSON.stringify({
-        dbg: 'dispatch_flows_query',
-        sessionId: 'c830cd',
-        trigger: triggerType,
-        flows_err: flowsErr ? (flowsErr.message ?? flowsErr.code ?? String(flowsErr)) : null,
-        flows_count: flows?.length ?? -1,
-        ts: new Date().toISOString(),
-      })
-      await supabase
-        .from('nuvemshop_connections')
-        .update({ last_error_message: dbgPayload })
-        .eq('company_id', companyId)
-        .eq('status', 'active')
-    } catch (_dbgErr) {}
-    // #endregion
 
     if (flowsErr) {
       console.error(`${tag} erro ao buscar flows:`, flowsErr.message)
@@ -125,7 +109,7 @@ export async function dispatchNuvemshopTrigger(
     }
 
     if (!flows || flows.length === 0) {
-      console.log(`${tag} nenhum flow ativo encontrado para o triggerType`)
+      console.log(`${tag} nenhum flow ativo encontrado`)
       return
     }
 
@@ -136,24 +120,6 @@ export async function dispatchNuvemshopTrigger(
     }
 
     const matchedFlows = flows.filter(flow => matchesTriggerConditions(flow, event))
-
-    // #region agent log — debug H-C: matchedFlows count
-    try {
-      const dbgPayload2 = JSON.stringify({
-        dbg: 'dispatch_matched_flows',
-        sessionId: 'c830cd',
-        trigger: triggerType,
-        flows_found: flows.length,
-        matched: matchedFlows.length,
-        ts: new Date().toISOString(),
-      })
-      await supabase
-        .from('nuvemshop_connections')
-        .update({ last_error_message: dbgPayload2 })
-        .eq('company_id', companyId)
-        .eq('status', 'active')
-    } catch (_dbgErr) {}
-    // #endregion
 
     if (matchedFlows.length === 0) {
       console.log(`${tag} nenhum flow corresponde ao evento — total avaliados: ${flows.length}`)

@@ -151,25 +151,6 @@ export async function orderHandler(ctx) {
   };
   const triggerType = TOPIC_TO_TRIGGER[topic];
 
-  // #region agent log — debug: confirmar chamada do dispatch no orderHandler
-  try {
-    const dbgHandler = JSON.stringify({
-      dbg: 'order_handler_pre_dispatch',
-      sessionId: 'c830cd',
-      topic,
-      triggerType: triggerType ?? null,
-      leadId: syncResult.leadId ?? null,
-      opportunityId: syncResult.opportunityId ?? null,
-      ts: new Date().toISOString(),
-    })
-    await svc
-      .from('nuvemshop_connections')
-      .update({ last_error_message: dbgHandler })
-      .eq('company_id', companyId)
-      .eq('status', 'active')
-  } catch (_dbgErr) {}
-  // #endregion
-
   if (triggerType) {
     if (syncResult.leadId) {
       // Aguardado (await) para garantir conclusão dentro do lifetime da Vercel Function.
