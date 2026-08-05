@@ -30,7 +30,7 @@ interface NodeConfigPanelProps {
 }
 
 export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, onSave }: NodeConfigPanelProps) {
-  const [config, setConfig] = useState<any>({})
+  const [config, setConfig] = useState<any>(selectedNode?.data?.config || {})
   const { company } = useAuth()
   
   const [tags, setTags] = useState<any[]>([])
