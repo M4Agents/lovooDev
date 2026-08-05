@@ -45,6 +45,7 @@
 //   - correlation_id por execução
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { randomBytes }              from 'crypto';
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js';
 import { createNuvemshopClient }    from '../lib/nuvemshop/nuvemshopClient.js';
@@ -547,6 +548,7 @@ async function reconcileCompany(conn, svc, workerId, correlationId) {
 // ── Handler principal ─────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }

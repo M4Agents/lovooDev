@@ -42,6 +42,7 @@
 //   PARENT_COMPANY_ID          — UUID da empresa pai (fallback: M4 Digital)
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { fetchNotificationsConfig, isChannelEnabled } from '../lib/notifications/configDb.js'
 import { fetchTemplate, renderTemplate } from '../lib/notifications/templateDb.js'
@@ -357,6 +358,7 @@ async function processEmail(candidate, svc, stats) {
 // ── Handler principal ──────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }

@@ -32,6 +32,7 @@
 //   VITE_SUPABASE_URL         — URL Supabase
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { createClient } from '@supabase/supabase-js'
 
 const COMPANY_BATCH = 5     // empresas por sub-batch
@@ -79,6 +80,7 @@ function estimateTotal(dates, companyCount) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }

@@ -32,6 +32,7 @@
 //   }
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { createClient } from '@supabase/supabase-js'
 
 function getServiceSupabase() {
@@ -52,6 +53,7 @@ function validateCronAuth(req) {
 }
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Método não permitido' })
   }

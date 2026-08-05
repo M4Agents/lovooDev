@@ -29,6 +29,7 @@
 //   agent_id      = lovoo_agents.id (o modelo LLM base — via assignment.agent_id)
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { createClient } from '@supabase/supabase-js'
 
 const BATCH_LIMIT = 100
@@ -47,6 +48,7 @@ function validateCronAuth(req) {
 }
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (!validateCronAuth(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }

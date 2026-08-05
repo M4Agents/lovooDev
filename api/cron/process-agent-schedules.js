@@ -39,6 +39,7 @@
 //   - Nunca confia em dados cached — recarrega do banco antes de cada etapa crítica
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { randomUUID }   from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { buildContext } from '../lib/agents/contextBuilder.js'
@@ -98,6 +99,7 @@ function getFollowUpHint(attemptNumber) {
 // ── Handler principal ──────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (!validateCronAuth(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }

@@ -21,6 +21,7 @@
 //   next_retry_at   ← next_attempt_at no evento DB
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { randomBytes }                from 'crypto';
 import { getSupabaseAdmin }           from '../lib/automation/supabaseAdmin.js';
 import { dispatch, topicToResourceType } from '../lib/nuvemshop/eventDispatcher.js';
@@ -167,6 +168,7 @@ async function processEvent(event, svc, workerId) {
 // ── Handler principal (cron) ──────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   const authHeader = req.headers['authorization'];
   const cronSecret = process.env.CRON_SECRET;
 

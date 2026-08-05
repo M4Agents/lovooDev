@@ -16,9 +16,11 @@
 // Frequência: executado com menor frequência que process-events (a cada 2 minutos).
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js';
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   const authHeader = req.headers['authorization'];
   const cronSecret = process.env.CRON_SECRET;
 

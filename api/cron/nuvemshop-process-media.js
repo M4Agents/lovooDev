@@ -23,6 +23,7 @@
 //   - storageUploader.js — upload, library e catalog_item_media
 // =============================================================================
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { randomBytes }          from 'crypto';
 import { getSupabaseAdmin }     from '../lib/automation/supabaseAdmin.js';
 import { downloadImage }        from '../lib/nuvemshop/media/imageDownloader.js';
@@ -199,6 +200,7 @@ async function processMediaItem({ svc, item, workerId }) {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

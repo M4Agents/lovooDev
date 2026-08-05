@@ -4,6 +4,7 @@
 // Executado a cada minuto via Vercel Cron
 // Processa mensagens pendentes e envia via UAZAPI
 
+import { cronGuard }           from '../lib/cronGuard.js';
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile.js'
 
@@ -11,6 +12,7 @@ const supabase = getSupabaseAdmin()
 const UAZAPI_BASE = 'https://lovoo.uazapi.com'
 
 export default async function handler(req, res) {
+  if (!cronGuard(req, res)) return;
   const runId = Math.random().toString(36).slice(2, 8)
   console.log(`[CRON-SCHED][${runId}] ▶ Invocation started at ${new Date().toISOString()}`)
 
