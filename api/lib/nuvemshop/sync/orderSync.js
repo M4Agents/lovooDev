@@ -447,8 +447,15 @@ export async function upsertOrder({ companyId, storeId, orderData, transactionDa
     orderProducts: orderData.products ?? [],
   });
 
-  // 3. Oportunidade: buscar existente
-  const { data: existing, error: lookupErr } = await svc
+  // 3. Oportunidade: lookup em três camadas
+  //
+  // Camada 1 — idempotência: mesma order_id já vinculada → UPDATE direto.
+  // Camada 2 — reaproveitamento: oportunidade aberta sem order_id (criada pelo
+  //            trigger z_add_lead_to_funnel ao inserir o lead) → UPDATE com dados
+  //            reais do pedido, evitando duplicidade para o mesmo cliente.
+  // Camada 3 — nova compra ou reativação: oportunidade aberta já tem outro pedido
+  //            vinculado, ou todas as oportunidades estão won/lost → INSERT.
+  const { data: existingByOrderId, error: lookupErr } = await svc
     .from('opportunities')
     .select('id, status')
     .eq('company_id', companyId)
@@ -457,7 +464,25 @@ export async function upsertOrder({ companyId, storeId, orderData, transactionDa
 
   if (lookupErr) throw new Error(`[orderSync] opportunity_lookup_failed: ${lookupErr.message}`);
 
-  const oppRow = buildOpportunityRow({
+  // Camada 2: se não existe pelo order_id, buscar oportunidades abertas do lead
+  let blankOpenOpp = null;
+  if (!existingByOrderId) {
+    const { data: openOpps, error: openLookupErr } = await svc
+      .from('opportunities')
+      .select('id, status, nuvemshop_order_id')
+      .eq('company_id', companyId)
+      .eq('lead_id', leadId)
+      .eq('status', 'open')
+      .order('created_at', { ascending: true });
+
+    if (openLookupErr) throw new Error(`[orderSync] open_opportunity_lookup_failed: ${openLookupErr.message}`);
+
+    // Prioridade: oportunidade aberta sem order_id vinculado (a em branco do trigger)
+    blankOpenOpp = (openOpps ?? []).find(o => !o.nuvemshop_order_id) ?? null;
+  }
+
+  const existing   = existingByOrderId ?? blankOpenOpp;
+  const oppRow     = buildOpportunityRow({
     companyId, storeId, leadId, orderData, transactionData, topic, now,
   });
 
@@ -465,7 +490,7 @@ export async function upsertOrder({ companyId, storeId, orderData, transactionDa
   let action;
 
   if (existing) {
-    // UPDATE
+    // UPDATE — Camada 1 (mesmo pedido) ou Camada 2 (oportunidade em branco reaproveitada)
     const { data: updated, error: updateErr } = await svc
       .from('opportunities')
       .update(oppRow)
@@ -478,7 +503,7 @@ export async function upsertOrder({ companyId, storeId, orderData, transactionDa
     opportunityId = updated.id;
     action        = 'updated';
   } else {
-    // INSERT
+    // INSERT — Camada 3: cliente recorrente ou sem oportunidade aberta disponível
     const insertRow = { ...oppRow, created_at: now };
     const { data: inserted, error: insertErr } = await svc
       .from('opportunities')
