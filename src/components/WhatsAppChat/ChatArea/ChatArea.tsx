@@ -56,6 +56,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [conversation, setConversation] = useState<ChatConversation | null>(null)
   const [contactPhotoUrl, setContactPhotoUrl] = useState<string | null>(null)
   const [leadId, setLeadId] = useState<number | null>(null)
+  const [nuvemshopLeadData, setNuvemshopLeadData] = useState<{
+    checkout_url: string | null
+    cart_total: string | null
+    checkout_id: string | null
+  }>({ checkout_url: null, cart_total: null, checkout_id: null })
   // Hook de ciclos de contato — avalia elegibilidade após envio de mensagem
   const { modalState, triggerCheck, dismiss } = useContactCycleState(companyId)
   // Estados para modal de atividades
@@ -395,6 +400,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       console.error('Erro ao carregar conversa')
     }
   }
+
+  // =====================================================
+  // DADOS NUVEMSHOP DO LEAD (para resolução em templates de mensagem)
+  // =====================================================
+
+  useEffect(() => {
+    if (!leadId) {
+      setNuvemshopLeadData({ checkout_url: null, cart_total: null, checkout_id: null })
+      return
+    }
+    supabase
+      .from('leads')
+      .select('nuvemshop_checkout_url, nuvemshop_checkout_id, cart_total')
+      .eq('id', leadId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const raw = data as Record<string, unknown>
+          setNuvemshopLeadData({
+            checkout_url: (raw.nuvemshop_checkout_url as string | null) ?? null,
+            checkout_id:  (raw.nuvemshop_checkout_id  as string | null) ?? null,
+            cart_total:   raw.cart_total != null
+              ? `R$ ${Number(raw.cart_total).toFixed(2).replace('.', ',')}`
+              : null,
+          })
+        }
+      })
+  }, [leadId])
 
   // =====================================================
   // MODAL DE ATIVIDADES
@@ -1584,6 +1617,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           leadPhone={conversation?.contact_phone ?? ''}
           leadCompany={conversation?.company_name ?? ''}
           attendantName={attendantName}
+          nuvemshopLeadData={nuvemshopLeadData}
         />
       </div>
 
@@ -2368,6 +2402,12 @@ interface MessageInputProps {
   leadCompany?: string
   /** Nome do atendente logado — para resolução de {{nome_atendente}} / {{atendente.nome}}. */
   attendantName?: string
+  /** Dados Nuvemshop do lead — para resolução de {{nuvemshop.*}} em templates. */
+  nuvemshopLeadData?: {
+    checkout_url: string | null
+    cart_total:   string | null
+    checkout_id:  string | null
+  }
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -2385,6 +2425,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   leadPhone = '',
   leadCompany = '',
   attendantName = '',
+  nuvemshopLeadData,
 }) => {
   const { t } = useTranslation('chat')
   const resolvedPlaceholder = useMemo(
@@ -2858,6 +2899,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   nome_atendente: attendantName,
                   lead_telefone:  leadPhone,
                   lead_empresa:   leadCompany,
+                  nuvemshop_checkout_url: nuvemshopLeadData?.checkout_url ?? null,
+                  nuvemshop_cart_total:   nuvemshopLeadData?.cart_total   ?? null,
+                  nuvemshop_checkout_id:  nuvemshopLeadData?.checkout_id  ?? null,
                 })
                 setMessage(resolved)
 
