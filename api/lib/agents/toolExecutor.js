@@ -1215,15 +1215,21 @@ async function execRequestHandoff(svc, args, ctx) {
     .insert({
       company_id:      ctx.company_id,
       conversation_id: ctx.conversation_id,
-      agent_id:        ctx.agent_id,
+      assignment_id:   ctx.assignment_id ?? null,
+      session_id:      ctx.session_id ?? null,
       handoff_type:    'ai_to_human',
-      reason:          reason || 'Solicitação do agente IA',
-      initiated_by:    'ai',
-      created_at:      new Date().toISOString(),
+      notes:           reason || null,
     })
 
   if (handoffError) {
-    console.error('[TOOL] request_handoff: erro ao registrar evento:', handoffError.message)
+    console.error('[TOOL] request_handoff: falha ao registrar agent_handoff_events', {
+      error:           handoffError.message,
+      code:            handoffError.code,
+      company_id:      ctx.company_id,
+      conversation_id: ctx.conversation_id,
+      assignment_id:   ctx.assignment_id ?? null,
+      session_id:      ctx.session_id ?? null,
+    })
   }
 
   // deferred_ai_state sinaliza ao pipeline que o estado deve ser aplicado

@@ -6,12 +6,14 @@
     "overview": "Resumen",
     "byStage": "Por etapa",
     "bySeller": "Por vendedor",
-    "cycleTime": "Tiempo de ciclo"
+    "cycleTime": "Tiempo de ciclo",
+    "agentIa": "Agente IA"
   },
   "sections": {
     "byStage": "Tiempo por etapa — oportunidades abiertas y movimientos históricos en el período",
     "bySeller": "Rendimiento por vendedor — ganadas y perdidas en el período seleccionado",
-    "cycleTime": "Ciclo de ventas — tiempo entre apertura y cierre (ganadas y perdidas en el período)"
+    "cycleTime": "Ciclo de ventas — tiempo entre apertura y cierre (ganadas y perdidas en el período)",
+    "agentIa": "Atenciones del Agente IA — sesiones, seguimientos y transferencias en el período"
   },
   "duration": {
     "empty": "—",
@@ -79,6 +81,45 @@
     "columnMax": "Máximo",
     "columnStatus": "Estado",
     "bottleneck": "Cuello de botella"
+  },
+  "agentReport": {
+    "kpi": {
+      "totalSessions": "Atenciones",
+      "completionRate": "Tasa de conclusión",
+      "avgMessages": "Msgs por atención",
+      "totalFollowups": "Seguimientos enviados",
+      "humanHandoffs": "Transferencias humanas",
+      "ofSessions": "de las atenciones"
+    },
+    "hourly": {
+      "title": "Distribución horaria de atenciones",
+      "empty": "Ninguna atención registrada en el período.",
+      "sessions": "Atenciones",
+      "tooltipHour": "Hora"
+    },
+    "daily": {
+      "title": "Tendencia diaria",
+      "empty": "No hay datos diarios disponibles.",
+      "sessions": "Atenciones",
+      "handoffs": "Transferencias"
+    },
+    "assignmentTable": {
+      "title": "Desempeño por configuración de agente",
+      "empty": "Ninguna configuración activa en el período.",
+      "searchPlaceholder": "Buscar configuración...",
+      "columnName": "Configuración",
+      "columnSessions": "Atenciones",
+      "columnAvgMessages": "Msgs prom.",
+      "columnCredits": "Créditos",
+      "columnHandoffs": "Transferencias",
+      "columnHandoffRate": "Tasa transferencia",
+      "inactive": "inactivo"
+    },
+    "messages": {
+      "loadError": "Error al cargar informe: {{error}}",
+      "retry": "Reintentar",
+      "noData": "Ninguna sesión del agente en este período."
+    }
   },
   "sellerTable": {
     "searchPlaceholder": "Buscar vendedor...",

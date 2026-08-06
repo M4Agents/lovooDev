@@ -599,6 +599,8 @@ export async function runAgentWithConfig(
         company_id:                ctx.company_id ?? '',
         lead_id:                   ctx.lead_id ?? null,
         conversation_id:           ctx.conversation_id ?? '',
+        session_id:                (ctx.session_id as string | null | undefined) ?? null,
+        assignment_id:             (ctx.assignment_id as string | null | undefined) ?? null,
         // Canal Instagram: campo separado para não colidir com conversation_id (WhatsApp).
         // Necessário para a tool create_lead. Jamais vem do LLM.
         instagram_conversation_id: ctx.instagram_conversation_id ?? null,

@@ -6,12 +6,14 @@
     "overview": "Visão Geral",
     "byStage": "Por Etapa",
     "bySeller": "Por Vendedor",
-    "cycleTime": "Tempo de Ciclo"
+    "cycleTime": "Tempo de Ciclo",
+    "agentIa": "Agente IA"
   },
   "sections": {
     "byStage": "Tempo por etapa — oportunidades abertas e movimentações históricas no período",
     "bySeller": "Performance por vendedor — ganhos e perdidos no período selecionado",
-    "cycleTime": "Ciclo de vendas — tempo entre abertura e fechamento (ganhas e perdidas no período)"
+    "cycleTime": "Ciclo de vendas — tempo entre abertura e fechamento (ganhas e perdidas no período)",
+    "agentIa": "Atendimentos do Agente de IA — sessões, follow-ups e transferências no período"
   },
   "duration": {
     "empty": "—",
@@ -79,6 +81,45 @@
     "columnMax": "Máximo",
     "columnStatus": "Status",
     "bottleneck": "Gargalo"
+  },
+  "agentReport": {
+    "kpi": {
+      "totalSessions": "Atendimentos",
+      "completionRate": "Taxa de conclusão",
+      "avgMessages": "Msgs por atendimento",
+      "totalFollowups": "Follow-ups enviados",
+      "humanHandoffs": "Handoffs humanos",
+      "ofSessions": "dos atendimentos"
+    },
+    "hourly": {
+      "title": "Distribuição horária de atendimentos",
+      "empty": "Nenhum atendimento registrado no período.",
+      "sessions": "Atendimentos",
+      "tooltipHour": "Hora"
+    },
+    "daily": {
+      "title": "Tendência diária",
+      "empty": "Nenhum dado diário disponível.",
+      "sessions": "Atendimentos",
+      "handoffs": "Handoffs"
+    },
+    "assignmentTable": {
+      "title": "Desempenho por configuração de agente",
+      "empty": "Nenhuma configuração ativa no período.",
+      "searchPlaceholder": "Buscar configuração...",
+      "columnName": "Configuração",
+      "columnSessions": "Atendimentos",
+      "columnAvgMessages": "Msgs médias",
+      "columnCredits": "Créditos",
+      "columnHandoffs": "Handoffs",
+      "columnHandoffRate": "Taxa handoff",
+      "inactive": "inativo"
+    },
+    "messages": {
+      "loadError": "Erro ao carregar relatório: {{error}}",
+      "retry": "Tentar novamente",
+      "noData": "Nenhum atendimento do agente neste período."
+    }
   },
   "sellerTable": {
     "searchPlaceholder": "Buscar vendedor...",

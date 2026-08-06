@@ -205,6 +205,8 @@ export async function executeAgent(output) {
     // Contexto para toolExecutor — IDs de recursos validados pelo backend
     lead_id:              output.contact?.lead_id ? String(output.contact.lead_id) : null,
     conversation_id:      output.conversation?.id ?? null,
+    session_id:           output.session_id ?? null,
+    assignment_id:        output.metadata?.assignment_id ?? null,
     locked_opportunity_id: output.locked_opportunity_id ?? null, // Phase 3: vem do flow state
     item_of_interest:      output.item_of_interest ?? null,
     model_config:          output.agent?.model_config ?? {},

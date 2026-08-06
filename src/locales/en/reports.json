@@ -6,12 +6,14 @@
     "overview": "Overview",
     "byStage": "By stage",
     "bySeller": "By seller",
-    "cycleTime": "Cycle time"
+    "cycleTime": "Cycle time",
+    "agentIa": "AI Agent"
   },
   "sections": {
     "byStage": "Time by stage — open opportunities and historical moves in the period",
     "bySeller": "Seller performance — wins and losses in the selected period",
-    "cycleTime": "Sales cycle — time between open and close (won and lost in the period)"
+    "cycleTime": "Sales cycle — time between open and close (won and lost in the period)",
+    "agentIa": "AI Agent conversations — sessions, follow-ups and handoffs in the period"
   },
   "duration": {
     "empty": "—",
@@ -79,6 +81,45 @@
     "columnMax": "Max",
     "columnStatus": "Status",
     "bottleneck": "Bottleneck"
+  },
+  "agentReport": {
+    "kpi": {
+      "totalSessions": "Sessions",
+      "completionRate": "Completion rate",
+      "avgMessages": "Avg. messages",
+      "totalFollowups": "Follow-ups sent",
+      "humanHandoffs": "Human handoffs",
+      "ofSessions": "of sessions"
+    },
+    "hourly": {
+      "title": "Hourly session distribution",
+      "empty": "No sessions recorded in this period.",
+      "sessions": "Sessions",
+      "tooltipHour": "Hour"
+    },
+    "daily": {
+      "title": "Daily trend",
+      "empty": "No daily data available.",
+      "sessions": "Sessions",
+      "handoffs": "Handoffs"
+    },
+    "assignmentTable": {
+      "title": "Performance by agent configuration",
+      "empty": "No active configuration in this period.",
+      "searchPlaceholder": "Search configuration...",
+      "columnName": "Configuration",
+      "columnSessions": "Sessions",
+      "columnAvgMessages": "Avg. messages",
+      "columnCredits": "Credits",
+      "columnHandoffs": "Handoffs",
+      "columnHandoffRate": "Handoff rate",
+      "inactive": "inactive"
+    },
+    "messages": {
+      "loadError": "Failed to load report: {{error}}",
+      "retry": "Retry",
+      "noData": "No agent sessions in this period."
+    }
   },
   "sellerTable": {
     "searchPlaceholder": "Search seller...",

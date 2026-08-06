@@ -289,6 +289,18 @@ export function useAccessControl() {
   const canViewAllLeads = hasPermission('view_all_leads')
   const canEditAllLeads = hasPermission('edit_all_leads')
 
+  // ── Relatório do Agente de IA ──────────────────────────────
+  // Controle de UI apenas — a autorização real é feita na RPC.
+  // manager e admin da empresa veem o relatório.
+  // super_admin, system_admin e impersonação também têm acesso.
+  // partner e seller: bloqueados no frontend (e na RPC).
+  const canViewAgentReport =
+    currentRole === 'manager'      ||
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
   // ── Dashboard — visibilidade de blocos por role ────────────
   // Partner NÃO incluído: acesso depende de empresas atribuídas,
   // não é um manager operacional da empresa.
@@ -407,5 +419,8 @@ export function useAccessControl() {
     canViewContactCycles,
     canOperateContactCycles,
     canManageContactCycles,
+
+    // Relatório do Agente de IA (controle de UI)
+    canViewAgentReport,
   }
 }

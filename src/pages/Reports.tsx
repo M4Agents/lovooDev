@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   TrendingUp, TrendingDown, DollarSign, Target,
-  Clock, AlertTriangle, BarChart2, Users, Timer,
+  Clock, AlertTriangle, BarChart2, Users, Timer, Bot,
 } from 'lucide-react'
 import { PeriodFilter } from '../components/PeriodFilter'
 import { ReportFunnelSelector } from '../components/reports/ReportFunnelSelector'
@@ -12,8 +12,10 @@ import { StageTimeTable } from '../components/reports/StageTimeTable'
 import { SellerTable } from '../components/reports/SellerTable'
 import { KpiSkeleton, TableSkeleton, BarChartSkeleton } from '../components/reports/MetricSkeleton'
 import { ReportEmptyState } from '../components/reports/ReportEmptyState'
+import { AgentReportPanel } from '../components/reports/AgentReportPanel'
 import { useReports, ReportTab } from '../hooks/useReports'
 import { useFunnelMetrics } from '../hooks/useFunnelMetrics'
+import { useAccessControl } from '../hooks/useAccessControl'
 import type { CycleTimeMetric } from '../types/reports'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney } from '../lib/formatMoney'
@@ -227,19 +229,25 @@ function CycleTimeTab({
 export default function Reports() {
   const { t } = useTranslation('reports')
   const { company } = useAuth()
+  const { canViewAgentReport } = useAccessControl()
   const displayCurrency = company?.default_currency ?? 'BRL'
   const fmtCurrency = (v: number) => formatMoney(v, displayCurrency)
   const fmtCycle = useFmtCycleSeconds()
 
   const tabs = useMemo(
-    () =>
-      [
-        { key: 'overview' as const, label: t('tabs.overview') },
-        { key: 'by-stage' as const, label: t('tabs.byStage') },
-        { key: 'by-seller' as const, label: t('tabs.bySeller') },
-        { key: 'cycle-time' as const, label: t('tabs.cycleTime') },
-      ],
-    [t]
+    () => {
+      const base: { key: ReportTab; label: string }[] = [
+        { key: 'overview',    label: t('tabs.overview') },
+        { key: 'by-stage',    label: t('tabs.byStage') },
+        { key: 'by-seller',   label: t('tabs.bySeller') },
+        { key: 'cycle-time',  label: t('tabs.cycleTime') },
+      ]
+      if (canViewAgentReport) {
+        base.push({ key: 'agent-ia', label: t('tabs.agentIa') })
+      }
+      return base
+    },
+    [t, canViewAgentReport]
   )
 
   const {
@@ -350,6 +358,18 @@ export default function Reports() {
               </h2>
             </div>
             <CycleTimeTab data={metrics.cycleMetrics} loading={loading} fmtCycle={fmtCycle} />
+          </div>
+        )}
+
+        {activeTab === 'agent-ia' && canViewAgentReport && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Bot className="w-4 h-4 text-gray-500" />
+              <h2 className="text-sm font-semibold text-gray-700">
+                {t('sections.agentIa')}
+              </h2>
+            </div>
+            <AgentReportPanel companyId={companyId} filters={filters} />
           </div>
         )}
       </div>

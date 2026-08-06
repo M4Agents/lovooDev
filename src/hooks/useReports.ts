@@ -11,7 +11,7 @@ import { PREDEFINED_PERIODS } from '../types/analytics'
 import type { PeriodFilter, PeriodType } from '../types/analytics'
 import type { ReportFilters } from '../types/reports'
 
-export type ReportTab = 'overview' | 'by-stage' | 'by-seller' | 'cycle-time'
+export type ReportTab = 'overview' | 'by-stage' | 'by-seller' | 'cycle-time' | 'agent-ia'
 
 export interface SalesFunnelOption {
   id: string
