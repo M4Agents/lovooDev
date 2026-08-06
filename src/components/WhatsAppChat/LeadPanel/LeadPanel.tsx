@@ -637,26 +637,47 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       if (!conversation?.contact_phone || !companyId) return
       
       try {
-        // Normalizar telefone (remover caracteres especiais)
         const normalizedPhone = conversation.contact_phone.replace(/\D/g, '')
-        
-        // Buscar lead diretamente pelo phone_normalized via SQL
-        const { data: matchingLead, error } = await supabase
-          .from('leads')
-          .select('id, responsible_user_id, phone')
-          .eq('company_id', companyId)
-          .eq('phone_normalized', normalizedPhone)
-          .is('deleted_at', null)
-          .maybeSingle()
-        
-        if (error) throw error
+
+        // Fallback para variação do nono dígito brasileiro (área 11-99)
+        // Uazapi pode entregar com ou sem o nono dígito; o lead pode ter sido salvo diferente
+        const getAlternativePhone = (phone: string): string | null => {
+          if (!phone.startsWith('55')) return null
+          if (phone.length === 13 && phone[4] === '9') {
+            // 5599991126548 → 559991126548 (remove o nono dígito)
+            return phone.slice(0, 4) + phone.slice(5)
+          }
+          if (phone.length === 12) {
+            // 559991126548 → 5599991126548 (adiciona o nono dígito)
+            return phone.slice(0, 4) + '9' + phone.slice(4)
+          }
+          return null
+        }
+
+        const queryLead = async (phone: string) => {
+          const { data, error } = await supabase
+            .from('leads')
+            .select('id, responsible_user_id, phone')
+            .eq('company_id', companyId)
+            .eq('phone_normalized', phone)
+            .is('deleted_at', null)
+            .maybeSingle()
+          if (error) throw error
+          return data
+        }
+
+        // Tentar com o telefone original primeiro; se não achar, tentar variação do nono dígito
+        let matchingLead = await queryLead(normalizedPhone)
+        if (!matchingLead) {
+          const altPhone = getAlternativePhone(normalizedPhone)
+          if (altPhone) matchingLead = await queryLead(altPhone)
+        }
         
         if (matchingLead) {
           setCurrentLeadId(matchingLead.id)
           setCurrentResponsibleId(matchingLead.responsible_user_id || '')
           setOriginalResponsibleId(matchingLead.responsible_user_id || null)
         } else {
-          // Resetar estados se não encontrar lead
           setCurrentLeadId(null)
           setCurrentResponsibleId('')
           setOriginalResponsibleId(null)
