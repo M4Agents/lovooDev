@@ -2005,7 +2005,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showReactionPicker, setShowReactionPicker] = React.useState(false)
   const [expanded, setExpanded] = React.useState(false)
   const reactionPickerRef = React.useRef<HTMLDivElement>(null)
-  const READ_MORE_THRESHOLD = 300
+  const READ_MORE_THRESHOLD = 600
 
   // Fechar picker ao clicar fora
   React.useEffect(() => {
@@ -2337,7 +2337,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               {message.content.length > READ_MORE_THRESHOLD && (
                 <button
                   onClick={() => setExpanded(prev => !prev)}
-                  className={`mt-1 text-xs font-medium underline ${isOwn ? 'text-green-200 hover:text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                  className="mt-1 text-xs font-medium text-blue-500 hover:text-blue-700 underline"
                 >
                   {expanded ? 'Ler menos' : 'Ler mais'}
                 </button>
