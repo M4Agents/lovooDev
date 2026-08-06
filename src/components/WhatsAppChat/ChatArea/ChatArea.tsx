@@ -2003,7 +2003,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const [hovered, setHovered] = React.useState(false)
   const [showReactionPicker, setShowReactionPicker] = React.useState(false)
+  const [expanded, setExpanded] = React.useState(false)
   const reactionPickerRef = React.useRef<HTMLDivElement>(null)
+  const READ_MORE_THRESHOLD = 300
 
   // Fechar picker ao clicar fora
   React.useEffect(() => {
@@ -2323,9 +2325,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {message.content && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
-            <p className="text-sm whitespace-pre-wrap">
-              {renderMessageWithLinks(message.content)}
-            </p>
+            <div>
+              <p className="text-sm whitespace-pre-wrap">
+                {message.content.length > READ_MORE_THRESHOLD && !expanded
+                  ? renderMessageWithLinks(message.content.substring(0, READ_MORE_THRESHOLD))
+                  : renderMessageWithLinks(message.content)}
+                {message.content.length > READ_MORE_THRESHOLD && !expanded && (
+                  <span className="text-gray-400">...</span>
+                )}
+              </p>
+              {message.content.length > READ_MORE_THRESHOLD && (
+                <button
+                  onClick={() => setExpanded(prev => !prev)}
+                  className={`mt-1 text-xs font-medium underline ${isOwn ? 'text-green-200 hover:text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {expanded ? 'Ler menos' : 'Ler mais'}
+                </button>
+              )}
+            </div>
           )}
           
           {/* Timestamp para todas as mensagens, layout diferente por tipo */}

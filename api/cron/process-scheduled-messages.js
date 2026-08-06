@@ -167,8 +167,7 @@ export default async function handler(req, res) {
 // =====================================================
 
 async function createChatMessageRecord(message) {
-  const content   = message.content || ''
-  const truncated = content.length > 450 ? content.substring(0, 447) + '...' : content
+  const content = message.content || ''
 
   // #region agent log
   console.log(`[CHAT-CREATE] conv=${message.conversation_id} company=${message.company_id} type=${message.message_type} sentBy=${message.created_by}`)
@@ -177,7 +176,7 @@ async function createChatMessageRecord(message) {
   const { data, error } = await supabase.rpc('chat_create_message', {
     p_conversation_id: message.conversation_id,
     p_company_id:      message.company_id,
-    p_content:         truncated,
+    p_content:         content,
     p_message_type:    message.message_type,
     p_direction:       'outbound',
     p_sent_by:         message.created_by || null,

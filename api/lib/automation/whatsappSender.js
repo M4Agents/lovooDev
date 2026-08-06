@@ -273,13 +273,10 @@ function replaceVariables(message, lead, opportunity, contextVariables) {
 // ---------------------------------------------------------------------------
 
 async function createDbMessage(conversationId, companyId, content, messageType, mediaUrl, userId, supabase) {
-  // Truncar para evitar "value too long for character varying(500)"
-  const truncated = content.length > 450 ? content.substring(0, 447) + '...' : content
-
   const { data, error } = await supabase.rpc('chat_create_message', {
     p_conversation_id: conversationId,
     p_company_id:      companyId,
-    p_content:         truncated,
+    p_content:         content,
     p_message_type:    messageType,
     p_direction:       'outbound',
     p_sent_by:         userId,
