@@ -49,6 +49,9 @@ export function useFunnelMetrics(companyId: string, filters: ReportFilters) {
       })
       .catch((err) => {
         if (cancelled) return
+        // #region agent log
+        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ab518'},body:JSON.stringify({sessionId:'6ab518',location:'useFunnelMetrics.ts:catch',message:'useFunnelMetrics Promise.all REJECTED',data:{errMsg:err instanceof Error?err.message:String(err),errCode:(err as {code?:string}).code,companyId},hypothesisId:'H4-H5',timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
         setError(err instanceof Error ? err.message : 'Erro ao carregar relatórios')
       })
       .finally(() => {

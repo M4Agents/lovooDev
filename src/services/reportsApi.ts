@@ -40,7 +40,12 @@ export const reportsApi = {
     filters: ReportFilters
   ): Promise<StageTimeMetric[]> {
     const { data, error } = await supabase.rpc('get_stage_time_metrics', toRpcParams(companyId, filters))
-    if (error) throw error
+    // #region agent log
+    if (error) {
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6ab518'},body:JSON.stringify({sessionId:'6ab518',location:'reportsApi.ts:getStageTimeMetrics',message:'RPC get_stage_time_metrics FAILED',data:{code:error.code,message:error.message,hint:error.hint,details:error.details,companyId},hypothesisId:'H4-H5-H6',timestamp:Date.now()})}).catch(()=>{})
+      throw error
+    }
+    // #endregion
     return (data as StageTimeMetric[]) ?? []
   },
 
