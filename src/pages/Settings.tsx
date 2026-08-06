@@ -151,12 +151,19 @@ export const Settings: React.FC = () => {
   // Detectar parâmetro tab na URL ou state de navegação para ativar aba correta
   useEffect(() => {
     const tabParam = searchParams.get('tab');
+    const subtabParam = searchParams.get('subtab');
     const stateTab = (location.state as any)?.activeTab as string | undefined;
     const validTabs = ['integracoes', 'usuarios', 'tracking', 'empresas', 'sistema', 'catalogo', 'tipos-venda', 'agentes', 'agentes-empresa', 'ia-governance', 'planos-uso', 'automacoes', 'gestao-empresas', 'gestao-planos', 'integracoes-globais', 'notificacoes'] as const;
     if (stateTab && (validTabs as readonly string[]).includes(stateTab)) {
       setActiveTab(stateTab as typeof validTabs[number]);
     } else if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
       setActiveTab(tabParam as typeof validTabs[number]);
+    }
+
+    // Deep link para sub-aba de Planos e Uso (ex: ?subtab=comprar-creditos vindo do LowCreditAlert)
+    const validSubTabs = ['plano-atual', 'consumo-ia', 'comprar-creditos', 'consultoria'] as const;
+    if (subtabParam && (validSubTabs as readonly string[]).includes(subtabParam)) {
+      setPlanUsageSubTab(subtabParam as typeof validSubTabs[number]);
     }
   }, [searchParams, location.state]);
 

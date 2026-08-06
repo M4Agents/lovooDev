@@ -26,6 +26,7 @@ import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
 import { ActivityNotificationButton } from './ActivityNotificationButton';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { LowCreditAlert } from './LowCreditAlert';
 
 type ModernLayoutProps = {
   children: React.ReactNode;
@@ -34,12 +35,34 @@ type ModernLayoutProps = {
 export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
   const { t } = useTranslation('layout');
   const { user, company, signOut, isImpersonating, originalUser, stopImpersonation, userRoles, currentRole } = useAuth();
-  const { isMaster } = useAccessControl();
+  const { isMaster, canPurchaseAiCredits } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const realtimeStats = useRealtimeAnalytics(company?.id);
+
+  // Saldo de créditos de IA — usado pelo LowCreditAlert
+  const [aiCreditsTotal, setAiCreditsTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!company?.id || !canPurchaseAiCredits) return;
+
+    let cancelled = false;
+    supabase
+      .from('company_credits')
+      .select('plan_credits, extra_credits')
+      .eq('company_id', company.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data) {
+          setAiCreditsTotal((data.plan_credits ?? 0) + (data.extra_credits ?? 0));
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [company?.id, canPurchaseAiCredits]);
   
   // Estado para dados do usuário (foto e nome)
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
@@ -303,6 +326,14 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         
         {/* Page Content - Fullscreen */}
         <main className="p-6 min-h-screen bg-gray-50">
+          {/* Alerta global de créditos baixos — visível apenas para admins */}
+          {company?.id && aiCreditsTotal !== null && (
+            <LowCreditAlert
+              companyId={company.id}
+              totalCredits={aiCreditsTotal}
+              canPurchase={canPurchaseAiCredits}
+            />
+          )}
           {children}
         </main>
       </div>

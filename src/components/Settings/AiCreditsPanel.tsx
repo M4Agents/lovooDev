@@ -57,6 +57,8 @@ interface CreditTx {
 
 type Period = 7 | 30 | 60 | 90
 
+const TX_PAGE_SIZE = 50
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getAuthHeaders(): Promise<HeadersInit> {
@@ -301,6 +303,9 @@ export function AiCreditsPanel({ companyId }: Props) {
   const [loadingCredits,  setLoadingCredits]  = useState(true)
   const [loadingUsage,    setLoadingUsage]    = useState(true)
   const [loadingTx,       setLoadingTx]       = useState(true)
+  const [loadingMoreTx,   setLoadingMoreTx]   = useState(false)
+  const [txOffset,        setTxOffset]        = useState(0)
+  const [txTotal,         setTxTotal]         = useState(0)
 
   const [errorCredits,    setErrorCredits]    = useState<string | null>(null)
   const [errorUsage,      setErrorUsage]      = useState<string | null>(null)
@@ -342,34 +347,60 @@ export function AiCreditsPanel({ companyId }: Props) {
   }, [companyId])
 
   // ── Carregamento: histórico de transações ─────────────────────────────────
+  // Filtra pelo período selecionado e suporta "Carregar mais" via offset.
 
-  const loadTransactions = useCallback(async () => {
-    setLoadingTx(true)
+  const loadTransactions = useCallback(async (p: number, reset = true, currentOffset = 0) => {
+    if (reset) {
+      setLoadingTx(true)
+    } else {
+      setLoadingMoreTx(true)
+    }
     setErrorTx(null)
     try {
-      const { data, error } = await supabase
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - p)
+      const cutoffIso = cutoff.toISOString()
+
+      const newOffset = reset ? 0 : currentOffset + TX_PAGE_SIZE
+
+      const { data, error, count } = await supabase
         .from('credit_transactions')
-        .select('id, type, credits, balance_after, plan_balance_after, extra_balance_after, feature_type, created_at')
+        .select(
+          'id, type, credits, balance_after, plan_balance_after, extra_balance_after, feature_type, created_at',
+          { count: 'exact' }
+        )
         .eq('company_id', companyId)
+        .gte('created_at', cutoffIso)
         .order('created_at', { ascending: false })
-        .limit(30)
+        .range(newOffset, newOffset + TX_PAGE_SIZE - 1)
+
       if (error) throw error
-      setTransactions((data ?? []) as CreditTx[])
+
+      const rows = (data ?? []) as CreditTx[]
+      if (reset) {
+        setTransactions(rows)
+        setTxOffset(0)
+      } else {
+        setTransactions(prev => [...prev, ...rows])
+        setTxOffset(newOffset)
+      }
+      setTxTotal(count ?? 0)
     } catch (err) {
       setErrorTx(err instanceof Error ? err.message : 'Erro ao carregar histórico de transações')
     } finally {
       setLoadingTx(false)
+      setLoadingMoreTx(false)
     }
   }, [companyId])
 
   useEffect(() => {
     void loadCredits()
-    void loadTransactions()
-  }, [loadCredits, loadTransactions])
+  }, [loadCredits])
 
   useEffect(() => {
     void loadUsage(period)
-  }, [period, loadUsage])
+    void loadTransactions(period, true)
+  }, [period, loadUsage, loadTransactions])
 
   // ── Valores calculados ───────────────────────────────────────────────────
 
@@ -614,7 +645,13 @@ export function AiCreditsPanel({ companyId }: Props) {
         <SectionHeader
           icon={<Receipt size={16} />}
           title="Histórico de Transações"
-          right={<span className="text-xs text-slate-400">Últimas 30</span>}
+          right={
+            <span className="text-xs text-slate-400">
+              {transactions.length > 0
+                ? `${transactions.length}${txTotal > transactions.length ? ` de ${txTotal}` : ''} registro${transactions.length !== 1 ? 's' : ''} — últimos ${period}d`
+                : `Últimos ${period}d`}
+            </span>
+          }
         />
 
         {loadingTx ? (
@@ -682,8 +719,27 @@ export function AiCreditsPanel({ companyId }: Props) {
                     </td>
                   </tr>
                 ))}
+                {/* Linhas de skeleton enquanto carrega mais */}
+                {loadingMoreTx && Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonRow key={`more-${i}`} cols={5} />
+                ))}
               </tbody>
             </table>
+
+            {/* Botão Carregar mais */}
+            {transactions.length < txTotal && !loadingMoreTx && (
+              <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs text-slate-400">
+                  Exibindo {transactions.length} de {txTotal} registros
+                </span>
+                <button
+                  onClick={() => void loadTransactions(period, false, txOffset)}
+                  className="px-4 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                >
+                  Carregar mais
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
