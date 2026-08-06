@@ -358,8 +358,12 @@ export function getNuvemshopVariables(activeTriggerType?: string): Variable[] {
     return [...NS_VARS_BASE, ...NS_VARS_CHECKOUT]
   }
 
-  // order_fulfilled / order_packed → + tracking_number, shipping_carrier
-  if (activeTriggerType === 'nuvemshop.order_fulfilled' || activeTriggerType === 'nuvemshop.order_packed') {
+  // order_fulfilled / order_packed / order_delivered → + tracking_number, shipping_carrier
+  if (
+    activeTriggerType === 'nuvemshop.order_fulfilled' ||
+    activeTriggerType === 'nuvemshop.order_packed'    ||
+    activeTriggerType === 'nuvemshop.order_delivered'
+  ) {
     return [...NS_VARS_BASE, ...NS_VARS_ORDER, ...NS_VARS_FULFILLMENT]
   }
 

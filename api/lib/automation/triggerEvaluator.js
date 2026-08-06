@@ -37,7 +37,8 @@ function matchesTriggerConditions(flow, event) {
       case 'nuvemshop.order_paid':
       case 'nuvemshop.order_cancelled':
       case 'nuvemshop.order_fulfilled':
-      case 'nuvemshop.order_packed':      return true // sem filtros na v1
+      case 'nuvemshop.order_packed':
+      case 'nuvemshop.order_delivered':   return true // sem filtros na v1
       default: return true
     }
   })

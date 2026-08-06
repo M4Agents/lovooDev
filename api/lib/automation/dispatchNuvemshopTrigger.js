@@ -2,13 +2,14 @@
 // DISPATCH NUVEMSHOP TRIGGER
 //
 // Dispatcher backend para eventos da integração Nuvemshop.
-// Suporta os 6 tipos de gatilho:
+// Suporta os 7 tipos de gatilho:
 //   nuvemshop.checkout_abandoned
 //   nuvemshop.order_created
 //   nuvemshop.order_paid
 //   nuvemshop.order_cancelled
 //   nuvemshop.order_fulfilled
 //   nuvemshop.order_packed
+//   nuvemshop.order_delivered  ← detectado via order/updated (shipping_status=delivered)
 //
 // Segue exatamente o mesmo contrato de dispatchLeadCreatedTrigger.js:
 //   - supabaseAdmin.js     → cliente com service_role

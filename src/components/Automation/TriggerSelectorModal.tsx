@@ -205,6 +205,13 @@ const NUVEMSHOP_CATEGORY: TriggerCategory = {
       icon: Package,
       color: 'indigo',
     },
+    {
+      type: 'nuvemshop.order_delivered',
+      label: 'Pedido Entregue',
+      description: 'Dispara quando o pedido é marcado como entregue ao cliente na Nuvemshop',
+      icon: Truck,
+      color: 'teal',
+    },
   ]
 }
 

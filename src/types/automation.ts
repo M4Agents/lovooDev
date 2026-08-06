@@ -322,6 +322,7 @@ export type TriggerType =
   | 'nuvemshop.order_cancelled'
   | 'nuvemshop.order_fulfilled'
   | 'nuvemshop.order_packed'
+  | 'nuvemshop.order_delivered'
 
 export type ComparisonType = 
   | 'contains'

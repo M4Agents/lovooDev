@@ -192,6 +192,7 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     { value: 'nuvemshop.order_cancelled',    label: '❌ NS: Pedido Cancelado' },
     { value: 'nuvemshop.order_fulfilled',    label: '🚚 NS: Pedido Enviado' },
     { value: 'nuvemshop.order_packed',       label: '📫 NS: Pedido Embalado' },
+    { value: 'nuvemshop.order_delivered',    label: '✅ NS: Pedido Entregue' },
   ]
 
   const comparisonTypes: { value: ComparisonType; label: string }[] = [
@@ -1076,7 +1077,8 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
             config.triggerType === 'nuvemshop.order_paid'      ||
             config.triggerType === 'nuvemshop.order_cancelled' ||
             config.triggerType === 'nuvemshop.order_fulfilled' ||
-            config.triggerType === 'nuvemshop.order_packed'
+            config.triggerType === 'nuvemshop.order_packed'    ||
+            config.triggerType === 'nuvemshop.order_delivered'
           ) && (
             <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-3">
               Este gatilho não possui filtros adicionais. Será acionado em todos os eventos do tipo correspondente na sua loja Nuvemshop.

@@ -5,6 +5,7 @@
 //   order/created → cria oportunidade vinculada ao lead
 //   order/paid    → atualiza status para 'won'
 //   order/updated → atualiza oportunidade e itens
+//                   ↳ detecta shipping_status='delivered' → nuvemshop.order_delivered
 //
 // Responsabilidades deste handler:
 //   1. Validar contexto (companyId, storeId, nuvemshopOrderId)
@@ -143,13 +144,24 @@ export async function orderHandler(ctx) {
     correlation_id:     correlationId,
   }));
 
-  // ── Disparar automações (fire-and-forget) ─────────────────────────────────
+  // ── Disparar automações ───────────────────────────────────────────────────
   const TOPIC_TO_TRIGGER = {
     'order/created':   'nuvemshop.order_created',
     'order/paid':      'nuvemshop.order_paid',
     'order/cancelled': 'nuvemshop.order_cancelled',
   };
   const triggerType = TOPIC_TO_TRIGGER[topic];
+
+  // Variáveis base do pedido — compartilhadas por todos os dispatches deste handler
+  const baseOrderVars = {
+    store_id:       storeId,
+    order_id:       nuvemshopOrderId,
+    order_number:   String(orderData?.number          ?? ''),
+    order_status:   String(orderData?.status          ?? ''),
+    payment_status: String(orderData?.payment_status  ?? ''),
+    order_items:    formatOrderItems(orderData?.products),
+    customer_id:    String(orderData?.customer?.id    ?? ''),
+  };
 
   if (triggerType) {
     if (syncResult.leadId) {
@@ -160,15 +172,7 @@ export async function orderHandler(ctx) {
         triggerType,
         leadId:        syncResult.leadId,
         opportunityId: syncResult.opportunityId ?? null,
-        nuvemshopVars: {
-          store_id:       storeId,
-          order_id:       nuvemshopOrderId,
-          order_number:   String(orderData?.number          ?? ''),
-          order_status:   String(orderData?.status          ?? ''),
-          payment_status: String(orderData?.payment_status  ?? ''),
-          order_items:    formatOrderItems(orderData?.products),
-          customer_id:    String(orderData?.customer?.id    ?? ''),
-        },
+        nuvemshopVars: baseOrderVars,
       }).catch(err => console.error(JSON.stringify({
         level:              'error',
         event:              'order_automation_dispatch_failed',
@@ -183,6 +187,49 @@ export async function orderHandler(ctx) {
         level:              'warn',
         event:              'automation_skipped_no_lead',
         trigger:            triggerType,
+        company_id:         companyId,
+        nuvemshop_order_id: nuvemshopOrderId,
+        reason:             'orderSync did not return leadId',
+        correlation_id:     correlationId,
+      }));
+    }
+  }
+
+  // ── Detectar entrega (shipping_status=delivered via order/updated) ─────────
+  // A Nuvemshop não tem webhook order/delivered. O status chega via order/updated.
+  // Dedup key: nuvemshop:{order_id}:order_delivered — garante disparo único por pedido.
+  if (topic === 'order/updated' && orderData?.shipping_status === 'delivered') {
+    if (syncResult.leadId) {
+      console.info(JSON.stringify({
+        level:              'info',
+        event:              'order_delivered_detected',
+        company_id:         companyId,
+        nuvemshop_order_id: nuvemshopOrderId,
+        correlation_id:     correlationId,
+      }));
+      await dispatchNuvemshopTrigger({
+        companyId,
+        triggerType:   'nuvemshop.order_delivered',
+        leadId:        syncResult.leadId,
+        opportunityId: syncResult.opportunityId ?? null,
+        nuvemshopVars: {
+          ...baseOrderVars,
+          tracking_number:  String(orderData?.shipping_tracking_number ?? ''),
+          tracking_url:     String(orderData?.shipping_tracking_url    ?? ''),
+          shipping_carrier: String(orderData?.shipping_carrier_name    ?? ''),
+        },
+      }).catch(err => console.error(JSON.stringify({
+        level:              'error',
+        event:              'order_delivered_dispatch_failed',
+        company_id:         companyId,
+        nuvemshop_order_id: nuvemshopOrderId,
+        correlation_id:     correlationId,
+        message:            err?.message,
+      })));
+    } else {
+      console.warn(JSON.stringify({
+        level:              'warn',
+        event:              'order_delivered_skipped_no_lead',
         company_id:         companyId,
         nuvemshop_order_id: nuvemshopOrderId,
         reason:             'orderSync did not return leadId',
