@@ -41,7 +41,16 @@ interface AssignmentDraft {
   follow_up_absence_hours: number
   follow_up_max_attempts:  number
   follow_up_interval_hours: number
+  completion_triggers:     string[]
 }
+
+const COMPLETION_TRIGGER_OPTIONS = [
+  { value: 'human_handoff',       label: 'Transferência para humano',      hint: 'ex: lead agendou reunião' },
+  { value: 'lead_qualified',      label: 'Lead qualificado pelo agente',   hint: '' },
+  { value: 'conversation_closed', label: 'Conversa encerrada naturalmente', hint: '' },
+  { value: 'timeout',             label: 'Tempo limite atingido',           hint: '' },
+  { value: 'max_messages',        label: 'Limite de mensagens atingido',    hint: '' },
+] as const
 
 const PRICE_POLICY_LABELS: Record<PriceDisplayPolicy, string> = {
   disabled:      'Nunca informar preço',
@@ -241,6 +250,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     follow_up_absence_hours: assignment.follow_up_absence_hours ?? 2,
     follow_up_max_attempts:  assignment.follow_up_max_attempts  ?? 3,
     follow_up_interval_hours: assignment.follow_up_interval_hours ?? 24,
+    completion_triggers:     assignment.completion_triggers     ?? [],
   })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -255,7 +265,8 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.follow_up_enabled       !== (assignment.follow_up_enabled       ?? false) ||
     draft.follow_up_absence_hours !== (assignment.follow_up_absence_hours ?? 2)     ||
     draft.follow_up_max_attempts  !== (assignment.follow_up_max_attempts  ?? 3)     ||
-    draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24)
+    draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24) ||
+    JSON.stringify([...(draft.completion_triggers)].sort()) !== JSON.stringify([...(assignment.completion_triggers ?? [])].sort())
 
   const handleSave = async () => {
     setSaveState('saving')
@@ -271,6 +282,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         follow_up_absence_hours: draft.follow_up_absence_hours,
         follow_up_max_attempts:  draft.follow_up_max_attempts,
         follow_up_interval_hours: draft.follow_up_interval_hours,
+        completion_triggers:     draft.completion_triggers,
       })
       setSaveState('saved')
       onSaved(updated)
@@ -409,6 +421,51 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         onChangeInterval={(v) => setDraft((d) => ({ ...d, follow_up_interval_hours: v }))}
       />
 
+      {/* Critério de conclusão de atendimento */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Critério de conclusão de atendimento</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Defina quais desfechos contam como "atendimento concluído" no relatório do Agente de IA.
+            </p>
+          </div>
+        </div>
+        <div className="px-4 py-4 space-y-3">
+          {COMPLETION_TRIGGER_OPTIONS.map(({ value, label, hint }) => {
+            const checked = draft.completion_triggers.includes(value)
+            return (
+              <label
+                key={value}
+                className={`flex items-start gap-3 cursor-pointer select-none ${!canManageConversationalAgents ? 'opacity-50 pointer-events-none' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => {
+                    setDraft((d) => ({
+                      ...d,
+                      completion_triggers: checked
+                        ? d.completion_triggers.filter((v) => v !== value)
+                        : [...d.completion_triggers, value]
+                    }))
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">
+                  {label}
+                  {hint && <span className="text-xs text-gray-400 ml-1">({hint})</span>}
+                </span>
+              </label>
+            )
+          })}
+          {draft.completion_triggers.length === 0 && (
+            <p className="text-xs text-amber-600 flex items-center gap-1">
+              Nenhum critério selecionado — a Taxa de conclusão sempre será 0%.
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Rodapé: erro + botão salvar */}
       {saveError && (

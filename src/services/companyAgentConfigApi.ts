@@ -49,6 +49,7 @@ export interface CompanyAgentAssignment {
   follow_up_absence_hours: number
   follow_up_max_attempts:  number
   follow_up_interval_hours: number
+  completion_triggers:     string[]
   created_at:              string
   updated_at:              string
 }
@@ -89,6 +90,7 @@ export interface UpdateAssignmentPayload {
   follow_up_absence_hours?: number
   follow_up_max_attempts?:  number
   follow_up_interval_hours?: number
+  completion_triggers?:     string[]
 }
 
 export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms' | 'instagram'

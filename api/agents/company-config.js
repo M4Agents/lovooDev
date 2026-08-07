@@ -99,6 +99,7 @@ export default async function handler(req, res) {
       follow_up_absence_hours,
       follow_up_max_attempts,
       follow_up_interval_hours,
+      completion_triggers,
       created_at,
       updated_at,
       lovoo_agents ( id, name )

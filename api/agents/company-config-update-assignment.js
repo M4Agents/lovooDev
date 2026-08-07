@@ -76,7 +76,8 @@ export default async function handler(req, res) {
   const {
     company_id, assignment_id, is_active, agent_id, capabilities,
     price_display_policy, operating_schedule,
-    follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours
+    follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours,
+    completion_triggers
   } = req.body ?? {};
 
   // ── Validação de entrada ───────────────────────────────────────────────────
@@ -108,6 +109,21 @@ export default async function handler(req, res) {
     const v = Number(follow_up_interval_hours);
     if (isNaN(v) || v < 1 || v > 720) {
       return res.status(400).json({ success: false, error: 'follow_up_interval_hours deve ser número entre 1 e 720.' });
+    }
+  }
+
+  const VALID_COMPLETION_TRIGGERS = ['human_handoff', 'lead_qualified', 'conversation_closed', 'timeout', 'max_messages'];
+
+  if (completion_triggers !== undefined) {
+    if (!Array.isArray(completion_triggers)) {
+      return res.status(400).json({ success: false, error: 'completion_triggers deve ser um array de strings.' });
+    }
+    const invalid = completion_triggers.filter((v) => !VALID_COMPLETION_TRIGGERS.includes(v));
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `completion_triggers contém valores inválidos: ${invalid.join(', ')}. Permitidos: ${VALID_COMPLETION_TRIGGERS.join(', ')}.`
+      });
     }
   }
 
@@ -185,6 +201,7 @@ export default async function handler(req, res) {
   if (follow_up_absence_hours !== undefined) updatePayload.follow_up_absence_hours = Number(follow_up_absence_hours);
   if (follow_up_max_attempts  !== undefined) updatePayload.follow_up_max_attempts  = Number(follow_up_max_attempts);
   if (follow_up_interval_hours !== undefined) updatePayload.follow_up_interval_hours = Number(follow_up_interval_hours);
+  if (completion_triggers      !== undefined) updatePayload.completion_triggers      = completion_triggers;
 
   if (capabilities !== undefined && typeof capabilities === 'object' && capabilities !== null) {
     // Merge apenas as capabilities conhecidas — nunca substituir com campos arbitrários
@@ -216,7 +233,7 @@ export default async function handler(req, res) {
     .update(updatePayload)
     .eq('id', assignment_id)
     .eq('company_id', company_id)
-    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, updated_at')
+    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, completion_triggers, updated_at')
     .single();
 
   if (updateErr) {
