@@ -637,9 +637,32 @@ function buildMemorySection(rawMemory) {
   // Linha principal: summary
   lines.push(memory.summary);
 
-  // Linha de open_loops (se houver e não muito velhos)
-  if (memory.open_loops.length > 0) {
-    lines.push(`Aguardando resposta: ${memory.open_loops.join(', ')}`);
+  // Linha de facts preenchidos — expõe ao LLM o que já foi coletado
+  // Sem isso o LLM só vê summary/open_loops e fica cego para o que já sabe
+  const filledFacts = Object.entries(memory.facts ?? {}).filter(([, v]) => v && String(v).trim().length > 0);
+  if (filledFacts.length > 0) {
+    lines.push(`Já informado: ${filledFacts.map(([k, v]) => `${k}=${v}`).join(', ')}`);
+  }
+
+  // Linha de open_loops: filtra loops que contradizem facts já preenchidos.
+  // O LLM frequentemente usa sinônimos nos open_loops (ex: "motivo" em vez de "objetivo"),
+  // então o filtro usa um mapeamento semântico por fact key.
+  const FACT_LOOP_KEYWORDS = {
+    nome:        ['nome', 'identificação', 'quem é'],
+    objetivo:    ['objetivo', 'motivo', 'motivação', 'por que', 'porquê', 'motivou'],
+    experiencia: ['experiência', 'experiencia', 'perfil', 'conhecimento'],
+    aplicacao:   ['aplicação', 'aplicacao', 'onde vai usar', 'aplicar', 'contexto'],
+    prazo:       ['prazo', 'quando', 'urgência', 'urgencia', 'data'],
+  };
+  const filteredLoops = (memory.open_loops ?? []).filter(loop => {
+    const loopLower = loop.toLowerCase();
+    return !filledFacts.some(([k]) => {
+      const keywords = FACT_LOOP_KEYWORDS[k] ?? [k];
+      return keywords.some(kw => loopLower.includes(kw));
+    });
+  });
+  if (filteredLoops.length > 0) {
+    lines.push(`Aguardando resposta: ${filteredLoops.join(', ')}`);
   }
 
   // Linha de metadados
@@ -656,6 +679,10 @@ function buildMemorySection(rawMemory) {
   if (meta.length > 0) lines.push(meta.join(' | '));
 
   const section = `[MEMÓRIA]\n${lines.join('\n')}`;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'agentExecutor.js:buildMemorySection',message:'bloco [MEMÓRIA] gerado',data:{facts:filledFacts.map(([k,v])=>({k,v})),filteredLoops,rawOpenLoops:memory.open_loops,section:section.slice(0,500)},timestamp:Date.now(),hypothesisId:'H-facts-invisible'})}).catch(()=>{});
+  // #endregion
 
   // Hard cap de caracteres no prompt
   return section.slice(0, MEM_PROMPT_MAX_CHARS);
@@ -871,6 +898,10 @@ async function writeMemory(svc, conversationId, companyId, memoryPayload, existi
   // ── Sanitizar facts antes do merge ───────────────────────────────────────────
   const rawFacts      = memoryPayload.facts && typeof memoryPayload.facts === 'object' ? memoryPayload.facts : {};
   const sanitizedFacts = sanitizeFacts(rawFacts, recentMessages, safeExisting.facts ?? {}, userMessage);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'agentExecutor.js:writeMemory',message:'facts extraídos pelo LLM e sanitização',data:{rawFacts,sanitizedFacts,existingFacts:safeExisting.facts??{},openLoopsFromLLM:memoryPayload.open_loops,summary:memoryPayload.summary},timestamp:Date.now(),hypothesisId:'H-facts-invisible'})}).catch(()=>{});
+  // #endregion
 
   // ── Merge inteligente ─────────────────────────────────────────────────────────
   // facts: preserva existentes, adiciona/atualiza novos sanitizados
