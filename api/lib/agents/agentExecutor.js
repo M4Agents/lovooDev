@@ -429,8 +429,26 @@ function buildExtraContext(output) {
   // #endregion
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
-  // Mensagens outbound de automação (is_ai_generated=false) são excluídas do histórico:
-  // elas não fazem parte do fluxo do agente e confundem o LLM quando rotuladas como [AGENTE].
+  //
+  // FILTRO — mensagens outbound de automação excluídas intencionalmente:
+  //   Automações (is_ai_generated=false, direction='outbound') enviam mensagens
+  //   de boas-vindas ou de fluxo que aparecem intercaladas com as mensagens do
+  //   agente. Sem esse filtro, o LLM as enxerga como [AGENTE] e fica confuso
+  //   sobre quais perguntas ele mesmo fez — causando repetição de perguntas ou
+  //   reinício de fluxo.
+  //
+  //   Exemplo real: automação enviava "Recebi seu cadastro, você tem interesse
+  //   no curso?" como [AGENTE] logo após o agente perguntar o nome. O LLM
+  //   interpretava isso como se ele tivesse feito duas perguntas diferentes e
+  //   não conseguia associar a resposta do lead à pergunta correta.
+  //
+  // NORMALIZAÇÃO de newlines:
+  //   Mensagens com '\n' internas ficavam sem prefixo nas linhas seguintes,
+  //   deixando conteúdo "solto" no histórico sem rótulo [CONTATO]/[AGENTE].
+  //   Ex: "[CONTATO]: Marcio\nquero informações" aparecia como:
+  //       [CONTATO]: Marcio
+  //       quero informações    ← sem rótulo, LLM não sabe quem disse
+  //   Após a normalização cada linha recebe o prefixo correto.
   const allMessages = output.conversation?.recent_messages ?? [];
   const messages = allMessages.filter(m =>
     m.direction === 'inbound' || m.is_ai_generated === true
@@ -438,8 +456,6 @@ function buildExtraContext(output) {
   if (messages.length > 0) {
     const lines = messages.map(m => {
       const prefix  = m.direction === 'inbound' ? '[CONTATO]' : '[AGENTE]';
-      // Normaliza quebras de linha: cada linha da mesma mensagem recebe o prefixo correto.
-      // Sem isso, linhas após a primeira ficam sem rótulo e confundem o LLM.
       const content = (m.content ?? '').replace(/\n/g, ` \n${prefix}: `);
       return `${prefix}: ${content}`;
     });
@@ -632,8 +648,31 @@ function computeAgeDays(lastInteractionAt) {
 // ── buildMemorySection ────────────────────────────────────────────────────────
 
 /**
- * Formata a memória como bloco [MEMÓRIA] para o extra_context.
+ * Formata a memória como bloco [MEMÓRIA] para o extra_context do LLM.
  * Retorna null quando não há summary (conversas novas não recebem o bloco).
+ *
+ * ESTRUTURA DO BLOCO (ordem intencional):
+ *   1. "Já informado: k=v, ..."  — facts preenchidos PRIMEIRO
+ *   2. summary                   — contexto descritivo, pode estar desatualizado
+ *   3. "Aguardando resposta: ..."— open_loops filtrados (sem contradições com facts)
+ *   4. metadados (estágio, interações, idade)
+ *
+ * POR QUE facts vêm antes do summary:
+ *   O LLM lê o bloco de cima para baixo. O summary pode ficar desatualizado
+ *   (ex: "aguardando nome" quando facts.nome já está preenchido). Colocando
+ *   facts primeiro, o LLM vê os dados concretos antes do contexto potencialmente
+ *   obsoleto — evitando que siga seções de ABERTURA desnecessariamente.
+ *
+ * POR QUE open_loops são filtrados semanticamente:
+ *   O LLM frequentemente escreve open_loops com sinônimos inconsistentes com
+ *   os facts que ele mesmo extraiu (ex: escreve "motivo não informado" em
+ *   open_loops enquanto preenche facts.objetivo com o valor correto). O filtro
+ *   semântico remove esses loops contraditórios antes de exibi-los ao LLM,
+ *   usando mapeamento de sinônimos por campo (ver FACT_LOOP_KEYWORDS).
+ *
+ * IMPORTANTE: a sanitização de open_loops também ocorre em writeMemory() ao
+ *   persistir no banco — esta filtragem aqui é defesa em profundidade para
+ *   cobrir memórias legadas que possam ter sido salvas antes da sanitização.
  */
 function buildMemorySection(rawMemory) {
   const memory = safeMemoryForPrompt(rawMemory);
@@ -642,19 +681,19 @@ function buildMemorySection(rawMemory) {
   const ageDays = computeAgeDays(memory.last_interaction_at);
   const lines   = [];
 
-  // Linha principal: summary
-  lines.push(memory.summary);
-
-  // Linha de facts preenchidos — expõe ao LLM o que já foi coletado
-  // Sem isso o LLM só vê summary/open_loops e fica cego para o que já sabe
+  // 1. Facts preenchidos PRIMEIRO — dados concretos têm prioridade visual sobre summary
   const filledFacts = Object.entries(memory.facts ?? {}).filter(([, v]) => v && String(v).trim().length > 0);
   if (filledFacts.length > 0) {
     lines.push(`Já informado: ${filledFacts.map(([k, v]) => `${k}=${v}`).join(', ')}`);
   }
 
-  // Linha de open_loops: filtra loops que contradizem facts já preenchidos.
-  // O LLM frequentemente usa sinônimos nos open_loops (ex: "motivo" em vez de "objetivo"),
-  // então o filtro usa um mapeamento semântico por fact key.
+  // 2. Summary — contexto descritivo após os facts
+  lines.push(memory.summary);
+
+  // 3. Open_loops filtrados semanticamente.
+  //    Mapeamento: fact key → sinônimos que o LLM costuma usar nos open_loops.
+  //    Se um fact está preenchido e o loop usa qualquer sinônimo desse campo,
+  //    o loop é removido para evitar contradição visível ao LLM.
   const FACT_LOOP_KEYWORDS = {
     nome:        ['nome', 'identificação', 'quem é'],
     objetivo:    ['objetivo', 'motivo', 'motivação', 'por que', 'porquê', 'motivou'],
@@ -915,13 +954,49 @@ async function writeMemory(svc, conversationId, companyId, memoryPayload, existi
   // facts: preserva existentes, adiciona/atualiza novos sanitizados
   const mergedFacts = { ...(safeExisting.facts ?? {}), ...sanitizedFacts };
 
+  // ── Sanitizar open_loops antes de persistir ──────────────────────────────────
+  //
+  // PROBLEMA: o LLM gera o bloco mem em passagem única após o texto da resposta.
+  // Ele pode extrair facts corretamente (ex: facts.nome="Marcio") mas ao mesmo
+  // tempo escrever open_loops inconsistentes (ex: ["nome não informado"]) porque
+  // o summary e os open_loops refletem a resposta que ele acabou de gerar, não
+  // os facts que ele mesmo coletou.
+  //
+  // EXEMPLO real observado em produção:
+  //   facts.nome = "Marcio"         → extraído corretamente do histórico
+  //   open_loops = ["nome não informado"]  → escrito incorretamente
+  //   → na próxima mensagem, o LLM lê open_loops e reinicia o ABERTURA
+  //
+  // SOLUÇÃO: antes de persistir, filtrar os open_loops removendo qualquer item
+  // que seja semanticamente equivalente a um fact já preenchido no merge final.
+  // O mapeamento cobre os sinônimos mais comuns que o LLM usa por fact key.
+  //
+  // ATENÇÃO: se adicionar novos campos ao bloco mem (além dos 5 atuais),
+  // adicionar o mapeamento correspondente em FACT_LOOP_KEYWORDS_WRITE.
+  const FACT_LOOP_KEYWORDS_WRITE = {
+    nome:        ['nome', 'identificação', 'quem é'],
+    objetivo:    ['objetivo', 'motivo', 'motivação', 'por que', 'porquê', 'motivou'],
+    experiencia: ['experiência', 'experiencia', 'perfil', 'conhecimento'],
+    aplicacao:   ['aplicação', 'aplicacao', 'onde vai usar', 'aplicar'],
+    prazo:       ['prazo', 'quando', 'urgência', 'urgencia'],
+  };
+  const filledMergedFacts = Object.entries(mergedFacts).filter(([, v]) => v && String(v).trim().length > 0);
+  const rawOpenLoops = safeList(memoryPayload.open_loops ?? safeExisting.open_loops ?? []);
+  const sanitizedOpenLoops = rawOpenLoops.filter(loop => {
+    const loopLower = loop.toLowerCase();
+    return !filledMergedFacts.some(([k]) => {
+      const keywords = FACT_LOOP_KEYWORDS_WRITE[k] ?? [k];
+      return keywords.some(kw => loopLower.includes(kw));
+    });
+  });
+
   const merged = {
     v:                   2,
     summary:             (memoryPayload.summary ?? safeExisting.summary ?? '').slice(0, MEM_SUMMARY_MAX_CHARS),
     facts:               mergedFacts,
     intents:             safeList(memoryPayload.intents    ?? safeExisting.intents    ?? []),
     objections:          safeList(memoryPayload.objections ?? safeExisting.objections ?? []),
-    open_loops:          safeList(memoryPayload.open_loops ?? safeExisting.open_loops ?? []),
+    open_loops:          sanitizedOpenLoops,
     conversation_stage:  (memoryPayload.conversation_stage ?? safeExisting.conversation_stage ?? 'prospecto').slice(0, MEM_STAGE_MAX_CHARS),
     interaction_count:   (typeof safeExisting.interaction_count === 'number' ? safeExisting.interaction_count : 0) + 1,
     last_interaction_at: now,

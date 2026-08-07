@@ -491,7 +491,7 @@ async function execMoveOpportunity(svc, args, ctx) {
     return { success: true, note: 'Oportunidade já está nesta etapa' }
   }
 
-  // Usa RPC atômica (atualiza posição + histórico + status)
+  // RPC atômica: atualiza opportunity_funnel_positions + stage_history em uma transação
   const { error } = await svc.rpc('move_opportunity', {
     p_opportunity_id:    opportunityId,
     p_funnel_id:         position.funnel_id,
@@ -502,9 +502,21 @@ async function execMoveOpportunity(svc, args, ctx) {
 
   if (error) return { success: false, error: error.message }
 
-  // Disparar event opportunity.stage_changed para que automações downstream disparem.
-  // Sem este dispatch, nenhuma automação configurada para a etapa de destino seria notificada.
-  // Fail-safe: nunca bloqueia o retorno ao agente em caso de erro no dispatcher.
+  // ── Dispatch do evento opportunity.stage_changed ──────────────────────────
+  //
+  // PROBLEMA ORIGINAL: a RPC move_opportunity acima apenas persiste a mudança
+  // no banco — ela não notifica o sistema de automações. As demais funções que
+  // movem oportunidades (crmActions.moveOpportunity, crmActions.changeFunnel)
+  // já chamavam dispatchOpportunityStageChangedTrigger após a RPC, mas este
+  // execMoveOpportunity (usado pelo agente de IA) não chamava, causando que
+  // automações configuradas para a etapa de destino nunca disparavam.
+  //
+  // Exemplo real: automação "Mover Atendimento IA para Humano" (IC Campo Limpo)
+  // configurada para disparar ao entrar na etapa X — nunca disparava quando o
+  // agente de IA movia o lead para essa etapa via move_opportunity.
+  //
+  // Fail-safe com try/catch: o erro no dispatcher nunca deve bloquear a
+  // resposta ao agente — a movimentação em si já foi confirmada no banco.
   // #region agent log
   fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'toolExecutor.js:execMoveOpportunity:dispatch',message:'dispatchOpportunityStageChangedTrigger chamado',data:{companyId:ctx.company_id,opportunityId,leadId:ctx.lead_id??null,oldStageId:position.stage_id,newStageId:toStageId,funnelId:position.funnel_id},timestamp:Date.now()})}).catch(()=>{})
   // #endregion
