@@ -429,11 +429,19 @@ function buildExtraContext(output) {
   // #endregion
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
-  const messages = output.conversation?.recent_messages ?? [];
+  // Mensagens outbound de automação (is_ai_generated=false) são excluídas do histórico:
+  // elas não fazem parte do fluxo do agente e confundem o LLM quando rotuladas como [AGENTE].
+  const allMessages = output.conversation?.recent_messages ?? [];
+  const messages = allMessages.filter(m =>
+    m.direction === 'inbound' || m.is_ai_generated === true
+  );
   if (messages.length > 0) {
     const lines = messages.map(m => {
-      const prefix = m.direction === 'inbound' ? '[CONTATO]' : '[AGENTE]';
-      return `${prefix}: ${m.content}`;
+      const prefix  = m.direction === 'inbound' ? '[CONTATO]' : '[AGENTE]';
+      // Normaliza quebras de linha: cada linha da mesma mensagem recebe o prefixo correto.
+      // Sem isso, linhas após a primeira ficam sem rótulo e confundem o LLM.
+      const content = (m.content ?? '').replace(/\n/g, ` \n${prefix}: `);
+      return `${prefix}: ${content}`;
     });
     sections.push(`Histórico da conversa (últimas ${messages.length} mensagens):\n${lines.join('\n')}`);
   }
