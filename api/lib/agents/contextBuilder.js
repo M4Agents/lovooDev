@@ -187,6 +187,10 @@ export async function buildContext(orchestratorContext) {
     recentMessages = recentMessages.slice(-10);
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'contextBuilder.js:188',message:'H-A/H-C: estado memória e slice de mensagens',data:{conversation_id:conversationId,company_id:companyId,total_messages_before_slice:messagesResult.status==='fulfilled'?(messagesResult.value??[]).length:0,messages_after_slice:recentMessages.length,has_memory:!!contactMemory,memory_has_summary:!!(contactMemory?.summary),memory_has_facts:!!(contactMemory?.facts&&Object.keys(contactMemory.facts).length>0),memory_facts_keys:contactMemory?.facts?Object.keys(contactMemory.facts):[],slice_applied:!!(contactMemory?.summary)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // ── Contato / Lead ────────────────────────────────────────────────────────
 
   const emptyContact = { lead_id: null, name: null, phone: null };

@@ -187,6 +187,10 @@ export async function executeAgent(output) {
     return { success: false, skip_reason: 'empty_user_message' };
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:executeAgent_entry',message:'H-D: estado do contexto no início do turno',data:{conversation_id:output.conversation?.id,user_message_preview:userMessage.slice(0,80),memory_summary:output.conversation_memory?.summary??null,memory_stage:output.conversation_memory?.conversation_stage??null,memory_open_loops:output.conversation_memory?.open_loops??null,memory_facts_keys:output.conversation_memory?.facts?Object.keys(output.conversation_memory.facts):[],messages_in_context:(output.conversation?.recent_messages??[]).length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // ── Montar extra_context ─────────────────────────────────────────────────────
   const extraContext = buildExtraContext(output);
 
@@ -290,6 +294,10 @@ export async function executeAgent(output) {
   // A resposta limpa vai para executorOutput.raw_response → responseComposer.
   const { cleanResponse, memoryPayload, extractionResult, validationError } =
     extractMemoryBlock(runResult.result ?? '');
+
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:mem_extraction',message:'H-A: resultado da extração do bloco mem',data:{conversation_id:output.conversation?.id,extraction_result:extractionResult,validation_error:validationError??null,memory_payload_summary:memoryPayload?.summary??null,memory_payload_facts:memoryPayload?.facts??null,memory_payload_stage:memoryPayload?.conversation_stage??null,memory_payload_open_loops:memoryPayload?.open_loops??null,had_existing_memory:!!(output.conversation_memory?.summary)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   console.log('[MEM] extraction:', {
     run_id:           output.run_id,
@@ -416,6 +424,9 @@ function buildExtraContext(output) {
     sections.push(memorySection);
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:418',message:'H-A/H-C: memorySection e mensagens no extra_context',data:{has_memory_section:!!memorySection,memory_section_preview:memorySection?memorySection.slice(0,200):null,messages_count:(output.conversation?.recent_messages??[]).length,has_item_of_interest:!!output.item_of_interest,item_name:output.item_of_interest?.name??null,has_usable_memory:hasUsableMemory(output.conversation_memory)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
   const messages = output.conversation?.recent_messages ?? [];
@@ -800,6 +811,9 @@ function sanitizeFacts(facts, recentMessages, existingFacts) {
     }
 
     // Rejeitado: dado não encontrado na conversa nem na memória anterior
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:sanitizeFacts',message:'H-B: fact rejeitado por sanitizeFacts',data:{key,value_snippet:value.slice(0,40),value_snippet_8:value.toLowerCase().slice(0,8),key_already_existed:keyAlreadyExists,message_text_length:messageText.length,value_in_message:messageText.includes(value.toLowerCase().slice(0,8))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (messageText.length > 0) {
       console.warn('[MEM] sanitizeFacts: fact rejeitado (sem evidência):', {
         key,
