@@ -33,7 +33,8 @@ import { createClient } from '@supabase/supabase-js'
 import { CRITICAL_TOOLS, FORBIDDEN_ARG_FIELDS } from './toolDefinitions.js'
 import { INTENT_TO_USAGE_ROLE } from './mediaConstants.js'
 import { mediaSelector } from './mediaSelector.js'
-import { dispatchLeadCreatedTrigger } from '../automation/dispatchLeadCreatedTrigger.js'
+import { dispatchLeadCreatedTrigger }              from '../automation/dispatchLeadCreatedTrigger.js'
+import { dispatchOpportunityStageChangedTrigger }  from '../automation/dispatchOpportunityTrigger.js'
 
 const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
 const UAZAPI_TIMEOUT_MS = 30_000
@@ -500,6 +501,32 @@ async function execMoveOpportunity(svc, args, ctx) {
   })
 
   if (error) return { success: false, error: error.message }
+
+  // Disparar event opportunity.stage_changed para que automações downstream disparem.
+  // Sem este dispatch, nenhuma automação configurada para a etapa de destino seria notificada.
+  // Fail-safe: nunca bloqueia o retorno ao agente em caso de erro no dispatcher.
+  // #region agent log
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'toolExecutor.js:execMoveOpportunity:dispatch',message:'dispatchOpportunityStageChangedTrigger chamado',data:{companyId:ctx.company_id,opportunityId,leadId:ctx.lead_id??null,oldStageId:position.stage_id,newStageId:toStageId,funnelId:position.funnel_id},timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+  try {
+    await dispatchOpportunityStageChangedTrigger({
+      companyId:    ctx.company_id,
+      opportunityId,
+      leadId:       ctx.lead_id ? Number(ctx.lead_id) : null,
+      oldStageId:   position.stage_id,
+      newStageId:   toStageId,
+      funnelId:     position.funnel_id,
+    }, svc)
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'toolExecutor.js:execMoveOpportunity:dispatch:success',message:'dispatch concluído com sucesso',data:{companyId:ctx.company_id,opportunityId,newStageId:toStageId},timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
+  } catch (dispatchErr) {
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c8f106'},body:JSON.stringify({sessionId:'c8f106',location:'toolExecutor.js:execMoveOpportunity:dispatch:error',message:'dispatch falhou (não crítico)',data:{companyId:ctx.company_id,opportunityId,newStageId:toStageId,error:dispatchErr?.message},timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
+    console.error('[toolExecutor][execMoveOpportunity] dispatch opportunity.stage_changed falhou (não crítico):', dispatchErr?.message)
+  }
+
   return { success: true, opportunity_id: opportunityId, to_stage_id: toStageId }
 }
 
