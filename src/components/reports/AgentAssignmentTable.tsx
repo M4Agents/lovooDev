@@ -40,6 +40,12 @@ export const AgentAssignmentTable: React.FC<AgentAssignmentTableProps> = ({ data
               <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
                 {t('agentReport.assignmentTable.columnSessions')}
               </th>
+              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">
+                {t('agentReport.assignmentTable.columnCompleted')}
+              </th>
+              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">
+                {t('agentReport.assignmentTable.columnCompletionRate')}
+              </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden sm:table-cell">
                 {t('agentReport.assignmentTable.columnAvgMessages')}
               </th>
@@ -70,6 +76,14 @@ export const AgentAssignmentTable: React.FC<AgentAssignmentTableProps> = ({ data
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700 font-semibold">
                   {row.session_count}
+                </td>
+                <td className="px-4 py-3 text-right text-emerald-600 font-semibold hidden md:table-cell">
+                  {row.completed_sessions}
+                </td>
+                <td className="px-4 py-3 text-right hidden md:table-cell">
+                  <span className={Number(row.completion_rate) > 0 ? 'text-emerald-600 font-medium' : 'text-gray-400'}>
+                    {Number(row.completion_rate).toFixed(1)}%
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-500 hidden sm:table-cell">
                   {Number(row.avg_messages).toFixed(1)}

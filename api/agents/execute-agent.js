@@ -349,16 +349,43 @@ export default async function handler(req, res) {
           conversation_id: conversationId,
         });
       } else {
-        // #region agent log
         console.log('🤖 [EXECUTE] 🔀 ai_state → ai_paused (handoff diferido aplicado após envio):', {
           conversation_id: conversationId,
           company_id:      companyId,
           run_id:          context.run_id,
         });
-        // #endregion
       }
     } catch (handoffStateEx) {
       console.error('🤖 [EXECUTE] ❌ Exceção ao aplicar handoff diferido:', handoffStateEx.message);
+    }
+
+    // Fechar sessão: agente transferiu para humano — status = 'paused', end_reason = 'human_handoff'
+    if (context.session_id) {
+      try {
+        const { error: sessionCloseErr } = await supabaseAdmin
+          .from('agent_conversation_sessions')
+          .update({
+            status:     'paused',
+            ended_at:   new Date().toISOString(),
+            end_reason: 'human_handoff',
+          })
+          .eq('id', context.session_id)
+          .eq('company_id', companyId)
+          .eq('status', 'active');
+
+        if (sessionCloseErr) {
+          console.error('🤖 [EXECUTE] ⚠️  Falha ao fechar sessão após handoff autônomo:', {
+            error:      sessionCloseErr.message,
+            session_id: context.session_id,
+          });
+        } else {
+          console.log('🤖 [EXECUTE] 📋 Sessão fechada (paused/human_handoff — autônomo):', {
+            session_id: context.session_id,
+          });
+        }
+      } catch (sessionCloseEx) {
+        console.error('🤖 [EXECUTE] ❌ Exceção ao fechar sessão após handoff autônomo:', sessionCloseEx.message);
+      }
     }
   }
 

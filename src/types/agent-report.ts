@@ -32,6 +32,8 @@ export interface AgentAssignmentEntry {
   display_name: string
   is_active: boolean
   session_count: number
+  completed_sessions: number
+  completion_rate: number
   avg_messages: number
   total_credits: number
   human_handoffs: number

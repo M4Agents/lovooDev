@@ -221,6 +221,29 @@ export default async function handler(req, res) {
         conversation_id
       });
     }
+
+    // Fechar sessão quando humano assume: status = 'paused', end_reason = 'human_handoff'
+    if (handoffType === 'ai_to_human' && latestSession?.id) {
+      const { error: sessionCloseErr } = await supabaseAdmin
+        .from('agent_conversation_sessions')
+        .update({
+          status:     'paused',
+          ended_at:   new Date().toISOString(),
+          end_reason: 'human_handoff',
+        })
+        .eq('id', latestSession.id)
+        .eq('company_id', company_id)
+        .eq('status', 'active');
+
+      if (sessionCloseErr) {
+        console.error('[set-ai-state] ⚠️  Falha ao fechar sessão após handoff manual (não crítico):', sessionCloseErr.message);
+      } else {
+        console.log('[set-ai-state] 📋 Sessão fechada (paused/human_handoff — manual):', {
+          session_id: latestSession.id,
+          conversation_id,
+        });
+      }
+    }
   }
 
   return res.status(200).json({

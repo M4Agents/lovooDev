@@ -109,6 +109,8 @@
       "searchPlaceholder": "Buscar configuración...",
       "columnName": "Configuración",
       "columnSessions": "Atenciones",
+      "columnCompleted": "Completados",
+      "columnCompletionRate": "Tasa conclusión",
       "columnAvgMessages": "Msgs prom.",
       "columnCredits": "Créditos",
       "columnHandoffs": "Transferencias",

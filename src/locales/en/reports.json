@@ -109,6 +109,8 @@
       "searchPlaceholder": "Search configuration...",
       "columnName": "Configuration",
       "columnSessions": "Sessions",
+      "columnCompleted": "Completed",
+      "columnCompletionRate": "Completion rate",
       "columnAvgMessages": "Avg. messages",
       "columnCredits": "Credits",
       "columnHandoffs": "Handoffs",
