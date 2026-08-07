@@ -335,7 +335,7 @@ export async function executeAgent(output) {
     const existingMemory = output.conversation_memory ?? null;
     const recentMessages = output.conversation?.recent_messages ?? [];
 
-    void writeMemory(svcForMemory, conversationId, companyId, memoryPayload, existingMemory, recentMessages, 'llm_extraction')
+    void writeMemory(svcForMemory, conversationId, companyId, memoryPayload, existingMemory, recentMessages, 'llm_extraction', userMessage)
       .then(result => {
         console.log('[MEM] write:', {
           run_id:            output.run_id,
@@ -770,15 +770,19 @@ function validateMemoryPayload(payload) {
  *
  * Facts existentes na memória anterior são preservados via merge em writeMemory.
  */
-function sanitizeFacts(facts, recentMessages, existingFacts) {
+function sanitizeFacts(facts, recentMessages, existingFacts, userMessage = '') {
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) return {};
 
   const safeExisting = existingFacts && typeof existingFacts === 'object' ? existingFacts : {};
 
-  // Texto completo das mensagens recentes para verificação de presença
-  const messageText = (recentMessages ?? [])
-    .map(m => (m.content ?? '').toLowerCase())
-    .join(' ');
+  // Texto completo: mensagens recentes + mensagem atual do lead.
+  // A mensagem atual não está em recentMessages (é o turno em andamento),
+  // por isso é incluída explicitamente para que facts derivados do turno atual
+  // passem na verificação de presença.
+  const messageText = [
+    ...(recentMessages ?? []).map(m => (m.content ?? '').toLowerCase()),
+    userMessage.toLowerCase(),
+  ].join(' ');
 
   const sanitized = {};
   let count = 0;
@@ -801,8 +805,10 @@ function sanitizeFacts(facts, recentMessages, existingFacts) {
       continue;
     }
 
-    // Anti-injection: aceitar se parte do valor aparece nas mensagens recentes
-    const valueSnippet = value.toLowerCase().slice(0, 8);
+    // Anti-injection: aceitar se parte do valor aparece no texto da conversa.
+    // Snippet de 5 chars cobre variações morfológicas do português
+    // (ex: "traba" aparece tanto em "trabalho" quanto em "trabalhar").
+    const valueSnippet = value.toLowerCase().slice(0, 5);
     const valueInMessages = messageText.length > 0 && valueSnippet.length >= 2 && messageText.includes(valueSnippet);
     if (valueInMessages) {
       sanitized[key] = value;
@@ -812,7 +818,7 @@ function sanitizeFacts(facts, recentMessages, existingFacts) {
 
     // Rejeitado: dado não encontrado na conversa nem na memória anterior
     // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:sanitizeFacts',message:'H-B: fact rejeitado por sanitizeFacts',data:{key,value_snippet:value.slice(0,40),value_snippet_8:value.toLowerCase().slice(0,8),key_already_existed:keyAlreadyExists,message_text_length:messageText.length,value_in_message:messageText.includes(value.toLowerCase().slice(0,8))},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:sanitizeFacts',message:'H-B: fact rejeitado por sanitizeFacts',data:{key,value_snippet:value.slice(0,40),value_snippet_5:value.toLowerCase().slice(0,5),key_already_existed:keyAlreadyExists,message_text_length:messageText.length,value_in_message:messageText.includes(value.toLowerCase().slice(0,5))},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (messageText.length > 0) {
       console.warn('[MEM] sanitizeFacts: fact rejeitado (sem evidência):', {
@@ -842,7 +848,7 @@ function sanitizeFacts(facts, recentMessages, existingFacts) {
  *
  * Failsafe: se payload inválido, mantém existingMemory sem sobrescrever.
  */
-async function writeMemory(svc, conversationId, companyId, memoryPayload, existingMemory, recentMessages, source) {
+async function writeMemory(svc, conversationId, companyId, memoryPayload, existingMemory, recentMessages, source, userMessage = '') {
   // ── Barreira de origem — runtime guard ───────────────────────────────────────
   if (source !== 'llm_extraction') {
     console.warn('[MEM] write bloqueado — source inválido:', { source, conversation_id: conversationId, company_id: companyId });
@@ -864,7 +870,7 @@ async function writeMemory(svc, conversationId, companyId, memoryPayload, existi
 
   // ── Sanitizar facts antes do merge ───────────────────────────────────────────
   const rawFacts      = memoryPayload.facts && typeof memoryPayload.facts === 'object' ? memoryPayload.facts : {};
-  const sanitizedFacts = sanitizeFacts(rawFacts, recentMessages, safeExisting.facts ?? {});
+  const sanitizedFacts = sanitizeFacts(rawFacts, recentMessages, safeExisting.facts ?? {}, userMessage);
 
   // ── Merge inteligente ─────────────────────────────────────────────────────────
   // facts: preserva existentes, adiciona/atualiza novos sanitizados
