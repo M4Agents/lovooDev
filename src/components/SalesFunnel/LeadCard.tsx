@@ -117,6 +117,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 <h3 className="font-semibold text-gray-900 truncate text-sm">
                   {opportunity.title}
                 </h3>
+                {isFieldVisible('opportunity_number') && opportunity.opportunity_number != null && (
+                  <span className="text-xs font-mono text-gray-400 flex-shrink-0">
+                    #{opportunity.opportunity_number}
+                  </span>
+                )}
                 {(position.reentry_count ?? 0) > 0 && (
                   <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
                     Reengajado ({position.reentry_count})

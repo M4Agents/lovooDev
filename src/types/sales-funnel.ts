@@ -125,6 +125,9 @@ export interface Opportunity {
   // Joins
   lead?: LeadCardData
 
+  // ── Número sequencial legível por empresa — gerado exclusivamente pelo banco via trigger ──
+  opportunity_number?: number
+
   // ── Campos Nuvemshop (opcionais — presentes somente em oportunidades da integração) ──
   nuvemshop_order_id?:           string | null
   nuvemshop_store_id?:           string | null
@@ -841,7 +844,8 @@ export const FUNNEL_CONSTANTS = {
     'origin',
     'status',
     'created_at',
-    'last_contact_at'
+    'last_contact_at',
+    'opportunity_number'
   ],
   
   STAGE_TYPES: {

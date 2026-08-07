@@ -27,7 +27,8 @@ const FIELD_LABELS: Record<string, string> = {
   origin: 'Origem',
   status: 'Status',
   created_at: 'Data de Criação',
-  last_contact_at: 'Último Contato'
+  last_contact_at: 'Último Contato',
+  opportunity_number: 'Número da Oportunidade'
 }
 
 const FIELD_DESCRIPTIONS: Record<string, string> = {
@@ -42,7 +43,8 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   origin: 'Origem do lead (ex: WhatsApp, Site)',
   status: 'Status atual do lead',
   created_at: 'Data em que o lead foi criado',
-  last_contact_at: 'Data do último contato com o lead'
+  last_contact_at: 'Data do último contato com o lead',
+  opportunity_number: 'Número sequencial único gerado automaticamente por empresa'
 }
 
 export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
