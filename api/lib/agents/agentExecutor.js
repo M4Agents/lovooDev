@@ -879,27 +879,27 @@ function sanitizeFacts(facts, recentMessages, existingFacts, userMessage = '') {
       continue;
     }
 
-    // Anti-injection: aceitar se parte do valor aparece no texto da conversa.
-    // Snippet de 5 chars cobre variações morfológicas do português
-    // (ex: "traba" aparece tanto em "trabalho" quanto em "trabalhar").
-    const valueSnippet = value.toLowerCase().slice(0, 5);
-    const valueInMessages = messageText.length > 0 && valueSnippet.length >= 2 && messageText.includes(valueSnippet);
-    if (valueInMessages) {
-      sanitized[key] = value;
-      count++;
-      continue;
+    // Anti-injection para `nome`: validação estrita — o valor deve aparecer nas mensagens.
+    // Protege contra o LLM usar o nome do registro CRM como se o lead tivesse confirmado.
+    // Para todos os outros facts (objetivo, experiencia, aplicacao, prazo, etc.) a validação
+    // por string é omitida: o LLM normaliza a linguagem do lead (ex: "Agr" → "agora",
+    // "Começando" → "iniciante") e essa normalização semântica não pode ser validada via
+    // correspondência de substring. O prompt já instrui o LLM a não inventar facts.
+    if (key === 'nome') {
+      const valueSnippet = value.toLowerCase().slice(0, 5);
+      const nomeInMessages = messageText.length > 0 && valueSnippet.length >= 2 && messageText.includes(valueSnippet);
+      if (!nomeInMessages) {
+        // #region agent log
+        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:sanitizeFacts',message:'nome rejeitado por sanitizeFacts (sem evidencia)',data:{key,value_snippet:value.slice(0,40),value_snippet_5:valueSnippet,message_text_length:messageText.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        console.warn('[MEM] sanitizeFacts: nome rejeitado (sem evidência nas mensagens):', { value_snippet: value.slice(0, 30) });
+        continue;
+      }
     }
 
-    // Rejeitado: dado não encontrado na conversa nem na memória anterior
-    // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:sanitizeFacts',message:'H-B: fact rejeitado por sanitizeFacts',data:{key,value_snippet:value.slice(0,40),value_snippet_5:value.toLowerCase().slice(0,5),key_already_existed:keyAlreadyExists,message_text_length:messageText.length,value_in_message:messageText.includes(value.toLowerCase().slice(0,5))},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (messageText.length > 0) {
-      console.warn('[MEM] sanitizeFacts: fact rejeitado (sem evidência):', {
-        key,
-        value_snippet: value.slice(0, 30),
-      });
-    }
+    // Fact aceito (nome validado acima, demais facts liberados para normalização semântica)
+    sanitized[key] = value;
+    count++;
   }
 
   return sanitized;
