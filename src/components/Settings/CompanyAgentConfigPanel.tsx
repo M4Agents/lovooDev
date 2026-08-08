@@ -225,6 +225,89 @@ function FollowUpProativoCard({
   )
 }
 
+// ── Componente: Linha "Responder mensagem pendente ao ativar" ─────────────────
+
+interface RespondOnActivationRowProps {
+  checked:  boolean
+  disabled: boolean
+  onChange: (v: boolean) => void
+}
+
+function RespondOnActivationRow({ checked, disabled, onChange }: RespondOnActivationRowProps) {
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!helpOpen) return
+    const handler = (e: MouseEvent) => {
+      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
+        setHelpOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [helpOpen])
+
+  return (
+    <div className="flex items-start gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40 cursor-pointer"
+      />
+
+      <div className="flex-1 flex items-start justify-between gap-1">
+        <label
+          className={`text-sm text-gray-700 cursor-pointer leading-snug ${disabled ? 'opacity-40' : ''}`}
+          onClick={() => !disabled && onChange(!checked)}
+        >
+          Responder mensagem pendente ao ativar
+        </label>
+
+        {/* Ícone de ajuda */}
+        <div ref={helpRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setHelpOpen((o) => !o)}
+            className="p-0.5 rounded-full text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+            title="Como funciona"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
+
+          {helpOpen && (
+            <div className="absolute right-0 top-6 z-50 w-72 bg-white border border-blue-100 rounded-xl shadow-lg p-4 space-y-3">
+              <p className="text-xs font-semibold text-blue-700">Como funciona</p>
+
+              <ol className="space-y-2">
+                {[
+                  'Novo lead chega e envia uma mensagem antes do agente ser ativado.',
+                  'A automação roda e ativa o agente via "Vincular Agente de IA" — mas a mensagem já foi processada sem agente ativo.',
+                  'Com esta opção ativa, assim que o agente é vinculado, o sistema detecta a mensagem sem resposta e dispara o agente automaticamente.',
+                  'O lead recebe a resposta sem precisar enviar uma segunda mensagem.',
+                ].map((step, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
+                    <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center justify-center text-[10px]">
+                      {i + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+
+              <p className="text-[11px] text-blue-500 pt-1 border-t border-blue-50">
+                Idempotente: se já houver uma resposta na conversa, o agente não é disparado novamente.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Componente: Card de Assignment ────────────────────────────────────────────
 
 interface AssignmentCardProps {
@@ -390,21 +473,11 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
           ))}
 
           {/* Responder mensagem pendente ao ativar */}
-          <label className="flex items-start gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={draft.respond_on_activation}
-              onChange={(e) => setDraft((d) => ({ ...d, respond_on_activation: e.target.checked }))}
-              disabled={!canManageConversationalAgents}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
-            />
-            <span className="text-sm text-gray-700">
-              Responder mensagem pendente ao ativar
-              <span className="block text-xs text-gray-400 mt-0.5">
-                Quando o agente for ativado via automação e já houver mensagem do lead sem resposta, o agente responde automaticamente.
-              </span>
-            </span>
-          </label>
+          <RespondOnActivationRow
+            checked={draft.respond_on_activation}
+            disabled={!canManageConversationalAgents}
+            onChange={(v) => setDraft((d) => ({ ...d, respond_on_activation: v }))}
+          />
         </div>
       </div>
 
