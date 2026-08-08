@@ -77,7 +77,8 @@ export default async function handler(req, res) {
     company_id, assignment_id, is_active, agent_id, capabilities,
     price_display_policy, operating_schedule,
     follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours,
-    completion_triggers
+    completion_triggers,
+    respond_on_activation
   } = req.body ?? {};
 
   // ── Validação de entrada ───────────────────────────────────────────────────
@@ -197,11 +198,12 @@ export default async function handler(req, res) {
   // operating_schedule: null limpa o schedule (sem restrição); objeto = nova config validada
   if (operating_schedule !== undefined)   updatePayload.operating_schedule   = operating_schedule ?? null;
   // follow-up proativo (whitelist explícita)
-  if (follow_up_enabled       !== undefined) updatePayload.follow_up_enabled       = Boolean(follow_up_enabled);
-  if (follow_up_absence_hours !== undefined) updatePayload.follow_up_absence_hours = Number(follow_up_absence_hours);
-  if (follow_up_max_attempts  !== undefined) updatePayload.follow_up_max_attempts  = Number(follow_up_max_attempts);
+  if (follow_up_enabled        !== undefined) updatePayload.follow_up_enabled        = Boolean(follow_up_enabled);
+  if (follow_up_absence_hours  !== undefined) updatePayload.follow_up_absence_hours  = Number(follow_up_absence_hours);
+  if (follow_up_max_attempts   !== undefined) updatePayload.follow_up_max_attempts   = Number(follow_up_max_attempts);
   if (follow_up_interval_hours !== undefined) updatePayload.follow_up_interval_hours = Number(follow_up_interval_hours);
   if (completion_triggers      !== undefined) updatePayload.completion_triggers      = completion_triggers;
+  if (respond_on_activation    !== undefined) updatePayload.respond_on_activation    = Boolean(respond_on_activation);
 
   if (capabilities !== undefined && typeof capabilities === 'object' && capabilities !== null) {
     // Merge apenas as capabilities conhecidas — nunca substituir com campos arbitrários
@@ -233,7 +235,7 @@ export default async function handler(req, res) {
     .update(updatePayload)
     .eq('id', assignment_id)
     .eq('company_id', company_id)
-    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, completion_triggers, updated_at')
+    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, completion_triggers, respond_on_activation, updated_at')
     .single();
 
   if (updateErr) {

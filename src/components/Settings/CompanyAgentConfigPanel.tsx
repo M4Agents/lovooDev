@@ -42,6 +42,7 @@ interface AssignmentDraft {
   follow_up_max_attempts:  number
   follow_up_interval_hours: number
   completion_triggers:     string[]
+  respond_on_activation:   boolean
 }
 
 const COMPLETION_TRIGGER_OPTIONS = [
@@ -246,11 +247,12 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     },
     price_display_policy:    assignment.price_display_policy,
     operating_schedule:      assignment.operating_schedule ?? null,
-    follow_up_enabled:       assignment.follow_up_enabled       ?? false,
-    follow_up_absence_hours: assignment.follow_up_absence_hours ?? 2,
-    follow_up_max_attempts:  assignment.follow_up_max_attempts  ?? 3,
+    follow_up_enabled:       assignment.follow_up_enabled        ?? false,
+    follow_up_absence_hours: assignment.follow_up_absence_hours  ?? 2,
+    follow_up_max_attempts:  assignment.follow_up_max_attempts   ?? 3,
     follow_up_interval_hours: assignment.follow_up_interval_hours ?? 24,
-    completion_triggers:     assignment.completion_triggers     ?? [],
+    completion_triggers:     assignment.completion_triggers      ?? [],
+    respond_on_activation:   assignment.respond_on_activation    ?? false,
   })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -262,10 +264,11 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.capabilities.can_auto_reply    !== (assignment.capabilities?.can_auto_reply    ?? false) ||
     draft.capabilities.can_inform_prices !== (assignment.capabilities?.can_inform_prices ?? false) ||
     JSON.stringify(draft.operating_schedule) !== JSON.stringify(assignment.operating_schedule ?? null) ||
-    draft.follow_up_enabled       !== (assignment.follow_up_enabled       ?? false) ||
-    draft.follow_up_absence_hours !== (assignment.follow_up_absence_hours ?? 2)     ||
-    draft.follow_up_max_attempts  !== (assignment.follow_up_max_attempts  ?? 3)     ||
-    draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24) ||
+    draft.follow_up_enabled        !== (assignment.follow_up_enabled        ?? false) ||
+    draft.follow_up_absence_hours  !== (assignment.follow_up_absence_hours  ?? 2)     ||
+    draft.follow_up_max_attempts   !== (assignment.follow_up_max_attempts   ?? 3)     ||
+    draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24)    ||
+    draft.respond_on_activation    !== (assignment.respond_on_activation    ?? false)  ||
     JSON.stringify([...(draft.completion_triggers)].sort()) !== JSON.stringify([...(assignment.completion_triggers ?? [])].sort())
 
   const handleSave = async () => {
@@ -283,6 +286,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         follow_up_max_attempts:  draft.follow_up_max_attempts,
         follow_up_interval_hours: draft.follow_up_interval_hours,
         completion_triggers:     draft.completion_triggers,
+        respond_on_activation:   draft.respond_on_activation,
       })
       setSaveState('saved')
       onSaved(updated)
@@ -384,6 +388,23 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
               <span className="text-sm text-gray-700">{label}</span>
             </label>
           ))}
+
+          {/* Responder mensagem pendente ao ativar */}
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={draft.respond_on_activation}
+              onChange={(e) => setDraft((d) => ({ ...d, respond_on_activation: e.target.checked }))}
+              disabled={!canManageConversationalAgents}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+            />
+            <span className="text-sm text-gray-700">
+              Responder mensagem pendente ao ativar
+              <span className="block text-xs text-gray-400 mt-0.5">
+                Quando o agente for ativado via automação e já houver mensagem do lead sem resposta, o agente responde automaticamente.
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 

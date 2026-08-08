@@ -24,6 +24,7 @@
 
 import { resolveLeadId, resolveOpportunityId, resolveConversationId } from './contextUtils.js'
 import { dispatchOpportunityStageChangedTrigger }                     from './dispatchOpportunityTrigger.js'
+import { triggerPendingMessage }                                       from '../agents/triggerPendingMessage.js'
 
 // ---------------------------------------------------------------------------
 // Utilitário: validar membership do usuário na empresa
@@ -541,10 +542,12 @@ async function attachAgent(config, context, supabase) {
   // Propagar para o restante do ciclo (mesmo resume já trazia em context)
   context.conversationId = conversationId
 
-  // Buscar assignment ativo da empresa para o agente selecionado
+  // Buscar assignment ativo da empresa para o agente selecionado.
+  // Inclui respond_on_activation, capabilities e price_display_policy para
+  // uso posterior caso o recurso esteja habilitado.
   const { data: assignment, error: assignErr } = await supabase
     .from('company_agent_assignments')
-    .select('id')
+    .select('id, respond_on_activation, capabilities, price_display_policy')
     .eq('company_id', companyId)
     .eq('agent_id', agentId)
     .eq('is_active', true)
@@ -625,6 +628,29 @@ async function attachAgent(config, context, supabase) {
   fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a12b9f'},body:JSON.stringify({sessionId:'a12b9f',runId:'attach-fix',hypothesisId:'H2',location:'crmActions.js:attachAgent:activated',message:'attach_agent ativou IA',data:{conversationId,conversationSource,agentId,assignmentId:assignment.id,previousAiState,replaced},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
+  // ── respond_on_activation ─────────────────────────────────────────────────
+  // Se habilitado, dispara o pipeline do agente para a última mensagem inbound
+  // sem resposta. Resolve o caso em que a mensagem do lead chegou antes da
+  // automação terminar de ativar o agente (janela de ~30–60s).
+  //
+  // Fire-and-forget com try/catch: nunca bloqueia o retorno desta ação nem
+  // afeta a execução da automação em caso de erro no pipeline.
+  if (assignment.respond_on_activation === true) {
+    triggerPendingMessage(
+      {
+        companyId,
+        conversationId,
+        assignmentId:  assignment.id,
+        agentId,
+        capabilities:  assignment.capabilities  ?? {},
+        pricePolicy:   assignment.price_display_policy ?? 'disabled',
+      },
+      supabase
+    ).catch(err => {
+      console.error('[attach_agent] respond_on_activation: pipeline falhou (não crítico):', err?.message)
+    })
+  }
+
   return {
     executed: true,
     action: 'attach_agent',
@@ -636,7 +662,8 @@ async function attachAgent(config, context, supabase) {
     newAiState: 'ai_active',
     previousAssignmentId,
     newAssignmentId: assignment.id,
-    replaced
+    replaced,
+    respond_on_activation: assignment.respond_on_activation === true
   }
 }
 
