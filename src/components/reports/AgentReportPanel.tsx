@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bot, MessageSquare, Zap, RefreshCw, HandshakeIcon, Coins, CreditCard } from 'lucide-react'
+import { Bot, MessageSquare, Zap, RefreshCw, HandshakeIcon, Coins, CreditCard, Send, Inbox, MessagesSquare } from 'lucide-react'
 import { KpiCard } from './KpiCard'
 import { KpiSkeleton } from './MetricSkeleton'
 import { ReportEmptyState } from './ReportEmptyState'
@@ -17,8 +17,8 @@ interface AgentReportPanelProps {
 
 function LoadingKpis() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      {Array.from({ length: 7 }).map((_, i) => <KpiSkeleton key={i} />)}
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {Array.from({ length: 10 }).map((_, i) => <KpiSkeleton key={i} />)}
     </div>
   )
 }
@@ -55,7 +55,8 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
       {loading ? (
         <LoadingKpis />
       ) : kpis ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Linha 1 */}
           <KpiCard
             label={t('agentReport.kpi.totalSessions')}
             value={kpis.total_sessions}
@@ -89,6 +90,7 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
             iconColor="text-amber-500"
             subLabel={`${Number(kpis.human_handoff_rate).toFixed(1)}% ${t('agentReport.kpi.ofSessions')}`}
           />
+          {/* Linha 2 */}
           <KpiCard
             label={t('agentReport.kpi.totalCredits')}
             value={kpis.total_credits_used.toLocaleString('pt-BR')}
@@ -100,6 +102,24 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
             value={Number(kpis.avg_credits_per_session).toFixed(2)}
             icon={Coins}
             iconColor="text-yellow-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.totalMessagesReceived')}
+            value={kpis.total_messages_received.toLocaleString('pt-BR')}
+            icon={Inbox}
+            iconColor="text-sky-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.totalMessagesSent')}
+            value={kpis.total_messages_sent.toLocaleString('pt-BR')}
+            icon={Send}
+            iconColor="text-teal-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.totalMessages')}
+            value={kpis.total_messages.toLocaleString('pt-BR')}
+            icon={MessagesSquare}
+            iconColor="text-gray-500"
           />
         </div>
       ) : (

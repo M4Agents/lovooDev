@@ -13,6 +13,9 @@ export interface AgentReportKpis {
   avg_credits_per_session: number
   human_handoffs: number
   human_handoff_rate: number
+  total_messages_sent: number
+  total_messages_received: number
+  total_messages: number
 }
 
 export interface AgentHourlyEntry {

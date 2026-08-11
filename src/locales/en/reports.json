@@ -91,7 +91,10 @@
       "humanHandoffs": "Human handoffs",
       "totalCredits": "Total credits",
       "avgCreditsPerSession": "Credits per session",
-      "ofSessions": "of sessions"
+      "ofSessions": "of sessions",
+      "totalMessagesSent": "Messages sent",
+      "totalMessagesReceived": "Messages received",
+      "totalMessages": "Total messages"
     },
     "hourly": {
       "title": "Hourly session distribution",

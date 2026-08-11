@@ -91,7 +91,10 @@
       "humanHandoffs": "Transferencias humanas",
       "totalCredits": "Total de créditos",
       "avgCreditsPerSession": "Créditos por atención",
-      "ofSessions": "de las atenciones"
+      "ofSessions": "de las atenciones",
+      "totalMessagesSent": "Mensajes enviados",
+      "totalMessagesReceived": "Mensajes recibidos",
+      "totalMessages": "Total de mensajes"
     },
     "hourly": {
       "title": "Distribución horaria de atenciones",
