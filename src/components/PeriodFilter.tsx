@@ -140,9 +140,13 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   const handleCustomPeriodApply = () => {
     if (!customStartDate || !customEndDate) return
 
-    const startDate = new Date(customStartDate)
-    const endDate = new Date(customEndDate)
-    endDate.setHours(23, 59, 59)
+    // Usar split manual para criar datas em horário LOCAL — evita o bug do JS onde
+    // new Date("YYYY-MM-DD") interpreta a string como UTC midnight, gerando um
+    // deslocamento de 3h para o fuso de Sao Paulo e uma janela errada de apenas 3h.
+    const [sy, sm, sd] = customStartDate.split('-').map(Number)
+    const [ey, em, ed] = customEndDate.split('-').map(Number)
+    const startDate = new Date(sy, sm - 1, sd, 0, 0, 0)
+    const endDate   = new Date(ey, em - 1, ed, 23, 59, 59)
 
     if (startDate > endDate) {
       alert(t('validation.startBeforeEnd'))
