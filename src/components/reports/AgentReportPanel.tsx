@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bot, MessageSquare, Zap, RefreshCw, HandshakeIcon, Coins } from 'lucide-react'
+import { Bot, MessageSquare, Zap, RefreshCw, HandshakeIcon, Coins, CreditCard } from 'lucide-react'
 import { KpiCard } from './KpiCard'
 import { KpiSkeleton } from './MetricSkeleton'
 import { ReportEmptyState } from './ReportEmptyState'
@@ -18,7 +18,7 @@ interface AgentReportPanelProps {
 function LoadingKpis() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      {Array.from({ length: 6 }).map((_, i) => <KpiSkeleton key={i} />)}
+      {Array.from({ length: 7 }).map((_, i) => <KpiSkeleton key={i} />)}
     </div>
   )
 }
@@ -55,7 +55,7 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
       {loading ? (
         <LoadingKpis />
       ) : kpis ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <KpiCard
             label={t('agentReport.kpi.totalSessions')}
             value={kpis.total_sessions}
@@ -88,6 +88,12 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
             alert={kpis.human_handoff_rate > 30}
             iconColor="text-amber-500"
             subLabel={`${Number(kpis.human_handoff_rate).toFixed(1)}% ${t('agentReport.kpi.ofSessions')}`}
+          />
+          <KpiCard
+            label={t('agentReport.kpi.totalCredits')}
+            value={kpis.total_credits_used.toLocaleString('pt-BR')}
+            icon={CreditCard}
+            iconColor="text-orange-500"
           />
           <KpiCard
             label={t('agentReport.kpi.avgCreditsPerSession')}

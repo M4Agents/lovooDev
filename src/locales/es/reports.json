@@ -89,6 +89,7 @@
       "avgMessages": "Msgs por atención",
       "totalFollowups": "Seguimientos enviados",
       "humanHandoffs": "Transferencias humanas",
+      "totalCredits": "Total de créditos",
       "avgCreditsPerSession": "Créditos por atención",
       "ofSessions": "de las atenciones"
     },

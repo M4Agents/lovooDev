@@ -89,6 +89,7 @@
       "avgMessages": "Avg. messages",
       "totalFollowups": "Follow-ups sent",
       "humanHandoffs": "Human handoffs",
+      "totalCredits": "Total credits",
       "avgCreditsPerSession": "Credits per session",
       "ofSessions": "of sessions"
     },
