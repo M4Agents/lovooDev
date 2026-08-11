@@ -22,9 +22,10 @@ export interface CreateResult {
 export type ClientCompany = Company & { plans?: { name: string; slug: string } | null }
 
 export interface Plan {
-  id:   string
-  name: string
-  slug: string
+  id:                  string
+  name:                string
+  slug:                string
+  is_publicly_listed?: boolean
 }
 
 export type ViewMode      = 'grid' | 'list'

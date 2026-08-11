@@ -140,7 +140,7 @@ export const CompaniesPanel: React.FC = () => {
 
       const { data: plans } = await supabase
         .from('plans')
-        .select('id, name, slug')
+        .select('id, name, slug, is_publicly_listed')
         .eq('is_active', true)
         .order('sort_order')
       setAvailablePlans((plans ?? []) as Plan[])
@@ -883,7 +883,9 @@ export const CompaniesPanel: React.FC = () => {
               >
                 <option value="">Selecione um plano...</option>
                 {availablePlans.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.is_publicly_listed === false ? `${p.name} (Personalizado)` : p.name}
+                  </option>
                 ))}
               </select>
             </div>
