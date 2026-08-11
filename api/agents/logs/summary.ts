@@ -41,13 +41,6 @@ function getServiceSupabase() {
   })
 }
 
-// Statuses classificados como erro (para cálculo de error_rate)
-const ERROR_STATUSES = new Set([
-  'error_missing_context',
-  'error_openai',
-  'error_db',
-])
-
 // ── Billing mode ──────────────────────────────────────────────────────────────
 //
 // Fluxo completamente separado do modo padrão (governança).
@@ -251,58 +244,48 @@ export default async function handler(
   const useId             = params.get('use_id') ?? undefined
   const consumerCompanyId = params.get('consumer_company_id') ?? undefined
 
-  // ── 4. Query agregada com filtros ─────────────────────────────────────────
+  // ── 4. Agregação via RPC ───────────────────────────────────────────────────
   //
-  // Busca todos os registros do período para calcular métricas.
-  // SELECT limitado a colunas estritamente necessárias para agregação.
+  // get_agent_execution_summary agrega inteiramente no banco, eliminando o cap
+  // de max_rows=1000 do PostgREST que limitava total_executions, total_tokens
+  // e estimated_cost_usd ao primeiro milhar de linhas.
+  //
+  // Regra de negócio: super_admin/admin da empresa pai têm visão global de
+  // todos os logs. consumer_company_id é filtro de visualização sem validação
+  // de hierarquia parent/client — comportamento idêntico ao anterior.
+  //
+  // Débito técnico: assertCanManageOpenAIIntegration não filtra is_active em
+  // company_users. Admin desativado com JWT válido ainda consegue acesso.
+  // Correção registrada como tarefa separada, fora do escopo desta mudança.
 
-  let query = svc
-    .from('ai_agent_execution_logs')
-    .select('status, is_fallback, total_tokens, estimated_cost_usd')
-
-  if (from)              query = query.gte('created_at', from)
-  if (to)                query = query.lte('created_at', to)
-  if (status)            query = query.eq('status', status)
-  if (useId)             query = query.eq('use_id', useId)
-  if (consumerCompanyId) query = query.eq('consumer_company_id', consumerCompanyId)
-
-  const { data, error } = await query
+  const { data: rpcData, error } = await svc.rpc('get_agent_execution_summary', {
+    p_from:                from               ?? null,
+    p_to:                  to                 ?? null,
+    p_status:              status             ?? null,
+    p_use_id:              useId              ?? null,
+    p_consumer_company_id: consumerCompanyId  ?? null,
+  })
 
   if (error) {
     return jsonResponse(res, 500, { ok: false, error: 'Erro ao calcular métricas' })
   }
 
-  const rows = data ?? []
-  const totalExecutions = rows.length
-
-  // Agrega métricas
-  let totalTokens       = 0
-  let totalCost         = 0
-  let errorCount        = 0
-  let fallbackCount     = 0
-  const byStatus: Record<string, number> = {}
-
-  for (const row of rows) {
-    totalTokens   += row.total_tokens        ?? 0
-    totalCost     += Number(row.estimated_cost_usd ?? 0)
-    if (row.is_fallback)              fallbackCount++
-    if (ERROR_STATUSES.has(row.status)) errorCount++
-
-    byStatus[row.status] = (byStatus[row.status] ?? 0) + 1
-  }
-
-  const errorRate    = totalExecutions > 0 ? errorCount    / totalExecutions : 0
-  const fallbackRate = totalExecutions > 0 ? fallbackCount / totalExecutions : 0
+  // Normalização defensiva: a RPC retorna JSONB parsed pelo Supabase client.
+  // Number() garante conversão de tipos inesperados (string numérica, bigint).
+  // Fallback para 0 / {} protege contra campos ausentes em resposta inesperada.
+  const d = (rpcData ?? {}) as Record<string, unknown>
 
   return jsonResponse(res, 200, {
     ok:                  true,
-    total_executions:    totalExecutions,
-    total_tokens:        totalTokens,
+    total_executions:    Number(d.total_executions    ?? 0) || 0,
+    total_tokens:        Number(d.total_tokens        ?? 0) || 0,
     // Arredondado para 8 casas — alinhado com NUMERIC(12,8) do banco
-    estimated_cost_usd:  Math.round(totalCost * 1e8) / 1e8,
+    estimated_cost_usd:  Number(d.estimated_cost_usd  ?? 0) || 0,
     // Taxas como frações (0–1); a UI formata em %
-    error_rate:          Math.round(errorRate    * 1e6) / 1e6,
-    fallback_rate:       Math.round(fallbackRate * 1e6) / 1e6,
-    by_status:           byStatus,
+    error_rate:          Number(d.error_rate           ?? 0) || 0,
+    fallback_rate:       Number(d.fallback_rate        ?? 0) || 0,
+    by_status:           (d.by_status != null && typeof d.by_status === 'object')
+                           ? d.by_status as Record<string, number>
+                           : {},
   })
 }
