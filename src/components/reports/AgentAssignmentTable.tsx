@@ -52,6 +52,9 @@ export const AgentAssignmentTable: React.FC<AgentAssignmentTableProps> = ({ data
               <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden md:table-cell">
                 {t('agentReport.assignmentTable.columnCredits')}
               </th>
+              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 hidden lg:table-cell">
+                {t('agentReport.assignmentTable.columnAvgCredits')}
+              </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
                 {t('agentReport.assignmentTable.columnHandoffs')}
               </th>
@@ -90,6 +93,11 @@ export const AgentAssignmentTable: React.FC<AgentAssignmentTableProps> = ({ data
                 </td>
                 <td className="px-4 py-3 text-right text-gray-500 hidden md:table-cell">
                   {row.total_credits}
+                </td>
+                <td className="px-4 py-3 text-right text-gray-500 hidden lg:table-cell">
+                  {row.session_count > 0
+                    ? (row.total_credits / row.session_count).toFixed(2)
+                    : '—'}
                 </td>
                 <td className="px-4 py-3 text-right text-amber-600">
                   {row.human_handoffs}

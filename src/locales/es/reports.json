@@ -89,6 +89,7 @@
       "avgMessages": "Msgs por atención",
       "totalFollowups": "Seguimientos enviados",
       "humanHandoffs": "Transferencias humanas",
+      "avgCreditsPerSession": "Créditos por atención",
       "ofSessions": "de las atenciones"
     },
     "hourly": {
@@ -113,6 +114,7 @@
       "columnCompletionRate": "Tasa conclusión",
       "columnAvgMessages": "Msgs prom.",
       "columnCredits": "Créditos",
+      "columnAvgCredits": "Créd. prom.",
       "columnHandoffs": "Transferencias",
       "columnHandoffRate": "Tasa transferencia",
       "inactive": "inactivo"

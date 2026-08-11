@@ -89,6 +89,7 @@
       "avgMessages": "Msgs por atendimento",
       "totalFollowups": "Follow-ups enviados",
       "humanHandoffs": "Handoffs humanos",
+      "avgCreditsPerSession": "Créditos por atendimento",
       "ofSessions": "dos atendimentos"
     },
     "hourly": {
@@ -113,6 +114,7 @@
       "columnCompletionRate": "Taxa conclusão",
       "columnAvgMessages": "Msgs médias",
       "columnCredits": "Créditos",
+      "columnAvgCredits": "Créd. médio",
       "columnHandoffs": "Handoffs",
       "columnHandoffRate": "Taxa handoff",
       "inactive": "inativo"

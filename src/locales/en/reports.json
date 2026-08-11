@@ -89,6 +89,7 @@
       "avgMessages": "Avg. messages",
       "totalFollowups": "Follow-ups sent",
       "humanHandoffs": "Human handoffs",
+      "avgCreditsPerSession": "Credits per session",
       "ofSessions": "of sessions"
     },
     "hourly": {
@@ -113,6 +114,7 @@
       "columnCompletionRate": "Completion rate",
       "columnAvgMessages": "Avg. messages",
       "columnCredits": "Credits",
+      "columnAvgCredits": "Avg. credits",
       "columnHandoffs": "Handoffs",
       "columnHandoffRate": "Handoff rate",
       "inactive": "inactive"
