@@ -64,44 +64,10 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
             iconColor="text-indigo-500"
           />
           <KpiCard
-            label={t('agentReport.kpi.completionRate')}
-            value={`${Number(kpis.completion_rate).toFixed(1)}%`}
-            icon={Zap}
-            highlight={kpis.completion_rate >= 70}
-            iconColor="text-emerald-500"
-          />
-          <KpiCard
             label={t('agentReport.kpi.avgMessages')}
             value={Number(kpis.avg_messages_sent).toFixed(1)}
             icon={MessageSquare}
             iconColor="text-blue-500"
-          />
-          <KpiCard
-            label={t('agentReport.kpi.totalFollowups')}
-            value={kpis.total_followups_sent}
-            icon={RefreshCw}
-            iconColor="text-violet-500"
-          />
-          <KpiCard
-            label={t('agentReport.kpi.humanHandoffs')}
-            value={kpis.human_handoffs}
-            icon={HandshakeIcon}
-            alert={kpis.human_handoff_rate > 30}
-            iconColor="text-amber-500"
-            subLabel={`${Number(kpis.human_handoff_rate).toFixed(1)}% ${t('agentReport.kpi.ofSessions')}`}
-          />
-          {/* Linha 2 */}
-          <KpiCard
-            label={t('agentReport.kpi.totalCredits')}
-            value={kpis.total_credits_used.toLocaleString('pt-BR')}
-            icon={CreditCard}
-            iconColor="text-orange-500"
-          />
-          <KpiCard
-            label={t('agentReport.kpi.avgCreditsPerSession')}
-            value={Number(kpis.avg_credits_per_session).toFixed(2)}
-            icon={Coins}
-            iconColor="text-yellow-500"
           />
           <KpiCard
             label={t('agentReport.kpi.totalMessagesReceived')}
@@ -116,10 +82,44 @@ export const AgentReportPanel: React.FC<AgentReportPanelProps> = ({ companyId, f
             iconColor="text-teal-500"
           />
           <KpiCard
+            label={t('agentReport.kpi.totalFollowups')}
+            value={kpis.total_followups_sent}
+            icon={RefreshCw}
+            iconColor="text-violet-500"
+          />
+          {/* Linha 2 */}
+          <KpiCard
             label={t('agentReport.kpi.totalMessages')}
             value={kpis.total_messages.toLocaleString('pt-BR')}
             icon={MessagesSquare}
             iconColor="text-gray-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.humanHandoffs')}
+            value={kpis.human_handoffs}
+            icon={HandshakeIcon}
+            alert={kpis.human_handoff_rate > 30}
+            iconColor="text-amber-500"
+            subLabel={`${Number(kpis.human_handoff_rate).toFixed(1)}% ${t('agentReport.kpi.ofSessions')}`}
+          />
+          <KpiCard
+            label={t('agentReport.kpi.completionRate')}
+            value={`${Number(kpis.completion_rate).toFixed(1)}%`}
+            icon={Zap}
+            highlight={kpis.completion_rate >= 70}
+            iconColor="text-emerald-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.avgCreditsPerSession')}
+            value={Number(kpis.avg_credits_per_session).toFixed(2)}
+            icon={Coins}
+            iconColor="text-yellow-500"
+          />
+          <KpiCard
+            label={t('agentReport.kpi.totalCredits')}
+            value={kpis.total_credits_used.toLocaleString('pt-BR')}
+            icon={CreditCard}
+            iconColor="text-orange-500"
           />
         </div>
       ) : (
