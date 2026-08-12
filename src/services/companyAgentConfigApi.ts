@@ -34,6 +34,8 @@ export interface AgentCapabilities {
 
 export type PriceDisplayPolicy = 'disabled' | 'fixed_only' | 'range_allowed' | 'consult_only'
 
+export type HistoryMode = 'mem_block' | 'multi_turn'
+
 export interface CompanyAgentAssignment {
   id:                      string
   company_id:              string
@@ -51,6 +53,7 @@ export interface CompanyAgentAssignment {
   follow_up_interval_hours: number
   completion_triggers:     string[]
   respond_on_activation:   boolean
+  history_mode:            HistoryMode
   created_at:              string
   updated_at:              string
 }
@@ -93,6 +96,7 @@ export interface UpdateAssignmentPayload {
   follow_up_interval_hours?: number
   completion_triggers?:     string[]
   respond_on_activation?:   boolean
+  history_mode?:            HistoryMode
 }
 
 export type AgentChannel = 'whatsapp' | 'web' | 'email' | 'sms' | 'instagram'

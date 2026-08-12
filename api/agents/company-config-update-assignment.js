@@ -78,7 +78,8 @@ export default async function handler(req, res) {
     price_display_policy, operating_schedule,
     follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours,
     completion_triggers,
-    respond_on_activation
+    respond_on_activation,
+    history_mode
   } = req.body ?? {};
 
   // ── Validação de entrada ───────────────────────────────────────────────────
@@ -132,6 +133,14 @@ export default async function handler(req, res) {
     return res.status(400).json({
       success: false,
       error: `price_display_policy inválido: "${price_display_policy}". Valores permitidos: ${VALID_PRICE_POLICIES.join(', ')}.`
+    });
+  }
+
+  const VALID_HISTORY_MODES = ['mem_block', 'multi_turn'];
+  if (history_mode !== undefined && !VALID_HISTORY_MODES.includes(history_mode)) {
+    return res.status(400).json({
+      success: false,
+      error: `history_mode inválido: "${history_mode}". Permitidos: ${VALID_HISTORY_MODES.join(', ')}.`
     });
   }
 
@@ -204,6 +213,8 @@ export default async function handler(req, res) {
   if (follow_up_interval_hours !== undefined) updatePayload.follow_up_interval_hours = Number(follow_up_interval_hours);
   if (completion_triggers      !== undefined) updatePayload.completion_triggers      = completion_triggers;
   if (respond_on_activation    !== undefined) updatePayload.respond_on_activation    = Boolean(respond_on_activation);
+  // history_mode: validado acima — apenas 'mem_block' ou 'multi_turn' chegam aqui
+  if (history_mode             !== undefined) updatePayload.history_mode             = history_mode;
 
   if (capabilities !== undefined && typeof capabilities === 'object' && capabilities !== null) {
     // Merge apenas as capabilities conhecidas — nunca substituir com campos arbitrários
@@ -235,7 +246,7 @@ export default async function handler(req, res) {
     .update(updatePayload)
     .eq('id', assignment_id)
     .eq('company_id', company_id)
-    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, completion_triggers, respond_on_activation, updated_at')
+    .select('id, is_active, agent_id, capabilities, price_display_policy, operating_schedule, follow_up_enabled, follow_up_absence_hours, follow_up_max_attempts, follow_up_interval_hours, completion_triggers, respond_on_activation, history_mode, updated_at')
     .single();
 
   if (updateErr) {

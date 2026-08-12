@@ -19,6 +19,7 @@ import {
   type AgentCapabilities,
   type AgentChannel,
   type OperatingSchedule,
+  type HistoryMode,
 } from '../../services/companyAgentConfigApi'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { AgentScheduleEditor } from './AgentScheduleEditor'
@@ -43,6 +44,7 @@ interface AssignmentDraft {
   follow_up_interval_hours: number
   completion_triggers:     string[]
   respond_on_activation:   boolean
+  history_mode:            HistoryMode
 }
 
 const COMPLETION_TRIGGER_OPTIONS = [
@@ -336,6 +338,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     follow_up_interval_hours: assignment.follow_up_interval_hours ?? 24,
     completion_triggers:     assignment.completion_triggers      ?? [],
     respond_on_activation:   assignment.respond_on_activation    ?? false,
+    history_mode:            assignment.history_mode             ?? 'mem_block',
   })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -352,7 +355,8 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
     draft.follow_up_max_attempts   !== (assignment.follow_up_max_attempts   ?? 3)     ||
     draft.follow_up_interval_hours !== (assignment.follow_up_interval_hours ?? 24)    ||
     draft.respond_on_activation    !== (assignment.respond_on_activation    ?? false)  ||
-    JSON.stringify([...(draft.completion_triggers)].sort()) !== JSON.stringify([...(assignment.completion_triggers ?? [])].sort())
+    JSON.stringify([...(draft.completion_triggers)].sort()) !== JSON.stringify([...(assignment.completion_triggers ?? [])].sort()) ||
+    draft.history_mode             !== (assignment.history_mode             ?? 'mem_block')
 
   const handleSave = async () => {
     setSaveState('saving')
@@ -370,6 +374,7 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
         follow_up_interval_hours: draft.follow_up_interval_hours,
         completion_triggers:     draft.completion_triggers,
         respond_on_activation:   draft.respond_on_activation,
+        history_mode:            draft.history_mode,
       })
       setSaveState('saved')
       onSaved(updated)
@@ -556,6 +561,49 @@ function AssignmentCard({ assignment, availableAgents, companyId, onSaved }: Ass
           {draft.completion_triggers.length === 0 && (
             <p className="text-xs text-amber-600 flex items-center gap-1">
               Nenhum critério selecionado — a Taxa de conclusão sempre será 0%.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Histórico completo da conversa (history_mode) */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <span className="text-sm font-semibold text-gray-800">Histórico completo da conversa</span>
+          <button
+            type="button"
+            onClick={() =>
+              setDraft((d) => ({
+                ...d,
+                history_mode: d.history_mode === 'multi_turn' ? 'mem_block' : 'multi_turn',
+              }))
+            }
+            disabled={!canManageConversationalAgents}
+            className="flex items-center gap-1.5 text-sm font-medium transition-colors disabled:opacity-40"
+            title={draft.history_mode === 'multi_turn' ? 'Desativar histórico completo' : 'Ativar histórico completo'}
+          >
+            {draft.history_mode === 'multi_turn' ? (
+              <>
+                <ToggleRight className="w-6 h-6 text-green-500" />
+                <span className="text-green-600">Ativo</span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-6 h-6 text-gray-400" />
+                <span className="text-gray-500">Inativo</span>
+              </>
+            )}
+          </button>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          <p className="text-xs text-gray-500">
+            Quando ativado, o agente recebe as mensagens anteriores da conversa como histórico real,
+            reduzindo repetição de perguntas e perda de contexto.
+          </p>
+          {draft.history_mode === 'multi_turn' && (
+            <p className="text-xs text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              Pode aumentar o consumo de tokens em conversas longas.
             </p>
           )}
         </div>

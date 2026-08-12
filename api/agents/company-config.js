@@ -101,6 +101,7 @@ export default async function handler(req, res) {
       follow_up_interval_hours,
       completion_triggers,
       respond_on_activation,
+      history_mode,
       created_at,
       updated_at,
       lovoo_agents ( id, name )
