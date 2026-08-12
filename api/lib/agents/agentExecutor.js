@@ -191,6 +191,33 @@ export async function executeAgent(output) {
   fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'agentExecutor.js:executeAgent_entry',message:'H-D: estado do contexto no início do turno',data:{conversation_id:output.conversation?.id,user_message_preview:userMessage.slice(0,80),memory_summary:output.conversation_memory?.summary??null,memory_stage:output.conversation_memory?.conversation_stage??null,memory_open_loops:output.conversation_memory?.open_loops??null,memory_facts_keys:output.conversation_memory?.facts?Object.keys(output.conversation_memory.facts):[],messages_in_context:(output.conversation?.recent_messages??[]).length},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
+  // ── Pré-popular facts.nome com o nome do CRM ─────────────────────────────────
+  // O nome do lead é fornecido pelo sistema em output.contact.name (fonte: CRM).
+  // Quando o agente usa esse nome na primeira resposta mas o lead nunca o declarou
+  // explicitamente, sanitizeFacts rejeita facts.nome (validação textual estrita).
+  // Na próxima execução, facts.nome fica null → o prompt instrui "pergunte o nome
+  // se não souber" → agente se re-apresenta mesmo tendo o nome disponível.
+  //
+  // A injeção antecipada resolve isso em duas frentes:
+  //   1. buildMemorySection exibe "Já informado: nome=X" quando há memória existente
+  //      → LLM vê o nome como fato confirmado e não re-pergunta.
+  //   2. sanitizeFacts aceita facts.nome via keyAlreadyExists (sem exigir grounding
+  //      textual) → o nome persiste corretamente no banco após cada execução.
+  //
+  // Condição: aplica somente se o nome do CRM existe E facts.nome ainda está vazio.
+  // Nunca sobrescreve um nome que o lead já confirmou explicitamente.
+  const contactName = (output.contact?.name ?? '').trim();
+  if (contactName && !output.conversation_memory?.facts?.nome) {
+    const existingMem = output.conversation_memory ?? {};
+    output = {
+      ...output,
+      conversation_memory: {
+        ...existingMem,
+        facts: { ...(existingMem.facts ?? {}), nome: contactName },
+      },
+    };
+  }
+
   // ── Montar extra_context ─────────────────────────────────────────────────────
   const extraContext = buildExtraContext(output);
 
