@@ -194,6 +194,15 @@ export async function executeAgent(output) {
   // ── Montar extra_context ─────────────────────────────────────────────────────
   const extraContext = buildExtraContext(output);
 
+  // ── Montar history_messages (modo multi_turn) ─────────────────────────────────
+  // Em mem_block: undefined → runner ignora e mantém comportamento atual.
+  // Em multi_turn: array de turns {role, content} em ordem cronológica,
+  // excluindo a mensagem atual (passada separadamente como ctx.userMessage).
+  const historyMode     = output.history_mode ?? 'mem_block';
+  const historyMessages = historyMode === 'multi_turn'
+    ? buildHistoryMessages(output)
+    : undefined;
+
   // ── Montar AgentRunContext ───────────────────────────────────────────────────
   const agentRunCtx = {
     userMessage,
@@ -214,6 +223,8 @@ export async function executeAgent(output) {
     locked_opportunity_id: output.locked_opportunity_id ?? null, // Phase 3: vem do flow state
     item_of_interest:      output.item_of_interest ?? null,
     model_config:          output.agent?.model_config ?? {},
+    // multi_turn: histórico como turns reais; undefined em mem_block (runner ignora).
+    history_messages: historyMessages,
   };
 
   console.log('🤖 [EXEC] 🚀 Chamando runner.runAgentWithConfig:', {
@@ -396,6 +407,39 @@ export async function executeAgent(output) {
   return { success: true, output: executorOutput };
 }
 
+// ── Histórico multi_turn ──────────────────────────────────────────────────────
+
+/**
+ * Constrói o array de turns para o modo multi_turn.
+ *
+ * Filtro V1 (idêntico ao filtro textual do mem_block):
+ *   - inbound              → role: 'user'
+ *   - outbound AI          → role: 'assistant'
+ *   - outbound humano/auto → ignorado (dívida técnica — ver COMMENT na migration)
+ *
+ * A mensagem atual (current_inbound_message_id) é excluída do array:
+ * ela será passada separadamente como ctx.userMessage no runner,
+ * garantindo exatamente uma ocorrência na sequência enviada à API.
+ * A exclusão é feita por ID (nunca por comparação de conteúdo).
+ *
+ * O array resultante está em ordem cronológica (oldest → newest),
+ * herdada de recentMessages que já é normalizado no contextBuilder.
+ */
+export function buildHistoryMessages(output) {
+  const allMessages = output.conversation?.recent_messages ?? [];
+  const currentId   = output.current_inbound_message_id ?? null;
+
+  return allMessages
+    .filter(m =>
+      (m.direction === 'inbound' || m.is_ai_generated === true) &&
+      (currentId === null || m.id !== currentId)
+    )
+    .map(m => ({
+      role:    m.direction === 'inbound' ? 'user' : 'assistant',
+      content: m.content ?? ''
+    }));
+}
+
 // ── Montagem do extra_context ─────────────────────────────────────────────────
 
 /**
@@ -430,7 +474,12 @@ function buildExtraContext(output) {
 
   // ── 1. Histórico da conversa ─────────────────────────────────────────────
   //
-  // FILTRO — mensagens outbound de automação excluídas intencionalmente:
+  // Em mem_block (padrão): histórico textual injetado no system prompt.
+  // Em multi_turn: histórico é passado como turns reais user/assistant na API
+  // (via ctx.history_messages no runner) — não deve aparecer aqui para evitar
+  // duplicação e conflito entre representações.
+  //
+  // FILTRO (mem_block) — mensagens outbound de automação excluídas intencionalmente:
   //   Automações (is_ai_generated=false, direction='outbound') enviam mensagens
   //   de boas-vindas ou de fluxo que aparecem intercaladas com as mensagens do
   //   agente. Sem esse filtro, o LLM as enxerga como [AGENTE] e fica confuso
@@ -449,17 +498,19 @@ function buildExtraContext(output) {
   //       [CONTATO]: Marcio
   //       quero informações    ← sem rótulo, LLM não sabe quem disse
   //   Após a normalização cada linha recebe o prefixo correto.
-  const allMessages = output.conversation?.recent_messages ?? [];
-  const messages = allMessages.filter(m =>
-    m.direction === 'inbound' || m.is_ai_generated === true
-  );
-  if (messages.length > 0) {
-    const lines = messages.map(m => {
-      const prefix  = m.direction === 'inbound' ? '[CONTATO]' : '[AGENTE]';
-      const content = (m.content ?? '').replace(/\n/g, ` \n${prefix}: `);
-      return `${prefix}: ${content}`;
-    });
-    sections.push(`Histórico da conversa (últimas ${messages.length} mensagens):\n${lines.join('\n')}`);
+  if ((output.history_mode ?? 'mem_block') !== 'multi_turn') {
+    const allMessages = output.conversation?.recent_messages ?? [];
+    const messages = allMessages.filter(m =>
+      m.direction === 'inbound' || m.is_ai_generated === true
+    );
+    if (messages.length > 0) {
+      const lines = messages.map(m => {
+        const prefix  = m.direction === 'inbound' ? '[CONTATO]' : '[AGENTE]';
+        const content = (m.content ?? '').replace(/\n/g, ` \n${prefix}: `);
+        return `${prefix}: ${content}`;
+      });
+      sections.push(`Histórico da conversa (últimas ${messages.length} mensagens):\n${lines.join('\n')}`);
+    }
   }
 
   // ── 2. Informações do contato ────────────────────────────────────────────

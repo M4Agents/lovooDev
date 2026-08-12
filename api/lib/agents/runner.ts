@@ -100,6 +100,19 @@ export type AgentRunContext = {
   item_of_interest?: Record<string, unknown> | null
   /** model_config do agente (ex.: media_max_per_call) — somente backend. */
   model_config?: Record<string, unknown>
+  /**
+   * Histórico de turns para o modo multi_turn (opcional).
+   * Quando presente, é inserido entre o system prompt e a mensagem atual em firstMessages,
+   * produzindo a sequência: system → ...history_messages → user_atual.
+   * O segundo turno (tools) usa [...firstMessages, ...toolResultMessages] — inalterado.
+   *
+   * V1: representa apenas o transcript lead↔IA (role: 'user' | 'assistant').
+   * Mensagens humanas outbound excluídas nesta versão (dívida técnica).
+   *
+   * Produzido por buildHistoryMessages() em agentExecutor.
+   * NUNCA aceitar do LLM. undefined em modo mem_block (runner ignora).
+   */
+  history_messages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 export type ToolCallResult = {
@@ -566,8 +579,15 @@ export async function runAgentWithConfig(
   try {
     const signal = AbortSignal.timeout(openaiSettings.timeout_ms)
 
+    // Em mem_block (padrão): historyTurns é vazio — comportamento idêntico ao anterior.
+    // Em multi_turn: historyTurns contém turns reais user/assistant em ordem cronológica,
+    // excluindo a mensagem atual (passada logo abaixo como ctx.userMessage).
+    // O segundo turno (tools) usa [...firstMessages, ...toolResultMessages] — inalterado.
+    const historyTurns = (ctx.history_messages?.length ?? 0) > 0 ? ctx.history_messages! : []
+
     const firstMessages: Parameters<typeof client.chat.completions.create>[0]['messages'] = [
       { role: 'system', content: systemPrompt },
+      ...historyTurns,
       { role: 'user',   content: ctx.userMessage },
     ]
 

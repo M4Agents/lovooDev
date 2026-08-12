@@ -295,7 +295,7 @@ export async function routeConversationEvent(event, _deps = {}) {
 
   const { data: assignment, error: assignError } = await svc
     .from('company_agent_assignments')
-    .select('id, agent_id, capabilities, price_display_policy, is_active, display_name, operating_schedule')
+    .select('id, agent_id, capabilities, price_display_policy, is_active, display_name, operating_schedule, history_mode')
     .eq('id', matchedRule.assignment_id)
     .eq('company_id', event.company_id)
     .single();
@@ -501,6 +501,7 @@ export async function routeConversationEvent(event, _deps = {}) {
     locked_opportunity_id: null,
     capabilities,
     price_display_policy:  assignment.price_display_policy,
+    history_mode:          assignment.history_mode ?? 'mem_block',
     conversation: {
       id:               conversation.id,
       ai_state:         conversation.ai_state,

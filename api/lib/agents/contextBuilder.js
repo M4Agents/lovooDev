@@ -176,19 +176,36 @@ export async function buildContext(orchestratorContext) {
     console.error('🤖 [CTX] ⚠️  Falha ao buscar mensagens (continuando):', messagesResult.reason?.message);
   }
 
+  // Modo de histórico do assignment: 'mem_block' (padrão) ou 'multi_turn'.
+  // Propagado do Router → Orchestrator → aqui.
+  const historyMode = orchestratorContext.history_mode ?? 'mem_block';
+
+  // ID da mensagem inbound atual — usado em multi_turn para excluí-la do histórico
+  // (ela será passada separadamente como ctx.userMessage no runner, evitando duplicação).
+  // Fonte primária: event.saved_message_id (UUID interno do CRM, determinístico).
+  // Fallback: último inbound do array recentMessages (para fluxo grouped_messages
+  // onde o event sintético não inclui saved_message_id, ou outros edge cases).
+  // NUNCA compara conteúdo textual para identificar a mensagem atual.
+  const savedMessageId          = orchestratorContext.event?.saved_message_id ?? null;
+  const currentInboundMessageId = savedMessageId
+    ?? [...recentMessages].reverse().find(m => m.direction === 'inbound')?.id
+    ?? null;
+
   // Limite dinâmico: reduz para 10 quando memória com summary existe.
   // Fetched sempre com MESSAGES_LIMIT; o slice é feito aqui pós-fase-1
   // sem custo extra de DB. Economia: ~200-400 tokens em conversas com memória.
   // CRÍTICO: recentMessages está em ordem cronológica (mais antigas → mais recentes).
   // Usar slice(-10) para manter as 10 MAIS RECENTES. slice(0, 10) pegava as mais
   // antigas da janela e descartava o turno atual — causando repetição de perguntas.
+  // Em multi_turn o slice é suprimido: o objetivo é manter a janela completa (até 40)
+  // para que o LLM veja o transcript real — reduzir para 10 negaria o benefício do modo.
   const contactMemory = contactResult.status === 'fulfilled' ? (contactResult.value?.memory ?? null) : null;
-  if (contactMemory?.summary) {
+  if (historyMode !== 'multi_turn' && contactMemory?.summary) {
     recentMessages = recentMessages.slice(-10);
   }
 
   // #region agent log
-  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'contextBuilder.js:188',message:'H-A/H-C: estado memória e slice de mensagens',data:{conversation_id:conversationId,company_id:companyId,total_messages_before_slice:messagesResult.status==='fulfilled'?(messagesResult.value??[]).length:0,messages_after_slice:recentMessages.length,has_memory:!!contactMemory,memory_has_summary:!!(contactMemory?.summary),memory_has_facts:!!(contactMemory?.facts&&Object.keys(contactMemory.facts).length>0),memory_facts_keys:contactMemory?.facts?Object.keys(contactMemory.facts):[],slice_applied:!!(contactMemory?.summary)},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1f6baf'},body:JSON.stringify({sessionId:'1f6baf',location:'contextBuilder.js:188',message:'H-A/H-C: estado memória e slice de mensagens',data:{conversation_id:conversationId,company_id:companyId,total_messages_before_slice:messagesResult.status==='fulfilled'?(messagesResult.value??[]).length:0,messages_after_slice:recentMessages.length,has_memory:!!contactMemory,memory_has_summary:!!(contactMemory?.summary),memory_has_facts:!!(contactMemory?.facts&&Object.keys(contactMemory.facts).length>0),memory_facts_keys:contactMemory?.facts?Object.keys(contactMemory.facts):[],slice_applied:historyMode!=='multi_turn'&&!!(contactMemory?.summary)},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
   // ── Contato / Lead ────────────────────────────────────────────────────────
@@ -476,6 +493,15 @@ export async function buildContext(orchestratorContext) {
     is_comparison:        isComparison,
 
     user_message: userMessage,
+
+    // Modo de histórico do assignment (propagado do Router via Orchestrator).
+    // Fallback 'mem_block' garante que agentes existentes não sejam afetados.
+    history_mode:                historyMode,
+
+    // UUID interno do CRM da mensagem inbound atual.
+    // Usado pelo agentExecutor em multi_turn para excluir a mensagem do histórico
+    // antes de passá-la como ctx.userMessage — evitando duplicação na API OpenAI.
+    current_inbound_message_id: currentInboundMessageId,
 
     capabilities:         orchestratorContext.capabilities,
     price_display_policy: orchestratorContext.price_display_policy,

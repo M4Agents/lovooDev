@@ -178,6 +178,7 @@ export async function orchestrateExecution(decision) {
       rule_id:              decision.rule_id,
       capabilities:         decision.capabilities,
       price_display_policy: decision.price_display_policy,
+      history_mode:         decision.history_mode ?? 'mem_block',
       // Phase 3: fluxo ativo — oportunidade travada (null se sem fluxo ou sem oportunidade em foco)
       flow_state_id:         decision.flow_state_id         ?? null,
       locked_opportunity_id: decision.locked_opportunity_id ?? null,
