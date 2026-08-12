@@ -1,9 +1,9 @@
 // =============================================================================
 // api/lib/agents/triggerPendingMessage.js
 //
-// Dispara o pipeline completo do agente para a última mensagem inbound sem
-// resposta de uma conversa. Usado exclusivamente por attachAgent quando
-// respond_on_activation = true no company_agent_assignment.
+// Dispara o enqueue da última mensagem inbound sem resposta de uma conversa,
+// para que o batch pipeline a processe. Usado exclusivamente por attachAgent
+// quando respond_on_activation = true no company_agent_assignment.
 //
 // PROBLEMA QUE RESOLVE:
 //   Quando um agente é ativado via automação (ex: opportunity.stage_changed),
@@ -13,40 +13,44 @@
 //   agente aguarda uma nova mensagem que pode nunca chegar.
 //
 //   Com respond_on_activation = true, este módulo verifica se há uma mensagem
-//   inbound sem resposta e executa o pipeline completo (LLM → envio) como se
-//   a mensagem tivesse acabado de chegar.
+//   inbound sem resposta e a enfileira via enqueueMessage para processamento
+//   pelo batch pipeline (process-message-buffer cron).
 //
 // GARANTIAS:
 //   - Fire-and-forget: chamado sem await — nunca bloqueia o attachAgent
-//   - Idempotente: se já existe resposta outbound após o último inbound, aborta
+//   - Idempotente: se já existe resposta outbound após o último inbound, aborta;
+//     se a mensagem já está no buffer, enqueueMessage retorna duplicate=true
 //   - Fail-safe: qualquer erro é logado mas nunca propagado para o caller
 //   - Multi-tenant: todo acesso ao banco inclui company_id
-//   - Respeita ai_state: o orchestrator re-valida do banco antes de prosseguir
+//   - Respeita ai_state: verificado antes de enfileirar
+//   - Guards explícitos: uazapi_message_id e instanceId devem estar presentes
 //
 // FLUXO:
 //   1. Buscar conversa (ai_state + instance)
 //   2. Buscar última mensagem inbound sem resposta subsequente
-//   3. Montar RouterDecision sintético
-//   4. Executar pipeline: orchestrate → buildContext → executeAgent → compose → sendBlocks
+//   3. Validar uazapi_message_id e instanceId
+//   4. Resolver windowSeconds do model_config do agente
+//   5. Enfileirar via enqueueMessage → batch pipeline (process-message-buffer cron)
+//
+// LATÊNCIA CONHECIDA (V1):
+//   respond_on_activation → enqueue → aguarda cron (0–60s) → batch → LLM → resposta
+//   Tempo esperado com windowSeconds=30: ~40 a ~120 segundos após ativação.
+//   Objetivo desta implementação: garantir entrega e eliminar falha silenciosa.
+//   Otimização de latência é melhoria futura separada.
 // =============================================================================
 
-import { randomUUID }            from 'crypto'
-import { orchestrateExecution }  from './conversationOrchestrator.js'
-import { buildContext }          from './contextBuilder.js'
-import { executeAgent }          from './agentExecutor.js'
-import { compose }               from './responseComposer.js'
-import { sendBlocks }            from './whatsappGateway.js'
+import { enqueueMessage } from './messageBufferService.js'
 
 /**
  * Busca a última mensagem inbound da conversa que ainda não tem resposta
  * outbound após ela.
  *
- * @returns {object|null} - mensagem encontrada ou null se não aplicável
+ * @returns {object|null} mensagem encontrada ou null se não aplicável
  */
 async function findUnansweredInbound(supabase, { companyId, conversationId }) {
   const { data: recent } = await supabase
     .from('chat_messages')
-    .select('id, content, direction, created_at')
+    .select('id, content, direction, created_at, uazapi_message_id, message_type')
     .eq('conversation_id', conversationId)
     .eq('company_id', companyId)
     .order('created_at', { ascending: false })
@@ -67,19 +71,29 @@ async function findUnansweredInbound(supabase, { companyId, conversationId }) {
 }
 
 /**
- * Dispara o pipeline do agente para a última mensagem inbound sem resposta.
+ * Enfileira a última mensagem inbound sem resposta para o batch pipeline.
  *
  * Sempre chamado fire-and-forget:
  *   triggerPendingMessage({ ... }, svc).catch(err => console.error(...))
  *
  * @param {{ companyId, conversationId, assignmentId, agentId, capabilities, pricePolicy }} params
- * @param {object} supabase - cliente service_role
+ * @param {object} supabase - cliente service_role (recebido do caller — não criar novo)
  */
 export async function triggerPendingMessage(
   { companyId, conversationId, assignmentId, agentId, capabilities, pricePolicy },
   supabase
 ) {
   const tag = '[triggerPendingMessage]'
+
+  // ── Validar parâmetros obrigatórios ───────────────────────────────────────
+  if (!companyId || !conversationId || !assignmentId) {
+    console.warn(`${tag} parâmetros obrigatórios ausentes — abortando`, {
+      companyId: !!companyId,
+      conversationId: !!conversationId,
+      assignmentId: !!assignmentId,
+    })
+    return
+  }
 
   // ── 1. Revalidar conversa ─────────────────────────────────────────────────
   const { data: conv } = await supabase
@@ -107,78 +121,83 @@ export async function triggerPendingMessage(
     return
   }
 
-  console.log(`${tag} mensagem pendente encontrada — disparando pipeline`, {
+  console.log(`${tag} mensagem pendente encontrada — preparando enqueue`, {
     conversationId,
     messageId:   pendingMessage.id,
     preview:     (pendingMessage.content ?? '').slice(0, 60),
-    assignmentId
+    assignmentId,
   })
 
-  // ── 3. Montar RouterDecision sintético ────────────────────────────────────
-  // O orchestrator re-valida ai_state do banco — o valor aqui é apenas
-  // informativo e não é usado para decisões de segurança.
+  // ── 3. Validar dados necessários para o enqueue ───────────────────────────
+  if (!pendingMessage.uazapi_message_id) {
+    console.warn(`${tag} uazapi_message_id ausente — enqueue abortado`, {
+      conversationId,
+      messageId: pendingMessage.id,
+    })
+    return
+  }
+
   const instanceId = conv.last_instance_id ?? conv.instance_id ?? null
 
-  const decision = {
-    should_process:       true,
-    skip_reason:          null,
-    // rule_id sintético: não aponta para agent_routing_rules real (activation)
-    rule_id:              randomUUID(),
-    assignment_id:        assignmentId,
-    agent_id:             agentId,
-    capabilities:         capabilities ?? {},
-    price_display_policy: pricePolicy  ?? 'disabled',
-    conversation: {
-      id:               conv.id,
-      ai_state:         conv.ai_state,
-      ai_assignment_id: assignmentId,
-      contact_phone:    conv.contact_phone
-    },
-    event: {
-      event_type:        'message.received',
-      channel:           'whatsapp',
-      company_id:        companyId,
-      instance_id:       instanceId,
-      conversation_id:   conversationId,
-      uazapi_message_id: null,
-      source_type:       'activation_trigger',
-      source_identifier: null,
-      message_text:      pendingMessage.content ?? '',
-      saved_message_id:  pendingMessage.id,
-      timestamp:         new Date(pendingMessage.created_at).getTime()
+  if (!instanceId) {
+    console.warn(`${tag} instanceId ausente (last_instance_id e instance_id são null) — enqueue abortado`, {
+      conversationId,
+    })
+    return
+  }
+
+  // ── 4. Resolver janela de agrupamento do agente ───────────────────────────
+  // Busca model_config.message_grouping_window_s em lovoo_agents.
+  // Filtro obrigatório por id + company_id (tenant-safe).
+  // Fallback: 30s (mesmo default da UI — GROUPING_WINDOW_DEFAULT).
+  let windowSeconds = 30
+
+  if (agentId) {
+    const { data: agentRow } = await supabase
+      .from('lovoo_agents')
+      .select('model_config')
+      .eq('id', agentId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    const rawWindow = agentRow?.model_config?.message_grouping_window_s
+    if (Number.isInteger(rawWindow) && rawWindow >= 1 && rawWindow <= 120) {
+      windowSeconds = rawWindow
     }
   }
 
-  // ── 4. Executar pipeline completo ─────────────────────────────────────────
-
-  const orchResult = await orchestrateExecution(decision)
-  if (!orchResult.success) {
-    console.log(`${tag} orchestrator abortou:`, orchResult.skip_reason, { conversationId })
-    return
-  }
-
-  const buildResult = await buildContext(orchResult.context)
-  if (!buildResult.success) {
-    console.log(`${tag} contextBuilder abortou:`, buildResult.skip_reason, { conversationId })
-    return
-  }
-
-  const execResult = await executeAgent(buildResult.output)
-  if (!execResult.success) {
-    console.log(`${tag} agentExecutor abortou:`, execResult.skip_reason, { conversationId })
-    return
-  }
-
-  const composerResult = compose(execResult.output)
-  if (!composerResult.success) {
-    console.log(`${tag} responseComposer abortou:`, composerResult.skip_reason, { conversationId })
-    return
-  }
-
-  await sendBlocks(composerResult.output)
-
-  console.log(`${tag} pipeline concluído com sucesso`, {
+  // ── 5. Enfileirar para o batch pipeline ───────────────────────────────────
+  // Usa o client supabase recebido pelo caller (já é service_role).
+  // Não cria novo createClient.
+  // O lote será processado pelo cron process-message-buffer (a cada minuto).
+  const enqueueResult = await enqueueMessage({
+    svc:                     supabase,
+    companyId,
     conversationId,
-    blocks: composerResult.output?.blocks?.length ?? 0
+    assignmentId,
+    channel:                 'whatsapp',
+    windowSeconds,
+    maxBatchDurationSeconds: 120,
+    providerMessageId:       pendingMessage.uazapi_message_id,
+    instanceId,
+    messageText:             pendingMessage.content      ?? '',
+    messageType:             pendingMessage.message_type ?? 'text',
+    receivedAt:              new Date(pendingMessage.created_at),
+    payload:                 {},
+  })
+
+  if (enqueueResult.duplicate) {
+    console.log(`${tag} mensagem já no buffer (duplicate) — skip`, {
+      conversationId,
+      batchId: enqueueResult.batch_id,
+    })
+    return
+  }
+
+  console.log(`${tag} mensagem enfileirada com sucesso`, {
+    conversationId,
+    batchId:      enqueueResult.batch_id,
+    messageId:    pendingMessage.id,
+    windowSeconds,
   })
 }
