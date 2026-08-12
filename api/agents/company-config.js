@@ -177,6 +177,7 @@ export default async function handler(req, res) {
     follow_up_interval_hours:  a.follow_up_interval_hours  ?? 24,
     completion_triggers:       a.completion_triggers       ?? [],
     respond_on_activation:     a.respond_on_activation     ?? false,
+    history_mode:              a.history_mode              ?? 'mem_block',
     created_at:                a.created_at,
     updated_at:                a.updated_at
   }));
