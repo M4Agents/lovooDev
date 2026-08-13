@@ -116,6 +116,38 @@ export async function dispatchOpportunityStageChangedTrigger(
 
     if (matchedFlows.length === 0) return
 
+    // 5b. Carregar campos personalizados do lead para interpolação de variáveis {{custom.*}}
+    //     Mesmo padrão de dispatchLeadCreatedTrigger.js — fail-safe, não bloqueia o dispatch.
+    let customVariables = {}
+    const resolvedLeadId = leadId ?? null
+    if (resolvedLeadId) {
+      try {
+        const { data: customValues } = await supabase
+          .from('lead_custom_values')
+          .select('value, lead_custom_fields(field_name, field_type, company_id)')
+          .eq('lead_id', resolvedLeadId)
+
+        for (const cv of customValues ?? []) {
+          const field = cv.lead_custom_fields
+          if (!field?.field_name || field.company_id !== companyId) continue
+
+          let displayValue = cv.value ?? ''
+          if (field.field_type === 'boolean') {
+            displayValue = cv.value === 'true' ? 'Sim' : 'Não'
+          }
+          customVariables[`custom_${field.field_name}`] = displayValue
+        }
+
+        console.log(`${tag} campos personalizados carregados: ${Object.keys(customVariables).length}`)
+      } catch (customErr) {
+        console.warn(`${tag} erro ao carregar campos personalizados (não crítico):`, customErr?.message)
+      }
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'499c2f'},body:JSON.stringify({sessionId:'499c2f',location:'dispatchOpportunityTrigger.js:customFields',message:'custom fields carregados para opportunity.stage_changed',data:{leadId:resolvedLeadId,customKeys:Object.keys(customVariables),customVariables},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     // 6. Para cada flow compatível: enforcar plano, deduplicar, criar execução e processar
     for (const flow of matchedFlows) {
       // Enforcement de plano: flow acima do limite não executa
@@ -142,8 +174,8 @@ export async function dispatchOpportunityStageChangedTrigger(
           continue
         }
 
-        // Criar execução — createExecution já verifica is_over_plan e limite mensal internamente
-        const execution = await createExecution(flow, event.data, companyId, supabase)
+        // Criar execução com campos personalizados em variables para interpolação {{custom.*}}
+        const execution = await createExecution(flow, { ...event.data, variables: customVariables }, companyId, supabase)
 
         if (!execution) {
           console.error(`${tag} flow=${flow.id} — createExecution retornou null`)

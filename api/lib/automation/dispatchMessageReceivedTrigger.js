@@ -185,6 +185,37 @@ export async function dispatchMessageReceivedTrigger(
     dispatchResult.matchedFlows = matchedFlows.length
     console.log(`${tag} ${matchedFlows.length} flow(s) correspondente(s) — iniciando execuções`)
 
+    // 2b. Carregar campos personalizados do lead para interpolação de variáveis {{custom.*}}
+    //     Mesmo padrão de dispatchLeadCreatedTrigger.js — fail-safe, não bloqueia o dispatch.
+    let customVariables = {}
+    if (leadId) {
+      try {
+        const { data: customValues } = await supabase
+          .from('lead_custom_values')
+          .select('value, lead_custom_fields(field_name, field_type, company_id)')
+          .eq('lead_id', leadId)
+
+        for (const cv of customValues ?? []) {
+          const field = cv.lead_custom_fields
+          if (!field?.field_name || field.company_id !== companyId) continue
+
+          let displayValue = cv.value ?? ''
+          if (field.field_type === 'boolean') {
+            displayValue = cv.value === 'true' ? 'Sim' : 'Não'
+          }
+          customVariables[`custom_${field.field_name}`] = displayValue
+        }
+
+        console.log(`${tag} campos personalizados carregados: ${Object.keys(customVariables).length}`)
+      } catch (customErr) {
+        console.warn(`${tag} erro ao carregar campos personalizados (não crítico):`, customErr?.message)
+      }
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'499c2f'},body:JSON.stringify({sessionId:'499c2f',location:'dispatchMessageReceivedTrigger.js:customFields',message:'custom fields carregados para message.received',data:{leadId,customKeys:Object.keys(customVariables)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     // 3. Para cada flow compatível: deduplicar, criar execução e processar
     for (const flow of matchedFlows) {
       // Enforcement de plano: flow acima do limite não executa
@@ -243,6 +274,7 @@ export async function dispatchMessageReceivedTrigger(
           ig_message_id:   igMessageId,
           text,
           channel,
+          variables:       customVariables,
         }
         const execution = await createExecution(flow, triggerData, companyId, supabase)
 

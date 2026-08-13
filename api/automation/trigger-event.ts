@@ -391,6 +391,33 @@ export default async function handler(req: any, res: any) {
   const opportunityId = isUUID(data.opportunity_id) ? data.opportunity_id : null
   const leadId        = data.lead_id ? Number(data.lead_id) : null
 
+  // 5b. Carregar campos personalizados do lead para interpolação de variáveis {{custom.*}}
+  //     Mesmo padrão de dispatchLeadCreatedTrigger.js — fail-safe, não bloqueia o dispatch.
+  let customVariables: Record<string, string> = {}
+  if (leadId) {
+    try {
+      const { data: customValues } = await supabaseAdmin
+        .from('lead_custom_values')
+        .select('value, lead_custom_fields(field_name, field_type, company_id)')
+        .eq('lead_id', leadId)
+
+      for (const cv of (customValues ?? []) as any[]) {
+        const field = cv.lead_custom_fields
+        if (!field?.field_name || field.company_id !== company_id) continue
+
+        let displayValue: string = cv.value ?? ''
+        if (field.field_type === 'boolean') {
+          displayValue = cv.value === 'true' ? 'Sim' : 'Não'
+        }
+        customVariables[`custom_${field.field_name}`] = displayValue
+      }
+
+      console.log(`[trigger-event] campos personalizados carregados: ${Object.keys(customVariables).length} (lead: ${leadId})`)
+    } catch (customErr: any) {
+      console.warn('[trigger-event] erro ao carregar campos personalizados (não crítico):', customErr?.message)
+    }
+  }
+
   // 6. Avaliar cada flow e registrar auditoria
   const matchedFlows: any[] = []
   const event = { type: event_type as AllowedEventType, data }
@@ -442,6 +469,10 @@ export default async function handler(req: any, res: any) {
   const executionIds: string[] = []
   let duplicates = 0
 
+  // #region agent log
+  ;(fetch as any)('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'499c2f'},body:JSON.stringify({sessionId:'499c2f',location:'trigger-event.ts:customFields',message:'custom fields carregados para trigger-event',data:{leadId,customKeys:Object.keys(customVariables),eventType:event_type},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   for (const flow of matchedFlows) {
     const dedupKey = buildDedupKey(company_id, flow.id, opportunityId, leadId)
 
@@ -469,7 +500,7 @@ export default async function handler(req: any, res: any) {
     // 7b. Criar execução
     let execution: any = null
     try {
-      execution = await createExecution(flow, data, company_id, supabaseAdmin)
+      execution = await createExecution(flow, { ...data, variables: customVariables }, company_id, supabaseAdmin)
     } catch (err: any) {
       console.error(`[trigger-event] erro ao criar execução para flow ${flow.id}:`, err?.message)
 
