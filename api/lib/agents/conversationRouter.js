@@ -197,6 +197,20 @@ export async function routeConversationEvent(event, _deps = {}) {
     return buildDecision(false, SKIP.AI_INACTIVE, conversation, event);
   }
 
+  // ── PASSO 2.1: Verificar ai_assignment_id presente ───────────────────────
+  // Conversas com ai_state='ai_active' mas sem assignment vinculado indicam
+  // estado inconsistente (ex: fallback de /resetar, ou ativação manual incompleta).
+  // O agente só pode executar quando há um assignment explicitamente atribuído
+  // à conversa — idêntico ao comportamento do instagramAgentRouter.
+  if (!conversation.ai_assignment_id) {
+    console.log('🤖 [ROUTER] ⏭️  ai_assignment_id nulo — conversa sem agente vinculado:', {
+      conversation_id: event.conversation_id,
+      ai_state:        conversation.ai_state,
+    });
+    await skipWithAudit(svc, event, canUseMessageGrouping, SKIP.AI_INACTIVE, null);
+    return buildDecision(false, 'missing_assignment', conversation, event);
+  }
+
   // ── PASSO 2.5: Verificar fluxo ativo ────────────────────────────────────
   // Fluxos ativos não usam agrupamento nesta etapa.
   // auditProcessed garante registro APM independente do canUseMessageGrouping.

@@ -993,14 +993,17 @@ async function processMessage(payload) {
 
           // Fallback: se delete da conversa atual falhou, ao menos zera memória/flags
           // para não reenviar estado estruturado antigo na próxima sessão.
+          // ai_state → 'ai_inactive': garante que o agente não processe mensagens futuras
+          // nesta conversa sem que uma automação o reative explicitamente.
           if (conversationsDeleted === 0) {
             const { error: memClearError } = await supabaseAdmin
               .from('chat_conversations')
               .update({
-                memory: {},
-                reset_pending: false,
-                ai_state: 'ai_active',
-                updated_at: new Date().toISOString(),
+                memory:           {},
+                reset_pending:    false,
+                ai_state:         'ai_inactive',
+                ai_assignment_id: null,
+                updated_at:       new Date().toISOString(),
               })
               .eq('id', conversationId)
               .eq('company_id', company.id);
