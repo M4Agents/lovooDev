@@ -4,26 +4,33 @@
 // Recebe beacon do m4track quando detecta URL de checkout Nuvemshop.
 // Grava a associação visitor_id × checkout_id na bridge visitor_checkout_links.
 //
-// Fluxo:
-//   1. Validar formato dos campos obrigatórios
-//   2. Resolver company_id pelo tracking_code (landing_pages ativa)
-//   3. Verificar feature flag (NUVEMSHOP_BRIDGE_ALLOWLIST)
-//      — com flag OFF: retorna FEATURE_DISABLED, nada é gravado
-//   4. Validar que o visitor_id pertence ao mesmo company_id
-//   5. Verificar vínculo existente (company_id, checkout_id):
+// Autorização automática: qualquer empresa com integração Nuvemshop ativa
+// (nuvemshop_connections.status = 'active') é elegível — sem allowlist manual.
+// Novas empresas são cobertas automaticamente ao conectar a Nuvemshop via OAuth.
+//
+// Fluxo de validação:
+//   1. Validar método e payload
+//   2. Validar formato de tracking_code, visitor_id, checkout_id
+//   3. Verificar kill switch global (NUVEMSHOP_BRIDGE_ENABLED)
+//   4. Resolver company_id pelo tracking_code (landing_pages ativa)
+//   5. Validar que visitor_id pertence ao mesmo company_id
+//   6. Validar que company_id possui integração Nuvemshop ativa
+//   7. Verificar vínculo existente (company_id, checkout_id):
 //      — Inexistente → INSERT
 //      — Mesmo visitor → already_linked (idempotente)
 //      — Outro visitor → VISITOR_CONFLICT, não sobrescrever
 //
 // Segurança:
-//   — tracking_code é público; não autoriza ação sem resolução do company_id
-//   — visitor_id é validado por ownership real no banco
-//   — company_id nunca vem do cliente
-//   — Responde sempre HTTP 200 (beacon não deve falhar o checkout)
+//   — tracking_code é público; não é autenticação suficiente isoladamente
+//   — visitor_id validado por ownership real (visitors → landing_pages → company_id)
+//   — integração Nuvemshop ativa é verificação obrigatória adicional
+//   — company_id nunca vem do request
 //   — service_role exclusivo para operações de banco
+//   — Responde sempre HTTP 200 (beacon não deve falhar o checkout)
 // =============================================================================
 
-import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
+import { getSupabaseAdmin }              from './lib/automation/supabaseAdmin.js';
+import { hasActiveNuvemshopIntegration } from './lib/nuvemshop/checkIntegration.js';
 
 const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DIGIT_RE = /^\d+$/;
@@ -57,11 +64,14 @@ function sanitizeError(err) {
   return 'unknown';
 }
 
-function getAllowlist() {
-  return (process.env.NUVEMSHOP_BRIDGE_ALLOWLIST || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+/**
+ * Kill switch global da bridge.
+ * Ausente ou qualquer valor diferente de 'false' → bridge habilitada.
+ * NUVEMSHOP_BRIDGE_ENABLED=false → desliga globalmente em emergência.
+ * Nota: a alteração desta variável tem efeito após o próximo deployment da Function.
+ */
+function isBridgeGloballyEnabled() {
+  return process.env.NUVEMSHOP_BRIDGE_ENABLED !== 'false';
 }
 
 export default async function handler(req, res) {
@@ -80,12 +90,13 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
 
-    // Rejeitar payloads excessivos (proteção anti-abuso mínima)
+    // 1. Rejeitar payloads excessivos (proteção anti-abuso mínima)
     if (JSON.stringify(body).length > MAX_PAYLOAD_BYTES) {
       res.status(200).json({ success: false, reason: 'PAYLOAD_TOO_LARGE' });
       return;
     }
 
+    // 2. Extrair e validar campos
     const tracking_code = typeof body.tracking_code === 'string' ? body.tracking_code.trim() : '';
     const visitor_id    = typeof body.visitor_id    === 'string' ? body.visitor_id.trim()    : '';
     const checkout_id   = typeof body.checkout_id   === 'string' ? body.checkout_id.trim()   : '';
@@ -105,21 +116,20 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Resolver company_id pelo tracking_code (landing page ativa)
+    // 3. Kill switch global (sem DB call — avaliado antes de qualquer I/O)
+    if (!isBridgeGloballyEnabled()) {
+      res.status(200).json({ success: false, reason: 'FEATURE_DISABLED' });
+      return;
+    }
+
+    // 4. Resolver company_id pelo tracking_code (landing page ativa)
     const company_id = await resolveCompanyId(tracking_code);
     if (!company_id) {
       res.status(200).json({ success: false, reason: 'INVALID_TRACKING_CODE' });
       return;
     }
 
-    // Feature flag — com flag OFF nada é gravado
-    const allowlist = getAllowlist();
-    if (!allowlist.includes(company_id)) {
-      res.status(200).json({ success: false, reason: 'FEATURE_DISABLED' });
-      return;
-    }
-
-    // Validar ownership: visitor_id deve pertencer ao mesmo company_id
+    // 5. Validar ownership: visitor_id deve pertencer ao mesmo company_id
     const ownershipOk = await validateVisitorOwnership(visitor_id, company_id);
     if (!ownershipOk) {
       console.warn('[checkout-link] visitor_id não pertence ao company_id', {
@@ -130,7 +140,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Gravar ou verificar vínculo existente
+    // 6. Validar que a empresa possui integração Nuvemshop ativa
+    const svc = getSupabaseAdmin();
+    const hasNuvemshop = await hasActiveNuvemshopIntegration(company_id, svc);
+    if (!hasNuvemshop) {
+      res.status(200).json({ success: false, reason: 'NO_ACTIVE_NUVEMSHOP' });
+      return;
+    }
+
+    // 7. Gravar ou verificar vínculo existente
     const result = await upsertBridge({ company_id, checkout_id, visitor_id });
     res.status(200).json(result);
   } catch (err) {
@@ -198,6 +216,12 @@ async function validateVisitorOwnership(visitor_id, company_id) {
  * INSERT na bridge, respeitando a constraint UNIQUE(company_id, checkout_id).
  * — Mesmo visitor_id → idempotente (already_linked)
  * — Visitor_id diferente → VISITOR_CONFLICT, não sobrescreve
+ *
+ * Race condition: dois requests simultâneos podem passar pelo SELECT sem
+ * encontrar registro e tentar INSERT ao mesmo tempo. O erro 23505
+ * (unique violation pela constraint uq_vcl_company_checkout) é capturado,
+ * relido e tratado como already_linked ou VISITOR_CONFLICT conforme o
+ * visitor_id gravado — nunca como sucesso silencioso ou sobrescrita.
  */
 async function upsertBridge({ company_id, checkout_id, visitor_id }) {
   try {
@@ -231,9 +255,8 @@ async function upsertBridge({ company_id, checkout_id, visitor_id }) {
       .insert({ company_id, checkout_id, visitor_id });
 
     if (insErr) {
-      // Possível race condition no INSERT (outro request ganhou a corrida)
+      // Race condition: outro request ganhou o INSERT simultaneamente
       if (insErr.code === '23505') {
-        // Unique violation: reler e retornar resultado correto
         const { data: raceRow } = await svc
           .from('visitor_checkout_links')
           .select('visitor_id')
