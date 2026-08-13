@@ -1,0 +1,16 @@
+{
+  "name": "lovocrm-nube-attribution-test",
+  "version": "0.1.0",
+  "description": "NubeSDK Fase A — validação de correlação visitor_id × checkout_id (somente logs técnicos)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "@tiendanube/nube-sdk-types": "latest",
+    "esbuild": "latest",
+    "typescript": "latest"
+  }
+}
