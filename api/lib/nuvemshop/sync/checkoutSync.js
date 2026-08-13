@@ -46,7 +46,8 @@
 // checkout_url NUNCA trafega entre módulos — acesso exclusivo pelo banco.
 // =============================================================================
 
-import { getSupabaseAdmin } from '../../automation/supabaseAdmin.js';
+import { getSupabaseAdmin }           from '../../automation/supabaseAdmin.js';
+import { tryEnrichLeadAttribution } from './attributionSync.js';
 
 // ── Sanitização de cart_items ─────────────────────────────────────────────────
 
@@ -257,6 +258,7 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
     };
     const { data: ins, error } = await svc.from('leads').insert(newRow).select('id').single();
     if (error) throw new Error(`[checkoutSync] collision_insert_failed: ${error.message}`);
+    await tryEnrichLeadAttribution({ companyId, leadId: ins.id, email, phone, svc }).catch(() => {});
     return {
       ok: true, leadId: ins.id, action: 'created_collision_blocked', matchedBy,
       checkoutId: nuvemshopCheckoutId, cartTotal: checkoutFields.cart_total,
@@ -287,6 +289,7 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
       .single();
 
     if (error) throw new Error(`[checkoutSync] update_failed: ${error.message}`);
+    await tryEnrichLeadAttribution({ companyId, leadId: updated.id, email, phone, svc }).catch(() => {});
     return {
       ok: true, leadId: updated.id, action: 'updated', matchedBy,
       checkoutId: nuvemshopCheckoutId, cartTotal: checkoutFields.cart_total,
@@ -312,6 +315,7 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
     .single();
 
   if (insertErr) throw new Error(`[checkoutSync] insert_failed: ${insertErr.message}`);
+  await tryEnrichLeadAttribution({ companyId, leadId: inserted.id, email, phone, svc }).catch(() => {});
   return {
     ok: true, leadId: inserted.id, action: 'created', matchedBy: null,
     checkoutId: nuvemshopCheckoutId, cartTotal: checkoutFields.cart_total,

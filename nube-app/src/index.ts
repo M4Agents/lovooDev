@@ -1,120 +1,176 @@
 /**
- * LovoCRM NubeSDK — Fase A: Validação de Correlação
+ * LovoCRM NubeSDK — Attribution Signal
  *
- * PROPÓSITO: apenas coleta dados técnicos de correlação para validação da arquitetura.
- * NÃO persiste dados, NÃO envia sinais, NÃO interfere no checkout.
+ * Envia um conversion_signal para o backend LovoCRM quando o visitante
+ * preenche dados de contato no checkout Nuvemshop.
  *
- * Dados capturados (somente técnicos, sem PII):
- *   - state.location.url  (URL da página)
- *   - checkout_id         (extraído da URL)
- *   - state.cart.id       (identificador do carrinho)
- *   - state.store.id      (identificador da loja)
- *   - checkout step       (start / payment / success)
- *   - asyncLocalStorage   (resultado da leitura de lovocrm_visitor_id — SIM/NÃO)
+ * Fluxo:
+ *   1. customer:update dispara (com debounce de 1.5s)
+ *   2. Validar: store_id, checkout_id e (email OU phone) presentes
+ *   3. POST /api/nuvemshop-attribution-signal
+ *   4. Se VISITOR_LINK_NOT_FOUND → uma nova tentativa após ~3s
  *
- * NÃO loga: email, telefone, nome, endereço, CPF ou qualquer dado pessoal.
+ * Garantia de idempotência:
+ *   A garantia definitiva está no banco (UNIQUE company_id + checkout_id).
+ *   O estado local (signalSent, timer) é apenas proteção contra chamadas
+ *   excessivas no mesmo ciclo de vida do Worker.
+ *
+ * Regras PII:
+ *   NUNCA logar email, phone, name ou qualquer dado pessoal.
+ *   NUNCA incluir service_role ou credenciais no bundle.
+ *
+ * Feature flag:
+ *   O endpoint verifica NUVEMSHOP_ATTRIBUTION_ENABLED no backend.
+ *   Ausente ou falso → FEATURE_DISABLED → nenhum signal é criado.
+ *   O NubeSDK não tem acesso à flag — a decisão é exclusivamente do backend.
  */
 
 import type { NubeSDK, NubeSDKState } from '@tiendanube/nube-sdk-types';
 
-const PREFIX = '[lovocrm-nube-fase-a]';
+// URL da API LovoCRM — única secret do bundle (URL pública, sem credenciais)
+const ATTRIBUTION_API = 'https://app.lovoocrm.com/api/nuvemshop-attribution-signal';
 
-function extractCheckoutId(url: string): string | null {
-  // Padrão: /checkout/v3/{step}/{checkout_id}/...
-  const match = url.match(/\/checkout\/v3\/[^/]+\/(\d+)\//);
+// Timeout do debounce (ms) — evita burst de chamadas durante preenchimento do form
+const DEBOUNCE_MS = 1500;
+
+// Delay da segunda tentativa quando VISITOR_LINK_NOT_FOUND (ms)
+const RETRY_DELAY_MS = 3000;
+
+/** Conjunto de checkout_ids para os quais o signal já foi enviado com sucesso neste Worker. */
+const sentCheckouts = new Set<string>();
+
+/** Timer ativo de debounce (referência para cancelamento). */
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Extrai checkout_id de forma determinística.
+ * Usa state.cart.id (igual ao checkout_id na URL).
+ * Fallback: parse da URL apenas se cart.id não disponível.
+ */
+function getCheckoutId(state: Readonly<NubeSDKState>): string | null {
+  const cartIdRaw = state.cart?.id;
+  // cart.id pode ser string ou number dependendo da versão dos tipos NubeSDK
+  if (cartIdRaw != null) {
+    const asStr = String(cartIdRaw).trim();
+    if (/^\d+$/.test(asStr) && asStr !== '0') return asStr;
+  }
+  // Fallback: extrair da URL para robustez
+  const match = state.location?.url?.match(/\/checkout\/v3\/[^/]+\/(\d+)\//);
   return match ? match[1] : null;
 }
 
-function getStep(state: Readonly<NubeSDKState>): string {
-  const page = state.location.page;
-  if (page.type === 'checkout') return page.data.step;
-  return page.type;
+/**
+ * Envia o attribution signal para o backend.
+ * Nunca loga valores de PII (email, phone, name).
+ * Retorna o reason de falha ou null se bem-sucedido.
+ */
+async function postSignal(payload: {
+  store_id:    number;
+  checkout_id: string;
+  email:       string | null;
+  phone:       string | null;
+  name:        string | null;
+}): Promise<{ success: boolean; reason?: string }> {
+  try {
+    const res = await fetch(ATTRIBUTION_API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      console.warn('[lovocrm] attribution response não-ok', { status: res.status });
+      return { success: false, reason: 'HTTP_ERROR' };
+    }
+
+    const json = await res.json() as { success?: boolean; reason?: string; signal_id?: string };
+    return { success: !!json.success, reason: json.reason };
+  } catch {
+    return { success: false, reason: 'FETCH_ERROR' };
+  }
 }
 
-function logTechnicalData(
-  label: string,
-  state: Readonly<NubeSDKState>,
-  asyncVisitorId?: string | null
-): void {
-  const url = state.location.url;
-  const checkoutId = extractCheckoutId(url);
-  const cartId = state.cart?.id ?? null;
-  const storeId = state.store?.id ?? null;
-  const step = getStep(state);
+/**
+ * Orquestra envio e retry único para VISITOR_LINK_NOT_FOUND.
+ * Fail-open: nenhuma exceção pode propagar para o runtime NubeSDK.
+ */
+async function trySendSignal(payload: {
+  store_id:    number;
+  checkout_id: string;
+  email:       string | null;
+  phone:       string | null;
+  name:        string | null;
+}): Promise<void> {
+  const localKey = `${payload.store_id}:${payload.checkout_id}`;
 
-  console.group(`${PREFIX} ${label}`);
-  console.log('location.url  :', url);
-  console.log('checkout_id   :', checkoutId ?? '(não encontrado na URL)');
-  console.log('cart.id       :', cartId ?? '(null)');
-  console.log('store.id      :', storeId ?? '(null)');
-  console.log('step          :', step);
+  // Proteção local: evitar chamada dupla no mesmo Worker para o mesmo checkout
+  if (sentCheckouts.has(localKey)) return;
 
-  if (asyncVisitorId !== undefined) {
-    const readable = asyncVisitorId !== null ? 'SIM — valor presente' : 'NÃO — null (scoped ou ausente)';
-    console.log('asyncLocalStorage[lovocrm_visitor_id]:', readable);
+  const result = await postSignal(payload);
+
+  if (result.success) {
+    sentCheckouts.add(localKey);
+    console.log('[lovocrm] attribution signal ok', { checkout_id: payload.checkout_id });
+    return;
   }
 
-  // Diagnóstico de correlação
-  const idMatch =
-    checkoutId !== null && cartId !== null
-      ? checkoutId === cartId
-        ? '✓ checkout_id == cart.id'
-        : `✗ checkout_id (${checkoutId}) ≠ cart.id (${cartId})`
-      : '(não foi possível comparar — um ou ambos nulos)';
-  console.log('correlação    :', idMatch);
-  console.groupEnd();
+  // VISITOR_LINK_NOT_FOUND: bridge pode não ter chegado ainda — uma nova tentativa
+  if (result.reason === 'VISITOR_LINK_NOT_FOUND') {
+    console.log('[lovocrm] attribution retry agendado', { checkout_id: payload.checkout_id });
+    setTimeout(async () => {
+      if (sentCheckouts.has(localKey)) return;
+      const retry = await postSignal(payload);
+      if (retry.success) {
+        sentCheckouts.add(localKey);
+        console.log('[lovocrm] attribution retry ok', { checkout_id: payload.checkout_id });
+      } else {
+        // Fail-open: segunda tentativa esgotada, não bloquear checkout
+        console.log('[lovocrm] attribution retry falhou', { reason: retry.reason, checkout_id: payload.checkout_id });
+      }
+    }, RETRY_DELAY_MS);
+    return;
+  }
+
+  // Qualquer outra falha (FEATURE_DISABLED, STORE_NOT_FOUND, etc.) — sem retry
+  console.log('[lovocrm] attribution signal falhou', { reason: result.reason });
 }
 
 export function App(nube: NubeSDK): void {
-  const browser = nube.getBrowserAPIs();
+  // customer:update dispara enquanto o usuário preenche o form.
+  // Debounce de 1.5s para evitar burst de chamadas.
+  nube.on('customer:update', (state: Readonly<NubeSDKState>) => {
+    const storeId    = state.store?.id;
+    const checkoutId = getCheckoutId(state);
+    const contact    = state.customer?.contact;
+    const email      = contact?.email?.trim() || null;
+    const phone      = contact?.phone?.trim() || null;
+    const name       = contact?.name?.trim()  || null;
 
-  // 1. Captura inicial: assim que o app carrega
-  nube.on('checkout:ready', async (state) => {
-    let asyncVisitorId: string | null = null;
-    try {
-      asyncVisitorId = await browser.asyncLocalStorage.getItem('lovocrm_visitor_id');
-    } catch {
-      asyncVisitorId = null;
-    }
-    logTechnicalData('checkout:ready', state, asyncVisitorId);
-  });
+    // Pré-condições mínimas: store, checkout e pelo menos email ou phone
+    if (!storeId || !checkoutId || (!email && !phone)) return;
 
-  // 2. Captura a cada transição de step (start → payment → success)
-  nube.on('location:updated', (state) => {
-    const page = state.location.page;
-    if (page.type !== 'checkout') return;
-    logTechnicalData('location:updated (checkout)', state);
-  });
-
-  // 3. Captura quando o customer preenche dados
-  //    Loga APENAS confirmação de presença (SIM/NÃO), sem valor
-  nube.on('customer:update', async (state) => {
-    const contact = state.customer?.contact;
-    const hasEmail = contact?.email != null && contact.email !== '';
-    const hasPhone = contact?.phone != null && contact.phone !== '';
-    const hasName  = contact?.name  != null && contact.name  !== '';
-
-    // Reler asyncLocalStorage a cada customer:update para detectar mudança
-    let asyncVisitorId: string | null = null;
-    try {
-      asyncVisitorId = await browser.asyncLocalStorage.getItem('lovocrm_visitor_id');
-    } catch {
-      asyncVisitorId = null;
+    // Cancelar debounce anterior se ainda pendente
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
     }
 
-    logTechnicalData('customer:update', state, asyncVisitorId);
+    const payload = { store_id: storeId, checkout_id: checkoutId, email, phone, name };
 
-    // Confirma presença de contato (SIM/NÃO — sem logar o valor)
-    console.log(`${PREFIX} contato presente: email=${hasEmail} phone=${hasPhone} name=${hasName}`);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      // NÃO usar await aqui (callback NubeSDK é síncrono)
+      trySendSignal(payload).catch(() => {
+        // fail-open: nunca propagar erro para o runtime NubeSDK
+      });
+    }, DEBOUNCE_MS);
   });
 
-  // 4. Captura no sucesso do pedido
-  nube.on('order:update', (state) => {
-    logTechnicalData('order:update (success)', state);
-    // eventPayload pode conter order.id — logar se presente
-    const payload = state.eventPayload as Record<string, unknown> | null;
-    if (payload?.id) {
-      console.log(`${PREFIX} order.id (eventPayload):`, payload.id);
+  // Limpar timer pendente na navegação entre steps
+  nube.on('location:updated', () => {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
     }
   });
 }

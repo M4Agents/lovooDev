@@ -33,6 +33,7 @@
 
 import { getSupabaseAdmin }                     from '../../automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload }       from '../../leads/handleLeadReentry.js';
+import { tryEnrichLeadAttribution }             from './attributionSync.js';
 
 const GENERIC_NAMES = new Set(['lead', 'lead sem nome', 'lead sem nome', 'unknown', 'usuário']);
 
@@ -243,6 +244,7 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
     const newRow = buildNewLeadRow({ companyId, storeId, nuvemshopCustomerId, customer: customerData, now });
     const { data: ins, error: insErr } = await svc.from('leads').insert(newRow).select('id').single();
     if (insErr) throw new Error(`[customerSync] collision_insert_failed: ${insErr.message}`);
+    await tryEnrichLeadAttribution({ companyId, leadId: ins.id, email, phone, svc }).catch(() => {});
     return { ok: true, leadId: ins.id, action: 'created_collision_blocked', matchedBy };
   }
 
@@ -263,6 +265,8 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
       .single();
 
     if (error) throw new Error(`[customerSync] update_failed: ${error.message}`);
+
+    await tryEnrichLeadAttribution({ companyId, leadId: updated.id, email, phone, svc }).catch(() => {});
 
     // Registrar reentrada no histórico do lead.
     // externalEventId fixo por customer → idempotente: uma entrada por vínculo,
@@ -297,5 +301,6 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
   const newRow = buildNewLeadRow({ companyId, storeId, nuvemshopCustomerId, customer: customerData, now });
   const { data: inserted, error: insertErr } = await svc.from('leads').insert(newRow).select('id').single();
   if (insertErr) throw new Error(`[customerSync] insert_failed: ${insertErr.message}`);
+  await tryEnrichLeadAttribution({ companyId, leadId: inserted.id, email, phone, svc }).catch(() => {});
   return { ok: true, leadId: inserted.id, action: 'created', matchedBy: null };
 }
