@@ -42,6 +42,7 @@
         .catch(function () { /* visit attempt settled with error; continue */ })
         .then(function () {
           M4Track.setupEventListeners();
+          M4Track.sendCheckoutLink(); // Nuvemshop: registra bridge visitor_id × checkout_id (fire-and-forget)
         });
       this.setupFormInterception();
       this.setupHttpInterception();
@@ -421,6 +422,50 @@
         });
       } catch (e) {
         /* fail-open */
+      }
+    },
+
+    // Nuvemshop checkout bridge: associa visitor_id ao checkout_id da jornada atual.
+    // Fire-and-forget — NO-OP se não estiver em URL de checkout.
+    // O backend valida ownership e idempotência; o frontend não controla duplicidade.
+    sendCheckoutLink: function() {
+      try {
+        if (!this.config.isInitialized) return;
+
+        // Detectar URL de checkout: /checkout/v3/{step}/{checkout_id}/
+        var pathname = (typeof window !== 'undefined' && window.location)
+          ? window.location.pathname
+          : '';
+        var match = pathname.match(/\/checkout\/v3\/[^/]+\/(\d+)(?:\/|$)/);
+        if (!match) return; // Não está em checkout — NO-OP total
+
+        var checkoutId = match[1];
+        var visitorId  = this.getOrCreateVisitorId(); // Lê o mesmo ID já registrado em trackVisitor
+        var tc         = this.config.trackingCode;
+        var apiUrl     = this.config.apiUrl;
+
+        if (!checkoutId || !visitorId || !tc || !apiUrl) return;
+
+        // Usar _originalFetch para não acionar a própria interceptação HTTP
+        var doFetch = this._originalFetch || (typeof window !== 'undefined' && window.fetch) || fetch;
+        doFetch(apiUrl + '/api/nuvemshop-checkout-link', {
+          method:      'POST',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({
+                         tracking_code: tc,
+                         visitor_id:    visitorId,
+                         checkout_id:   checkoutId
+                       }),
+          keepalive:   true,
+          mode:        'cors',
+          credentials: 'omit'
+        }).then(function() {
+          console.log('LovoCRM: Checkout link sent (' + checkoutId + ')');
+        }).catch(function() {
+          console.warn('LovoCRM: Checkout link failed (non-blocking)');
+        });
+      } catch (e) {
+        /* fail-open — nunca bloquear navegação */
       }
     },
 
