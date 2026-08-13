@@ -7,7 +7,7 @@
 // Fluxo:
 //   1. Validar formato dos campos obrigatórios
 //   2. Resolver company_id pelo tracking_code (landing_pages ativa)
-//   3. Verificar feature flag (NUVEMSHOP_ATTRIBUTION_ALLOWLIST)
+//   3. Verificar feature flag (NUVEMSHOP_BRIDGE_ALLOWLIST)
 //      — com flag OFF: retorna FEATURE_DISABLED, nada é gravado
 //   4. Validar que o visitor_id pertence ao mesmo company_id
 //   5. Verificar vínculo existente (company_id, checkout_id):
@@ -58,7 +58,7 @@ function sanitizeError(err) {
 }
 
 function getAllowlist() {
-  return (process.env.NUVEMSHOP_ATTRIBUTION_ALLOWLIST || '')
+  return (process.env.NUVEMSHOP_BRIDGE_ALLOWLIST || '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
