@@ -11,11 +11,13 @@ import { Draggable } from '@hello-pangea/dnd'
 import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
-import type { OpportunityFunnelPosition } from '../../types/sales-funnel'
+import type { OpportunityFunnelPosition, CustomFieldValueEntry } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 import { resolvePhotoUrl } from '../../utils/imageUtils'
 import { CycleStatusBadge } from './CycleStatusBadge'
+import { LeadCardCustomFieldRows } from './LeadCardCustomFieldRows'
+import { isCustomFieldKey } from '../../utils/customFieldUtils'
 
 function getOwnerInitials(user?: CompanyUser): string {
   const name = user?.display_name || user?.email || ''
@@ -38,6 +40,8 @@ interface LeadCardProps {
   onDetailClick?: (opportunityId: string) => void
   /** Lista de usuários da empresa para resolver nome do owner. */
   companyUsers?: CompanyUser[]
+  /** Mapa de valores de campos personalizados, indexado por lead_id. */
+  customFieldValuesMap?: Record<number, CustomFieldValueEntry[]>
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -48,7 +52,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   onChatClick,
   companyId,
   onDetailClick,
-  companyUsers = []
+  companyUsers = [],
+  customFieldValuesMap = {}
 }) => {
   const { t } = useTranslation('funnel')
   const opportunity = position.opportunity
@@ -72,6 +77,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   }
 
   const isFieldVisible = (field: string) => visibleFields.includes(field)
+
+  const visibleCustomKeys = visibleFields.filter(isCustomFieldKey)
 
   const handleTagsChanged = (names: string[]) => {
     setLocalTagNames(names)
@@ -275,6 +282,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 </button>
               )}
             </div>
+          )}
+
+          {/* Campos personalizados visíveis no card */}
+          {visibleCustomKeys.length > 0 && (
+            <LeadCardCustomFieldRows
+              visibleCustomKeys={visibleCustomKeys}
+              customFieldValuesMap={customFieldValuesMap}
+              leadId={lead.id}
+            />
           )}
 
           {/* Footer com tempo na etapa + badge de ciclo + owner */}

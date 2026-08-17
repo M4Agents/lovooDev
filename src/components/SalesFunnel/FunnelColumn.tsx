@@ -8,7 +8,7 @@ import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
 import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check, ArrowUpDown, ChevronRight } from 'lucide-react'
-import type { FunnelStage, LeadFunnelPosition, SortOption } from '../../types/sales-funnel'
+import type { FunnelStage, LeadFunnelPosition, SortOption, CustomFieldValueEntry } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
 import { formatCurrency } from '../../types/sales-funnel'
@@ -86,6 +86,8 @@ interface FunnelColumnProps {
   isDragDisabled?: boolean
   /** Quando true, esta coluna tem uma ordenação própria diferente da global. */
   isOverride?: boolean
+  /** Mapa de valores de campos personalizados, indexado por lead_id. */
+  customFieldValuesMap?: Record<number, CustomFieldValueEntry[]>
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -111,7 +113,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   currentSort,
   onSortChange,
   isDragDisabled = false,
-  isOverride = false
+  isOverride = false,
+  customFieldValuesMap
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -399,6 +402,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   companyId={companyId}
                   onDetailClick={onDetailClick}
                   companyUsers={companyUsers}
+                  customFieldValuesMap={customFieldValuesMap}
                 />
               ))
             )}

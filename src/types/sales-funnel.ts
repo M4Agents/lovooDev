@@ -449,6 +449,31 @@ export interface LeadCardData {
 }
 
 // =====================================================
+// TIPOS: CAMPOS PERSONALIZADOS
+// =====================================================
+
+/** Definição de um campo personalizado (linha de lead_custom_fields). */
+export interface CustomFieldDefinition {
+  id: string
+  company_id: string
+  field_name: string
+  field_label: string
+  field_type: 'text' | 'number' | 'date' | 'boolean' | 'select'
+  options?: unknown
+  is_required: boolean
+  created_at: string
+  numeric_id: number
+}
+
+/** Entrada no mapa de valores custom usada pelo LeadCard e FunnelBoard. */
+export interface CustomFieldValueEntry {
+  field_id: string
+  field_label: string
+  field_type: string
+  value: string
+}
+
+// =====================================================
 // TYPES PARA FORMULÁRIOS
 // =====================================================
 

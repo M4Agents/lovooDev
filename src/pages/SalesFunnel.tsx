@@ -23,8 +23,9 @@ import { useAccessControl } from '../hooks/useAccessControl'
 import { useContactCycleConfig }   from '../hooks/useContactCycleConfig'
 import { useCompanyIntegration }   from '../hooks/useCompanyIntegration'
 import { funnelApi } from '../services/funnelApi'
+import { api } from '../services/api'
 import { supabase } from '../lib/supabase'
-import type { CreateFunnelForm, FunnelStage, SortOption, DateField } from '../types/sales-funnel'
+import type { CreateFunnelForm, FunnelStage, SortOption, DateField, CustomFieldDefinition } from '../types/sales-funnel'
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { ContactAttemptsState } from '../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
@@ -80,6 +81,7 @@ export default function SalesFunnel() {
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null)
   const [visibleFields, setVisibleFields] = useState<string[]>([...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS])
+  const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [selectedTagsMode, setSelectedTagsMode] = useState<'or' | 'and'>('or')
@@ -227,6 +229,26 @@ export default function SalesFunnel() {
     }
     loadPreferences()
   }, [companyId, selectedFunnel])
+
+  // Carregar definições de campos personalizados para o customizer
+  useEffect(() => {
+    let cancelled = false
+
+    if (!companyId) {
+      setCustomFields([])
+      return () => { cancelled = true }
+    }
+    api.getCustomFields(companyId)
+      .then((fields) => {
+        if (cancelled) return
+        setCustomFields(fields as CustomFieldDefinition[])
+      })
+      .catch(() => {
+        if (!cancelled) setCustomFields([])
+      })
+
+    return () => { cancelled = true }
+  }, [companyId])
 
   // ─── Helper: snapshot do estado atual de filtros ────────────────────────────
   const buildCurrentSnapshot = useCallback((): FunnelFilterSnapshot => ({
@@ -937,6 +959,7 @@ export default function SalesFunnel() {
         onClose={() => setShowCardCustomizer(false)}
         onSubmit={handleUpdateCardPreferences}
         currentVisibleFields={visibleFields}
+        availableCustomFields={customFields}
       />
 
       {selectedFunnel && (

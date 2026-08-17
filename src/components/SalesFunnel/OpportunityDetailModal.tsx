@@ -22,7 +22,9 @@ import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
 import { getCompanyUsers } from '../../services/userApi'
+import { api } from '../../services/api'
 import { parsePtBrMoneyInput } from '../../utils/ptBrMoneyInput'
+import { formatCustomFieldValue } from '../../utils/customFieldUtils'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { useOpportunityStageHistory } from '../../hooks/useOpportunityStageHistory'
 import { useContactCyclePanel } from '../../hooks/useContactCyclePanel'
@@ -37,8 +39,9 @@ import {
   resolveOpportunityCompositionErrorMessage
 } from '../../utils/opportunityCompositionErrors'
 import type { CompanyUser } from '../../types/user'
+import type { Lead } from '../../lib/supabase'
 
-type TabType = 'details' | 'journey' | 'status' | 'notes' | 'cycles' | 'nuvemshop'
+type TabType = 'details' | 'journey' | 'status' | 'notes' | 'cycles' | 'nuvemshop' | 'lead_data'
 
 interface OpportunityDetailModalProps {
   isOpen: boolean
@@ -68,6 +71,114 @@ const formatDateShort = (iso?: string): string => {
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric'
   }).format(new Date(iso))
+}
+
+// =====================================================
+// Subcomponente: LeadDataTab — exibe dados completos do lead
+// =====================================================
+
+function LeadInfoRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null
+  return (
+    <div className="flex gap-2 py-1.5 border-b border-gray-50 last:border-0">
+      <span className="text-xs text-gray-400 w-36 shrink-0">{label}</span>
+      <span className="text-xs text-gray-800 break-all">{value}</span>
+    </div>
+  )
+}
+
+function LeadSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
+      <div className="bg-gray-50 rounded-lg px-3 py-1">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function LeadDataTab({ lead }: { lead: Lead }) {
+  const customValues = lead.lead_custom_values ?? []
+
+  const hasContact = lead.name || lead.email || lead.phone || lead.instagram || lead.linkedin || lead.tiktok
+  const hasCompany = lead.company_name || lead.company_cnpj || lead.company_cidade || lead.company_site || lead.company_telefone
+  const hasProfile = lead.cargo || lead.poder_investimento || lead.data_nascimento
+  const hasAddress = lead.cep || lead.estado || lead.cidade || lead.endereco
+  const hasMarketing = lead.campanha || lead.conjunto_anuncio || lead.anuncio || lead.utm_source || lead.utm_medium
+  const hasCustom = customValues.length > 0
+
+  return (
+    <div className="space-y-1">
+      {hasContact && (
+        <LeadSection title="Contato">
+          <LeadInfoRow label="Nome" value={lead.name} />
+          <LeadInfoRow label="Email" value={lead.email} />
+          <LeadInfoRow label="Telefone" value={lead.phone} />
+          <LeadInfoRow label="Instagram" value={lead.instagram} />
+          <LeadInfoRow label="LinkedIn" value={lead.linkedin} />
+          <LeadInfoRow label="TikTok" value={lead.tiktok} />
+        </LeadSection>
+      )}
+
+      {hasCompany && (
+        <LeadSection title="Empresa">
+          <LeadInfoRow label="Nome" value={lead.company_name} />
+          <LeadInfoRow label="CNPJ" value={lead.company_cnpj} />
+          <LeadInfoRow label="Cidade / Estado" value={[lead.company_cidade, lead.company_estado].filter(Boolean).join(' / ') || undefined} />
+          <LeadInfoRow label="Telefone" value={lead.company_telefone} />
+          <LeadInfoRow label="Email" value={lead.company_email} />
+          <LeadInfoRow label="Site" value={lead.company_site} />
+        </LeadSection>
+      )}
+
+      {hasProfile && (
+        <LeadSection title="Perfil">
+          <LeadInfoRow label="Cargo" value={lead.cargo} />
+          <LeadInfoRow label="Poder de investimento" value={lead.poder_investimento} />
+          <LeadInfoRow label="Data de nascimento" value={lead.data_nascimento ? formatDateShort(lead.data_nascimento) : undefined} />
+        </LeadSection>
+      )}
+
+      {hasAddress && (
+        <LeadSection title="Endereço">
+          <LeadInfoRow label="CEP" value={lead.cep} />
+          <LeadInfoRow label="Estado" value={lead.estado} />
+          <LeadInfoRow label="Cidade" value={lead.cidade} />
+          <LeadInfoRow label="Endereço" value={lead.endereco} />
+          <LeadInfoRow label="Número" value={lead.numero} />
+          <LeadInfoRow label="Bairro" value={lead.bairro} />
+          <LeadInfoRow label="Complemento" value={lead.complemento} />
+        </LeadSection>
+      )}
+
+      {hasMarketing && (
+        <LeadSection title="Marketing">
+          <LeadInfoRow label="Campanha" value={lead.campanha} />
+          <LeadInfoRow label="Conjunto" value={lead.conjunto_anuncio} />
+          <LeadInfoRow label="Anúncio" value={lead.anuncio} />
+          <LeadInfoRow label="UTM Source" value={lead.utm_source ?? undefined} />
+          <LeadInfoRow label="UTM Medium" value={lead.utm_medium ?? undefined} />
+        </LeadSection>
+      )}
+
+      {hasCustom && (
+        <LeadSection title="Campos Personalizados">
+          {customValues.map((cv, i) => (
+            <LeadInfoRow
+              key={i}
+              label={cv.lead_custom_fields.field_label || cv.lead_custom_fields.field_name}
+              value={formatCustomFieldValue(cv.value, cv.lead_custom_fields.field_type) || undefined}
+            />
+          ))}
+        </LeadSection>
+      )}
+
+      {!hasContact && !hasCompany && !hasProfile && !hasAddress && !hasMarketing && !hasCustom && (
+        <p className="text-sm text-gray-400 text-center py-6">Nenhum dado disponível para este lead.</p>
+      )}
+    </div>
+  )
 }
 
 // =====================================================
@@ -207,6 +318,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
   const [compositionEntitled, setCompositionEntitled] = useState(false)
   const [opportunitySaleTypes, setOpportunitySaleTypes] = useState<OpportunitySaleTypeLink[]>([])
   const [loadingSaleTypes, setLoadingSaleTypes] = useState(false)
+
+  // Aba "Dados do Lead" — lazy load
+  const [fullLead, setFullLead] = useState<Lead | null>(null)
+  const [leadDataState, setLeadDataState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [leadLoadedForId, setLeadLoadedForId] = useState<number | null>(null)
 
   // Edição geral
   const [editMode, setEditMode]       = useState(false)
@@ -386,6 +502,31 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     return () => clearTimeout(timer)
   }, [activeTab, loadingStage])
 
+  // Resetar dados do lead ao trocar de oportunidade/lead
+  useEffect(() => {
+    setFullLead(null)
+    setLeadLoadedForId(null)
+    setLeadDataState('idle')
+  }, [opportunity.id])
+
+  // Lazy load dos dados completos do lead ao abrir aba lead_data
+  useEffect(() => {
+    if (activeTab !== 'lead_data') return
+    if (!opportunity.lead_id) return
+    if (leadLoadedForId === opportunity.lead_id) return
+
+    setLeadDataState('loading')
+    api.getLeadById(opportunity.lead_id)
+      .then((data) => {
+        setFullLead(data as Lead)
+        setLeadLoadedForId(opportunity.lead_id)
+        setLeadDataState('idle')
+      })
+      .catch(() => {
+        setLeadDataState('error')
+      })
+  }, [activeTab, opportunity.lead_id, opportunity.id, leadLoadedForId])
+
   const statusConfigResolved = useMemo(
     () => ({
       open: { ...statusConfig.open, label: t('opportunityDetail.badge.open') },
@@ -406,6 +547,7 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
     { key: 'journey', label: t('opportunityDetail.tabs.journey'), icon: <Route className="w-3.5 h-3.5" /> },
     { key: 'status', label: t('opportunityDetail.tabs.status'), icon: <Clock className="w-3.5 h-3.5" /> },
     { key: 'notes', label: 'Notas', icon: <StickyNote className="w-3.5 h-3.5" /> },
+    { key: 'lead_data', label: 'Dados do Lead', icon: <User className="w-3.5 h-3.5" /> },
     ...(canViewContactCycles
       ? [{ key: 'cycles' as TabType, label: t('opportunityDetail.tabs.cycles'), icon: <RefreshCw className="w-3.5 h-3.5" /> }]
       : []),
@@ -856,6 +998,38 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
                 opportunityId={opportunity.id}
                 companyId={companyId}
               />
+            </div>
+          )}
+
+          {/* ABA: Dados do Lead */}
+          {activeTab === 'lead_data' && (
+            <div>
+              {leadDataState === 'loading' && (
+                <div className="flex items-center justify-center gap-2 py-10 text-gray-400">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Carregando dados do lead...</span>
+                </div>
+              )}
+
+              {leadDataState === 'error' && (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                  <AlertCircle className="w-8 h-8 text-red-400" />
+                  <p className="text-sm text-gray-600">Não foi possível carregar os dados do lead.</p>
+                  <button
+                    onClick={() => {
+                      setLeadLoadedForId(null)
+                      setLeadDataState('idle')
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+
+              {leadDataState === 'idle' && fullLead && (
+                <LeadDataTab lead={fullLead} />
+              )}
             </div>
           )}
         </div>

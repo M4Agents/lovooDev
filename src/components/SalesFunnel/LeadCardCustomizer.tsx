@@ -5,14 +5,17 @@
 // =====================================================
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, Eye, EyeOff } from 'lucide-react'
+import { X, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { FUNNEL_CONSTANTS } from '../../types/sales-funnel'
+import type { CustomFieldDefinition } from '../../types/sales-funnel'
+import { toCustomFieldKey, isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
 
 interface LeadCardCustomizerProps {
   isOpen: boolean
   onClose: () => void
   onSubmit: (visibleFields: string[]) => Promise<void>
   currentVisibleFields: string[]
+  availableCustomFields: CustomFieldDefinition[]
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -47,11 +50,20 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   opportunity_number: 'Número sequencial único gerado automaticamente por empresa'
 }
 
+const FIELD_TYPE_LABEL: Record<string, string> = {
+  text: 'Texto',
+  number: 'Número',
+  date: 'Data',
+  boolean: 'Sim/Não',
+  select: 'Seleção',
+}
+
 export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  currentVisibleFields
+  currentVisibleFields,
+  availableCustomFields
 }) => {
   const [visibleFields, setVisibleFields] = useState<string[]>(currentVisibleFields)
   const [loading, setLoading] = useState(false)
@@ -60,7 +72,6 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
     setVisibleFields(currentVisibleFields)
   }, [currentVisibleFields])
 
-  // Recarregar preferências quando o modal abrir
   useEffect(() => {
     if (isOpen) {
       setVisibleFields(currentVisibleFields)
@@ -77,7 +88,6 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     try {
       setLoading(true)
       await onSubmit(visibleFields)
@@ -97,7 +107,8 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
   }
 
   const handleSelectAll = () => {
-    setVisibleFields([...FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS])
+    const allCustomKeys = availableCustomFields.map(f => toCustomFieldKey(f.id))
+    setVisibleFields([...FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS, ...allCustomKeys])
   }
 
   const handleDeselectAll = () => {
@@ -107,6 +118,9 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
   const handleResetToDefault = () => {
     setVisibleFields([...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS])
   }
+
+  const selectedCustomCount = visibleFields.filter(isCustomFieldKey).length
+  const totalFields = FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS.length + availableCustomFields.length
 
   if (!isOpen) return null
 
@@ -161,54 +175,119 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
             </button>
             <div className="flex-1" />
             <span className="text-sm text-gray-600">
-              {visibleFields.length} de {FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS.length} selecionados
+              {visibleFields.length} de {totalFields} selecionados
             </span>
           </div>
         </div>
 
         {/* Fields List */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS.map((field) => {
-              const isVisible = visibleFields.includes(field)
-              
-              return (
-                <label
-                  key={field}
-                  className={`
-                    flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
-                    ${isVisible 
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }
-                  `}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isVisible}
-                    onChange={() => toggleField(field)}
-                    className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    disabled={loading}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {isVisible ? (
-                        <Eye className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      )}
-                      <p className="font-medium text-gray-900">
-                        {FIELD_LABELS[field] || field}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Campos padrão */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              Campos do Card
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {FUNNEL_CONSTANTS.ALL_AVAILABLE_FIELDS.map((field) => {
+                const isVisible = visibleFields.includes(field)
+                return (
+                  <label
+                    key={field}
+                    className={`
+                      flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${isVisible
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }
+                    `}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isVisible}
+                      onChange={() => toggleField(field)}
+                      className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      disabled={loading}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {isVisible ? (
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        )}
+                        <p className="font-medium text-gray-900">
+                          {FIELD_LABELS[field] || field}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {FIELD_DESCRIPTIONS[field] || 'Campo do lead'}
                       </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {FIELD_DESCRIPTIONS[field] || 'Campo do lead'}
-                    </p>
-                  </div>
-                </label>
-              )
-            })}
+                  </label>
+                )
+              })}
+            </div>
           </div>
+
+          {/* Campos personalizados */}
+          {availableCustomFields.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Campos Personalizados
+              </p>
+
+              {selectedCustomCount > 3 && (
+                <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    Cards com muitos campos personalizados podem ficar longos. Considere reduzir a seleção.
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {availableCustomFields.map((field) => {
+                  const key = toCustomFieldKey(field.id)
+                  const isVisible = visibleFields.includes(key)
+                  return (
+                    <label
+                      key={field.id}
+                      className={`
+                        flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                        ${isVisible
+                          ? 'border-purple-500 bg-purple-50'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }
+                      `}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => toggleField(key)}
+                        className="mt-1 w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        disabled={loading}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {isVisible ? (
+                            <Eye className="w-4 h-4 text-purple-600" />
+                          ) : (
+                            <EyeOff className="w-4 h-4 text-gray-400" />
+                          )}
+                          <p className="font-medium text-gray-900">
+                            {field.field_label}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Tipo: {FIELD_TYPE_LABEL[field.field_type] ?? field.field_type}
+                        </p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Info */}
@@ -241,3 +320,4 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
     </div>
   )
 }
+

@@ -1344,6 +1344,40 @@ class FunnelApiService {
       throw error
     }
   }
+  // ===================================================
+  // CAMPOS PERSONALIZADOS NO CARD (BATCH)
+  // ===================================================
+
+  /**
+   * Busca valores de campos personalizados para um conjunto de leads.
+   *
+   * Usa o cliente Supabase autenticado — RLS ativo.
+   * A isolação multi-tenant é garantida via RLS em lead_custom_values:
+   *   lead_id → leads.company_id → auth_user_is_company_member().
+   *
+   * @param leadIds   IDs dos leads já carregados/autorizados no board.
+   * @param fieldIds  UUIDs dos campos personalizados visíveis (sem prefixo cf_).
+   */
+  async getCustomFieldValuesForLeads(
+    leadIds: number[],
+    fieldIds: string[]
+  ): Promise<Array<{ lead_id: number; field_id: string; value: string; lead_custom_fields: { field_label: string; field_type: string } }>> {
+    if (leadIds.length === 0 || fieldIds.length === 0) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('lead_custom_values')
+        .select('lead_id, field_id, value, lead_custom_fields(field_label, field_type)')
+        .in('lead_id', leadIds)
+        .in('field_id', fieldIds)
+
+      if (error) throw error
+      return (data ?? []) as Array<{ lead_id: number; field_id: string; value: string; lead_custom_fields: { field_label: string; field_type: string } }>
+    } catch (error) {
+      console.error('[funnelApi.getCustomFieldValuesForLeads] Erro:', error)
+      return []
+    }
+  }
 }
 
 // =====================================================

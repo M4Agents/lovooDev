@@ -42,8 +42,10 @@ import type {
   UpdateStageForm,
   CloseOpportunityParams,
   ReopenOpportunityParams,
-  Opportunity
+  Opportunity,
+  CustomFieldValueEntry
 } from '../../types/sales-funnel'
+import { isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../../types/analytics'
 import type { BulkMoveRequest } from './FunnelColumn'
@@ -101,6 +103,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const { company, user } = useAuth()
   const companyId = company?.id
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
+  const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
 
   useEffect(() => {
     if (!companyId) return
@@ -190,6 +193,64 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const { counts, refresh: refreshCounts } = useStageCounts(funnelId, companyId, filter)
 
   const { move } = useMoveOpportunity(companyId)
+
+  // =====================================================
+  // BATCH QUERY: CAMPOS PERSONALIZADOS NO CARD
+  // Executa somente quando há cf_ visíveis E leads carregados.
+  // Re-executa ao carregar mais leads (loadMore) ou mudar visibleFields.
+  // Respeita RLS — usa cliente Supabase autenticado do usuário.
+  // =====================================================
+
+  const visibleCustomFieldIds = useMemo(
+    () => (visibleFields ?? []).filter(isCustomFieldKey).map(fromCustomFieldKey),
+    [visibleFields]
+  )
+
+  const allLeadIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const col of stageMap.values()) {
+      for (const pos of col.positions) {
+        if (typeof pos.lead_id === 'number') ids.add(pos.lead_id)
+      }
+    }
+    return Array.from(ids)
+  }, [stageMap])
+
+  // Chaves estáveis para as dependências do useEffect
+  const customFieldIdsKey = visibleCustomFieldIds.join(',')
+  const leadIdsKey = allLeadIds.join(',')
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (visibleCustomFieldIds.length === 0 || allLeadIds.length === 0) {
+      setCustomFieldValuesMap({})
+      return () => { cancelled = true }
+    }
+
+    funnelApi.getCustomFieldValuesForLeads(allLeadIds, visibleCustomFieldIds)
+      .then((rows) => {
+        if (cancelled) return
+        const map: Record<number, CustomFieldValueEntry[]> = {}
+        for (const row of rows) {
+          const entry: CustomFieldValueEntry = {
+            field_id: row.field_id,
+            field_label: row.lead_custom_fields.field_label,
+            field_type: row.lead_custom_fields.field_type,
+            value: row.value,
+          }
+          if (!map[row.lead_id]) map[row.lead_id] = []
+          map[row.lead_id].push(entry)
+        }
+        setCustomFieldValuesMap(map)
+      })
+      .catch(() => {
+        // Falha silenciosa: o card simplesmente não exibe os campos custom.
+      })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customFieldIdsKey, leadIdsKey])
 
   // =====================================================
   // FASE 4 — REALTIME
@@ -914,6 +975,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onSortChange={(sort) => handleStageSort(stage.id, sort)}
                 isDragDisabled={isDragDisabledForStage(stage.id)}
                 isOverride={isOverride(stage.id)}
+                customFieldValuesMap={customFieldValuesMap}
               />
             </div>
           ))}
