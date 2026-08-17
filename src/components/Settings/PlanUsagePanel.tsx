@@ -234,7 +234,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
       } else {
         // ── Nova assinatura via Stripe Checkout (sem assinatura ou trial interno) ──
         // #region agent log
-        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c55ca3'},body:JSON.stringify({sessionId:'c55ca3',location:'PlanUsagePanel.tsx:checkout-start',message:'iniciando checkout',data:{planId:selectedPlan.id,planName:selectedPlan.name,hasSubscription,isInternalTrial,useCheckout,companyId},timestamp:Date.now(),hypothesisId:'H1-H2-H3-H4'})}).catch(()=>{});
+        console.log('[DEBUG-c55ca3][checkout-start]', { planId: selectedPlan.id, planName: selectedPlan.name, hasSubscription, isInternalTrial, useCheckout, companyId })
         // #endregion
         const resp = await fetch(`/api/stripe/plans/checkout?company_id=${encodeURIComponent(companyId)}`, {
           method:  'POST',
@@ -245,7 +245,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         const json = await resp.json()
 
         // #region agent log
-        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c55ca3'},body:JSON.stringify({sessionId:'c55ca3',location:'PlanUsagePanel.tsx:checkout-response',message:'resposta do checkout',data:{status:resp.status,ok:resp.ok,json},timestamp:Date.now(),hypothesisId:'H1-H2-H3-H4'})}).catch(()=>{});
+        console.log('[DEBUG-c55ca3][checkout-response]', { status: resp.status, ok: resp.ok, json })
         // #endregion
 
         if (!resp.ok) {
@@ -256,7 +256,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
         if (json.direct_update) {
           // #region agent log
-          fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c55ca3'},body:JSON.stringify({sessionId:'c55ca3',location:'PlanUsagePanel.tsx:direct-update',message:'direct_update path acionado',data:{plan_name:json.plan_name},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+          console.log('[DEBUG-c55ca3][direct-update]', { plan_name: json.plan_name })
           // #endregion
           setSelectedPlan(null)
           setActionSuccess(`Plano ${json.plan_name ?? ''} atribuído com sucesso.`.trim())
@@ -266,7 +266,7 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
         if (json.checkout_url) {
           // #region agent log
-          fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c55ca3'},body:JSON.stringify({sessionId:'c55ca3',location:'PlanUsagePanel.tsx:redirect',message:'redirecionando para Stripe',data:{checkout_url:json.checkout_url.substring(0,60)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+          console.log('[DEBUG-c55ca3][redirect-to-stripe]', { checkout_url: json.checkout_url?.substring(0, 80) })
           // #endregion
           window.location.href = json.checkout_url
         }
