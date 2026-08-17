@@ -111,6 +111,9 @@ export default async function handler(req, res) {
   // Quando isParentUser = true (super_admin/system_admin agindo em nome da empresa),
   // não há fluxo de pagamento — o plano é atribuído diretamente, sem Stripe.
   // Isso cobre empresas is_free = true e qualquer empresa sem stripe_subscription_id.
+  // #region agent log
+  console.log('[DEBUG-c55ca3][checkout.js:3b]', JSON.stringify({ isParentUser, effectiveCompanyId, userId, to_plan_id }))
+  // #endregion
   if (isParentUser) {
     const rpcResult = await svc.rpc('admin_set_company_plan', {
       p_actor_user_id: userId,
@@ -192,6 +195,10 @@ export default async function handler(req, res) {
 
     const currentLimits = await getPlanLimits(svc, effectiveCompanyId)
     const fromPlanId    = currentLimits.plan_id
+
+    // #region agent log
+    console.log('[DEBUG-c55ca3][checkout.js:step5]', JSON.stringify({ existingSub_status: existingSub?.status, existingSub_hasSub: !!existingSub?.stripe_subscription_id, isInternalTrial, fromPlanId, to_plan_id, samePlan: fromPlanId === to_plan_id }))
+    // #endregion
 
     // Trial interno contratando o mesmo plano: PERMITIDO (conversão trial → pago).
     // Qualquer outro caso de same-plan: BLOQUEADO.
