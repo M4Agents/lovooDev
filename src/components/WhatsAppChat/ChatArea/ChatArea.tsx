@@ -2324,8 +2324,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {message.content && !isAudioMessage && actualMessageType !== 'image' && actualMessageType !== 'video' && (
-            <div>
+          {message.content && !isAudioMessage && (
+            <div className="mt-1">
               <p className="text-sm whitespace-pre-wrap">
                 {message.content.length > READ_MORE_THRESHOLD && !expanded
                   ? renderMessageWithLinks(message.content.substring(0, READ_MORE_THRESHOLD))
