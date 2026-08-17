@@ -222,6 +222,40 @@ export const useChatData = (
     fallbackToLegacy: ChatFeatureManager.shouldFallbackToLegacy()
   })
 
+  // Ref para evitar stale closure no listener de instâncias
+  const fetchConversationsRef = useRef(fetchConversations)
+  useEffect(() => {
+    fetchConversationsRef.current = fetchConversations
+  }, [fetchConversations])
+
+  // Subscription para mudanças de status em whatsapp_life_instances.
+  // Quando uma instância reconecta (ou é desconectada), refaz o fetch da lista de
+  // conversas para que os campos instance_status e instance_deleted venham frescos
+  // do JOIN da RPC — eliminando badges "Desconectada"/"Deletada" desatualizados.
+  useEffect(() => {
+    if (!companyId) return
+
+    const channel = supabase
+      .channel(`instance-status-${companyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'whatsapp_life_instances',
+          filter: `company_id=eq.${companyId}`
+        },
+        () => {
+          fetchConversationsRef.current()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [companyId])
+
   // Listener para novas conversas criadas
   useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
     if (conversation.company_id === companyId) {
@@ -237,23 +271,33 @@ export const useChatData = (
   // Listener para conversas atualizadas
   useChatEvent('chat:conversation:updated', (payload: any) => {
     if (payload.data && payload.data.company_id === companyId) {
-      const updated: ChatConversation = payload.data
+      const raw = payload.data
+      // Converter strings de data para Date — o payload bruto do realtime entrega
+      // timestamps como strings ISO, mas o restante do sistema espera Date objects.
+      // Fazer merge parcial (spread) preserva campos joined (instance_status, etc.)
+      // que não existem no payload direto da tabela.
+      const patch: Partial<ChatConversation> = {
+        ...raw,
+        last_message_at:  raw.last_message_at  ? new Date(raw.last_message_at)  : undefined,
+        updated_at:       raw.updated_at        ? new Date(raw.updated_at)        : undefined,
+        created_at:       raw.created_at        ? new Date(raw.created_at)        : undefined,
+        last_read_at:     raw.last_read_at      ? new Date(raw.last_read_at)      : undefined,
+      }
       if (visibilityContext) {
-        const visible = isConversationVisibleForUser(updated, visibilityContext)
+        const visible = isConversationVisibleForUser(patch as ChatConversation, visibilityContext)
         setConversations(prev => {
-          const exists = prev.some(conv => conv.id === updated.id)
+          const exists = prev.some(conv => conv.id === raw.id)
           if (!visible) {
-            return prev.filter(conv => conv.id !== updated.id)
+            return prev.filter(conv => conv.id !== raw.id)
           }
           if (!exists) {
-            // Conversa passou a ser visível — prepend com slice via ref
-            return [updated, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
+            return [patch as ChatConversation, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
           }
-          return prev.map(conv => conv.id === updated.id ? updated : conv)
+          return prev.map(conv => conv.id === raw.id ? { ...conv, ...patch } : conv)
         })
       } else {
         setConversations(prev =>
-          prev.map(conv => conv.id === updated.id ? updated : conv)
+          prev.map(conv => conv.id === raw.id ? { ...conv, ...patch } : conv)
         )
       }
     }
