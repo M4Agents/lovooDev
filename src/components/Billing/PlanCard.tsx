@@ -73,14 +73,19 @@ export function PlanCard({
 
   const isContactPlan = !plan.is_stripe_purchasable && !plan.is_current
 
-  const ctaLabel = plan.is_current ? null
+  const isCurrentInTrial = plan.is_current && isInternalTrial && plan.is_stripe_purchasable
+
+  const ctaLabel = (plan.is_current && !isInternalTrial) ? null
+    : isCurrentInTrial ? 'Contratar plano'
     : isContactPlan ? 'Fale com a equipe'
     : isInternalTrial && plan.is_stripe_purchasable ? 'Contratar plano'
     : plan.direction === 'upgrade' ? 'Fazer upgrade'
     : plan.direction === 'downgrade' ? 'Fazer downgrade'
     : null
 
-  const ctaStyle = plan.is_current ? ''
+  const ctaStyle = isCurrentInTrial
+    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+    : plan.is_current ? ''
     : isContactPlan
       ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
       : isInternalTrial && plan.is_stripe_purchasable
@@ -208,7 +213,7 @@ export function PlanCard({
       )}
 
       {/* CTA */}
-      {!plan.is_current && ctaLabel && (
+      {ctaLabel && (
         <button
           onClick={handleCtaClick}
           disabled={plan.is_stripe_purchasable && (!plan.is_accessible || requesting)}

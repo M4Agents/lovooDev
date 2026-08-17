@@ -169,11 +169,33 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'plan_not_stripe_purchasable' })
     }
 
-    // ── 5. Verificar plano atual e duplicidade ────────────────────────────────
+    // ── 5. Verificar plano atual, trial interno e duplicidade ─────────────────
+    //
+    // A leitura de company_subscriptions é feita UMA ÚNICA VEZ aqui e reutilizada
+    // nas guardas seguintes (same-plan e active_subscription_exists).
+    //
+    // isInternalTrial: empresa em período de teste sem assinatura Stripe vinculada.
+    // Definição oficial: status='trialing' AND stripe_subscription_id IS NULL.
+    // Trial interno contratando o mesmo plano é o fluxo normal de conversão trial → pago.
+    //
+    // Empresas com status='trialing' E stripe_subscription_id presente NÃO são
+    // trial interno — isInternalTrial = false — e continuam bloqueadas pelas guardas abaixo.
+    const { data: existingSub } = await svc
+      .from('company_subscriptions')
+      .select('id, status, stripe_subscription_id')
+      .eq('company_id', effectiveCompanyId)
+      .maybeSingle()
+
+    const isInternalTrial =
+      existingSub?.status === 'trialing' &&
+      !existingSub?.stripe_subscription_id
+
     const currentLimits = await getPlanLimits(svc, effectiveCompanyId)
     const fromPlanId    = currentLimits.plan_id
 
-    if (fromPlanId === to_plan_id) {
+    // Trial interno contratando o mesmo plano: PERMITIDO (conversão trial → pago).
+    // Qualquer outro caso de same-plan: BLOQUEADO.
+    if (fromPlanId === to_plan_id && !isInternalTrial) {
       return res.status(400).json({ error: 'already_on_this_plan' })
     }
 
@@ -221,15 +243,10 @@ export default async function handler(req, res) {
 
     // ── 6. Verificar assinatura Stripe ativa (este endpoint = apenas nova contratação)
     //
-    // Empresas em trial interno (status='trialing', stripe_subscription_id IS NULL)
-    // são PERMITIDAS aqui — esta é a rota correta de conversão do trial para plano pago.
+    // Reutiliza existingSub lido no passo 5 — sem query adicional.
+    // Empresas em trial interno (isInternalTrial = true) são PERMITIDAS aqui:
+    // esta é a rota correta de conversão do trial para plano pago.
     // A guarda usa stripe_subscription_id como critério, não o status isolado.
-    const { data: existingSub } = await svc
-      .from('company_subscriptions')
-      .select('id, status, stripe_subscription_id')
-      .eq('company_id', effectiveCompanyId)
-      .maybeSingle()
-
     const hasActiveStripeSubscription =
       existingSub?.stripe_subscription_id &&
       ['active', 'trialing', 'past_due'].includes(existingSub.status)

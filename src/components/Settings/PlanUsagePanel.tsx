@@ -292,6 +292,10 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
   const isInternalTrial = subscription?.is_internal_trial ?? false
 
   const handleHirePlan = () => {
+    if (isInternalTrial && currentPlan && currentPlan.is_stripe_purchasable) {
+      setSelectedPlan(currentPlan)
+      return
+    }
     document.getElementById('planos-disponiveis')?.scrollIntoView({ behavior: 'smooth' })
   }
 
