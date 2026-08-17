@@ -233,9 +233,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
       } else {
         // ── Nova assinatura via Stripe Checkout (sem assinatura ou trial interno) ──
-        // #region agent log
-        console.log('[DEBUG-c55ca3][checkout-start]', { planId: selectedPlan.id, planName: selectedPlan.name, hasSubscription, isInternalTrial, useCheckout, companyId })
-        // #endregion
         const resp = await fetch(`/api/stripe/plans/checkout?company_id=${encodeURIComponent(companyId)}`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -244,10 +241,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
 
         const json = await resp.json()
 
-        // #region agent log
-        console.log('[DEBUG-c55ca3][checkout-response]', { status: resp.status, ok: resp.ok, json })
-        // #endregion
-
         if (!resp.ok) {
           setActionError(STRIPE_ERROR_MSGS[json.error] ?? 'Erro ao iniciar checkout. Tente novamente.')
           setSelectedPlan(null)
@@ -255,9 +248,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         }
 
         if (json.direct_update) {
-          // #region agent log
-          console.log('[DEBUG-c55ca3][direct-update]', { plan_name: json.plan_name })
-          // #endregion
           setSelectedPlan(null)
           setActionSuccess(`Plano ${json.plan_name ?? ''} atribuído com sucesso.`.trim())
           refetchAll()
@@ -265,9 +255,6 @@ export const PlanUsagePanel: React.FC<Props> = ({ companyId }) => {
         }
 
         if (json.checkout_url) {
-          // #region agent log
-          console.log('[DEBUG-c55ca3][redirect-to-stripe]', { checkout_url: json.checkout_url?.substring(0, 80) })
-          // #endregion
           window.location.href = json.checkout_url
         }
       }
