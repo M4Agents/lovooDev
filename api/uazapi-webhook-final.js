@@ -224,7 +224,12 @@ async function processMessage(payload) {
     }
 
     const phoneNumber = rawPhone.replace(/@.*$/, '').replace(/\D/g, '');
-    const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
+    // #region agent log
+    const _rawSenderName = message.senderName;
+    const _rawChatName   = payload.chat?.name;
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'846aff'},body:JSON.stringify({sessionId:'846aff',location:'uazapi-webhook-final.js:227',message:'NOME_RESOLUCAO',data:{phone:phoneNumber,senderName:_rawSenderName,chatName:_rawChatName,instanceName:payload.instanceName},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const tempSenderName = message.senderName || '.';
     let messageText = message.text || '';
     let mediaUrl = null;
 

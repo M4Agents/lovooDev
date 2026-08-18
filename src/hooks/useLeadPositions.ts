@@ -109,7 +109,10 @@ export const useLeadPositions = (funnelId: string, companyId?: string, filter?: 
       })
       
       // Adicionar oportunidade ao funil
-      await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, firstStage.id)
+      // #region agent log
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'846aff'},body:JSON.stringify({sessionId:'846aff',location:'useLeadPositions.ts:112',message:'ADD_FUNNEL_HOOK',data:{opportunityId:opportunity.id,funnelId,stageId:firstStage.id,leadId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, firstStage.id, leadId)
 
       // Disparar automação (fire-and-forget — nunca bloqueia a UI)
       supabase.auth.getSession().then(({ data: sessionData }) => {

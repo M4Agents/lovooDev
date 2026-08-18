@@ -504,7 +504,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       owner_user_id:  lead.responsible_user_id ?? user?.id ?? undefined
     })
 
-    await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, targetStage.id)
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'846aff'},body:JSON.stringify({sessionId:'846aff',location:'FunnelBoard.tsx:507',message:'ADD_FUNNEL_BOARD',data:{opportunityId:opportunity.id,funnelId,stageId:targetStage.id,leadId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    await funnelApi.addOpportunityToFunnel(opportunity.id, funnelId, targetStage.id, leadId)
 
     // Refresh cirúrgico: apenas a coluna de entrada + contadores
     boardRefresh(targetStage.id)
