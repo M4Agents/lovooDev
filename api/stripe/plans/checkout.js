@@ -11,11 +11,15 @@
 // RESPOSTA (201):
 //   { "checkout_url": "https://checkout.stripe.com/...", "request_id": "<uuid>" }
 //
+// RESPOSTA (200) — reutilização de sessão aberta:
+//   { "checkout_url": "https://checkout.stripe.com/...", "request_id": "<uuid>" }
+//   Ocorre quando já existe um PCR pending com Checkout Session ainda open no Stripe.
+//   Nenhuma nova sessão é criada; o usuário é redirecionado para a sessão existente.
+//
 // ERROS:
 //   400 plan_not_available          — plano inativo ou não listado publicamente
 //   400 plan_not_stripe_purchasable — plano sem stripe_price_id_monthly
 //   400 already_on_this_plan        — empresa já está no plano destino
-//   400 already_has_pending_request — já existe PCR pendente para esta empresa
 //   400 active_subscription_exists  — empresa já tem assinatura Stripe ativa (usar /change)
 //   400 downgrade_blocked           — uso atual excede limites do plano destino
 //   401 / 403                       — autenticação ou acesso negado
@@ -212,13 +216,17 @@ export default async function handler(req, res) {
 
     if (existingPcr) {
       let sessionStillOpen = false
+      let existingSessionUrl = null
 
       if (existingPcr.stripe_checkout_session_id) {
         try {
           const existingSession = await stripe.checkout.sessions.retrieve(
             existingPcr.stripe_checkout_session_id
           )
-          sessionStillOpen = existingSession.status === 'open'
+          if (existingSession.status === 'open' && existingSession.url) {
+            sessionStillOpen  = true
+            existingSessionUrl = existingSession.url
+          }
         } catch {
           // Não conseguiu verificar (ex: sessão deletada no Stripe) — assume não aberta
           sessionStillOpen = false
@@ -226,8 +234,11 @@ export default async function handler(req, res) {
       }
 
       if (sessionStillOpen) {
-        // Checkout em andamento — não criar duplicata
-        return res.status(400).json({ error: 'already_has_pending_request' })
+        // Sessão ainda aberta: reutilizar em vez de bloquear com erro
+        return res.status(200).json({
+          checkout_url: existingSessionUrl,
+          request_id:   existingPcr.id,
+        })
       }
 
       // Sessão expirada/cancelada — auto-cancelar PCR stale e prosseguir
