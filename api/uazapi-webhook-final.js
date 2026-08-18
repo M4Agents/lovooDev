@@ -224,7 +224,29 @@ async function processMessage(payload) {
     }
 
     const phoneNumber = rawPhone.replace(/@.*$/, '').replace(/\D/g, '');
-    const tempSenderName = message.senderName || '.';
+
+    // Nomes próprios da instância: detecta quando o UAZAPI preenche senderName
+    // com o nome do perfil da instância em vez do nome real do contato.
+    const _instanceOwnNames = [instance.instance_name, instance.profile_name]
+      .filter(Boolean)
+      .map(n => n.trim().toLowerCase());
+    const _isInstanceOwnName = (name) =>
+      Boolean(name) && _instanceOwnNames.includes(name.trim().toLowerCase());
+
+    // Nomes gerados automaticamente pelo sistema (podem ser sobrescritos por pushName real).
+    const _isPlaceholderName = (name) =>
+      !name ||
+      name === '.' ||
+      name === 'Lead WhatsApp' ||
+      /^Contato \d+$/.test(name) ||
+      _isInstanceOwnName(name);
+
+    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância.
+    const _whatsAppName = (message.senderName && !_isInstanceOwnName(message.senderName))
+      ? message.senderName
+      : null;
+
+    const tempSenderName = _whatsAppName || '.';
     let messageText = message.text || '';
     let mediaUrl = null;
 
@@ -279,7 +301,9 @@ async function processMessage(payload) {
       instance = {
         id: instanceData.instance_id,
         company_id: instanceData.company_id,
-        provider_instance_id: instanceName
+        provider_instance_id: instanceName,
+        instance_name: instanceData.instance_name,
+        profile_name: instanceData.profile_name
       };
       company = {
         id: instanceData.company_id,
@@ -295,7 +319,7 @@ async function processMessage(payload) {
       const supabaseAdminFallback = getSupabaseAdmin();
       const { data: instanceByPhone, error: phoneError } = await supabaseAdminFallback
         .from('whatsapp_life_instances')
-        .select('id, company_id, provider_instance_id')
+        .select('id, company_id, provider_instance_id, instance_name, profile_name')
         .eq('phone_number', ownerPhone)
         .eq('status', 'connected')
         .is('deleted_at', null)
@@ -381,23 +405,43 @@ async function processMessage(payload) {
       }
     }
 
-    // Buscar nome do lead no cadastro
+    // Buscar nome do lead no cadastro (inclui id para possível atualização de placeholder)
     const { data: existingLead } = await supabase
       .from('leads')
-      .select('name')
+      .select('id, name')
       .eq('phone', phoneNumber)
       .eq('company_id', company.id)
       .is('deleted_at', null)
       .single();
 
-    const senderName = existingLead?.name || tempSenderName;
+    const _existingName = existingLead?.name;
+
+    // Nome final: preserva nome real do usuário; substitui placeholder por pushName real.
+    const senderName = (_existingName && !_isPlaceholderName(_existingName))
+      ? _existingName
+      : (_whatsAppName || _existingName || '.');
     
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'846aff'},body:JSON.stringify({sessionId:'846aff',location:'uazapi-webhook-final.js:nome',message:'NOME_RESOLUCAO_V2',data:{phone:phoneNumber,senderName:message.senderName,instanceNames:_instanceOwnNames,whatsAppName:_whatsAppName,existingName:_existingName,isPlaceholder:_isPlaceholderName(_existingName),finalName:senderName},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     console.log('👤 NOME RESOLVIDO:', { 
-      leadName: existingLead?.name, 
-      tempName: tempSenderName, 
+      leadName: _existingName, 
+      isPlaceholder: _isPlaceholderName(_existingName),
+      whatsAppName: _whatsAppName, 
       finalName: senderName 
     });
     
+    // Se o lead existe com nome placeholder E chegou pushName real → atualizar nome.
+    // Fire-and-forget: não bloqueia o fluxo principal do webhook.
+    if (direction === 'inbound' && existingLead?.id && _whatsAppName && _isPlaceholderName(_existingName)) {
+      getSupabaseAdmin()
+        .from('leads')
+        .update({ name: _whatsAppName, updated_at: new Date().toISOString() })
+        .eq('id', existingLead.id)
+        .then(() => console.log('👤 Nome do lead atualizado de placeholder para real:', _whatsAppName))
+        .catch(err => console.error('⚠️ Falha ao atualizar nome do lead (placeholder→real):', err));
+    }
+
     // 🎬 PROCESSAR MÍDIA ANTES DE CHAMAR RPC (CORREÇÃO CRÍTICA)
     let finalMediaUrl = mediaUrl;
     // Buffer de áudio capturado para transcrição posterior (apenas áudio sem texto)
