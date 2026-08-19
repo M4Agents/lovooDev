@@ -137,6 +137,9 @@ export default async function handler(req, res) {
     
   } catch (error) {
     console.error('❌ ERRO:', error);
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H1',location:'uazapi-webhook-final.js:handler-catch',message:'webhook_uncaught_error',data:{errorName:error?.name,errorMessage:String(error?.message||error).slice(0,200)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     res.status(200).json({ success: false, error: error.message });
   }
 }
@@ -224,29 +227,6 @@ async function processMessage(payload) {
     }
 
     const phoneNumber = rawPhone.replace(/@.*$/, '').replace(/\D/g, '');
-
-    // Nomes próprios da instância: detecta quando o UAZAPI preenche senderName
-    // com o nome do perfil da instância em vez do nome real do contato.
-    const _instanceOwnNames = [instance.instance_name, instance.profile_name]
-      .filter(Boolean)
-      .map(n => n.trim().toLowerCase());
-    const _isInstanceOwnName = (name) =>
-      Boolean(name) && _instanceOwnNames.includes(name.trim().toLowerCase());
-
-    // Nomes gerados automaticamente pelo sistema (podem ser sobrescritos por pushName real).
-    const _isPlaceholderName = (name) =>
-      !name ||
-      name === '.' ||
-      name === 'Lead WhatsApp' ||
-      /^Contato \d+$/.test(name) ||
-      _isInstanceOwnName(name);
-
-    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância.
-    const _whatsAppName = (message.senderName && !_isInstanceOwnName(message.senderName))
-      ? message.senderName
-      : null;
-
-    const tempSenderName = _whatsAppName || '.';
     let messageText = message.text || '';
     let mediaUrl = null;
 
@@ -379,6 +359,32 @@ async function processMessage(payload) {
     }
     
     console.log('🏢 EMPRESA:', company.name);
+
+    // Nomes próprios da instância: detecta quando o UAZAPI preenche senderName
+    // com o nome do perfil da instância em vez do nome real do contato.
+    // Deve rodar SOMENTE após `instance` estar resolvida (evita ReferenceError/TDZ).
+    const _instanceOwnNames = [instance.instance_name, instance.profile_name]
+      .filter(Boolean)
+      .map(n => n.trim().toLowerCase());
+    const _isInstanceOwnName = (name) =>
+      Boolean(name) && _instanceOwnNames.includes(name.trim().toLowerCase());
+
+    // Nomes gerados automaticamente pelo sistema (podem ser sobrescritos por pushName real).
+    const _isPlaceholderName = (name) =>
+      !name ||
+      name === '.' ||
+      name === 'Lead WhatsApp' ||
+      /^Contato \d+$/.test(name) ||
+      _isInstanceOwnName(name);
+
+    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância.
+    const _whatsAppName = (message.senderName && !_isInstanceOwnName(message.senderName))
+      ? message.senderName
+      : null;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H2',location:'uazapi-webhook-final.js:instance-resolved',message:'instance_ok_before_name_detection',data:{direction,instanceId:instance?.id,hasInstanceName:Boolean(instance?.instance_name),hasProfileName:Boolean(instance?.profile_name),companyId:company?.id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     
     // [IDEMPOTÊNCIA] Early-exit antes de qualquer IO pesado (S3, Whisper, RPC, automações)
     if (messageId && company?.id) {
@@ -422,7 +428,7 @@ async function processMessage(payload) {
       : (_whatsAppName || _existingName || '.');
     
     // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'846aff'},body:JSON.stringify({sessionId:'846aff',location:'uazapi-webhook-final.js:nome',message:'NOME_RESOLUCAO_V2',data:{phone:phoneNumber,senderName:message.senderName,instanceNames:_instanceOwnNames,whatsAppName:_whatsAppName,existingName:_existingName,isPlaceholder:_isPlaceholderName(_existingName),finalName:senderName},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H2',location:'uazapi-webhook-final.js:nome',message:'NOME_RESOLUCAO_V2',data:{hasWhatsAppName:Boolean(_whatsAppName),isPlaceholder:Boolean(_existingName)&&_isPlaceholderName(_existingName),finalNameLen:String(senderName||'').length,direction},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     console.log('👤 NOME RESOLVIDO:', { 
       leadName: _existingName, 
@@ -795,6 +801,9 @@ async function processMessage(payload) {
     }
     
     console.log('✅ FUNÇÃO SECURITY DEFINER EXECUTADA COM SUCESSO:', webhookResult);
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H3',location:'uazapi-webhook-final.js:rpc-success',message:'inbound_or_outbound_saved',data:{direction,hasMessageId:Boolean(webhookResult?.message_id),hasConversationId:Boolean(webhookResult?.conversation_id),companyId:company?.id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     
     const contactId = webhookResult.contact_id;
     const conversationId = webhookResult.conversation_id;
