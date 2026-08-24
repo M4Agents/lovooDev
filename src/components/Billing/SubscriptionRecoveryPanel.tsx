@@ -114,8 +114,9 @@ export const SubscriptionRecoveryPanel: React.FC<Props> = ({ companyId }) => {
 
   if (!data) return null
 
-  // Exibe apenas planos disponíveis para contratar (não o plano atual)
-  const purchasablePlans = data.plans.filter(p => !p.is_current)
+  // Exibe todos os planos contratáveis via Stripe.
+  // Inclui o plano atual quando ele é vendável via Stripe (renovação em trial expirado).
+  const purchasablePlans = data.plans.filter(p => !p.is_current || p.is_stripe_purchasable)
 
   // ── Renderização principal ───────────────────────────────────────────────────
 
