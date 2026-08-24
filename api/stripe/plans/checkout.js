@@ -209,7 +209,7 @@ export default async function handler(req, res) {
     // para permitir nova tentativa sem intervenção manual.
     const { data: existingPcr } = await svc
       .from('plan_change_requests')
-      .select('id, stripe_checkout_session_id')
+      .select('id, to_plan_id, stripe_checkout_session_id')
       .eq('company_id', effectiveCompanyId)
       .eq('status', 'pending')
       .maybeSingle()
@@ -233,23 +233,25 @@ export default async function handler(req, res) {
         }
       }
 
-      if (sessionStillOpen) {
-        // Sessão ainda aberta: reutilizar em vez de bloquear com erro
+      if (sessionStillOpen && existingPcr.to_plan_id === to_plan_id) {
+        // Mesma sessão, mesmo plano: reutilizar em vez de criar duplicata
         return res.status(200).json({
           checkout_url: existingSessionUrl,
           request_id:   existingPcr.id,
         })
       }
 
-      // Sessão expirada/cancelada — auto-cancelar PCR stale e prosseguir
+      // Sessão expirada/cancelada OU plano diferente do solicitado — auto-cancelar PCR e prosseguir
       await svc
         .from('plan_change_requests')
         .update({ status: 'cancelled' })
         .eq('id', existingPcr.id)
 
       console.log(
-        '[POST /api/stripe/plans/checkout] PCR stale auto-cancelado:',
-        existingPcr.id, '| session:', existingPcr.stripe_checkout_session_id
+        '[POST /api/stripe/plans/checkout] PCR auto-cancelado:',
+        existingPcr.id,
+        '| motivo:', sessionStillOpen ? 'plano diferente solicitado' : 'sessão expirada/cancelada',
+        '| session:', existingPcr.stripe_checkout_session_id
       )
     }
 
