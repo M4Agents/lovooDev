@@ -19,6 +19,13 @@ interface Props {
   canManage: boolean
 }
 
+const DEFAULT_FORM: ContactCycleConfigForm = {
+  enabled: false,
+  eligibility_rule: 'hours',
+  eligibility_hours: 24,
+  show_extra_questions: false,
+}
+
 const ELIGIBILITY_OPTIONS: Array<{ value: EligibilityRule; label: string; hint: string }> = [
   {
     value: 'hours',
@@ -41,12 +48,7 @@ export const ContactCycleConfigPanel: React.FC<Props> = ({ companyId, canManage 
   const { config, loading, saving, error, refresh, update } = useContactCycleConfig(companyId)
 
   // ── Form local (espelha config carregada) ─────────────────────
-  const [form, setForm] = useState<ContactCycleConfigForm>({
-    enabled: false,
-    eligibility_rule: 'hours',
-    eligibility_hours: 24,
-    show_extra_questions: false,
-  })
+  const [form, setForm] = useState<ContactCycleConfigForm>(DEFAULT_FORM)
   const [saved, setSaved] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -64,15 +66,17 @@ export const ContactCycleConfigPanel: React.FC<Props> = ({ companyId, canManage 
 
   const needsHours = form.eligibility_rule === 'hours' || form.eligibility_rule === 'both'
 
-  // hasChanges: detecta diff entre form local e config do servidor
-  const hasChanges = config !== null && (
-    form.enabled              !== config.enabled              ||
-    form.eligibility_rule     !== config.eligibility_rule     ||
-    form.show_extra_questions !== config.show_extra_questions ||
+  // Primeira configuração: GET devolve null. Comparar com os defaults do form
+  // para o Salvar habilitar (ex.: ligar "Módulo ativo") sem exigir linha prévia.
+  const baseline: ContactCycleConfigForm = config ?? DEFAULT_FORM
+
+  const hasChanges =
+    form.enabled              !== baseline.enabled              ||
+    form.eligibility_rule     !== baseline.eligibility_rule     ||
+    form.show_extra_questions !== baseline.show_extra_questions ||
     (needsHours
-      ? form.eligibility_hours !== config.eligibility_hours
-      : config.eligibility_hours !== null)
-  )
+      ? form.eligibility_hours !== baseline.eligibility_hours
+      : baseline.eligibility_hours !== null)
 
   const flash = () => {
     setSaved(true)
