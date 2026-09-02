@@ -52,20 +52,49 @@ export interface FeatureFlags {
    * Padrão: false (rollback instantâneo ao desligar).
    */
   hybridFunnelExecutive:     boolean
+  /**
+   * R1 — Stage Transition Questions
+   * Habilita perguntas de transição entre etapas active→active.
+   * Requer migrations R1 aplicadas no banco compartilhado.
+   * Tipos: text, number, boolean, select, multi_select.
+   * Padrão: false (rollback instantâneo ao desligar).
+   */
+  stageTransitionQuestions:  boolean
 }
 
 function parseFlag(value: string | undefined): boolean {
-  return value === 'true' || value === '1'
+  return value === 'true'
 }
 
-export function useFeatureFlags(): FeatureFlags {
+/**
+ * Função pura para obter feature flags (Non-React)
+ * Pode ser usada em services, utilities, e contextos não-React
+ */
+export function getFeatureFlags(): FeatureFlags {
   return {
-    snapshotDelta:          parseFlag(import.meta.env.VITE_FEATURE_SNAPSHOT_DELTA),
-    snapshotTrends:         parseFlag(import.meta.env.VITE_FEATURE_SNAPSHOT_TRENDS),
-    hybridExecutiveSummary: parseFlag(import.meta.env.VITE_FEATURE_HYBRID_EXECUTIVE_SUMMARY),
-    hybridSellerRanking:    parseFlag(import.meta.env.VITE_FEATURE_HYBRID_SELLER_RANKING),
-    hybridSlaAlerts:        parseFlag(import.meta.env.VITE_FEATURE_HYBRID_SLA_ALERTS),
-    hybridForecast:         parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FORECAST),
-    hybridFunnelExecutive:  parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FUNNEL_EXECUTIVE),
+    snapshotDelta:             parseFlag(import.meta.env.VITE_FEATURE_SNAPSHOT_DELTA),
+    snapshotTrends:            parseFlag(import.meta.env.VITE_FEATURE_SNAPSHOT_TRENDS),
+    hybridExecutiveSummary:    parseFlag(import.meta.env.VITE_FEATURE_HYBRID_EXECUTIVE_SUMMARY),
+    hybridSellerRanking:       parseFlag(import.meta.env.VITE_FEATURE_HYBRID_SELLER_RANKING),
+    hybridSlaAlerts:           parseFlag(import.meta.env.VITE_FEATURE_HYBRID_SLA_ALERTS),
+    hybridForecast:            parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FORECAST),
+    hybridFunnelExecutive:     parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FUNNEL_EXECUTIVE),
+    stageTransitionQuestions:  parseFlag(import.meta.env.VITE_FEATURE_STAGE_TRANSITION_QUESTIONS),
   }
+}
+
+/**
+ * Helper específico para Stage Transition Questions (Non-React)
+ * Usado pela service layer
+ */
+export function isStageTransitionQuestionsFeatureEnabled(): boolean {
+  return getFeatureFlags().stageTransitionQuestions
+}
+
+/**
+ * Hook React para feature flags
+ * Usa mesma fonte de verdade que getFeatureFlags()
+ */
+export function useFeatureFlags(): FeatureFlags {
+  return getFeatureFlags()
 }

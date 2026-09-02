@@ -8,6 +8,7 @@ import { TimezoneSelector } from './TimezoneSelector'
 import { SUPPORTED_CURRENCIES } from '../../lib/currencies'
 import { LeadReentryConfigSection } from './LeadReentryConfigSection'
 import { ContactCycleSection } from './ContactCycleSection'
+import { StageTransitionQuestionsSection } from './StageTransitionQuestionsSection'
 import { catalogApi } from '../../services/catalogApi'
 
 const COMMON_TIMEZONE_DEFS = [
@@ -500,6 +501,9 @@ export const SystemSettings: React.FC = () => {
 
       {/* Seção: Motor de Ciclos de Contato */}
       <ContactCycleSection />
+
+      {/* Seção: Perguntas de Transição de Etapa */}
+      <StageTransitionQuestionsSection />
     </div>
   )
 }

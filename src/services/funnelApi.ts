@@ -917,6 +917,38 @@ class FunnelApiService {
   }
   
   /**
+   * Mover oportunidade para outra etapa COM perguntas de transição (R1).
+   * Usa a RPC move_opportunity_v2 que registra histórico + answers atomicamente.
+   * ETAPA G: Usado apenas para ACTIVE → ACTIVE com perguntas habilitadas.
+   */
+  async moveOpportunityWithTransitionQuestions(params: {
+    opportunity_id: string
+    funnel_id: string
+    from_stage_id: string
+    to_stage_id: string
+    position_in_stage: number
+    transition_answers: Array<{ question_id: string; value: string }>
+  }): Promise<OpportunityFunnelPosition> {
+    try {
+      const { data: position, error } = await supabase.rpc('move_opportunity_v2', {
+        p_opportunity_id:    params.opportunity_id,
+        p_funnel_id:         params.funnel_id,
+        p_from_stage_id:     params.from_stage_id,
+        p_to_stage_id:       params.to_stage_id,
+        p_position_in_stage: params.position_in_stage,
+        p_transition_answers: params.transition_answers
+      })
+
+      if (error) throw error
+
+      return position
+    } catch (error) {
+      console.error('Error moving opportunity with transition questions:', error)
+      throw error
+    }
+  }
+
+  /**
    * Mover oportunidade para outra etapa.
    * Usa a RPC move_opportunity que registra o histórico de etapa atomicamente.
    */

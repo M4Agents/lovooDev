@@ -86,6 +86,8 @@ export interface FunnelStage {
   video_link?: string
   /** Habilita rastreamento de tentativas de contato. Editável somente por admin+. DEFAULT false. */
   track_contact_attempts: boolean
+  /** R1: Habilita perguntas de transição ao mover lead para esta etapa. OPCIONAL (migrations ainda não aplicadas). */
+  enable_transition_questions?: boolean
 }
 
 // =====================================================

@@ -11,6 +11,7 @@ import { HexColorPicker } from 'react-colorful'
 import { useAuth } from '../../contexts/AuthContext'
 import type { FunnelStage, CreateStageForm, UpdateStageForm } from '../../types/sales-funnel'
 import { validateStageName, validateStageColor, FUNNEL_CONSTANTS } from '../../types/sales-funnel'
+import { StageTransitionQuestionsToggle } from './StageTransitionQuestionsToggle'
 
 const PLAYBOOK_ALLOWED_ROLES = ['admin', 'super_admin', 'system_admin']
 
@@ -348,6 +349,15 @@ export const EditStageModal: React.FC<EditStageModalProps> = ({
                   />
                 </button>
               </div>
+
+              {/* Stage Transition Questions Toggle (only for existing stages) */}
+              {isEditing && stage && (
+                <StageTransitionQuestionsToggle
+                  stageId={stage.id}
+                  stageName={stage.name}
+                  disabled={loading}
+                />
+              )}
             </>
           )}
 

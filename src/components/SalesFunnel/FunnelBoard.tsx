@@ -20,6 +20,7 @@ import { AddLeadToFunnelModal } from './AddLeadToFunnelModal'
 import { CloseOpportunityModal } from './CloseOpportunityModal'
 import { ReopenOpportunityModal } from './ReopenOpportunityModal'
 import { OpportunityDetailModal } from './OpportunityDetailModal'
+import { StageTransitionModal } from './StageTransitionModal'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
@@ -28,6 +29,10 @@ import { useFunnelRealtime } from '../../hooks/useFunnelRealtime'
 import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
 import { useWonItemCheck } from '../../hooks/useWonItemCheck'
 import { useSaleTypeCheck } from '../../hooks/useSaleTypeCheck'
+import { isStageTransitionQuestionsFeatureEnabled } from '../../hooks/dashboard/useFeatureFlags'
+import { fetchStageConfig, fetchActiveQuestions } from '../../services/stageTransitionQuestionsTransport'
+import { StageTransitionFeatureDisabledError } from '../../services/stageTransitionQuestionsService'
+import type { StageTransitionQuestion, StageTransitionAnswer } from '../../types/stage-transition-questions'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
@@ -404,6 +409,28 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null)
 
+  // =====================================================
+  // ETAPA G — PENDING TRANSITION WITH QUESTIONS (R1)
+  // Estado para transições ACTIVE → ACTIVE com perguntas
+  // =====================================================
+  
+  interface PendingTransitionQuestions {
+    opportunityId: string
+    opportunityTitle: string
+    fromStageId: string
+    toStageId: string
+    toStageName: string
+    positionInStage: number
+    questions: StageTransitionQuestion[]
+    snapshot: ReturnType<typeof optimisticMove>
+    leadId?: number
+    conversationId?: string
+    opportunityData?: Record<string, unknown>
+  }
+
+  const [pendingTransitionQuestions, setPendingTransitionQuestions] = useState<PendingTransitionQuestions | null>(null)
+  const [isSubmittingTransition, setIsSubmittingTransition] = useState(false)
+
   // ── Verificação de item obrigatório / tipo de venda para won ──
   const wonOpportunityId = pendingTransition?.toStageType === 'won'
     ? pendingTransition.opportunityId
@@ -603,6 +630,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
     if (!destination) return
 
+    // ETAPA G: Bloquear novo drag se há transição pendente (questions ou close/reopen)
+    if (pendingTransitionQuestions || pendingTransition) {
+      console.warn('Drag bloqueado: existe transição pendente aguardando confirmação')
+      return
+    }
+
     // @hello-pangea/dnd não atualiza o cache de posições dos Droppables quando o
     // container horizontal (overflow-x-auto) é rolado durante o drag. Para corrigir,
     // usamos getBoundingClientRect() no momento do drop (sempre correto) combinado
@@ -665,10 +698,61 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const isCrossClose = (fromType === 'won' && toType === 'lost') || (fromType === 'lost' && toType === 'won')
     const needsModal = isClosing || isReopening || isCrossClose
 
-    // 1. Atualização visual imediata (em todos os casos)
+    // ETAPA H — CORREÇÃO CRÍTICA: Precheck de perguntas ANTES de optimisticMove
+    // Ordem correta: drag → precheck → modal → confirm → optimisticMove → RPC
+    const featureEnabled = isStageTransitionQuestionsFeatureEnabled()
+    
+    if (featureEnabled && fromType === 'active' && toType === 'active' && !needsModal) {
+      try {
+        // Precheck: config + questions (fail-closed)
+        const config = await fetchStageConfig(toStageId)
+        
+        if (config.enabled && config.activeQuestionCount > 0) {
+          // Carregar perguntas ativas
+          const questions = await fetchActiveQuestions(toStageId)
+          
+          // Se realmente há perguntas (defesa contra mudança concorrente)
+          if (questions.length > 0) {
+            // CRÍTICO: Abrir modal SEM fazer optimisticMove
+            // OptimisticMove será feito no handleConfirmTransitionQuestions
+            setPendingTransitionQuestions({
+              opportunityId,
+              opportunityTitle: opp?.title ?? '',
+              fromStageId,
+              toStageId,
+              toStageName: toStage.name,
+              positionInStage: newPosition,
+              questions,
+              snapshot: null as any, // Snapshot será criado no confirm
+              leadId: currentPosition.lead_id ?? undefined,
+              conversationId: opp?.lead?.chat_conversations?.[0]?.id,
+              opportunityData: { lead: opp?.lead }
+            })
+            return
+          }
+        }
+        
+        // Se chegou aqui: enabled=false OU count=0 OU get-active retornou vazio
+        // Continuar com fluxo legado (v1) com optimisticMove
+      } catch (error) {
+        // Erro no precheck: fail-closed (não mover)
+        console.error('Erro ao verificar perguntas de transição:', error)
+        
+        if (error instanceof StageTransitionFeatureDisabledError) {
+          // Feature desabilitada de forma coerente - usar fluxo legado com optimisticMove
+        } else {
+          // Erro real - não mover para não ignorar perguntas required
+          alert('Erro ao carregar perguntas de transição. Movimento cancelado.')
+          return
+        }
+      }
+    }
+
+    // OptimisticMove (somente para fluxos que não abriram modal de perguntas)
+    // Para perguntas R1: optimisticMove acontece no handleConfirmTransitionQuestions
     const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
 
-    // 2a. Se precisa de modal: guardar estado pendente e aguardar confirmação
+    // Se precisa de modal close/reopen: guardar estado pendente
     if (needsModal) {
       setPendingTransition({
         opportunityId,
@@ -688,8 +772,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       })
       return
     }
-
-    // 2b. Fluxo normal (active → active)
+    
+    // Fluxo legado (v1): sem perguntas ou feature disabled
     try {
       await move({
         opportunity_id:    opportunityId,
@@ -711,6 +795,112 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       rollback(snapshot)
     }
   }
+
+  // =====================================================
+  // ETAPA G — HANDLERS PARA STAGETRANSITIONMODAL
+  // =====================================================
+
+  const handleCancelTransitionQuestions = useCallback(() => {
+    // Cancel: limpar estado pendente sem mover
+    setPendingTransitionQuestions(null)
+    setIsSubmittingTransition(false)
+  }, [])
+
+  const handleConfirmTransitionQuestions = useCallback(async (answers: StageTransitionAnswer[]) => {
+    if (!pendingTransitionQuestions) return
+
+    setIsSubmittingTransition(true)
+
+    try {
+      // 1. Answers já vêm validados e canonicalizados do StageTransitionModal
+
+      // 2. OptimisticMove (DEPOIS da confirmação do modal, conforme especificação)
+      const snapshot = optimisticMove(
+        pendingTransitionQuestions.opportunityId,
+        pendingTransitionQuestions.fromStageId,
+        pendingTransitionQuestions.toStageId,
+        pendingTransitionQuestions.positionInStage
+      )
+
+      // 3. Chamar move_opportunity_v2 via funnelApi
+      try {
+        await funnelApi.moveOpportunityWithTransitionQuestions({
+          opportunity_id: pendingTransitionQuestions.opportunityId,
+          funnel_id: funnelId,
+          from_stage_id: pendingTransitionQuestions.fromStageId,
+          to_stage_id: pendingTransitionQuestions.toStageId,
+          position_in_stage: pendingTransitionQuestions.positionInStage,
+          transition_answers: answers
+        })
+
+        // Sucesso: manter movimento
+        recentlyMovedRef.current.set(pendingTransitionQuestions.opportunityId, Date.now())
+        setTimeout(() => recentlyMovedRef.current.delete(pendingTransitionQuestions.opportunityId), 6_000)
+
+        // Disparar automação (mesmo padrão do move normal)
+        if (companyId && pendingTransitionQuestions.fromStageId !== pendingTransitionQuestions.toStageId) {
+          supabase.auth.getSession().then(({ data }) => {
+            const token = data.session?.access_token
+            if (!token) return
+            fetch('/api/automation/trigger-event', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                event_type: 'opportunity.stage_changed',
+                company_id: companyId,
+                data: {
+                  opportunity_id: pendingTransitionQuestions.opportunityId,
+                  old_stage: pendingTransitionQuestions.fromStageId,
+                  new_stage: pendingTransitionQuestions.toStageId,
+                  opportunity: {
+                    funnel_id: funnelId ?? null
+                  }
+                }
+              })
+            }).catch(err => console.error('Automation trigger failed (non-blocking):', err))
+          })
+        }
+
+        refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
+
+        // Limpar estado pendente
+        setPendingTransitionQuestions(null)
+        setIsSubmittingTransition(false)
+      } catch (error) {
+        // Erro no RPC: rollback obrigatório
+        console.error('Erro ao mover oportunidade com perguntas:', error)
+        rollback(snapshot)
+        
+        // Mapear erro semântico se possível
+        let userMessage = 'Erro ao mover oportunidade. Tente novamente.'
+        
+        if (error instanceof Error) {
+          // Tentar extrair código de erro do Supabase
+          const pgError = error as any
+          if (pgError.code || pgError.message) {
+            // Mapear erros conhecidos
+            if (pgError.message?.includes('MISSING_REQUIRED_ANSWER')) {
+              userMessage = 'Resposta obrigatória não foi fornecida.'
+            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION')) {
+              userMessage = 'Pergunta de transição inválida. As perguntas podem ter sido alteradas.'
+            } else if (pgError.message?.includes('UNAUTHORIZED')) {
+              userMessage = 'Você não tem permissão para mover esta oportunidade.'
+            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION_CONFIG')) {
+              userMessage = 'Configuração inválida de perguntas. Por favor, contate o administrador.'
+            }
+          }
+        }
+        
+        alert(userMessage)
+        setIsSubmittingTransition(false)
+      }
+    } catch (error) {
+      // Erro na validação do payload
+      console.error('Erro ao validar respostas:', error)
+      alert(error instanceof Error ? error.message : 'Erro ao validar respostas')
+      setIsSubmittingTransition(false)
+    }
+  }, [pendingTransitionQuestions, funnelId, companyId, optimisticMove, rollback, refreshCounts])
 
   // =====================================================
   // CONFIRM CLOSE — chama RPC close_opportunity
@@ -1021,6 +1211,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         stageId={selectedStageId}
         availableLeads={availableLeads}
       />
+
+      {/* ETAPA G — Modal de perguntas de transição (active → active com perguntas) */}
+      {pendingTransitionQuestions && (
+        <StageTransitionModal
+          open={true}
+          destinationStageName={pendingTransitionQuestions.toStageName}
+          questions={pendingTransitionQuestions.questions}
+          onCancel={handleCancelTransitionQuestions}
+          onConfirm={handleConfirmTransitionQuestions}
+          isSubmitting={isSubmittingTransition}
+        />
+      )}
 
       {/* Modal de fechamento (won/lost) */}
       {pendingTransition && (pendingTransition.toStageType === 'won' || pendingTransition.toStageType === 'lost') && (
