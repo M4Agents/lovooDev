@@ -46,7 +46,7 @@ export const StageTransitionQuestionsSection: React.FC = () => {
       setError(null)
 
       const { data: funnels, error: funnelsError } = await supabase
-        .from('funnels')
+        .from('sales_funnels')
         .select('id')
         .eq('company_id', company!.id)
         .order('created_at', { ascending: true })
