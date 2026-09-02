@@ -698,8 +698,13 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const isCrossClose = (fromType === 'won' && toType === 'lost') || (fromType === 'lost' && toType === 'won')
     const needsModal = isClosing || isReopening || isCrossClose
 
-    // ETAPA H — CORREÇÃO CRÍTICA: Precheck de perguntas ANTES de optimisticMove
-    // Ordem correta: drag → precheck → modal → confirm → optimisticMove → RPC
+    // K.8D — OPTIMISTIC MOVE IMEDIATO: Executar ANTES de qualquer await
+    // Card move visualmente para destino imediatamente após validações síncronas.
+    // Este snapshot é reutilizado em todos os fluxos (perguntas, won/lost, legado).
+    const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
+
+    // ETAPA H — Precheck de perguntas (após optimisticMove)
+    // Ordem: drag → optimisticMove → precheck → modal/RPC
     const featureEnabled = isStageTransitionQuestionsFeatureEnabled()
     
     if (featureEnabled && fromType === 'active' && toType === 'active' && !needsModal) {
@@ -713,8 +718,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           
           // Se realmente há perguntas (defesa contra mudança concorrente)
           if (questions.length > 0) {
-            // CRÍTICO: Abrir modal SEM fazer optimisticMove
-            // OptimisticMove será feito no handleConfirmTransitionQuestions
+            // K.8D: Reutilizar snapshot criado na linha 700
+            // OptimisticMove já foi executado - card já está no destino
             setPendingTransitionQuestions({
               opportunityId,
               opportunityTitle: opp?.title ?? '',
@@ -723,7 +728,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
               toStageName: toStage.name,
               positionInStage: newPosition,
               questions,
-              snapshot: null as any, // Snapshot será criado no confirm
+              snapshot, // Guardar snapshot real para rollback
               leadId: currentPosition.lead_id ?? undefined,
               conversationId: opp?.lead?.chat_conversations?.[0]?.id,
               opportunityData: { lead: opp?.lead }
@@ -733,24 +738,24 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         }
         
         // Se chegou aqui: enabled=false OU count=0 OU get-active retornou vazio
-        // Continuar com fluxo legado (v1) com optimisticMove
+        // Continuar com fluxo legado (v1) - snapshot já criado na linha 700
       } catch (error) {
-        // Erro no precheck: fail-closed (não mover)
+        // Erro no precheck
         console.error('Erro ao verificar perguntas de transição:', error)
         
         if (error instanceof StageTransitionFeatureDisabledError) {
-          // Feature desabilitada de forma coerente - usar fluxo legado com optimisticMove
+          // Feature desabilitada de forma coerente - continuar fluxo legado
+          // Snapshot já criado, não fazer rollback
         } else {
-          // Erro real - não mover para não ignorar perguntas required
+          // Erro real - rollback e cancelar movimento
+          rollback(snapshot)
           alert('Erro ao carregar perguntas de transição. Movimento cancelado.')
           return
         }
       }
     }
 
-    // OptimisticMove (somente para fluxos que não abriram modal de perguntas)
-    // Para perguntas R1: optimisticMove acontece no handleConfirmTransitionQuestions
-    const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
+    // K.8D: Snapshot já criado na linha 700 - reutilizar em todos os fluxos
 
     // Se precisa de modal close/reopen: guardar estado pendente
     if (needsModal) {
@@ -801,10 +806,13 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
 
   const handleCancelTransitionQuestions = useCallback(() => {
-    // Cancel: limpar estado pendente sem mover
+    // Cancel K.8B: rollback visual (card volta à origem)
+    if (pendingTransitionQuestions?.snapshot) {
+      rollback(pendingTransitionQuestions.snapshot)
+    }
     setPendingTransitionQuestions(null)
     setIsSubmittingTransition(false)
-  }, [])
+  }, [pendingTransitionQuestions, rollback])
 
   const handleConfirmTransitionQuestions = useCallback(async (answers: StageTransitionAnswer[]) => {
     if (!pendingTransitionQuestions) return
@@ -814,13 +822,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     try {
       // 1. Answers já vêm validados e canonicalizados do StageTransitionModal
 
-      // 2. OptimisticMove (DEPOIS da confirmação do modal, conforme especificação)
-      const snapshot = optimisticMove(
-        pendingTransitionQuestions.opportunityId,
-        pendingTransitionQuestions.fromStageId,
-        pendingTransitionQuestions.toStageId,
-        pendingTransitionQuestions.positionInStage
-      )
+      // 2. OptimisticMove K.8B: já foi feito no handleDragEnd
+      // Usar o snapshot existente para rollback em caso de erro
+      const snapshot = pendingTransitionQuestions.snapshot
 
       // 3. Chamar move_opportunity_v2 via funnelApi
       try {
