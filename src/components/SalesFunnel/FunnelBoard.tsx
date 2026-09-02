@@ -199,6 +199,68 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   const { move } = useMoveOpportunity(companyId)
 
+  // K.9B — CACHE DE PERGUNTAS: Preload para modal instantâneo
+  // Map<stageId, StageTransitionQuestion[] | undefined>
+  // undefined = não carregado (cache miss)
+  // [] = carregado sem perguntas
+  // [Q1, Q2, ...] = carregado com perguntas
+  const questionsCacheRef = useRef<Map<string, StageTransitionQuestion[]>>(new Map())
+
+  // K.9B + K.9C — PRELOAD DE PERGUNTAS
+  // Ao carregar stages, pré-buscar perguntas de stages active com enable_transition_questions
+  useEffect(() => {
+    const featureEnabled = isStageTransitionQuestionsFeatureEnabled()
+    if (!featureEnabled || !funnelId || stages.length === 0) {
+      // Limpar cache se feature disabled ou sem stages
+      questionsCacheRef.current.clear()
+      return
+    }
+
+    // Filtrar stages elegíveis para preload
+    const eligibleStages = stages.filter(s =>
+      s.stage_type === 'active' &&
+      s.enable_transition_questions === true
+    )
+
+    if (eligibleStages.length === 0) {
+      // Nenhuma stage com perguntas: limpar cache
+      questionsCacheRef.current.clear()
+      return
+    }
+
+    // K.9C: Limpar cache antigo antes de novo ciclo de preload
+    // Garante que cache contém SOMENTE stages elegíveis atuais
+    questionsCacheRef.current.clear()
+
+    // Preload em paralelo (fire-and-forget, não bloqueia UI)
+    const abortController = new AbortController()
+    
+    Promise.all(
+      eligibleStages.map(async (stage) => {
+        try {
+          const questions = await fetchActiveQuestions(stage.id)
+          // K.9C: Verificar abort antes de popular cache
+          // Impede requests antigos de contaminar cache novo
+          if (!abortController.signal.aborted) {
+            questionsCacheRef.current.set(stage.id, questions)
+          }
+        } catch (error) {
+          // K.9C: Erro no preload: NÃO armazenar [] no cache
+          // Deixar como cache miss para fallback seguro no drag
+          console.warn(`[K.9B] Preload failed for stage ${stage.id}:`, error)
+        }
+      })
+    ).catch(() => {
+      // Erro geral: não bloquear board
+    })
+
+    return () => {
+      // K.9C: Cleanup - abortar requests pendentes
+      // Previne race condition de requests antigos
+      abortController.abort()
+    }
+  }, [funnelId, stages])
+
   // =====================================================
   // BATCH QUERY: CAMPOS PERSONALIZADOS NO CARD
   // Executa somente quando há cf_ visíveis E leads carregados.
@@ -703,54 +765,82 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     // Este snapshot é reutilizado em todos os fluxos (perguntas, won/lost, legado).
     const snapshot = optimisticMove(opportunityId, fromStageId, toStageId, newPosition)
 
-    // ETAPA H — Precheck de perguntas (após optimisticMove)
-    // Ordem: drag → optimisticMove → precheck → modal/RPC
+    // ETAPA H + K.9B — Precheck de perguntas (após optimisticMove)
+    // Ordem: drag → optimisticMove → cache check → precheck → modal/RPC
     const featureEnabled = isStageTransitionQuestionsFeatureEnabled()
     
     if (featureEnabled && fromType === 'active' && toType === 'active' && !needsModal) {
-      try {
-        // Precheck: config + questions (fail-closed)
-        const config = await fetchStageConfig(toStageId)
-        
-        if (config.enabled && config.activeQuestionCount > 0) {
-          // Carregar perguntas ativas
-          const questions = await fetchActiveQuestions(toStageId)
+      // K.9B: Verificar cache primeiro (modal instantâneo se cache hit)
+      const cachedQuestions = questionsCacheRef.current.get(toStageId)
+      
+      if (cachedQuestions !== undefined) {
+        // CACHE HIT: modal instantâneo (0ms de latência)
+        if (cachedQuestions.length > 0) {
+          setPendingTransitionQuestions({
+            opportunityId,
+            opportunityTitle: opp?.title ?? '',
+            fromStageId,
+            toStageId,
+            toStageName: toStage.name,
+            positionInStage: newPosition,
+            questions: cachedQuestions,
+            snapshot,
+            leadId: currentPosition.lead_id ?? undefined,
+            conversationId: opp?.lead?.chat_conversations?.[0]?.id,
+            opportunityData: { lead: opp?.lead }
+          })
+          return
+        }
+        // Cache hit com [] = sem perguntas: continuar fluxo legado
+      } else {
+        // CACHE MISS: fallback para requests (comportamento atual)
+        try {
+          // Precheck: config + questions (fail-closed)
+          const config = await fetchStageConfig(toStageId)
           
-          // Se realmente há perguntas (defesa contra mudança concorrente)
-          if (questions.length > 0) {
-            // K.8D: Reutilizar snapshot criado na linha 700
-            // OptimisticMove já foi executado - card já está no destino
-            setPendingTransitionQuestions({
-              opportunityId,
-              opportunityTitle: opp?.title ?? '',
-              fromStageId,
-              toStageId,
-              toStageName: toStage.name,
-              positionInStage: newPosition,
-              questions,
-              snapshot, // Guardar snapshot real para rollback
-              leadId: currentPosition.lead_id ?? undefined,
-              conversationId: opp?.lead?.chat_conversations?.[0]?.id,
-              opportunityData: { lead: opp?.lead }
-            })
+          if (config.enabled && config.activeQuestionCount > 0) {
+            // Carregar perguntas ativas
+            const questions = await fetchActiveQuestions(toStageId)
+            
+            // Atualizar cache para próximos drags
+            questionsCacheRef.current.set(toStageId, questions)
+            
+            // Se realmente há perguntas (defesa contra mudança concorrente)
+            if (questions.length > 0) {
+              setPendingTransitionQuestions({
+                opportunityId,
+                opportunityTitle: opp?.title ?? '',
+                fromStageId,
+                toStageId,
+                toStageName: toStage.name,
+                positionInStage: newPosition,
+                questions,
+                snapshot,
+                leadId: currentPosition.lead_id ?? undefined,
+                conversationId: opp?.lead?.chat_conversations?.[0]?.id,
+                opportunityData: { lead: opp?.lead }
+              })
+              return
+            }
+          }
+          
+          // Atualizar cache: sem perguntas
+          questionsCacheRef.current.set(toStageId, [])
+          
+          // Continuar com fluxo legado (v1) - snapshot já criado
+        } catch (error) {
+          // Erro no precheck
+          console.error('Erro ao verificar perguntas de transição:', error)
+          
+          if (error instanceof StageTransitionFeatureDisabledError) {
+            // Feature desabilitada de forma coerente - continuar fluxo legado
+            // Snapshot já criado, não fazer rollback
+          } else {
+            // Erro real - rollback e cancelar movimento
+            rollback(snapshot)
+            alert('Erro ao carregar perguntas de transição. Movimento cancelado.')
             return
           }
-        }
-        
-        // Se chegou aqui: enabled=false OU count=0 OU get-active retornou vazio
-        // Continuar com fluxo legado (v1) - snapshot já criado na linha 700
-      } catch (error) {
-        // Erro no precheck
-        console.error('Erro ao verificar perguntas de transição:', error)
-        
-        if (error instanceof StageTransitionFeatureDisabledError) {
-          // Feature desabilitada de forma coerente - continuar fluxo legado
-          // Snapshot já criado, não fazer rollback
-        } else {
-          // Erro real - rollback e cancelar movimento
-          rollback(snapshot)
-          alert('Erro ao carregar perguntas de transição. Movimento cancelado.')
-          return
         }
       }
     }
