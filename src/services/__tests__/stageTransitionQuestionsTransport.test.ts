@@ -57,6 +57,7 @@ const mockQuestion: StageTransitionQuestion = {
   options: null,
   sort_order: 0,
   active: true,
+  create_activity_on_answer: false,
   created_at: '2026-09-01T00:00:00Z',
   updated_at: '2026-09-01T00:00:00Z'
 }
@@ -464,6 +465,23 @@ describe('Stage Transition Questions Transport', () => {
         await updateQuestion({ question_id: 'q-1', label: 'Test' })
       } catch (error) {
         expect((error as StageTransitionServiceError).code).toBe('QUESTION_STRUCTURE_IMMUTABLE')
+      }
+    })
+
+    it('409 com "data e hora configurada para criar atividade" → ACTIVITY_DATETIME_ALREADY_EXISTS', async () => {
+      mockFetchError(409, 'Já existe uma pergunta ativa de data e hora configurada para criar atividade nesta etapa')
+
+      try {
+        await createQuestion({
+          funnel_stage_id: 'stage-1',
+          label: 'Test',
+          field_type: 'datetime',
+          required: true,
+          options: null,
+          create_activity_on_answer: true
+        })
+      } catch (error) {
+        expect((error as StageTransitionServiceError).code).toBe('ACTIVITY_DATETIME_ALREADY_EXISTS')
       }
     })
 

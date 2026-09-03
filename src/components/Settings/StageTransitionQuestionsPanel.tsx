@@ -35,14 +35,15 @@ interface Props {
   canManage: boolean
 }
 
-type FieldTypeOption = 'text' | 'number' | 'boolean' | 'select' | 'multi_select'
+type FieldTypeOption = 'text' | 'number' | 'boolean' | 'select' | 'multi_select' | 'datetime'
 
 const FIELD_TYPE_LABELS: Record<FieldTypeOption, string> = {
   text: 'Texto',
   number: 'Número',
   boolean: 'Sim / Não',
   select: 'Seleção (única)',
-  multi_select: 'Seleção (múltipla)'
+  multi_select: 'Seleção (múltipla)',
+  datetime: 'Data e hora'
 }
 
 interface FormState {
@@ -51,6 +52,7 @@ interface FormState {
   options: string[]
   required: boolean
   sort_order: string
+  create_activity_on_answer: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -58,7 +60,8 @@ const EMPTY_FORM: FormState = {
   field_type: 'text',
   options: [],
   required: false,
-  sort_order: '0'
+  sort_order: '0',
+  create_activity_on_answer: false
 }
 
 const MAX_ACTIVE_QUESTIONS = 15
@@ -138,7 +141,8 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
       field_type: q.field_type as FieldTypeOption,
       options: q.options ?? [],
       required: q.required,
-      sort_order: String(q.sort_order)
+      sort_order: String(q.sort_order),
+      create_activity_on_answer: q.create_activity_on_answer ?? false
     })
     setNewOption('')
     setLocalError(null)
@@ -182,6 +186,25 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
     const newOptions = [...form.options]
     ;[newOptions[index], newOptions[index + 1]] = [newOptions[index + 1], newOptions[index]]
     setForm(prev => ({ ...prev, options: newOptions }))
+  }
+
+  // Activity conflict detection (DATETIME.2A)
+  const hasActivityConflict = (): boolean => {
+    // Se não for datetime, sem conflito
+    if (form.field_type !== 'datetime') return false
+    
+    // Se a flag não está marcada, sem conflito
+    if (!form.create_activity_on_answer) return false
+    
+    // Procurar outra pergunta ativa com datetime+flag=true
+    const otherActiveWithFlag = questions.find(q =>
+      q.active &&
+      q.field_type === 'datetime' &&
+      q.create_activity_on_answer === true &&
+      q.id !== editing?.id // Não considerar a própria pergunta se estiver editando
+    )
+    
+    return !!otherActiveWithFlag
   }
 
   // Validation
@@ -229,7 +252,8 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
           question_id: editing.id,
           label: form.label.trim(),
           required: form.required,
-          sort_order: parseInt(form.sort_order, 10)
+          sort_order: parseInt(form.sort_order, 10),
+          create_activity_on_answer: form.create_activity_on_answer
         }
 
         await updateQuestion(input)
@@ -244,7 +268,8 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
           options: (form.field_type === 'select' || form.field_type === 'multi_select')
             ? form.options
             : null,
-          sort_order: parseInt(form.sort_order, 10)
+          sort_order: parseInt(form.sort_order, 10),
+          create_activity_on_answer: form.create_activity_on_answer
         }
 
         await createQuestion(input)
@@ -488,7 +513,15 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
             </label>
             <select
               value={form.field_type}
-              onChange={e => setForm(prev => ({ ...prev, field_type: e.target.value as FieldTypeOption, options: [] }))}
+              onChange={e => {
+                const newType = e.target.value as FieldTypeOption
+                setForm(prev => ({
+                  ...prev,
+                  field_type: newType,
+                  options: [],
+                  create_activity_on_answer: newType === 'datetime' ? prev.create_activity_on_answer : false
+                }))
+              }}
               disabled={saving || !!editing}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
             >
@@ -588,6 +621,35 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
             </label>
           </div>
 
+          {/* Create Activity on Answer (DATETIME.2A) */}
+          {form.field_type === 'datetime' && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="create_activity"
+                  checked={form.create_activity_on_answer}
+                  onChange={e => setForm(prev => ({ ...prev, create_activity_on_answer: e.target.checked }))}
+                  disabled={saving || hasActivityConflict()}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mt-0.5"
+                />
+                <div className="flex-1">
+                  <label htmlFor="create_activity" className="text-sm font-medium text-gray-900 cursor-pointer">
+                    Criar atividade a partir da resposta
+                  </label>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Ao responder esta pergunta, o sistema oferecerá criar uma atividade no calendário com a data e hora informadas.
+                  </p>
+                  {hasActivityConflict() && (
+                    <p className="text-xs text-amber-700 mt-2">
+                      Esta etapa já possui uma pergunta ativa de data e hora configurada para criar atividade.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Sort Order */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -681,6 +743,11 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
                         {q.required && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
                             Obrigatória
+                          </span>
+                        )}
+                        {q.field_type === 'datetime' && q.create_activity_on_answer && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded" title="Cria atividade no calendário">
+                            📅 Cria atividade
                           </span>
                         )}
                         {!q.active && (

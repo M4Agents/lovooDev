@@ -69,7 +69,7 @@ export function StageTransitionModal({
         }
         
         // Validar field_type conhecido
-        const validTypes = ['text', 'number', 'boolean', 'select', 'multi_select']
+        const validTypes = ['text', 'number', 'boolean', 'select', 'multi_select', 'datetime']
         if (!validTypes.includes(q.field_type)) {
           return `Tipo de pergunta desconhecido: ${q.field_type}`
         }
@@ -274,6 +274,25 @@ export function StageTransitionModal({
 }
 
 // =====================================================
+// HELPERS (DATETIME.2B)
+// =====================================================
+
+/**
+ * Gera string datetime-local "YYYY-MM-DDTHH:mm" para min attribute
+ * usando wall clock LOCAL do browser (não UTC)
+ */
+function getLocalDatetimeMin(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+// =====================================================
 // QUESTION FIELD COMPONENT
 // =====================================================
 
@@ -396,6 +415,30 @@ function QuestionField({ question, value, onChange, error, disabled }: QuestionF
                 </label>
               )
             })}
+          </div>
+        )
+      
+      case 'datetime':
+        // Determinar se precisa validar futuro
+        const requiresFuture = question.create_activity_on_answer === true
+        const minAttr = requiresFuture ? getLocalDatetimeMin() : undefined
+        
+        return (
+          <div>
+            <input
+              type="datetime-local"
+              value={value || ''}
+              onChange={(e) => onChange(e.target.value || undefined)}
+              disabled={disabled}
+              min={minAttr}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
+              placeholder={question.required ? 'Obrigatório' : 'Opcional'}
+            />
+            {requiresFuture && (
+              <p className="mt-1 text-xs text-gray-600">
+                Informe quando a atividade deverá ser agendada.
+              </p>
+            )}
           </div>
         )
       

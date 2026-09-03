@@ -164,6 +164,31 @@ export const ERROR_CATALOG: Record<StageTransitionErrorCode, StageTransitionErro
     category: 'validation',
     userMessage: 'Valor de seleção múltipla inválido.',
     retryable: false
+  },
+  
+  // ===================================================
+  // ERROS DATETIME (2)
+  // ===================================================
+  
+  [StageTransitionErrorCode.INVALID_DATETIME]: {
+    code: StageTransitionErrorCode.INVALID_DATETIME,
+    category: 'validation',
+    userMessage: 'Data e hora inválidas.',
+    retryable: false
+  },
+  
+  [StageTransitionErrorCode.DATETIME_IN_PAST]: {
+    code: StageTransitionErrorCode.DATETIME_IN_PAST,
+    category: 'validation',
+    userMessage: 'O agendamento deve estar no futuro.',
+    retryable: false
+  },
+  
+  [StageTransitionErrorCode.ACTIVITY_DATETIME_ALREADY_EXISTS]: {
+    code: StageTransitionErrorCode.ACTIVITY_DATETIME_ALREADY_EXISTS,
+    category: 'configuration',
+    userMessage: 'Já existe uma pergunta ativa de data e hora configurada para criar atividade nesta etapa.',
+    retryable: false
   }
 }
 

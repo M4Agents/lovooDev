@@ -8,10 +8,11 @@
 // Body:
 //   funnel_stage_id (obrigatório)
 //   label (obrigatório)
-//   field_type (obrigatório: text|number|boolean|select|multi_select)
+//   field_type (obrigatório: text|number|boolean|select|multi_select|datetime)
 //   required (obrigatório: boolean)
 //   options (obrigatório para select/multi_select: string[])
 //   sort_order (opcional: number, default: 0)
+//   create_activity_on_answer (opcional: boolean, default: false, só datetime)
 //
 // Validações:
 //   - Max 15 perguntas ativas por stage
@@ -37,7 +38,7 @@ function isFeatureEnabled(): boolean {
 }
 
 const ADMIN_ROLES = new Set(['admin', 'system_admin', 'super_admin'])
-const VALID_FIELD_TYPES = new Set(['text', 'number', 'boolean', 'select', 'multi_select'])
+const VALID_FIELD_TYPES = new Set(['text', 'number', 'boolean', 'select', 'multi_select', 'datetime'])
 const MAX_ACTIVE_QUESTIONS = 15
 
 interface CreateQuestionInput {
@@ -47,6 +48,7 @@ interface CreateQuestionInput {
   required: boolean
   options: string[] | null
   sort_order: number
+  create_activity_on_answer: boolean
 }
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -186,12 +188,30 @@ export default async function handler(req: any, res: any): Promise<void> {
       normalizedOptions = trimmed
 
     } else {
-      // text, number, boolean → options deve ser null
+      // text, number, boolean, datetime → options deve ser null
       if (body.options !== null && body.options !== undefined) {
         jsonError(res, 400, `field_type ${fieldType} não aceita options`)
         return
       }
       normalizedOptions = null
+    }
+
+    // Validar create_activity_on_answer
+    let createActivityOnAnswer = false
+
+    if ('create_activity_on_answer' in body) {
+      if (typeof body.create_activity_on_answer !== 'boolean') {
+        jsonError(res, 400, 'create_activity_on_answer deve ser boolean')
+        return
+      }
+
+      createActivityOnAnswer = body.create_activity_on_answer
+
+      // create_activity_on_answer=true só é permitido para datetime
+      if (createActivityOnAnswer && fieldType !== 'datetime') {
+        jsonError(res, 400, 'create_activity_on_answer=true só é permitido para field_type=datetime')
+        return
+      }
     }
 
     // Criar pergunta
@@ -206,6 +226,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       options: normalizedOptions,
       sort_order: sortOrder,
       active: true, // Nova pergunta nasce ativa
+      create_activity_on_answer: createActivityOnAnswer,
     }
 
     const { data: question, error: insertError } = await svc
@@ -220,6 +241,12 @@ export default async function handler(req: any, res: any): Promise<void> {
       // Se for violação do limite MAX 15 (check_violation)
       if (insertError.code === '23514' && insertError.message?.includes('MAX_ACTIVE_QUESTIONS')) {
         jsonError(res, 409, `Limite de ${MAX_ACTIVE_QUESTIONS} perguntas ativas atingido para esta etapa`)
+        return
+      }
+      
+      // Se for violação do único index (máx 1 datetime com create_activity_on_answer por stage)
+      if (insertError.code === '23505' && insertError.message?.includes('idx_stq_one_activity_flag_per_stage')) {
+        jsonError(res, 409, 'Já existe uma pergunta ativa de data e hora configurada para criar atividade nesta etapa')
         return
       }
       

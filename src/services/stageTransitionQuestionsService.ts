@@ -368,6 +368,125 @@ function processAnswerValue(
     }
   }
   
+  // DATETIME
+  if (question.field_type === 'datetime') {
+    if (value === null || value === undefined || value === '') {
+      return null
+    }
+    
+    if (typeof value !== 'string') {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Valor datetime deve ser string'
+      )
+    }
+    
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return null
+    }
+    
+    // Validar formato datetime-local ESTRITO (sem timezone, sem espaços)
+    // YYYY-MM-DDTHH:mm ou YYYY-MM-DDTHH:mm:ss
+    const datetimeLocalPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+    const match = datetimeLocalPattern.exec(trimmed)
+    
+    if (!match) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Formato de data e hora inválido'
+      )
+    }
+    
+    // Extrair componentes para validação rigorosa
+    const year = parseInt(match[1], 10)
+    const month = parseInt(match[2], 10)
+    const day = parseInt(match[3], 10)
+    const hour = parseInt(match[4], 10)
+    const minute = parseInt(match[5], 10)
+    const second = match[6] ? parseInt(match[6], 10) : 0
+    
+    // Validar ranges básicos
+    if (month < 1 || month > 12) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Mês inválido (1-12)'
+      )
+    }
+    
+    if (day < 1 || day > 31) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Dia inválido (1-31)'
+      )
+    }
+    
+    if (hour < 0 || hour > 23) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Hora inválida (0-23)'
+      )
+    }
+    
+    if (minute < 0 || minute > 59) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Minuto inválido (0-59)'
+      )
+    }
+    
+    if (second < 0 || second > 59) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Segundo inválido (0-59)'
+      )
+    }
+    
+    // Parsear data
+    let parsedDate: Date
+    try {
+      parsedDate = new Date(trimmed)
+      
+      // Validar que resultou em data válida (não NaN)
+      if (isNaN(parsedDate.getTime())) {
+        throw new Error('Data inválida')
+      }
+    } catch (error) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Data e hora inválidas',
+        error
+      )
+    }
+    
+    // VALIDAÇÃO RIGOROSA: verificar que data parseada corresponde aos componentes originais
+    // Isso rejeita datas impossíveis como 2026-02-31 que JavaScript normaliza para 2026-03-03
+    if (
+      parsedDate.getFullYear() !== year ||
+      parsedDate.getMonth() + 1 !== month ||
+      parsedDate.getDate() !== day ||
+      parsedDate.getHours() !== hour ||
+      parsedDate.getMinutes() !== minute ||
+      parsedDate.getSeconds() !== second
+    ) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.INVALID_DATETIME,
+        'Data inválida (dia não existe no calendário)'
+      )
+    }
+    
+    // Se create_activity_on_answer=true, validar que é futuro
+    if (question.create_activity_on_answer && parsedDate.getTime() < Date.now()) {
+      throw new StageTransitionServiceError(
+        StageTransitionErrorCode.DATETIME_IN_PAST,
+        'O agendamento deve estar no futuro'
+      )
+    }
+    
+    // Retornar ISO 8601 UTC canônico com Z
+    return parsedDate.toISOString()
+  }
+  
   throw new StageTransitionServiceError(
     StageTransitionErrorCode.INVALID_TRANSITION_ANSWERS_FORMAT,
     `Field type desconhecido: ${question.field_type}`

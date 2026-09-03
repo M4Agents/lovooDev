@@ -29,6 +29,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: null,
     sort_order: 0,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -42,6 +43,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: null,
     sort_order: 1,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -55,6 +57,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: null,
     sort_order: 2,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -68,6 +71,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: null,
     sort_order: 3,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -81,6 +85,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: ['WhatsApp', 'Telefone', 'E-mail'],
     sort_order: 4,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -94,6 +99,7 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: ['Produto A', 'Produto B', 'Produto C', 'Produto D'],
     sort_order: 5,
     active: true,
+    create_activity_on_answer: false,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   },
@@ -107,6 +113,35 @@ const mockQuestions: StageTransitionQuestion[] = [
     options: ['Serviço 1', 'Serviço 2'],
     sort_order: 6,
     active: true,
+    create_activity_on_answer: false,
+    created_at: '2026-09-01T00:00:00Z',
+    updated_at: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'q-datetime-normal',
+    company_id: 'company-1',
+    funnel_stage_id: 'stage-1',
+    label: 'Data do Último Contato',
+    field_type: 'datetime',
+    required: false,
+    options: null,
+    sort_order: 7,
+    active: true,
+    create_activity_on_answer: false,
+    created_at: '2026-09-01T00:00:00Z',
+    updated_at: '2026-09-01T00:00:00Z'
+  },
+  {
+    id: 'q-datetime-activity',
+    company_id: 'company-1',
+    funnel_stage_id: 'stage-1',
+    label: 'Agendar Próximo Contato',
+    field_type: 'datetime',
+    required: false,
+    options: null,
+    sort_order: 8,
+    active: true,
+    create_activity_on_answer: true,
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z'
   }
@@ -522,6 +557,366 @@ describe('Stage Transition Questions Service', () => {
         { questionId: 'q-boolean', value: true },
         { questionId: 'q-select', value: 'WhatsApp' },
         { questionId: 'q-multi-select', value: ['Produto A'] }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+  })
+  
+  // ===================================================
+  // DATETIME
+  // ===================================================
+  
+  describe('Datetime Field', () => {
+    it('A) datetime futuro normal → canonicaliza para ISO UTC com Z', () => {
+      // Data futura (1 hora à frente)
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000)
+      const datetimeLocal = futureDate.toISOString().slice(0, 16) // YYYY-MM-DDTHH:mm
+      
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: datetimeLocal }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-normal')
+      
+      expect(datetimeAnswer).toBeDefined()
+      expect(datetimeAnswer?.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      expect(datetimeAnswer?.value.endsWith('Z')).toBe(true)
+      
+      // Validar que é parseável
+      const parsed = new Date(datetimeAnswer!.value)
+      expect(parsed.getTime()).not.toBeNaN()
+    })
+    
+    it('B) datetime passado normal → permitido', () => {
+      // Data passada
+      const pastDate = new Date(Date.now() - 60 * 60 * 1000)
+      const datetimeLocal = pastDate.toISOString().slice(0, 16)
+      
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: datetimeLocal }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-normal')
+      
+      expect(datetimeAnswer).toBeDefined()
+      expect(datetimeAnswer?.value).toMatch(/Z$/)
+    })
+    
+    it('C) datetime futuro + create_activity_on_answer=true → permitido', () => {
+      // Data futura (2 horas à frente)
+      const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000)
+      const datetimeLocal = futureDate.toISOString().slice(0, 16)
+      
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-activity', value: datetimeLocal }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-activity')
+      
+      expect(datetimeAnswer).toBeDefined()
+      expect(datetimeAnswer?.value).toMatch(/Z$/)
+    })
+    
+    it('D) datetime passado + create_activity_on_answer=true → DATETIME_IN_PAST', () => {
+      // Data passada (24 horas atrás para evitar problemas de precisão)
+      const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      const datetimeLocal = pastDate.toISOString().slice(0, 16)
+      
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-activity', value: datetimeLocal }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+      
+      try {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      } catch (error) {
+        expect(error).toBeInstanceOf(StageTransitionServiceError)
+        expect((error as StageTransitionServiceError).code).toBe('DATETIME_IN_PAST')
+      }
+    })
+    
+    it('E) datetime inválido → INVALID_DATETIME', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: 'abc' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+      
+      try {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      } catch (error) {
+        expect(error).toBeInstanceOf(StageTransitionServiceError)
+        expect((error as StageTransitionServiceError).code).toBe('INVALID_DATETIME')
+      }
+    })
+    
+    it('E.2) formato brasileiro rejeitado → INVALID_DATETIME', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '01/09/2026 14:30' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+      
+      try {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      } catch (error) {
+        expect(error).toBeInstanceOf(StageTransitionServiceError)
+        expect((error as StageTransitionServiceError).code).toBe('INVALID_DATETIME')
+      }
+    })
+    
+    it('E.3) apenas data sem hora rejeitado → INVALID_DATETIME', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-09-15' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('F) string vazia → omite resposta opcional', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '' }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-normal')
+      
+      expect(datetimeAnswer).toBeUndefined()
+    })
+    
+    it('G) resultado termina com Z e é parseável', () => {
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000)
+      const datetimeLocal = futureDate.toISOString().slice(0, 16)
+      
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: datetimeLocal }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-normal')
+      
+      // Termina com Z
+      expect(datetimeAnswer?.value.endsWith('Z')).toBe(true)
+      
+      // É parseável
+      const parsed = new Date(datetimeAnswer!.value)
+      expect(isNaN(parsed.getTime())).toBe(false)
+      
+      // Validação semântica: timestamp deve ser aproximadamente o mesmo
+      const original = new Date(datetimeLocal)
+      const timeDiff = Math.abs(parsed.getTime() - original.getTime())
+      // Tolerância de 1 segundo para arredondamentos
+      expect(timeDiff).toBeLessThan(1000)
+    })
+    
+    // ===================================================
+    // VALIDAÇÃO RIGOROSA DE CALENDÁRIO
+    // ===================================================
+    
+    it('H) rejeita dia impossível: 2026-02-31', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-02-31T14:30' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+      
+      try {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      } catch (error) {
+        expect(error).toBeInstanceOf(StageTransitionServiceError)
+        expect((error as StageTransitionServiceError).code).toBe('INVALID_DATETIME')
+      }
+    })
+    
+    it('I) rejeita mês impossível: 2026-13-01', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-13-01T14:30' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('J) rejeita mês zero: 2026-00-01', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-00-01T14:30' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('K) rejeita hora impossível: 2026-09-15T25:00', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-09-15T25:00' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('L) rejeita minuto impossível: 2026-09-15T12:60', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-09-15T12:60' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('M) aceita leap year válido: 2028-02-29', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2028-02-29T14:30' }
+      ]
+      
+      const result = buildTransitionAnswersPayload(draft, mockQuestions)
+      const datetimeAnswer = result.find(a => a.question_id === 'q-datetime-normal')
+      
+      expect(datetimeAnswer).toBeDefined()
+      expect(datetimeAnswer?.value).toMatch(/Z$/)
+    })
+    
+    it('N) rejeita leap year inválido: 2027-02-29', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2027-02-29T14:30' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+      
+      try {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      } catch (error) {
+        expect(error).toBeInstanceOf(StageTransitionServiceError)
+        expect((error as StageTransitionServiceError).code).toBe('INVALID_DATETIME')
+      }
+    })
+    
+    it('O) rejeita formato com timezone Z: 2026-09-15T14:30:00Z', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-09-15T14:30:00Z' }
+      ]
+      
+      expect(() => {
+        buildTransitionAnswersPayload(draft, mockQuestions)
+      }).toThrow(StageTransitionServiceError)
+    })
+    
+    it('P) rejeita formato com offset: 2026-09-15T14:30:00-03:00', () => {
+      const draft: StageTransitionDraftAnswer[] = [
+        { questionId: 'q-text-required', value: 'teste' },
+        { questionId: 'q-number', value: '1000' },
+        { questionId: 'q-boolean', value: true },
+        { questionId: 'q-select', value: 'WhatsApp' },
+        { questionId: 'q-multi-select', value: ['Produto A'] },
+        { questionId: 'q-datetime-normal', value: '2026-09-15T14:30:00-03:00' }
       ]
       
       expect(() => {

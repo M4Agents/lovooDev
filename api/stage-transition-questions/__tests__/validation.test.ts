@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 // FIELD TYPE VALIDATION
 // =====================================================
 
-const VALID_FIELD_TYPES = new Set(['text', 'number', 'boolean', 'select', 'multi_select'])
+const VALID_FIELD_TYPES = new Set(['text', 'number', 'boolean', 'select', 'multi_select', 'datetime'])
 
 function validateFieldType(fieldType: string): boolean {
   return VALID_FIELD_TYPES.has(fieldType)
@@ -25,12 +25,12 @@ describe('Field Type Validation', () => {
     expect(validateFieldType('boolean')).toBe(true)
     expect(validateFieldType('select')).toBe(true)
     expect(validateFieldType('multi_select')).toBe(true)
+    expect(validateFieldType('datetime')).toBe(true)
   })
 
   it('rejeita tipos inválidos', () => {
     expect(validateFieldType('textarea')).toBe(false)
     expect(validateFieldType('date')).toBe(false)
-    expect(validateFieldType('datetime')).toBe(false)
     expect(validateFieldType('email')).toBe(false)
     expect(validateFieldType('')).toBe(false)
   })
@@ -377,5 +377,201 @@ describe('Server Feature Flag', () => {
     expect(isFeatureEnabled('TRUE')).toBe(false)
     expect(isFeatureEnabled('yes')).toBe(false)
     expect(isFeatureEnabled('')).toBe(false)
+  })
+})
+
+// =====================================================
+// CREATE_ACTIVITY_ON_ANSWER VALIDATION (DATETIME.1D)
+// =====================================================
+
+interface CreateActivityValidationResult {
+  valid: boolean
+  error?: string
+}
+
+function validateCreateActivityOnAnswer(
+  fieldType: string,
+  createActivityOnAnswer: any
+): CreateActivityValidationResult {
+  // Se não informado, default false (válido)
+  if (createActivityOnAnswer === undefined || createActivityOnAnswer === null) {
+    return { valid: true }
+  }
+
+  // Deve ser boolean
+  if (typeof createActivityOnAnswer !== 'boolean') {
+    return { valid: false, error: 'create_activity_on_answer deve ser boolean' }
+  }
+
+  // Se true, só é permitido para datetime
+  if (createActivityOnAnswer && fieldType !== 'datetime') {
+    return {
+      valid: false,
+      error: 'create_activity_on_answer=true só é permitido para field_type=datetime'
+    }
+  }
+
+  return { valid: true }
+}
+
+describe('Create Activity On Answer Validation (DATETIME.1D)', () => {
+  describe('CREATE', () => {
+    it('datetime + flag=false → válido', () => {
+      const result = validateCreateActivityOnAnswer('datetime', false)
+      expect(result.valid).toBe(true)
+    })
+
+    it('datetime + flag=true → válido', () => {
+      const result = validateCreateActivityOnAnswer('datetime', true)
+      expect(result.valid).toBe(true)
+    })
+
+    it('datetime + flag=undefined → válido (default false)', () => {
+      const result = validateCreateActivityOnAnswer('datetime', undefined)
+      expect(result.valid).toBe(true)
+    })
+
+    it('text + flag=true → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('text', true)
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('datetime')
+    })
+
+    it('number + flag=true → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('number', true)
+      expect(result.valid).toBe(false)
+    })
+
+    it('boolean + flag=true → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('boolean', true)
+      expect(result.valid).toBe(false)
+    })
+
+    it('select + flag=true → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('select', true)
+      expect(result.valid).toBe(false)
+    })
+
+    it('multi_select + flag=true → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('multi_select', true)
+      expect(result.valid).toBe(false)
+    })
+
+    it('text + flag=false → válido', () => {
+      const result = validateCreateActivityOnAnswer('text', false)
+      expect(result.valid).toBe(true)
+    })
+
+    it('flag não boolean → rejeitado', () => {
+      const result = validateCreateActivityOnAnswer('datetime', 'true')
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('boolean')
+    })
+  })
+})
+
+// =====================================================
+// FINAL STATE VALIDATION (DATETIME.1D - UPDATE)
+// =====================================================
+
+interface FinalStateValidationResult {
+  valid: boolean
+  error?: string
+}
+
+function validateFinalState(
+  finalFieldType: string,
+  finalCreateActivity: boolean
+): FinalStateValidationResult {
+  // Se create_activity_on_answer será true, field_type FINAL deve ser datetime
+  if (finalCreateActivity && finalFieldType !== 'datetime') {
+    return {
+      valid: false,
+      error: 'create_activity_on_answer=true requer field_type=datetime (estado final inválido)'
+    }
+  }
+
+  return { valid: true }
+}
+
+describe('Final State Validation (DATETIME.1D - UPDATE)', () => {
+  it('datetime + flag=true → válido', () => {
+    const result = validateFinalState('datetime', true)
+    expect(result.valid).toBe(true)
+  })
+
+  it('datetime + flag=false → válido', () => {
+    const result = validateFinalState('datetime', false)
+    expect(result.valid).toBe(true)
+  })
+
+  it('text + flag=false → válido', () => {
+    const result = validateFinalState('text', false)
+    expect(result.valid).toBe(true)
+  })
+
+  it('text + flag=true → rejeitado', () => {
+    const result = validateFinalState('text', true)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('datetime')
+  })
+
+  it('number + flag=true → rejeitado', () => {
+    const result = validateFinalState('number', true)
+    expect(result.valid).toBe(false)
+  })
+
+  it('boolean + flag=true → rejeitado', () => {
+    const result = validateFinalState('boolean', true)
+    expect(result.valid).toBe(false)
+  })
+
+  it('select + flag=true → rejeitado', () => {
+    const result = validateFinalState('select', true)
+    expect(result.valid).toBe(false)
+  })
+
+  it('multi_select + flag=true → rejeitado', () => {
+    const result = validateFinalState('multi_select', true)
+    expect(result.valid).toBe(false)
+  })
+
+  // ===================================================
+  // UPDATE SCENARIOS (DATETIME.1D.1)
+  // ===================================================
+
+  describe('Cenários UPDATE com estado final', () => {
+    it('Cenário 1: datetime+flag=true → payload field_type=text → final state rejeitado', () => {
+      // Estado existente: datetime + true
+      // Payload: field_type='text' (flag não enviado)
+      // Estado final: text + true
+      const result = validateFinalState('text', true)
+      expect(result.valid).toBe(false)
+      expect(result.error).toContain('datetime')
+    })
+
+    it('Cenário 2: datetime+flag=true → payload field_type=text+flag=false → final state válido', () => {
+      // Estado existente: datetime + true
+      // Payload: field_type='text', flag=false
+      // Estado final: text + false
+      const result = validateFinalState('text', false)
+      expect(result.valid).toBe(true)
+    })
+
+    it('Cenário 3: text+flag=false → payload flag=true → final state rejeitado', () => {
+      // Estado existente: text + false
+      // Payload: flag=true (field_type não enviado)
+      // Estado final: text + true
+      const result = validateFinalState('text', true)
+      expect(result.valid).toBe(false)
+    })
+
+    it('Cenário 4: datetime+flag=false → payload flag=true → final state válido', () => {
+      // Estado existente: datetime + false
+      // Payload: flag=true (field_type não enviado)
+      // Estado final: datetime + true
+      const result = validateFinalState('datetime', true)
+      expect(result.valid).toBe(true)
+    })
   })
 })

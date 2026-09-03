@@ -27,10 +27,11 @@ interface ApiResponse<T> {
 export interface CreateQuestionInput {
   funnel_stage_id: string
   label: string
-  field_type: 'text' | 'number' | 'boolean' | 'select' | 'multi_select'
+  field_type: 'text' | 'number' | 'boolean' | 'select' | 'multi_select' | 'datetime'
   required: boolean
   options: string[] | null
   sort_order?: number
+  create_activity_on_answer?: boolean
 }
 
 export interface UpdateQuestionInput {
@@ -38,6 +39,7 @@ export interface UpdateQuestionInput {
   label?: string
   required?: boolean
   sort_order?: number
+  create_activity_on_answer?: boolean
 }
 
 export interface QuestionOrder {
@@ -140,6 +142,9 @@ function mapHttpStatusToErrorCode(
     }
     if (message.includes('options')) {
       return 'QUESTION_STRUCTURE_IMMUTABLE' as StageTransitionErrorCode
+    }
+    if (message.includes('data e hora configurada para criar atividade')) {
+      return 'ACTIVITY_DATETIME_ALREADY_EXISTS' as StageTransitionErrorCode
     }
     return 'CONFLICT_ERROR' as StageTransitionErrorCode
   }

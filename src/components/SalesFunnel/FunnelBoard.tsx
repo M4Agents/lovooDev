@@ -21,6 +21,8 @@ import { CloseOpportunityModal } from './CloseOpportunityModal'
 import { ReopenOpportunityModal } from './ReopenOpportunityModal'
 import { OpportunityDetailModal } from './OpportunityDetailModal'
 import { StageTransitionModal } from './StageTransitionModal'
+import { ActivityPromptModal } from './ActivityPromptModal'
+import { ActivityModal } from '../Calendar/ActivityModal'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useBoardPositions } from '../../hooks/useBoardPositions'
 import { useStageCounts } from '../../hooks/useStageCounts'
@@ -50,7 +52,8 @@ import type {
   CloseOpportunityParams,
   ReopenOpportunityParams,
   Opportunity,
-  CustomFieldValueEntry
+  CustomFieldValueEntry,
+  LeadCardData
 } from '../../types/sales-funnel'
 import { isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
@@ -498,6 +501,19 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [pendingTransitionQuestions, setPendingTransitionQuestions] = useState<PendingTransitionQuestions | null>(null)
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false)
 
+  // =====================================================
+  // DATETIME.2C.2 — PÓS-RPC ACTIVITY CANDIDATE
+  // =====================================================
+  
+  interface PendingActivityFromTransition {
+    canonicalDatetime: string  // ISO UTC (resposta canonicalizada)
+    questionLabel: string
+    lead: LeadCardData
+  }
+  
+  const [pendingActivity, setPendingActivity] = useState<PendingActivityFromTransition | null>(null)
+  const [showActivityModal, setShowActivityModal] = useState(false)
+
   // ── Verificação de item obrigatório / tipo de venda para won ──
   const wonOpportunityId = pendingTransition?.toStageType === 'won'
     ? pendingTransition.opportunityId
@@ -708,9 +724,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
     if (!destination) return
 
-    // ETAPA G: Bloquear novo drag se há transição pendente (questions ou close/reopen)
-    if (pendingTransitionQuestions || pendingTransition) {
-      console.warn('Drag bloqueado: existe transição pendente aguardando confirmação')
+    // ETAPA G + DATETIME.2C.2: Bloquear novo drag se há transição pendente (questions, close/reopen ou activity)
+    if (pendingTransitionQuestions || pendingTransition || pendingActivity) {
+      console.warn('Drag bloqueado: existe transição/atividade pendente aguardando confirmação')
       return
     }
 
@@ -932,7 +948,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       // Usar o snapshot existente para rollback em caso de erro
       const snapshot = pendingTransitionQuestions.snapshot
 
-      // 3. Chamar move_opportunity_v2 via funnelApi
+      // =====================================================
+      // 3. CHAMAR move_opportunity_v2 — RPC BOUNDARY
+      // =====================================================
+      // ROLLBACK é permitido SOMENTE dentro deste try/catch.
+      // Após RPC success, rollback é PROIBIDO.
       try {
         await funnelApi.moveOpportunityWithTransitionQuestions({
           opportunity_id: pendingTransitionQuestions.opportunityId,
@@ -942,10 +962,82 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           position_in_stage: pendingTransitionQuestions.positionInStage,
           transition_answers: answers
         })
+      } catch (error) {
+        // ❌ RPC FAILURE: rollback autorizado
+        console.error('Erro ao mover oportunidade com perguntas:', error)
+        rollback(snapshot)
+        
+        // Mapear erro semântico se possível
+        let userMessage = 'Erro ao mover oportunidade. Tente novamente.'
+        
+        if (error instanceof Error) {
+          // Tentar extrair código de erro do Supabase
+          const pgError = error as any
+          if (pgError.code || pgError.message) {
+            // Mapear erros conhecidos
+            if (pgError.message?.includes('MISSING_REQUIRED_ANSWER')) {
+              userMessage = 'Resposta obrigatória não foi fornecida.'
+            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION')) {
+              userMessage = 'Pergunta de transição inválida. As perguntas podem ter sido alteradas.'
+            } else if (pgError.message?.includes('UNAUTHORIZED')) {
+              userMessage = 'Você não tem permissão para mover esta oportunidade.'
+            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION_CONFIG')) {
+              userMessage = 'Configuração inválida de perguntas. Por favor, contate o administrador.'
+            }
+          }
+        }
+        
+        alert(userMessage)
+        setIsSubmittingTransition(false)
+        return  // CRITICAL: Impedir execução do código pós-RPC
+      }
 
-        // Sucesso: manter movimento
-        recentlyMovedRef.current.set(pendingTransitionQuestions.opportunityId, Date.now())
-        setTimeout(() => recentlyMovedRef.current.delete(pendingTransitionQuestions.opportunityId), 6_000)
+      // =====================================================
+      // ✅ RPC SUCCESS — TRANSIÇÃO DEFINITIVA
+      // =====================================================
+      // A partir daqui, rollback(snapshot) é PROIBIDO.
+      // Qualquer falha é side effect pós-transição.
+
+      recentlyMovedRef.current.set(pendingTransitionQuestions.opportunityId, Date.now())
+      setTimeout(() => recentlyMovedRef.current.delete(pendingTransitionQuestions.opportunityId), 6_000)
+
+      // =====================================================
+      // SIDE EFFECTS PÓS-TRANSIÇÃO (non-blocking)
+      // =====================================================
+      // Candidate, automação, refreshCounts podem falhar sem rollback.
+      let activityCandidate: PendingActivityFromTransition | null = null
+      
+      try {
+        // DATETIME.2C.2 — Detectar datetime flagged
+        const flaggedQuestion = pendingTransitionQuestions.questions.find(
+          q => q.active && q.field_type === 'datetime' && q.create_activity_on_answer === true
+        )
+        
+        if (flaggedQuestion) {
+          const flaggedAnswer = answers.find(a => a.question_id === flaggedQuestion.id)
+          
+          if (flaggedAnswer && flaggedAnswer.value) {
+            // Validar que datetime é parseável
+            const parsedDate = new Date(flaggedAnswer.value)
+            const isValidDate = !isNaN(parsedDate.getTime())
+            
+            if (isValidDate) {
+              const leadData = pendingTransitionQuestions.opportunityData?.lead
+              
+              if (leadData) {
+                activityCandidate = {
+                  canonicalDatetime: flaggedAnswer.value,
+                  questionLabel: flaggedQuestion.label,
+                  lead: leadData
+                }
+              } else {
+                console.warn('[DATETIME.2C.2] Lead ausente para criar atividade — transição mantida')
+              }
+            } else {
+              console.warn('[DATETIME.2C.2] Datetime inválido para criar atividade — transição mantida')
+            }
+          }
+        }
 
         // Disparar automação (mesmo padrão do move normal)
         if (companyId && pendingTransitionQuestions.fromStageId !== pendingTransitionQuestions.toStageId) {
@@ -972,45 +1064,101 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         }
 
         refreshCounts().catch(err => console.error('Erro ao atualizar contadores:', err))
-
-        // Limpar estado pendente
-        setPendingTransitionQuestions(null)
-        setIsSubmittingTransition(false)
-      } catch (error) {
-        // Erro no RPC: rollback obrigatório
-        console.error('Erro ao mover oportunidade com perguntas:', error)
-        rollback(snapshot)
-        
-        // Mapear erro semântico se possível
-        let userMessage = 'Erro ao mover oportunidade. Tente novamente.'
-        
-        if (error instanceof Error) {
-          // Tentar extrair código de erro do Supabase
-          const pgError = error as any
-          if (pgError.code || pgError.message) {
-            // Mapear erros conhecidos
-            if (pgError.message?.includes('MISSING_REQUIRED_ANSWER')) {
-              userMessage = 'Resposta obrigatória não foi fornecida.'
-            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION')) {
-              userMessage = 'Pergunta de transição inválida. As perguntas podem ter sido alteradas.'
-            } else if (pgError.message?.includes('UNAUTHORIZED')) {
-              userMessage = 'Você não tem permissão para mover esta oportunidade.'
-            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION_CONFIG')) {
-              userMessage = 'Configuração inválida de perguntas. Por favor, contate o administrador.'
-            }
-          }
-        }
-        
-        alert(userMessage)
-        setIsSubmittingTransition(false)
+      } catch (sideEffectError) {
+        // Side effect pós-transição falhou — transição permanece confirmada
+        console.error('[RPC SUCCESS] Side effect pós-transição falhou (transição mantida):', sideEffectError)
       }
+
+      // =====================================================
+      // CLEANUP (sempre executa)
+      // =====================================================
+      setPendingTransitionQuestions(null)
+      setIsSubmittingTransition(false)
+      
+      // DATETIME.2C.2 — Se há candidate, abrir prompt
+      if (activityCandidate) {
+        setPendingActivity(activityCandidate)
+      }
+
     } catch (error) {
-      // Erro na validação do payload
+      // Erro na validação do payload (antes do RPC)
       console.error('Erro ao validar respostas:', error)
       alert(error instanceof Error ? error.message : 'Erro ao validar respostas')
       setIsSubmittingTransition(false)
     }
-  }, [pendingTransitionQuestions, funnelId, companyId, optimisticMove, rollback, refreshCounts])
+  }, [pendingTransitionQuestions, funnelId, companyId, rollback, refreshCounts])
+
+  // =====================================================
+  // DATETIME.2C.2/2C.3 — HANDLERS PARA ACTIVITY PROMPT + MODAL
+  // =====================================================
+
+  const handleCancelActivityPrompt = useCallback(() => {
+    setPendingActivity(null)
+  }, [])
+
+  const handleConfirmActivityPrompt = useCallback(() => {
+    // DATETIME.2C.3 — Abrir ActivityModal
+    // pendingActivity permanece para fornecer dados ao modal
+    setShowActivityModal(true)
+  }, [])
+
+  const handleCloseActivityModal = useCallback(() => {
+    // Cancelar ActivityModal — card permanece no destino
+    // PROIBIDO: rollback da transição
+    setShowActivityModal(false)
+    setPendingActivity(null)
+  }, [])
+
+  const handleSaveActivityModal = useCallback(() => {
+    // Atividade salva com sucesso — card permanece no destino
+    setShowActivityModal(false)
+    setPendingActivity(null)
+  }, [])
+
+  // =====================================================
+  // DATETIME.2C.3 — CONVERTER ISO UTC → LOCAL DATE/TIME
+  // =====================================================
+  
+  const activityPrefillData = useMemo(() => {
+    if (!pendingActivity || !showActivityModal) return null
+
+    try {
+      // Validar datetime defensivamente
+      const date = new Date(pendingActivity.canonicalDatetime)
+      if (isNaN(date.getTime())) {
+        console.warn('[DATETIME.2C.3] Datetime inválido para prefill — fechando fluxo:', pendingActivity.canonicalDatetime)
+        return null
+      }
+
+      // Reconstruir wall clock LOCAL do browser (mesmo timezone da escolha original)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+
+      const preSelectedDate = `${year}-${month}-${day}`
+      const preSelectedTime = `${hours}:${minutes}`
+
+      return {
+        lead: pendingActivity.lead,
+        preSelectedDate,
+        preSelectedTime
+      }
+    } catch (err) {
+      console.error('[DATETIME.2C.3] Erro ao preparar prefill — fechando fluxo:', err)
+      return null
+    }
+  }, [pendingActivity, showActivityModal])
+
+  // Se prefill falhou mas modal está aberto, fechar fluxo
+  useEffect(() => {
+    if (showActivityModal && pendingActivity && !activityPrefillData) {
+      console.warn('[DATETIME.2C.3] Prefill inválido — fechando ActivityModal')
+      setShowActivityModal(false)
+      setPendingActivity(null)
+    }
+  }, [showActivityModal, pendingActivity, activityPrefillData])
 
   // =====================================================
   // CONFIRM CLOSE — chama RPC close_opportunity
@@ -1343,6 +1491,28 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           onCancel={handleCancelTransitionQuestions}
           onConfirm={handleConfirmTransitionQuestions}
           isSubmitting={isSubmittingTransition}
+        />
+      )}
+
+      {/* DATETIME.2C.2 — Prompt para criar atividade pós-transição */}
+      {pendingActivity && !showActivityModal && (
+        <ActivityPromptModal
+          isOpen={true}
+          questionLabel={pendingActivity.questionLabel}
+          onConfirm={handleConfirmActivityPrompt}
+          onCancel={handleCancelActivityPrompt}
+        />
+      )}
+
+      {/* DATETIME.2C.3 — ActivityModal pré-preenchido */}
+      {showActivityModal && activityPrefillData && (
+        <ActivityModal
+          activity={null}
+          preSelectedLead={activityPrefillData.lead}
+          preSelectedDate={activityPrefillData.preSelectedDate}
+          preSelectedTime={activityPrefillData.preSelectedTime}
+          onClose={handleCloseActivityModal}
+          onSave={handleSaveActivityModal}
         />
       )}
 

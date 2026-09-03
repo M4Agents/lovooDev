@@ -163,6 +163,12 @@ export default async function handler(req: any, res: any): Promise<void> {
         return
       }
       
+      // Se for violação do único index (máx 1 datetime com create_activity_on_answer por stage)
+      if (updateError.code === '23505' && updateError.message?.includes('idx_stq_one_activity_flag_per_stage')) {
+        jsonError(res, 409, 'Já existe uma pergunta ativa de data e hora configurada para criar atividade nesta etapa')
+        return
+      }
+      
       jsonError(res, 500, 'Erro ao atualizar status da pergunta')
       return
     }

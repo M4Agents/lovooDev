@@ -10,6 +10,7 @@ export type StageTransitionFieldType =
   | 'boolean'
   | 'select'
   | 'multi_select'
+  | 'datetime'
 
 export interface StageTransitionQuestion {
   id: string
@@ -21,6 +22,7 @@ export interface StageTransitionQuestion {
   required: boolean
   sort_order: number
   active: boolean
+  create_activity_on_answer: boolean  // datetime only: se true, oferece criação de atividade após responder
   created_at: string
   updated_at: string
 }
@@ -34,6 +36,7 @@ export interface StageTransitionQuestion {
  * - boolean: "true" ou "false" (lowercase)
  * - select: string da opção selecionada
  * - multi_select: JSON array serializado (ex: '["Produto A","Produto C"]')
+ * - datetime: ISO 8601 UTC com Z (ex: "2026-09-15T17:30:00.000Z")
  */
 export interface StageTransitionAnswer {
   question_id: string
@@ -47,6 +50,7 @@ export interface CreateStageTransitionQuestionForm {
   options?: string[] | null
   required: boolean
   sort_order?: number
+  create_activity_on_answer?: boolean  // datetime only
 }
 
 export interface UpdateStageTransitionQuestionForm {
@@ -87,6 +91,9 @@ export enum StageTransitionErrorCode {
   INVALID_TRANSITION_QUESTION_CONFIG = 'INVALID_TRANSITION_QUESTION_CONFIG',
   INVALID_MULTI_SELECT_FORMAT = 'INVALID_MULTI_SELECT_FORMAT',
   INVALID_MULTI_SELECT_VALUE = 'INVALID_MULTI_SELECT_VALUE',
+  INVALID_DATETIME = 'INVALID_DATETIME',
+  DATETIME_IN_PAST = 'DATETIME_IN_PAST',
+  ACTIVITY_DATETIME_ALREADY_EXISTS = 'ACTIVITY_DATETIME_ALREADY_EXISTS',
 }
 
 export interface StageTransitionError {

@@ -10,6 +10,7 @@
 //   label (opcional)
 //   required (opcional: boolean)
 //   sort_order (opcional: number)
+//   create_activity_on_answer (opcional: boolean, só datetime)
 //
 // IMUTÁVEL após resposta:
 //   - field_type
@@ -170,6 +171,55 @@ export default async function handler(req: any, res: any): Promise<void> {
     // Preparar updates permitidos
     const updates: any = {}
 
+    // field_type: permitido SOMENTE se não houver respostas
+    if ('field_type' in body && !hasAnswers) {
+      const fieldType = typeof body.field_type === 'string' ? body.field_type.trim() : ''
+      const VALID_FIELD_TYPES = new Set(['text', 'number', 'boolean', 'select', 'multi_select', 'datetime'])
+      
+      if (!VALID_FIELD_TYPES.has(fieldType)) {
+        jsonError(res, 400, `field_type inválido — valores aceitos: ${[...VALID_FIELD_TYPES].join(', ')}`)
+        return
+      }
+      
+      updates.field_type = fieldType
+    }
+
+    // options: permitido SOMENTE se não houver respostas
+    if ('options' in body && !hasAnswers) {
+      const fieldType = updates.field_type ?? existingQuestion.field_type
+      
+      if (fieldType === 'select' || fieldType === 'multi_select') {
+        if (!Array.isArray(body.options)) {
+          jsonError(res, 400, `field_type ${fieldType} requer options como array`)
+          return
+        }
+
+        const trimmed = body.options
+          .map((opt: any) => typeof opt === 'string' ? opt.trim() : '')
+          .filter((opt: string) => opt.length > 0)
+
+        if (trimmed.length === 0) {
+          jsonError(res, 400, `options não pode ser vazio para ${fieldType}`)
+          return
+        }
+
+        const uniqueSet = new Set(trimmed)
+        if (uniqueSet.size !== trimmed.length) {
+          jsonError(res, 400, 'options contém valores duplicados')
+          return
+        }
+
+        updates.options = trimmed
+      } else {
+        // Outros tipos: options deve ser null
+        if (body.options !== null && body.options !== undefined) {
+          jsonError(res, 400, `field_type ${fieldType} não aceita options`)
+          return
+        }
+        updates.options = null
+      }
+    }
+
     if ('label' in body) {
       const label = typeof body.label === 'string' ? body.label.trim() : ''
       if (!label) {
@@ -195,8 +245,35 @@ export default async function handler(req: any, res: any): Promise<void> {
       updates.sort_order = body.sort_order
     }
 
+    if ('create_activity_on_answer' in body) {
+      if (typeof body.create_activity_on_answer !== 'boolean') {
+        jsonError(res, 400, 'create_activity_on_answer deve ser boolean')
+        return
+      }
+      updates.create_activity_on_answer = body.create_activity_on_answer
+    }
+
     if (Object.keys(updates).length === 0) {
       jsonError(res, 400, 'Nenhum campo válido fornecido para atualização')
+      return
+    }
+
+    // VALIDAÇÃO DE ESTADO FINAL
+    // Se create_activity_on_answer será true, field_type FINAL deve ser datetime
+    const finalFieldType = ('field_type' in updates)
+      ? updates.field_type
+      : (existingQuestion.field_type as string)
+      
+    const finalCreateActivity = ('create_activity_on_answer' in updates)
+      ? updates.create_activity_on_answer
+      : (existingQuestion.create_activity_on_answer ?? false)
+
+    if (finalCreateActivity && finalFieldType !== 'datetime') {
+      jsonError(
+        res,
+        400,
+        'create_activity_on_answer=true requer field_type=datetime (estado final inválido)'
+      )
       return
     }
 
@@ -211,6 +288,13 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     if (updateError) {
       console.error('[stage-transition-questions/update] updateError:', updateError)
+      
+      // Se for violação do único index (máx 1 datetime com create_activity_on_answer por stage)
+      if (updateError.code === '23505' && updateError.message?.includes('idx_stq_one_activity_flag_per_stage')) {
+        jsonError(res, 409, 'Já existe uma pergunta ativa de data e hora configurada para criar atividade nesta etapa')
+        return
+      }
+      
       jsonError(res, 500, 'Erro ao atualizar pergunta')
       return
     }

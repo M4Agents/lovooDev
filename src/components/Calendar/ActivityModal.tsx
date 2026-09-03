@@ -13,6 +13,7 @@ interface ActivityModalProps {
   onSave: () => void
   preSelectedLead?: Lead
   preSelectedDate?: string | null
+  preSelectedTime?: string | null  // DATETIME.2C
   showChatButton?: boolean
 }
 
@@ -37,6 +38,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   onSave,
   preSelectedLead,
   preSelectedDate,
+  preSelectedTime,  // DATETIME.2C
   showChatButton = false
 }) => {
   const { user, company, companyTimezone } = useAuth()
@@ -152,13 +154,20 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       // Definir data/hora mínima como agora ou usar data pré-selecionada
       const now = new Date()
       const minDate = preSelectedDate || now.toISOString().split('T')[0]
-      // Obter hora atual no timezone da empresa
-      const minTime = now.toLocaleTimeString('pt-BR', { 
-        timeZone: companyTimezone,
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false 
-      })
+      
+      // DATETIME.2C: Usar preSelectedTime se fornecido, caso contrário hora atual
+      let minTime: string
+      if (preSelectedTime) {
+        minTime = preSelectedTime
+      } else {
+        // Obter hora atual no timezone da empresa
+        minTime = now.toLocaleTimeString('pt-BR', { 
+          timeZone: companyTimezone,
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        })
+      }
       
       setFormData(prev => ({
         ...prev,
@@ -180,7 +189,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
     }
-  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, hasGoogleConnection])
+  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, preSelectedTime, hasGoogleConnection, companyTimezone])
 
   // Buscar leads
   useEffect(() => {
