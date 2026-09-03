@@ -14,10 +14,11 @@ import {
   DollarSign, Calendar, MessageSquare, ShoppingBag, Plus, Trash2,
   Tag, AlertCircle, ChevronDown, Check
 } from 'lucide-react'
-import type { CloseOpportunityParams, WonItemPayload, SaleType } from '../../types/sales-funnel'
+import type { CloseOpportunityParams, WonItemPayload, SaleType, LossType } from '../../types/sales-funnel'
 import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { catalogApi } from '../../services/catalogApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
+import { lossTypesApi } from '../../services/lossTypesApi'
 
 // ── helpers de formatação monetária ──
 const centsToBRL = (cents: number): string =>
@@ -206,6 +207,171 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
 }
 
 // ──────────────────────────────────────────────────────
+// Sub-componente: LostLossTypeSelector
+// Responsável por lazy load e seleção de tipos de perda.
+// Espelho de WonSaleTypeSelector.
+// ──────────────────────────────────────────────────────
+interface LostLossTypeSelectorProps {
+  companyId: string
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+  disabled: boolean
+}
+
+const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
+  companyId,
+  selectedIds,
+  onChange,
+  disabled,
+}) => {
+  const { t } = useTranslation('funnel')
+  const [loadingTypes, setLoadingTypes] = useState(false)
+  const [lossTypes, setLossTypes] = useState<LossType[]>([])
+  const [open, setOpen] = useState(false)
+  const loaded = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (loaded.current || !companyId) return
+    loaded.current = true
+    setLoadingTypes(true)
+    lossTypesApi.getVisibleLossTypes(companyId)
+      .then(data => setLossTypes(data))
+      .catch(() => setLossTypes([]))
+      .finally(() => setLoadingTypes(false))
+  }, [companyId])
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const toggle = (id: string) => {
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter(x => x !== id)
+        : [...selectedIds, id]
+    )
+  }
+
+  const CHIPS_VISIBLE = 2
+  const selectedTypes = lossTypes.filter(lt => selectedIds.includes(lt.id))
+  const visibleChips = selectedTypes.slice(0, CHIPS_VISIBLE)
+  const extraCount = selectedTypes.length - CHIPS_VISIBLE
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+        <span className="text-sm font-medium text-red-900">
+          {t('closeOpportunity.lostLossTypeTitle')}
+        </span>
+      </div>
+
+      {loadingTypes ? (
+        <div className="flex items-center gap-2 text-sm text-gray-500 px-1">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {t('closeOpportunity.lostLossTypeLoadingList')}
+        </div>
+      ) : lossTypes.length === 0 ? (
+        <div className="flex items-start gap-2 text-sm text-amber-700 px-1">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          {t('closeOpportunity.lostLossTypeEmptyList')}
+        </div>
+      ) : (
+        <div ref={containerRef} className="relative">
+          {/* Campo disparador */}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setOpen(prev => !prev)}
+            className={[
+              'w-full flex items-center gap-2 min-h-[40px] px-3 py-2 bg-white border rounded-lg text-left transition-colors',
+              open
+                ? 'border-red-400 ring-1 ring-red-400'
+                : 'border-gray-300 hover:border-red-300',
+              disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+            ].join(' ')}
+          >
+            <span className="flex-1 flex flex-wrap gap-1 min-w-0">
+              {selectedTypes.length === 0 ? (
+                <span className="text-sm text-gray-400">
+                  {t('closeOpportunity.lostLossTypePlaceholder')}
+                </span>
+              ) : (
+                <>
+                  {visibleChips.map(lt => (
+                    <span
+                      key={lt.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded-full"
+                    >
+                      {lt.name}
+                      {!disabled && (
+                        <span
+                          role="button"
+                          aria-label={`Remover ${lt.name}`}
+                          onMouseDown={e => { e.stopPropagation(); toggle(lt.id) }}
+                          className="ml-0.5 text-red-500 hover:text-red-700"
+                        >
+                          <X className="w-3 h-3" />
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  {extraCount > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                      +{extraCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
+            <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Painel dropdown */}
+          {open && (
+            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+              {lossTypes.map(lt => {
+                const checked = selectedIds.includes(lt.id)
+                return (
+                  <button
+                    key={lt.id}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); toggle(lt.id) }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-red-50 transition-colors"
+                  >
+                    <span className={[
+                      'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center',
+                      checked ? 'bg-red-600 border-red-600' : 'border-gray-300 bg-white',
+                    ].join(' ')}>
+                      {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm text-gray-900">{lt.name}</span>
+                      {lt.description && (
+                        <span className="block text-xs text-gray-500 truncate">{lt.description}</span>
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────
 // Props do modal principal
 // ──────────────────────────────────────────────────────
 interface CloseOpportunityModalProps {
@@ -223,6 +389,8 @@ interface CloseOpportunityModalProps {
   hasItems?: boolean
   requireSaleType?: boolean
   hasSaleTypes?: boolean
+  requireLossType?: boolean
+  hasLossTypes?: boolean
   onConfirm: (params: CloseOpportunityParams) => Promise<void>
   onCancel: () => void
 }
@@ -247,6 +415,8 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   hasItems = true,
   requireSaleType = false,
   hasSaleTypes = true,
+  requireLossType = false,
+  hasLossTypes = true,
   onConfirm,
   onCancel
 }) => {
@@ -256,6 +426,8 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   // Determina se cada seletor deve aparecer
   const showItemSelector = isWon && requireItems && !hasItems
   const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
+  // Seletor de tipos de perda: espelho exato de showSaleTypeSelector
+  const showLossTypeSelector = !isWon && requireLossType && !hasLossTypes
 
   // #region agent log
   if (isOpen) {
@@ -288,6 +460,9 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
 
   // ── Tipos de venda selecionados ──
   const [selectedSaleTypeIds, setSelectedSaleTypeIds] = useState<string[]>([])
+
+  // ── Tipos de perda selecionados ──
+  const [selectedLossTypeIds, setSelectedLossTypeIds] = useState<string[]>([])
 
   // Subtotal dos rascunhos
   const draftSubtotal = draftItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
@@ -414,6 +589,8 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
 
   const itemSelectorBlocking = showItemSelector && draftItems.length === 0
   const saleTypeSelectorBlocking = showSaleTypeSelector && selectedSaleTypeIds.length === 0
+  // Bloqueio para tipos de perda — espelho de saleTypeSelectorBlocking
+  const lossTypeSelectorBlocking = showLossTypeSelector && selectedLossTypeIds.length === 0
 
   const currentList = addType === 'product' ? products : services
 
@@ -424,6 +601,10 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
     }
     if (showSaleTypeSelector && selectedSaleTypeIds.length === 0) {
       setError(t('closeOpportunity.wonSaleTypeRequired'))
+      return
+    }
+    if (showLossTypeSelector && selectedLossTypeIds.length === 0) {
+      setError(t('closeOpportunity.lostLossTypeRequired'))
       return
     }
 
@@ -454,6 +635,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
         company_id:        companyId,
         items_to_add:      itemsToAdd.length > 0 ? itemsToAdd : undefined,
         sale_types_to_add: selectedSaleTypeIds.length > 0 ? selectedSaleTypeIds : undefined,
+        loss_types_to_add: selectedLossTypeIds.length > 0 ? selectedLossTypeIds : undefined,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
@@ -675,7 +857,17 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
             </div>
           )}
 
-          {/* Motivo da perda */}
+          {/* ── Seletor de tipos de perda ── */}
+          {showLossTypeSelector && (
+            <LostLossTypeSelector
+              companyId={companyId}
+              selectedIds={selectedLossTypeIds}
+              onChange={setSelectedLossTypeIds}
+              disabled={loading}
+            />
+          )}
+
+          {/* Motivo da perda — campo livre complementar (sempre visível em lost) */}
           {!isWon && (
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
@@ -714,7 +906,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading || itemSelectorBlocking || saleTypeSelectorBlocking}
+            disabled={loading || itemSelectorBlocking || saleTypeSelectorBlocking || lossTypeSelectorBlocking}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
               isWon ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
             }`}

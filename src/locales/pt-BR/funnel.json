@@ -177,7 +177,13 @@
     "wonSaleTypeEmptyList": "Nenhum tipo de venda ativo disponível. Cadastre ou ative um tipo em Configurações → Tipos de Venda.",
     "wonSaleTypeRequired": "Selecione ao menos um tipo de venda para continuar.",
     "errorWonSaleTypeRequired": "É necessário selecionar ao menos um tipo de venda para fechar como ganho.",
-    "errorInvalidFunnelPosition": "Não foi possível validar o funil desta oportunidade. Atualize a página e tente novamente."
+    "errorInvalidFunnelPosition": "Não foi possível validar o funil desta oportunidade. Atualize a página e tente novamente.",
+    "lostLossTypeTitle": "Tipo de Perda",
+    "lostLossTypeLoadingList": "Carregando tipos de perda...",
+    "lostLossTypeEmptyList": "Nenhum tipo de perda ativo disponível. Cadastre ou ative um tipo em Configurações → Tipos de Perda.",
+    "lostLossTypeRequired": "Selecione ao menos um tipo de perda para continuar.",
+    "lostLossTypePlaceholder": "Selecione o(s) motivo(s) da perda...",
+    "errorLostLossTypeRequired": "É necessário selecionar ao menos um tipo de perda para fechar como perdido."
   },
   "reopenOpportunity": {
     "title": "Reabrir Oportunidade",

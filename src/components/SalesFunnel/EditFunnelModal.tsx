@@ -5,12 +5,13 @@
 // =====================================================
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check, ShoppingBag, Tag } from 'lucide-react'
+import { X, Loader2, AlertCircle, Trash2, GripVertical, Plus, Edit2, Save, XCircle, Clipboard, Check, ShoppingBag, Tag, AlertTriangle } from 'lucide-react'
 import type { SalesFunnel, FunnelStage, UpdateFunnelForm } from '../../types/sales-funnel'
 import { validateFunnelName } from '../../types/sales-funnel'
 import { funnelApi } from '../../services/funnelApi'
 import { catalogApi } from '../../services/catalogApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
+import { lossTypesApi } from '../../services/lossTypesApi'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -55,6 +56,11 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
   const [requireWonSaleType, setRequireWonSaleType] = useState<boolean>(funnel.require_won_sale_type ?? false)
   const [savingRequireSaleType, setSavingRequireSaleType] = useState(false)
   const [saleTypeError, setSaleTypeError] = useState<string | undefined>(undefined)
+
+  // ── require_lost_loss_type ──
+  const [requireLostLossType, setRequireLostLossType] = useState<boolean>(funnel.require_lost_loss_type ?? false)
+  const [savingRequireLossType, setSavingRequireLossType] = useState(false)
+  const [lossTypeError, setLossTypeError] = useState<string | undefined>(undefined)
   
   // Estados para gerenciamento de etapas
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
@@ -78,6 +84,8 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       setRequireWonItems(funnel.require_won_items ?? false)
       setRequireWonSaleType(funnel.require_won_sale_type ?? false)
       setSaleTypeError(undefined)
+      setRequireLostLossType(funnel.require_lost_loss_type ?? false)
+      setLossTypeError(undefined)
     }
   }, [isOpen, funnel.id])
 
@@ -133,6 +141,26 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
       }
     } finally {
       setSavingRequireSaleType(false)
+    }
+  }
+
+  const handleToggleRequireLostLossType = async (value: boolean) => {
+    if (!companyId) return
+    setSavingRequireLossType(true)
+    setLossTypeError(undefined)
+    try {
+      await lossTypesApi.setFunnelRequireLostLossType(companyId, funnel.id, value)
+      setRequireLostLossType(value)
+      onUpdate()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar configuração'
+      if (msg.includes('NO_ACTIVE_LOSS_TYPES')) {
+        setLossTypeError('Cadastre ou ative ao menos um tipo de perda antes de habilitar esta opção.')
+      } else {
+        setLossTypeError(msg)
+      }
+    } finally {
+      setSavingRequireLossType(false)
     }
   }
 
@@ -656,6 +684,43 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
                       <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         {saleTypeError}
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              {/* Toggle require_lost_loss_type */}
+              <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <div className="mt-0.5">
+                    {savingRequireLossType
+                      ? <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                      : (
+                        <input
+                          type="checkbox"
+                          checked={requireLostLossType}
+                          onChange={(e) => handleToggleRequireLostLossType(e.target.checked)}
+                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                          disabled={loading || savingRequireLossType}
+                        />
+                      )
+                    }
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Exigir tipo de perda ao fechar como Perdido
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Quando ativado, o vendedor deve selecionar ao menos um tipo de perda antes de fechar a oportunidade como perdida.
+                    </p>
+                    {lossTypeError && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {lossTypeError}
                       </p>
                     )}
                   </div>
