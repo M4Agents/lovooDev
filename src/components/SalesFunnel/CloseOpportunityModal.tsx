@@ -427,7 +427,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const showItemSelector = isWon && requireItems && !hasItems
   const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
   // Seletor de tipos de perda: espelho exato de showSaleTypeSelector
-  const showLossTypeSelector = !isWon && requireLossType && !hasLossTypes
+  const showLossTypeSelector = !isWon
 
   // #region agent log
   if (isOpen) {
@@ -589,8 +589,12 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
 
   const itemSelectorBlocking = showItemSelector && draftItems.length === 0
   const saleTypeSelectorBlocking = showSaleTypeSelector && selectedSaleTypeIds.length === 0
-  // Bloqueio para tipos de perda — espelho de saleTypeSelectorBlocking
-  const lossTypeSelectorBlocking = showLossTypeSelector && selectedLossTypeIds.length === 0
+  // Bloqueio para tipos de perda: só bloqueia se o funil exigir E a oportunidade não tiver tipos já associados E nenhum selecionado agora
+  const lossTypeSelectorBlocking =
+    showLossTypeSelector &&
+    requireLossType &&
+    !hasLossTypes &&
+    selectedLossTypeIds.length === 0
 
   const currentList = addType === 'product' ? products : services
 
@@ -603,7 +607,12 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       setError(t('closeOpportunity.wonSaleTypeRequired'))
       return
     }
-    if (showLossTypeSelector && selectedLossTypeIds.length === 0) {
+    if (
+      showLossTypeSelector &&
+      requireLossType &&
+      !hasLossTypes &&
+      selectedLossTypeIds.length === 0
+    ) {
       setError(t('closeOpportunity.lostLossTypeRequired'))
       return
     }
