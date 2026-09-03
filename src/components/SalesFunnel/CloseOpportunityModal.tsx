@@ -259,6 +259,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
         ? selectedIds.filter(x => x !== id)
         : [...selectedIds, id]
     )
+    setOpen(false) // fecha dropdown após qualquer seleção/deseleção
   }
 
   const CHIPS_VISIBLE = 2
@@ -269,8 +270,8 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-        <span className="text-sm font-medium text-red-900">
+        <Tag className="w-4 h-4 text-gray-500 flex-shrink-0" />
+        <span className="text-sm font-medium text-gray-700">
           {t('closeOpportunity.lostLossTypeTitle')}
         </span>
       </div>
@@ -295,8 +296,10 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
             className={[
               'w-full flex items-center gap-2 min-h-[40px] px-3 py-2 bg-white border rounded-lg text-left transition-colors',
               open
-                ? 'border-red-400 ring-1 ring-red-400'
-                : 'border-gray-300 hover:border-red-300',
+                ? 'border-green-400 ring-1 ring-green-400'
+                : selectedIds.length > 0
+                  ? 'border-green-300 hover:border-green-400'
+                  : 'border-gray-300 hover:border-green-300',
               disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
             ].join(' ')}
           >
@@ -310,7 +313,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                   {visibleChips.map(lt => (
                     <span
                       key={lt.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded-full"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full"
                     >
                       {lt.name}
                       {!disabled && (
@@ -318,7 +321,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                           role="button"
                           aria-label={`Remover ${lt.name}`}
                           onMouseDown={e => { e.stopPropagation(); toggle(lt.id) }}
-                          className="ml-0.5 text-red-500 hover:text-red-700"
+                          className="ml-0.5 text-green-500 hover:text-green-700"
                         >
                           <X className="w-3 h-3" />
                         </span>
@@ -346,11 +349,11 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                     key={lt.id}
                     type="button"
                     onMouseDown={e => { e.preventDefault(); toggle(lt.id) }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-green-50 transition-colors"
                   >
                     <span className={[
                       'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center',
-                      checked ? 'bg-red-600 border-red-600' : 'border-gray-300 bg-white',
+                      checked ? 'bg-green-600 border-green-600' : 'border-gray-300 bg-white',
                     ].join(' ')}>
                       {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                     </span>
