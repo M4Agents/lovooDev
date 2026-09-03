@@ -12,7 +12,8 @@ import { UserModal } from '../components/UserManagement/UserModal';
 import { TemplateManager } from '../components/UserManagement/TemplateManager';
 import { SystemSettings } from '../components/Settings/SystemSettings';
 import { CatalogSettings } from '../components/Settings/CatalogSettings';
-import { SaleTypesSettings } from '../components/Settings/SaleTypesSettings';
+import { SaleTypesSettings } from '../components/Settings/SaleTypesSettings'
+import { LossTypesSettings } from '../components/Settings/LossTypesSettings';
 import { MessageTemplatesPanel } from '../components/Settings/MessageTemplatesPanel';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
@@ -1274,6 +1275,13 @@ export const Settings: React.FC = () => {
             <button onClick={() => setActiveTab('tipos-venda')} className={navItemClass('tipos-venda')}>
               <Tag className="w-4 h-4 shrink-0" />
               {t('tabs.saleTypes')}
+            </button>
+          )}
+
+          {canAccessSystemSettings && (
+            <button onClick={() => setActiveTab('tipos-perda')} className={navItemClass('tipos-perda')}>
+              <Tag className="w-4 h-4 shrink-0 text-red-500" />
+              Tipos de Perda
             </button>
           )}
 
@@ -4125,6 +4133,13 @@ export const Settings: React.FC = () => {
       {activeTab === 'tipos-venda' && canAccessSystemSettings && company?.id && (
         <div className="space-y-6">
           <SaleTypesSettings companyId={company.id} />
+        </div>
+      )}
+
+      {/* Aba Tipos de Perda */}
+      {activeTab === 'tipos-perda' && canAccessSystemSettings && company?.id && (
+        <div className="space-y-6">
+          <LossTypesSettings companyId={company.id} />
         </div>
       )}
 

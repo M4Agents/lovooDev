@@ -31,6 +31,8 @@ export interface SalesFunnel {
   require_won_items: boolean
   /** Quando true, exige ao menos um tipo de venda em opportunity_sale_types antes de fechar como 'won'. */
   require_won_sale_type: boolean
+  /** Quando true, exige ao menos um tipo de perda em opportunity_loss_types antes de fechar como 'lost'. */
+  require_lost_loss_type: boolean
 }
 
 // =====================================================
@@ -62,6 +64,37 @@ export interface OpportunitySaleTypeLink {
   sale_type_id: string
   created_at: string
   sale_types?: SaleType
+}
+
+// =====================================================
+// INTERFACE: LossType
+// Tipo de perda configurável por empresa
+// =====================================================
+
+export interface LossType {
+  id: string
+  company_id: string
+  name: string
+  description?: string | null
+  is_active: boolean
+  sort_order: number
+  /** Quando true: gerenciado pelo sistema — não pode ser editado, desativado ou excluído pelo admin. */
+  is_system: boolean
+  /** Chave canônica estável para idempotência (ex: preco, timing). Null para tipos customizados. */
+  system_key?: string | null
+  /** Quando true: tipo de sistema oculto — não aparece no seletor de fechamento de oportunidades. */
+  is_hidden: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OpportunityLossTypeLink {
+  id: string
+  company_id: string
+  opportunity_id: string
+  loss_type_id: string
+  created_at: string
+  loss_types?: LossType
 }
 
 export interface FunnelStage {
@@ -590,6 +623,8 @@ export interface CloseOpportunityParams {
   items_to_add?: WonItemPayload[]
   /** IDs de sale_types selecionados no modal de fechamento. Persistidos antes do close_opportunity. */
   sale_types_to_add?: string[]
+  /** IDs de loss_types selecionados no modal de fechamento (lost). Persistidos antes do close_opportunity. */
+  loss_types_to_add?: string[]
 }
 
 export interface ReopenOpportunityParams {

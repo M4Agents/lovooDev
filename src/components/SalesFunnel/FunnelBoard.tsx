@@ -33,9 +33,11 @@ import { isStageTransitionQuestionsFeatureEnabled } from '../../hooks/dashboard/
 import { fetchStageConfig, fetchActiveQuestions } from '../../services/stageTransitionQuestionsTransport'
 import { StageTransitionFeatureDisabledError } from '../../services/stageTransitionQuestionsService'
 import type { StageTransitionQuestion, StageTransitionAnswer } from '../../types/stage-transition-questions'
+import { useLossTypeCheck } from '../../hooks/useLossTypeCheck'
 import { useAuth } from '../../contexts/AuthContext'
 import { funnelApi } from '../../services/funnelApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
+import { lossTypesApi } from '../../services/lossTypesApi'
 import { supabase } from '../../lib/supabase'
 import { getCompanyUsers } from '../../services/userApi'
 import type {
@@ -70,6 +72,8 @@ interface FunnelBoardProps {
   /** Quando true, exige produto/serviço ao fechar como ganho. */
   funnelRequireWonItems?: boolean
   funnelRequireWonSaleType?: boolean
+  /** Quando true, exige tipo de perda ao fechar como perdido. */
+  funnelRequireLostLossType?: boolean
   visibleFields?: string[]
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
@@ -92,6 +96,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelName = '',
   funnelRequireWonItems = false,
   funnelRequireWonSaleType = false,
+  funnelRequireLostLossType = false,
   visibleFields,
   onLeadClick,
   searchTerm = '',
@@ -508,6 +513,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     companyId:                companyId ?? '',
     funnelRequireWonSaleType,
     enabled:                  !!wonOpportunityId,
+  })
+
+  // ── Verificação de tipo de perda para lost ──
+  const lostOpportunityId = pendingTransition?.toStageType === 'lost'
+    ? pendingTransition.opportunityId
+    : ''
+  const { requireLossType, hasLossTypes, refetch: refetchLossTypeCheck } = useLossTypeCheck({
+    opportunityId:             lostOpportunityId,
+    companyId:                 companyId ?? '',
+    funnelRequireLostLossType,
+    enabled:                   !!lostOpportunityId,
   })
 
   // #region agent log
@@ -1032,6 +1048,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       refetchSaleTypeCheck()
     }
 
+    // Vincular tipos de perda antes de fechar (require_lost_loss_type)
+    if (params.loss_types_to_add && params.loss_types_to_add.length > 0) {
+      for (const lossTypeId of params.loss_types_to_add) {
+        await lossTypesApi.addOpportunityLossType(
+          params.company_id,
+          params.opportunity_id,
+          lossTypeId,
+        )
+      }
+      refetchLossTypeCheck()
+    }
+
     const { data, error } = await supabase.rpc('close_opportunity', {
       p_opportunity_id:    params.opportunity_id,
       p_funnel_id:         params.funnel_id,
@@ -1335,6 +1363,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           hasItems={hasItems}
           requireSaleType={requireSaleType}
           hasSaleTypes={hasSaleTypes}
+          requireLossType={requireLossType}
+          hasLossTypes={hasLossTypes}
           onConfirm={handleConfirmClose}
           onCancel={handleCancelTransition}
         />

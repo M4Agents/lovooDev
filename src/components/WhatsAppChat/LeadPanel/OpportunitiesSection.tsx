@@ -9,7 +9,9 @@ import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { useWonItemCheck } from '../../../hooks/useWonItemCheck'
 import { useSaleTypeCheck } from '../../../hooks/useSaleTypeCheck'
+import { useLossTypeCheck } from '../../../hooks/useLossTypeCheck'
 import { saleTypesApi } from '../../../services/saleTypesApi'
+import { lossTypesApi } from '../../../services/lossTypesApi'
 import { CreateOpportunityModal } from '../../SalesFunnel/CreateOpportunityModal'
 import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal'
 import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
@@ -184,6 +186,21 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     companyId,
     funnelRequireWonSaleType: wonPendingFunnel?.require_won_sale_type ?? false,
     enabled:                  !!wonPendingOppId,
+  })
+
+  // ── Verificação de tipo de perda para lost (espelho de won) ──
+  const lostPendingOppId = pendingStageTransition?.toStageType === 'lost'
+    ? pendingStageTransition.opportunityId
+    : ''
+  const lostPendingFunnelId = pendingStageTransition?.toStageType === 'lost'
+    ? pendingStageTransition.funnelId
+    : ''
+  const lostPendingFunnel = funnels.find(f => f.id === lostPendingFunnelId)
+  const { requireLossType, hasLossTypes, refetch: refetchLossTypeCheck } = useLossTypeCheck({
+    opportunityId:             lostPendingOppId,
+    companyId,
+    funnelRequireLostLossType: lostPendingFunnel?.require_lost_loss_type ?? false,
+    enabled:                   !!lostPendingOppId,
   })
 
   // Buscar funis e posições das oportunidades
@@ -410,6 +427,18 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           refetchSaleTypeCheck()
         }
 
+        // Vincular tipos de perda antes de fechar (require_lost_loss_type)
+        if (params.loss_types_to_add && params.loss_types_to_add.length > 0) {
+          for (const lossTypeId of params.loss_types_to_add) {
+            await lossTypesApi.addOpportunityLossType(
+              params.company_id,
+              params.opportunity_id,
+              lossTypeId,
+            )
+          }
+          refetchLossTypeCheck()
+        }
+
         const { error } = await supabase.rpc('close_opportunity', {
           p_opportunity_id: params.opportunity_id,
           p_funnel_id: params.funnel_id,
@@ -471,7 +500,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
         setUpdatingPosition(null)
       }
     },
-    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId, refetchWonCheck]
+    [pendingStageTransition, leadId, companyId, phoneNumber, leadName, conversationId, refetchWonCheck, refetchLossTypeCheck]
   )
 
   const handleConfirmReopenOpportunity = useCallback(
@@ -1047,6 +1076,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
             hasItems={wonHasItems}
             requireSaleType={wonRequireSaleType}
             hasSaleTypes={wonHasSaleTypes}
+            requireLossType={requireLossType}
+            hasLossTypes={hasLossTypes}
             onConfirm={handleConfirmCloseOpportunity}
             onCancel={handleCancelStageTransition}
           />
