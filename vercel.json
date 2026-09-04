@@ -57,6 +57,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/automation/process-calendar-triggers",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/automation/process-timeouts",
       "schedule": "* * * * *"
     },
