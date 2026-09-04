@@ -274,22 +274,117 @@ export function StageTransitionModal({
 }
 
 // =====================================================
-// HELPERS (DATETIME.2B)
+// HELPERS (DATETIME.2B → DATETIME.UX1)
 // =====================================================
 
 /**
- * Gera string datetime-local "YYYY-MM-DDTHH:mm" para min attribute
+ * Gera string date "YYYY-MM-DD" para min attribute
  * usando wall clock LOCAL do browser (não UTC)
  */
-function getLocalDatetimeMin(): string {
+function getLocalDateMin(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
-  const hours = String(now.getHours()).padStart(2, '0')
-  const minutes = String(now.getMinutes()).padStart(2, '0')
   
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Separa datetime-local "YYYY-MM-DDTHH:mm" em date e time
+ */
+function splitDatetime(datetimeLocal: string | undefined): { date: string; time: string } {
+  if (!datetimeLocal) return { date: '', time: '' }
+  
+  const [date, time] = datetimeLocal.split('T')
+  return { 
+    date: date || '', 
+    time: time || '' 
+  }
+}
+
+/**
+ * Combina date "YYYY-MM-DD" e time "HH:mm" em datetime-local "YYYY-MM-DDTHH:mm"
+ */
+function combineDatetime(date: string, time: string): string | undefined {
+  // Ambos precisam estar preenchidos para formar datetime válido
+  if (!date || !time) return undefined
+  
+  return `${date}T${time}`
+}
+
+// =====================================================
+// DATETIME FIELD COMPONENT (DATETIME.UX1)
+// =====================================================
+
+interface DatetimeFieldProps {
+  value: string | undefined
+  onChange: (value: string | undefined) => void
+  disabled: boolean
+  question: StageTransitionQuestion
+}
+
+function DatetimeField({ value, onChange, disabled, question }: DatetimeFieldProps) {
+  // Separar datetime-local em date e time para inputs individuais
+  const { date, time } = splitDatetime(value)
+  
+  // Determinar se precisa validar futuro
+  const requiresFuture = question.create_activity_on_answer === true
+  const minDateAttr = requiresFuture ? getLocalDateMin() : undefined
+  
+  const handleDateChange = (newDate: string) => {
+    // Combinar nova data com hora existente (ou vazio)
+    const combined = combineDatetime(newDate, time)
+    onChange(combined)
+  }
+  
+  const handleTimeChange = (newTime: string) => {
+    // Combinar data existente com nova hora (ou vazio)
+    const combined = combineDatetime(date, newTime)
+    onChange(combined)
+  }
+  
+  return (
+    <div>
+      <div className="flex gap-3">
+        {/* CAMPO DATA */}
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Data {question.required && <span className="text-red-600">*</span>}
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => handleDateChange(e.target.value)}
+            disabled={disabled}
+            min={minDateAttr}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
+          />
+        </div>
+        
+        {/* CAMPO HORA */}
+        <div className="w-32">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Hora {question.required && <span className="text-red-600">*</span>}
+          </label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => handleTimeChange(e.target.value)}
+            disabled={disabled}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
+          />
+        </div>
+      </div>
+      
+      {/* HINT */}
+      {requiresFuture && (
+        <p className="mt-2 text-xs text-gray-600">
+          💡 Informe quando a atividade deverá ser agendada. Você pode digitar ou usar os calendários.
+        </p>
+      )}
+    </div>
+  )
 }
 
 // =====================================================
@@ -419,28 +514,13 @@ function QuestionField({ question, value, onChange, error, disabled }: QuestionF
         )
       
       case 'datetime':
-        // Determinar se precisa validar futuro
-        const requiresFuture = question.create_activity_on_answer === true
-        const minAttr = requiresFuture ? getLocalDatetimeMin() : undefined
-        
-        return (
-          <div>
-            <input
-              type="datetime-local"
-              value={value || ''}
-              onChange={(e) => onChange(e.target.value || undefined)}
-              disabled={disabled}
-              min={minAttr}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
-              placeholder={question.required ? 'Obrigatório' : 'Opcional'}
-            />
-            {requiresFuture && (
-              <p className="mt-1 text-xs text-gray-600">
-                Informe quando a atividade deverá ser agendada.
-              </p>
-            )}
-          </div>
-        )
+        // DATETIME.UX1 — Inputs separados para melhor digitação
+        return <DatetimeField 
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          question={question}
+        />
       
       default:
         return (
