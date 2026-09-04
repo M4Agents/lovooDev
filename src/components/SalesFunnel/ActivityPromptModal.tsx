@@ -1,20 +1,21 @@
 // =====================================================
 // COMPONENTE: ActivityPromptModal
-// DATETIME.2C.2
+// DATETIME.2C.2 → DATETIME.2C.4
 // Objetivo: Prompt pós-transição para oferecer criação
 //           de atividade quando existe datetime flagged.
+// 2C.4: Exibir data/hora escolhida em vez do label.
 // =====================================================
 
 interface ActivityPromptModalProps {
   isOpen: boolean
-  questionLabel: string
+  formattedDateTime: string
   onConfirm: () => void
   onCancel: () => void
 }
 
 export const ActivityPromptModal: React.FC<ActivityPromptModalProps> = ({
   isOpen,
-  questionLabel,
+  formattedDateTime,
   onConfirm,
   onCancel
 }) => {
@@ -34,7 +35,7 @@ export const ActivityPromptModal: React.FC<ActivityPromptModalProps> = ({
           Criar atividade?
         </h2>
         <p className="text-gray-600 mb-6">
-          Deseja criar uma atividade no calendário para <span className="font-medium">"{questionLabel}"</span>?
+          Deseja criar uma atividade no calendário para <span className="font-medium">{formattedDateTime}</span>?
         </p>
         <div className="flex gap-3 justify-end">
           <button

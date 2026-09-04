@@ -1161,6 +1161,36 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   }, [showActivityModal, pendingActivity, activityPrefillData])
 
   // =====================================================
+  // DATETIME.2C.4 — FORMATAR DATA/HORA PARA PROMPT PT-BR
+  // =====================================================
+  
+  const formattedPromptDateTime = useMemo(() => {
+    if (!pendingActivity) return ''
+
+    try {
+      // Validar datetime defensivamente
+      const date = new Date(pendingActivity.canonicalDatetime)
+      if (isNaN(date.getTime())) {
+        console.warn('[DATETIME.2C.4] Datetime inválido para prompt — usando fallback')
+        return 'data/hora indisponível'
+      }
+
+      // Converter para wall clock LOCAL do browser (consistente com prefill)
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year = date.getFullYear()
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+
+      // Formato pt-BR: DD/MM/YYYY às HH:mm
+      return `${day}/${month}/${year} às ${hours}:${minutes}`
+    } catch (err) {
+      console.warn('[DATETIME.2C.4] Erro ao formatar datetime para prompt:', err)
+      return 'data/hora indisponível'
+    }
+  }, [pendingActivity])
+
+  // =====================================================
   // CONFIRM CLOSE — chama RPC close_opportunity
   // =====================================================
 
@@ -1494,11 +1524,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         />
       )}
 
-      {/* DATETIME.2C.2 — Prompt para criar atividade pós-transição */}
+      {/* DATETIME.2C.2 → DATETIME.2C.4 — Prompt para criar atividade pós-transição */}
       {pendingActivity && !showActivityModal && (
         <ActivityPromptModal
           isOpen={true}
-          questionLabel={pendingActivity.questionLabel}
+          formattedDateTime={formattedPromptDateTime}
           onConfirm={handleConfirmActivityPrompt}
           onCancel={handleCancelActivityPrompt}
         />
