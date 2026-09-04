@@ -249,8 +249,80 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       }
 
       if (activity) {
-        // Atualizar
-        await calendarApi.updateActivity(activity.id, dataToSave)
+        // ── Detectar mudança real de data/hora (comparação UTC vs UTC) ──────
+        // activity.scheduled_date e activity.scheduled_time estão em UTC (como armazenados)
+        // utcDate e utcTime são os novos valores convertidos para UTC
+        const scheduleChanged =
+          utcDate !== activity.scheduled_date ||
+          utcTime.substring(0, 5) !== activity.scheduled_time.substring(0, 5)
+
+        // ── Separar campos de agenda dos demais ──────────────────────────────
+        // scheduled_date e scheduled_time foram removidos do PATCH whitelist:
+        // qualquer mudança de agenda passa obrigatoriamente pelo /reschedule.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { scheduled_date: _sd, scheduled_time: _st, ...nonScheduleData } = dataToSave
+
+        // ── Detectar se há mudanças reais em campos não relacionados à agenda ─
+        // Evita chamada desnecessária ao PATCH quando somente data/hora mudaram.
+        // Comparação simples por igualdade estrita nos campos da whitelist do PATCH.
+        // Falso positivo (null vs '') é aceitável e inofensivo.
+        const EDITABLE_FIELDS = [
+          'title', 'description', 'activity_type', 'duration_minutes',
+          'reminder_minutes', 'priority', 'visibility', 'assigned_to', 'sync_to_google',
+        ] as const
+        const hasNonScheduleChanges = EDITABLE_FIELDS.some(field => {
+          const newVal = (nonScheduleData as Record<string, unknown>)[field]
+          const oldVal = (activity as Record<string, unknown>)[field]
+          return newVal !== oldVal
+        })
+
+        // ── Ordem correta das chamadas ────────────────────────────────────────
+        // REGRA: quando scheduleChanged=true, o PATCH deve ocorrer ANTES do reschedule.
+        // Motivo: rescheduleActivity() dispara o único Google Calendar sync (fire-and-forget)
+        // APÓS o await do backend. Para que o Google receba o estado COMPLETO (nova data/hora
+        // E novos campos normais), todos os campos não-agenda devem estar no banco antes de
+        // o sync ser disparado.
+        //
+        // Cenário A — apenas título/prioridade/etc.:
+        //   updateActivity() com Google sync normal
+        //
+        // Cenário B — apenas data/hora:
+        //   rescheduleActivity() com Google sync
+        //
+        // Cenário C — data/hora + título/prioridade/etc.:
+        //   1. updateActivity() → skipGoogleSync:true (salva campos normais, sem sync)
+        //   2. rescheduleActivity() → await backend → fire-and-forget Google sync
+        //      (neste ponto o banco já tem os campos normais novos + nova agenda)
+        //
+        // ── Risco de atomicidade (a documentar para avaliação futura) ────────
+        // As duas chamadas (PATCH + reschedule) NÃO são transacionais.
+        // Em Cenário C: se o PATCH suceder mas o reschedule falhar, o banco
+        // terá novos campos normais mas agenda antiga. O usuário recebe erro e
+        // pode repetir a operação (reagendamento idempotente).
+        // Solução futura: RPC unificada no banco. Não implementar sem aprovação.
+
+        if (hasNonScheduleChanges) {
+          // PATCH primeiro — sem Google sync para evitar sincronização prematura
+          await calendarApi.updateActivity(
+            activity.id,
+            nonScheduleData,
+            company.id,
+            { skipGoogleSync: scheduleChanged }
+          )
+        }
+
+        if (scheduleChanged) {
+          // Reschedule por último — dispara o ÚNICO Google sync com estado final completo
+          // (neste ponto o banco já tem campos normais atualizados, se houver)
+          await calendarApi.rescheduleActivity(
+            activity.id,
+            company.id,
+            utcDate,
+            utcTime
+          )
+        }
+
+        // Se nenhuma mudança detectada: prossegue normalmente para onSave() fechar o modal
       } else {
         // Criar
         await calendarApi.createActivity(company.id, user.id, dataToSave)
@@ -298,6 +370,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       await calendarApi.completeActivity(
         activity.id,
         user.id,
+        company.id,  // 3º parâmetro obrigatório — validação multi-tenant no backend
         completionNotes ? { completion_notes: completionNotes } : undefined
       )
       setShowCompletionModal(false)

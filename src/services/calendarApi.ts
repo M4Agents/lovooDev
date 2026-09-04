@@ -1,6 +1,21 @@
 // =====================================================
 // API DE CALENDÁRIO
 // =====================================================
+//
+// Fase 1B: operações de escrita (CUD) agora passam pelos endpoints
+// REST seguros criados na Fase 1A, preservando exatamente o comportamento
+// atual incluindo sincronização com Google Calendar.
+//
+// Endpoints utilizados:
+//   POST  /api/activities/create
+//   PATCH /api/activities/[id]
+//   POST  /api/activities/[id]/complete
+//   POST  /api/activities/[id]/cancel
+//   POST  /api/activities/[id]/reschedule
+//
+// deleteActivity: mantido como DELETE físico via Supabase direto.
+// Operações de leitura: mantidas com Supabase direto (sem mudança).
+// =====================================================
 
 import { supabase } from '../lib/supabase'
 import type {
@@ -18,12 +33,63 @@ import type {
 } from '../types/calendar'
 
 export class CalendarApi {
+
+  // =====================================================
+  // HELPERS DE AUTENTICAÇÃO (privados)
+  // =====================================================
+
+  /**
+   * Obtém o token JWT da sessão atual.
+   * Utilizado para autenticar chamadas aos endpoints REST backend.
+   */
+  private static async getAuthToken(): Promise<string> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      throw new Error('Sessão inválida ou expirada')
+    }
+    return session.access_token
+  }
+
+  /**
+   * Realiza chamada autenticada a um endpoint REST backend.
+   * Injeta Authorization: Bearer <token> em todos os requests — este é o
+   * comportamento correto e esperado. O service_role nunca é exposto ao frontend.
+   * Lança erro com mensagem do backend em caso de falha.
+   */
+  private static async callApi<T = unknown>(
+    path: string,
+    method: 'POST' | 'PATCH',
+    body: Record<string, unknown>,
+  ): Promise<T> {
+    const token = await this.getAuthToken()
+    const response = await fetch(path, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    })
+
+    const json = await response.json()
+
+    if (!response.ok || json.success === false) {
+      throw new Error(json.error ?? `Erro ${response.status}`)
+    }
+
+    return json.data as T
+  }
   // =====================================================
   // ATIVIDADES
   // =====================================================
 
   /**
    * Criar nova atividade
+   *
+   * Fase 1B: chamada via POST /api/activities/create (backend seguro).
+   * O userId é mantido na assinatura por compatibilidade, mas o backend
+   * deriva o owner_user_id/created_by do JWT — nunca do body.
+   * Google Calendar sync preservado: disparado fire-and-forget quando sync_to_google = true.
    */
   static async createActivity(
     companyId: string,
@@ -31,34 +97,23 @@ export class CalendarApi {
     data: CreateActivityForm
   ): Promise<LeadActivity> {
     try {
-      // Filtrar campos undefined para evitar erro de tipo no banco
+      // Filtrar campos undefined para evitar envio de nulls desnecessários
       const cleanData = Object.fromEntries(
         Object.entries(data).filter(([_, value]) => value !== undefined)
-      );
+      )
 
-      const { data: result, error } = await supabase
-        .from('lead_activities')
-        .insert({
-          company_id: companyId,
-          owner_user_id: userId,
-          created_by: userId,
-          ...cleanData
-        })
-        .select(`
-          *,
-          lead:leads(id, name, phone, email, company_name)
-        `)
-        .single()
+      const result = await this.callApi('/api/activities/create', 'POST', {
+        company_id: companyId,
+        ...cleanData,
+      })
 
-      if (error) throw error
-      
       const activity = this.mapActivity(result)
 
-      // Sincronizar com Google Calendar se solicitado
+      // Sincronizar com Google Calendar se solicitado (fire-and-forget)
+      // Fase 1B: verifica data.sync_to_google (input) — mesmo comportamento anterior
       if (data.sync_to_google) {
         this.syncToGoogleCalendar(activity.id).catch(err => {
           console.error('Erro ao sincronizar com Google Calendar:', err)
-          // Não falhar a criação da atividade se sincronização falhar
         })
       }
 
@@ -207,50 +262,53 @@ export class CalendarApi {
   }
 
   /**
-   * Atualizar atividade
+   * Atualizar atividade (campos não relacionados ao agendamento)
+   *
+   * Fase 1B: chamada via PATCH /api/activities/[id] (backend seguro).
+   * Campos permitidos: title, description, activity_type, duration_minutes,
+   *   reminder_minutes, priority, visibility, assigned_to, sync_to_google
+   *
+   * IMPORTANTE — scheduled_date e scheduled_time NÃO são aceitos por este endpoint.
+   * Para alterar data/hora, use rescheduleActivity() que reseta status + notification_sent.
+   *
+   * @param skipGoogleSync - quando true, suprime a chamada ao Google Calendar sync.
+   *   Use quando rescheduleActivity() já tiver sido chamado no mesmo save, para
+   *   evitar dupla sincronização.
    */
   static async updateActivity(
     activityId: string,
-    data: UpdateActivityForm
+    data: UpdateActivityForm,
+    companyId: string,
+    options?: { skipGoogleSync?: boolean }
   ): Promise<LeadActivity> {
     try {
-      // Filtrar campos undefined para evitar erro de tipo no banco
+      // Filtrar campos undefined antes de enviar
       const cleanData = Object.fromEntries(
         Object.entries(data).filter(([_, value]) => value !== undefined)
-      );
+      )
 
-      const { data: result, error } = await supabase
-        .from('lead_activities')
-        .update({
-          ...cleanData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', activityId)
-        .select(`
-          *,
-          lead:leads(id, name, phone, email, company_name)
-        `)
-        .single()
+      const result = await this.callApi(`/api/activities/${activityId}`, 'PATCH', {
+        company_id: companyId,
+        ...cleanData,
+      })
 
-      if (error) throw error
-      
       const activity = this.mapActivity(result)
 
       console.log('🔄 Atividade atualizada:', {
         id: activity.id,
         google_event_id: activity.google_event_id,
         sync_to_google: activity.sync_to_google,
-        title: activity.title
+        title: activity.title,
       })
 
-      // Sincronizar com Google Calendar se a atividade estiver sincronizada
-      if (activity.google_event_id) {
+      // Sincronizar com Google Calendar (fire-and-forget)
+      // skipGoogleSync=true quando rescheduleActivity() já foi chamado no mesmo save
+      if (activity.google_event_id && !options?.skipGoogleSync) {
         console.log('📅 Sincronizando atualização com Google Calendar...')
         this.updateGoogleCalendarEvent(activityId).catch(err => {
           console.error('❌ Erro ao atualizar evento no Google Calendar:', err)
-          // Não falhar a atualização da atividade se sincronização falhar
         })
-      } else {
+      } else if (!activity.google_event_id) {
         console.log('⚠️ Atividade não tem google_event_id, sincronização ignorada')
       }
 
@@ -295,46 +353,25 @@ export class CalendarApi {
 
   /**
    * Marcar atividade como concluída
+   *
+   * Fase 1B: chamada via POST /api/activities/[id]/complete (backend seguro).
+   * companyId é OBRIGATÓRIO (3º parâmetro) — verificado em compile time.
+   * userId mantido na assinatura (2º parâmetro) por compatibilidade com chamadas
+   * existentes; o backend deriva completed_by do JWT, não do body.
+   * Notificações: marcadas como 'read' pelo backend (preservado).
+   * Google Calendar: nenhum sync nesta operação (comportamento anterior mantido).
    */
   static async completeActivity(
     activityId: string,
     userId: string,
-    data?: CompleteActivityForm
+    companyId: string,
+    data?: CompleteActivityForm,
   ): Promise<LeadActivity> {
     try {
-      const { data: result, error } = await supabase
-        .from('lead_activities')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          completed_by: userId,
-          completion_notes: data?.completion_notes,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', activityId)
-        .select(`
-          *,
-          lead:leads(id, name, phone, email, company_name)
-        `)
-        .single()
-
-      if (error) throw error
-
-      // Marcar notificações relacionadas como lidas
-      const { error: notificationError } = await supabase
-        .from('activity_notifications')
-        .update({
-          status: 'read',
-          read_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('activity_id', activityId)
-        .in('status', ['pending', 'sent'])
-
-      if (notificationError) {
-        console.error('Error updating notifications:', notificationError)
-        // Não falhar a conclusão da atividade por erro nas notificações
-      }
+      const result = await this.callApi(`/api/activities/${activityId}/complete`, 'POST', {
+        company_id: companyId,
+        completion_notes: data?.completion_notes,
+      })
 
       return this.mapActivity(result)
     } catch (error) {
@@ -345,18 +382,17 @@ export class CalendarApi {
 
   /**
    * Cancelar atividade
+   *
+   * Fase 1B: chamada via POST /api/activities/[id]/cancel (backend seguro).
+   * Parâmetro companyId adicionado — obrigatório para o endpoint backend.
+   * ATENÇÃO: cancelar ≠ excluir. Este método altera status para 'cancelled'.
+   * Para exclusão física, usar deleteActivity().
    */
-  static async cancelActivity(activityId: string): Promise<void> {
+  static async cancelActivity(activityId: string, companyId: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('lead_activities')
-        .update({
-          status: 'cancelled',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', activityId)
-
-      if (error) throw error
+      await this.callApi(`/api/activities/${activityId}/cancel`, 'POST', {
+        company_id: companyId,
+      })
     } catch (error) {
       console.error('Error cancelling activity:', error)
       throw error
@@ -364,7 +400,62 @@ export class CalendarApi {
   }
 
   /**
-   * Deletar atividade
+   * Reagendar atividade
+   *
+   * Fase 1B: novo método via POST /api/activities/[id]/reschedule (backend seguro).
+   * Reseta status para 'pending' e notification_sent para false (decisão D1).
+   * Google Calendar sync: disparado fire-and-forget se google_event_id presente.
+   *
+   * Use este método quando a intenção semântica for "reagendar" (não apenas editar).
+   * Para edição genérica de data/hora, usar updateActivity.
+   */
+  static async rescheduleActivity(
+    activityId: string,
+    companyId: string,
+    scheduledDate: string,
+    scheduledTime: string
+  ): Promise<LeadActivity> {
+    try {
+      const result = await this.callApi(`/api/activities/${activityId}/reschedule`, 'POST', {
+        company_id: companyId,
+        scheduled_date: scheduledDate,
+        scheduled_time: scheduledTime,
+      })
+
+      const activity = this.mapActivity(result)
+
+      // Sincronizar com Google Calendar se a atividade estiver sincronizada (fire-and-forget)
+      if (activity.google_event_id) {
+        console.log('📅 Sincronizando reagendamento com Google Calendar...')
+        this.updateGoogleCalendarEvent(activityId).catch(err => {
+          console.error('❌ Erro ao atualizar evento no Google Calendar (reschedule):', err)
+        })
+      }
+
+      return activity
+    } catch (error) {
+      console.error('Error rescheduling activity:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Deletar atividade (exclusão física permanente)
+   *
+   * Fase 1B: MANTIDO como DELETE físico via Supabase direto (frontend → Supabase via RLS).
+   *
+   * DISTINÇÃO SEMÂNTICA OBRIGATÓRIA:
+   *   - deleteActivity() → DELETE físico, linha removida do banco permanentemente.
+   *   - cancelActivity() → UPDATE status='cancelled', linha permanece no banco.
+   *   - Estes dois comportamentos são DISTINTOS e nunca devem ser unificados.
+   *
+   * IMPORTANTE — triggers de automação:
+   *   - calendar.activity_cancelled representa APENAS cancelamento lógico (cancelActivity).
+   *   - deleteActivity NÃO dispara calendar.activity_cancelled nem qualquer trigger.
+   *   - A exclusão física via frontend→Supabase é uma operação fora do pipeline de eventos.
+   *   - Esta operação permanecerá assim até aprovação explícita de migração para backend.
+   *
+   * Google Calendar cleanup: executado ANTES da exclusão do banco (comportamento preservado).
    */
   static async deleteActivity(activityId: string): Promise<void> {
     try {
