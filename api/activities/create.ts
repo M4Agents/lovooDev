@@ -38,6 +38,7 @@ const VALID_VISIBILITY     = ['private', 'shared', 'public'] as const
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const TIME_REGEX = /^\d{2}:\d{2}(:\d{2})?$/
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -157,6 +158,7 @@ export default async function handler(req: any, res: any) {
 
   // ── Montar payload do INSERT ──────────────────────────────────────────────
   // NOTA: scheduled_datetime é GENERATED ALWAYS — não deve ser incluído
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const insertPayload: Record<string, any> = {
     company_id:    companyId,     // sempre o validado, nunca o do body diretamente
     lead_id:       Number(lead_id),

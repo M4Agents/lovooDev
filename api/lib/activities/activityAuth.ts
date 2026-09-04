@@ -15,7 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractToken, getUserFromToken, assertMembership } from '../dashboard/auth.js'
-// @ts-ignore — módulo ESM JS sem types
+// @ts-expect-error — módulo ESM JS sem declarações de tipos
 import { getSupabaseAdmin } from '../automation/supabaseAdmin.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -57,6 +57,7 @@ export type AuthResult =
 // ---------------------------------------------------------------------------
 
 export async function validateCaller(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   req: any,
   companyId: unknown,
 ): Promise<AuthResult> {
@@ -77,6 +78,7 @@ export async function validateCaller(
   let supabase: SupabaseClient
   try {
     supabase = getSupabaseAdmin()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error('[activityAuth] getSupabaseAdmin falhou:', err?.message)
     return { ok: false, status: 500, error: 'Configuração interna inválida' }
@@ -112,6 +114,7 @@ export async function fetchOwnedActivity(
   activityId: string,
   companyId: string,
   supabase: SupabaseClient,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Record<string, any> | null> {
   if (!isUUID(activityId)) return null
 

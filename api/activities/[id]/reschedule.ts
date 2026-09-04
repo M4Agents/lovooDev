@@ -43,6 +43,7 @@ import { dispatchCalendarTrigger } from '../../lib/automation/dispatchCalendarTr
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const TIME_REGEX = /^\d{2}:\d{2}(:\d{2})?$/
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')

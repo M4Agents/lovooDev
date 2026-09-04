@@ -24,6 +24,7 @@ import {
 } from '../../lib/activities/activityAuth.js'
 import { dispatchCalendarTrigger } from '../../lib/automation/dispatchCalendarTrigger.js'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -67,6 +68,7 @@ export default async function handler(req: any, res: any) {
   const now = new Date().toISOString()
 
   // ── UPDATE: marcar como concluída ─────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updatePayload: Record<string, any> = {
     status:       'completed',
     completed_at: now,

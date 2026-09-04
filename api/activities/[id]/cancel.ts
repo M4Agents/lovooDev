@@ -25,6 +25,7 @@ import {
 } from '../../lib/activities/activityAuth.js'
 import { dispatchCalendarTrigger } from '../../lib/automation/dispatchCalendarTrigger.js'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
