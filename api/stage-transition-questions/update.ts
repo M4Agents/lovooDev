@@ -194,7 +194,8 @@ export default async function handler(req: any, res: any): Promise<void> {
           return
         }
 
-        const trimmed = body.options
+        const trimmed = (body.options as unknown[])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .map((opt: any) => typeof opt === 'string' ? opt.trim() : '')
           .filter((opt: string) => opt.length > 0)
 

@@ -303,16 +303,6 @@ function splitDatetime(datetimeLocal: string | undefined): { date: string; time:
   }
 }
 
-/**
- * Combina date "YYYY-MM-DD" e time "HH:mm" em datetime-local "YYYY-MM-DDTHH:mm"
- */
-function combineDatetime(date: string, time: string): string | undefined {
-  // Ambos precisam estar preenchidos para formar datetime válido
-  if (!date || !time) return undefined
-  
-  return `${date}T${time}`
-}
-
 // =====================================================
 // DATETIME FIELD COMPONENT (DATETIME.UX1)
 // =====================================================
