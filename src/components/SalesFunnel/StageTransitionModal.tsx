@@ -325,23 +325,43 @@ interface DatetimeFieldProps {
 }
 
 function DatetimeField({ value, onChange, disabled, question }: DatetimeFieldProps) {
-  // Separar datetime-local em date e time para inputs individuais
-  const { date, time } = splitDatetime(value)
+  // Estado local para manter valores parciais (data sem hora, ou hora sem data)
+  const [localDate, setLocalDate] = useState('')
+  const [localTime, setLocalTime] = useState('')
+  
+  // Sincronizar com value externo quando mudar
+  useEffect(() => {
+    const { date, time } = splitDatetime(value)
+    setLocalDate(date)
+    setLocalTime(time)
+  }, [value])
   
   // Determinar se precisa validar futuro
   const requiresFuture = question.create_activity_on_answer === true
   const minDateAttr = requiresFuture ? getLocalDateMin() : undefined
   
   const handleDateChange = (newDate: string) => {
-    // Combinar nova data com hora existente (ou vazio)
-    const combined = combineDatetime(newDate, time)
-    onChange(combined)
+    setLocalDate(newDate)
+    // Só propaga se ambos estiverem preenchidos
+    if (newDate && localTime) {
+      onChange(`${newDate}T${localTime}`)
+    } else if (!newDate && !localTime) {
+      // Se ambos vazios, limpa
+      onChange(undefined)
+    }
+    // Se apenas um preenchido, não propaga (mantém estado parcial)
   }
   
   const handleTimeChange = (newTime: string) => {
-    // Combinar data existente com nova hora (ou vazio)
-    const combined = combineDatetime(date, newTime)
-    onChange(combined)
+    setLocalTime(newTime)
+    // Só propaga se ambos estiverem preenchidos
+    if (localDate && newTime) {
+      onChange(`${localDate}T${newTime}`)
+    } else if (!localDate && !newTime) {
+      // Se ambos vazios, limpa
+      onChange(undefined)
+    }
+    // Se apenas um preenchido, não propaga (mantém estado parcial)
   }
   
   return (
@@ -354,7 +374,7 @@ function DatetimeField({ value, onChange, disabled, question }: DatetimeFieldPro
           </label>
           <input
             type="date"
-            value={date}
+            value={localDate}
             onChange={(e) => handleDateChange(e.target.value)}
             disabled={disabled}
             min={minDateAttr}
@@ -369,9 +389,10 @@ function DatetimeField({ value, onChange, disabled, question }: DatetimeFieldPro
           </label>
           <input
             type="time"
-            value={time}
+            value={localTime}
             onChange={(e) => handleTimeChange(e.target.value)}
             disabled={disabled}
+            step="60"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
           />
         </div>
