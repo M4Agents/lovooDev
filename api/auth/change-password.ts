@@ -7,7 +7,7 @@
 // =====================================================
 
 import { createClient } from '@supabase/supabase-js';
-import { assertMembership, getUserFromToken, extractToken } from '../lib/dashboard/auth';
+import { assertMembership, getUserFromToken, extractToken } from '../lib/dashboard/auth.js';
 
 const supabaseUrl = 'https://etzdsywunlpbgxkphuil.supabase.co';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
