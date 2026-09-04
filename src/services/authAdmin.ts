@@ -151,6 +151,14 @@ export const updateDisplayName = async (
       body: JSON.stringify({ targetUserId, displayName, companyId })
     });
 
+    // #region agent log [HypA/B/C] — capture raw response before JSON parse
+    if (!response.ok) {
+      const clone = response.clone();
+      const rawText = await clone.text();
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b4cee'},body:JSON.stringify({sessionId:'0b4cee',location:'authAdmin.ts:updateDisplayName',message:'update-display-name API error response',data:{status:response.status,rawBody:rawText.substring(0,300)},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
+
     const result = await response.json();
     if (!response.ok || result.error) {
       return { success: false, error: result.error || 'Erro ao atualizar nome' };
