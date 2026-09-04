@@ -323,6 +323,16 @@ export type TriggerType =
   | 'nuvemshop.order_fulfilled'
   | 'nuvemshop.order_packed'
   | 'nuvemshop.order_delivered'
+  // Calendário — Fase 2 (event-based, criação)
+  | 'calendar.activity_created'
+  // Calendário — Fase 3 (state-transition events)
+  | 'calendar.activity_completed'
+  | 'calendar.activity_cancelled'
+  | 'calendar.activity_rescheduled'
+  | 'calendar.activity_assigned'
+  // Calendário — Fase 4 (temporal/cron)
+  | 'calendar.activity_due_soon'
+  | 'calendar.activity_overdue'
 
 export type ComparisonType = 
   | 'contains'

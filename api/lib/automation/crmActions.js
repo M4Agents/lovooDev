@@ -1137,6 +1137,12 @@ export async function executeCrmAction(node, context, supabase) {
       case 'change_opportunity_funnel':
         return await changeFunnel(config, context, supabase)
 
+      // Ações de calendário — delegadas para calendarActions.js (Fase 2+)
+      case 'send_user_activity_notification': {
+        const { handleCalendarAction } = await import('./calendarActions.js')
+        return await handleCalendarAction(node, context, supabase)
+      }
+
       default:
         console.log(`[crmActions] ação não suportada nesta etapa: ${actionType} — skipped`)
         return { skipped: true, reason: `ação CRM não suportada nesta etapa: ${actionType}` }

@@ -913,6 +913,30 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                 {config.actionType === 'send_notification' && <NotificationForm config={config} setConfig={setConfig} users={users} />}
                 {config.actionType === 'trigger_automation' && <TriggerAutomationForm config={config} setConfig={setConfig} flows={flows} currentFlowId={flowId} />}
 
+                {/* NOTIFICAR RESPONSÁVEL DA ATIVIDADE */}
+                {config.actionType === 'send_user_activity_notification' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Destinatário
+                      </label>
+                      <select
+                        value={config.recipient_type || 'assigned_to'}
+                        onChange={(e) => setConfig({ ...config, recipient_type: e.target.value })}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        <option value="assigned_to">Responsável da atividade</option>
+                      </select>
+                    </div>
+                    <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
+                      <strong>Como funciona:</strong> envia uma notificação interna ao responsável da atividade quando a automação for executada. A notificação aparecerá no sino de alertas do sistema.
+                    </div>
+                    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-2">
+                      Se a atividade não tiver responsável atribuído, a notificação será ignorada.
+                    </div>
+                  </div>
+                )}
+
                 {/* Ativar Agente de IA */}
                 {config.actionType === 'attach_agent' && (
                   <div className="space-y-3">
@@ -983,7 +1007,7 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                 )}
 
                 {/* DESCRIÇÃO GENÉRICA para outras ações */}
-                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent', 'update_opportunity', 'change_opportunity_funnel'].includes(config.actionType) && (
+                {!['add_tag', 'remove_tag', 'assign_owner', 'move_opportunity', 'win_opportunity', 'lose_opportunity', 'create_opportunity', 'update_lead', 'set_custom_field', 'send_webhook', 'create_activity', 'update_activity', 'complete_activity', 'cancel_activity', 'reschedule_activity', 'send_notification', 'trigger_automation', 'attach_agent', 'detach_agent', 'update_opportunity', 'change_opportunity_funnel', 'send_user_activity_notification'].includes(config.actionType) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Descrição

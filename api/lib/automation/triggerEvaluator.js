@@ -39,6 +39,20 @@ function matchesTriggerConditions(flow, event) {
       case 'nuvemshop.order_fulfilled':
       case 'nuvemshop.order_packed':
       case 'nuvemshop.order_delivered':   return true // sem filtros na v1
+      // Calendário — Fase 2 (event-based, endpoint-driven)
+      // matchesCalendarActivity é reutilizável para todos os calendar.*
+      case 'calendar.activity_created':    return matchesCalendarActivity(trigger, event.data)
+      // Calendário — Fase 3 (state-transition events)
+      case 'calendar.activity_completed':
+      case 'calendar.activity_cancelled':
+      case 'calendar.activity_rescheduled':
+      case 'calendar.activity_assigned':   return matchesCalendarActivity(trigger, event.data)
+      // Calendário — Fase 4 (temporal/cron — due_soon e overdue)
+      // Para eventos originados pelo cron, a elegibilidade temporal já foi verificada
+      // antes de chegar aqui. matchesCalendarActivity aplica apenas os filtros
+      // de activity_type e priority configurados no trigger.
+      case 'calendar.activity_due_soon':
+      case 'calendar.activity_overdue':    return matchesCalendarActivity(trigger, event.data)
       default: return true
     }
   })
@@ -228,6 +242,43 @@ function matchesMessageReceived(trigger, eventData) {
   return true
 }
 
+// ---------------------------------------------------------------------------
+// calendar.activity_* — filtros por activity_type, priority e assigned_to
+//
+// Reutilizável para todos os triggers calendar.* (Fases 2–4+).
+// Regra: campo não configurado → não restringe.
+//        campo configurado     → atividade precisa corresponder.
+//
+// Aceita valor único (string) ou array de valores permitidos.
+// ---------------------------------------------------------------------------
+function matchesCalendarActivity(trigger, eventData) {
+  const config   = trigger.config || {}
+  const activity = eventData?.activity || {}
+
+  // ── Filtro por activity_type ─────────────────────────────────────────────
+  if (config.activity_type !== undefined && config.activity_type !== null && config.activity_type !== '') {
+    const allowedTypes = Array.isArray(config.activity_type)
+      ? config.activity_type
+      : [config.activity_type]
+    if (allowedTypes.length > 0 && !allowedTypes.includes(activity.activity_type)) return false
+  }
+
+  // ── Filtro por priority ──────────────────────────────────────────────────
+  if (config.priority !== undefined && config.priority !== null && config.priority !== '') {
+    const allowedPriorities = Array.isArray(config.priority)
+      ? config.priority
+      : [config.priority]
+    if (allowedPriorities.length > 0 && !allowedPriorities.includes(activity.priority)) return false
+  }
+
+  // ── Filtro por assigned_to (UUID exato) ──────────────────────────────────
+  if (config.assigned_to !== undefined && config.assigned_to !== null && config.assigned_to !== '') {
+    if (config.assigned_to !== activity.assigned_to) return false
+  }
+
+  return true
+}
+
 // nuvemshop.checkout_abandoned — filtro opcional por valor mínimo do carrinho
 function matchesNuvemshopCheckoutAbandoned(trigger, eventData) {
   const config = trigger.config || {}
@@ -247,6 +298,7 @@ export {
   matchesTag,
   matchesMessageReceived,
   matchesNuvemshopCheckoutAbandoned,
+  matchesCalendarActivity,
   normalizeText,
   extractInlineFlags,
 }

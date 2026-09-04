@@ -5,7 +5,7 @@
 // =====================================================
 
 import { useState } from 'react'
-import { X, UserPlus, MessageCircle, TrendingUp, Tag, Clock, RefreshCw, UserCheck, UserMinus, RotateCcw, ChevronRight, ShoppingCart, Package, Truck, XCircle, DollarSign } from 'lucide-react'
+import { X, UserPlus, MessageCircle, TrendingUp, Tag, Clock, RefreshCw, UserCheck, UserMinus, RotateCcw, ChevronRight, ShoppingCart, Package, Truck, XCircle, DollarSign, CalendarPlus, CalendarCheck, CalendarX, CalendarClock, AlarmClock, AlarmClockOff } from 'lucide-react'
 import type { TriggerConfig } from '../../types/automation'
 import { useCompanyIntegration } from '../../hooks/useCompanyIntegration'
 
@@ -139,6 +139,62 @@ const BASE_TRIGGER_CATEGORIES: TriggerCategory[] = [
         icon: Tag,
         color: 'yellow'
       }
+    ]
+  },
+  {
+    id: 'calendar',
+    title: 'Calendário',
+    icon: '📅',
+    triggers: [
+      {
+        type: 'calendar.activity_created',
+        label: 'Atividade Criada',
+        description: 'Dispara quando uma nova atividade de calendário é criada',
+        icon: CalendarPlus,
+        color: 'blue',
+      },
+      {
+        type: 'calendar.activity_completed',
+        label: 'Atividade Concluída',
+        description: 'Dispara quando uma atividade é marcada como concluída',
+        icon: CalendarCheck,
+        color: 'green',
+      },
+      {
+        type: 'calendar.activity_cancelled',
+        label: 'Atividade Cancelada',
+        description: 'Dispara quando uma atividade é cancelada (não confundir com exclusão)',
+        icon: CalendarX,
+        color: 'red',
+      },
+      {
+        type: 'calendar.activity_rescheduled',
+        label: 'Atividade Reagendada',
+        description: 'Dispara quando a data ou hora de uma atividade é alterada',
+        icon: CalendarClock,
+        color: 'orange',
+      },
+      {
+        type: 'calendar.activity_assigned',
+        label: 'Responsável Alterado',
+        description: 'Dispara quando o responsável de uma atividade é atribuído ou alterado',
+        icon: UserCheck,
+        color: 'purple',
+      },
+      {
+        type: 'calendar.activity_due_soon',
+        label: 'Atividade Próxima do Horário',
+        description: 'Dispara quando uma atividade está prestes a ocorrer (X minutos antes do horário agendado)',
+        icon: AlarmClock,
+        color: 'yellow',
+      },
+      {
+        type: 'calendar.activity_overdue',
+        label: 'Atividade Vencida',
+        description: 'Dispara quando uma atividade passa do horário agendado sem ser concluída (X minutos após)',
+        icon: AlarmClockOff,
+        color: 'red',
+      },
     ]
   },
   {

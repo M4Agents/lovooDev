@@ -193,6 +193,14 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     { value: 'nuvemshop.order_fulfilled',    label: '🚚 NS: Pedido Enviado' },
     { value: 'nuvemshop.order_packed',       label: '📫 NS: Pedido Embalado' },
     { value: 'nuvemshop.order_delivered',    label: '✅ NS: Pedido Entregue' },
+    // Calendário — Fase 2+
+    { value: 'calendar.activity_created',    label: '📅 Atividade Criada' },
+    { value: 'calendar.activity_completed',  label: '✅ Atividade Concluída' },
+    { value: 'calendar.activity_cancelled',  label: '❌ Atividade Cancelada' },
+    { value: 'calendar.activity_rescheduled', label: '🕐 Atividade Reagendada' },
+    { value: 'calendar.activity_assigned',   label: '👤 Responsável Alterado' },
+    { value: 'calendar.activity_due_soon',   label: '⏰ Atividade Próxima do Horário' },
+    { value: 'calendar.activity_overdue',    label: '🔴 Atividade Vencida' },
   ]
 
   const comparisonTypes: { value: ComparisonType; label: string }[] = [
@@ -1082,6 +1090,198 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           ) && (
             <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-3">
               Este gatilho não possui filtros adicionais. Será acionado em todos os eventos do tipo correspondente na sua loja Nuvemshop.
+            </div>
+          )}
+
+          {/* Calendário — filtros comuns (criada, concluída, cancelada, reagendada, responsável) */}
+          {(
+            config.triggerType === 'calendar.activity_created'    ||
+            config.triggerType === 'calendar.activity_completed'  ||
+            config.triggerType === 'calendar.activity_cancelled'  ||
+            config.triggerType === 'calendar.activity_rescheduled' ||
+            config.triggerType === 'calendar.activity_assigned'
+          ) && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Atividade
+                </label>
+                <select
+                  value={config.activity_type || ''}
+                  onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer tipo</option>
+                  <option value="call">Ligação</option>
+                  <option value="meeting">Reunião</option>
+                  <option value="email">E-mail</option>
+                  <option value="task">Tarefa</option>
+                  <option value="follow_up">Follow-up</option>
+                  <option value="demo">Demo</option>
+                  <option value="other">Outro</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Deixe vazio para disparar em qualquer tipo de atividade.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Prioridade
+                </label>
+                <select
+                  value={config.priority || ''}
+                  onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer prioridade</option>
+                  <option value="low">Baixa</option>
+                  <option value="medium">Média</option>
+                  <option value="high">Alta</option>
+                  <option value="urgent">Urgente</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Deixe vazio para disparar em qualquer prioridade.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Calendário — due_soon: configuração de minutes_before + filtros */}
+          {config.triggerType === 'calendar.activity_due_soon' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Antecedência (minutos antes) <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={config.minutes_before ?? 60}
+                  onChange={(e) => setConfig({ ...config, minutes_before: Number(e.target.value) })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value={5}>5 minutos</option>
+                  <option value={15}>15 minutos</option>
+                  <option value={30}>30 minutos</option>
+                  <option value={60}>1 hora</option>
+                  <option value={120}>2 horas</option>
+                  <option value={240}>4 horas</option>
+                  <option value={480}>8 horas</option>
+                  <option value={1440}>1 dia</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Quantos minutos antes do horário agendado este gatilho deve disparar.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Atividade
+                </label>
+                <select
+                  value={config.activity_type || ''}
+                  onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer tipo</option>
+                  <option value="call">Ligação</option>
+                  <option value="meeting">Reunião</option>
+                  <option value="email">E-mail</option>
+                  <option value="task">Tarefa</option>
+                  <option value="follow_up">Follow-up</option>
+                  <option value="demo">Demo</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Prioridade
+                </label>
+                <select
+                  value={config.priority || ''}
+                  onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer prioridade</option>
+                  <option value="low">Baixa</option>
+                  <option value="medium">Média</option>
+                  <option value="high">Alta</option>
+                  <option value="urgent">Urgente</option>
+                </select>
+              </div>
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-xs text-yellow-800">
+                  <strong>Ativação temporal:</strong> Este gatilho é processado pelo cron de automação de calendário.
+                  O disparo ocorre em até 1 minuto da janela configurada.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Calendário — overdue: configuração de minutes_after + filtros */}
+          {config.triggerType === 'calendar.activity_overdue' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tempo após o horário (minutos) <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={config.minutes_after ?? 0}
+                  onChange={(e) => setConfig({ ...config, minutes_after: Number(e.target.value) })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value={0}>Imediatamente após o horário</option>
+                  <option value={5}>5 minutos após</option>
+                  <option value={15}>15 minutos após</option>
+                  <option value={30}>30 minutos após</option>
+                  <option value={60}>1 hora após</option>
+                  <option value={120}>2 horas após</option>
+                  <option value={240}>4 horas após</option>
+                  <option value={1440}>1 dia após</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Quanto tempo após o horário agendado a atividade é considerada vencida.
+                  Aplica-se apenas a atividades com status <em>pendente</em>.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Atividade
+                </label>
+                <select
+                  value={config.activity_type || ''}
+                  onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer tipo</option>
+                  <option value="call">Ligação</option>
+                  <option value="meeting">Reunião</option>
+                  <option value="email">E-mail</option>
+                  <option value="task">Tarefa</option>
+                  <option value="follow_up">Follow-up</option>
+                  <option value="demo">Demo</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Prioridade
+                </label>
+                <select
+                  value={config.priority || ''}
+                  onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer prioridade</option>
+                  <option value="low">Baixa</option>
+                  <option value="medium">Média</option>
+                  <option value="high">Alta</option>
+                  <option value="urgent">Urgente</option>
+                </select>
+              </div>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-xs text-red-800">
+                  <strong>Ativação temporal:</strong> Este gatilho é processado pelo cron de automação de calendário.
+                  Atividades concluídas ou canceladas não são afetadas.
+                </p>
+              </div>
             </div>
           )}
         </div>
