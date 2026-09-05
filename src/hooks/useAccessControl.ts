@@ -289,6 +289,21 @@ export function useAccessControl() {
   const canViewAllLeads = hasPermission('view_all_leads')
   const canEditAllLeads = hasPermission('edit_all_leads')
 
+  // ── Funil de Vendas: atribuição em massa de responsável ────
+  // Espelha EXATAMENTE a matriz ALLOWED_ROLES do endpoint api/leads/bulk-assign.ts:
+  //   { 'super_admin', 'system_admin', 'admin', 'manager' }
+  // Baseado EXCLUSIVAMENTE em company_users.role.
+  // NÃO consulta: hasPermission, permissions JSONB, template de permissões.
+  // isImpersonating: o JWT do super_admin continua válido e o backend aceita
+  // a operação via assertMembership (Trilha 2 parent→child). Sem isImpersonating
+  // a UI ocultaria a feature enquanto o backend a aceita — divergência indesejada.
+  const canBulkAssignLeads =
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    isImpersonating
+
   // ── Relatório do Agente de IA ──────────────────────────────
   // Controle de UI apenas — a autorização real é feita na RPC.
   // manager e admin da empresa veem o relatório.
@@ -378,6 +393,9 @@ export function useAccessControl() {
     canViewLeads,
     canViewAllLeads,
     canEditAllLeads,
+
+    // Funil de Vendas — atribuição em massa de responsável
+    canBulkAssignLeads,
 
     // Histórico de importações via API
     canViewImportHistory,

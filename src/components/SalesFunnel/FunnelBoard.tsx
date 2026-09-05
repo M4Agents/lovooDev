@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
+import { BulkAssignModal } from '../BulkAssignModal'
 import { BulkMoveOpportunitiesModal } from './BulkMoveOpportunitiesModal'
 import { EditStageModal } from './EditStageModal'
 import { PlaybookModal } from './PlaybookModal'
@@ -29,7 +30,10 @@ import { useBoardAutoScroll } from '../../hooks/useBoardAutoScroll'
 import { useWonItemCheck } from '../../hooks/useWonItemCheck'
 import { useSaleTypeCheck } from '../../hooks/useSaleTypeCheck'
 import { useLossTypeCheck } from '../../hooks/useLossTypeCheck'
+import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAccessControl } from '../../hooks/useAccessControl'
+import { api } from '../../services/api'
 import { funnelApi } from '../../services/funnelApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
 import { lossTypesApi } from '../../services/lossTypesApi'
@@ -106,9 +110,20 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
+  const { canBulkAssignLeads } = useAccessControl()
   const companyId = company?.id
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
+
+  // ── Seleção múltipla de oportunidades ────────────────────────
+  // Map<positionId, leadId>: captura leadId no momento da seleção para
+  // não depender de stageMap em consultas posteriores (ex: após realtime).
+  const [selectedMap, setSelectedMap]             = useState<Map<string, number>>(new Map())
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
+  const [bulkAssignLoading, setBulkAssignLoading] = useState(false)
+
+  /** Set derivado de selectedMap — memoizado para evitar nova referência a cada render. */
+  const selectedPositionIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap])
 
   useEffect(() => {
     if (!companyId) return
@@ -573,6 +588,99 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   }, [boardRefresh, refreshCounts])
 
   // =====================================================
+  // SELEÇÃO MÚLTIPLA DE OPORTUNIDADES
+  // =====================================================
+
+  const toggleSelectPosition = useCallback((positionId: string, leadId: number) => {
+    setSelectedMap(prev => {
+      const next = new Map(prev)
+      if (next.has(positionId)) next.delete(positionId)
+      else next.set(positionId, leadId)
+      return next
+    })
+  }, [])
+
+  const selectLoadedInStage = useCallback((positions: { id: string; lead_id: number }[]) => {
+    setSelectedMap(prev => {
+      const next = new Map(prev)
+      for (const pos of positions) next.set(pos.id, pos.lead_id)
+      return next
+    })
+  }, [])
+
+  const deselectLoadedInStage = useCallback((positions: { id: string }[]) => {
+    setSelectedMap(prev => {
+      const next = new Map(prev)
+      for (const pos of positions) next.delete(pos.id)
+      return next
+    })
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelectedMap(new Map())
+  }, [])
+
+  const handleBulkAssign = useCallback(async (responsibleUserId: string | null) => {
+    if (!companyId) return
+    setBulkAssignLoading(true)
+    try {
+      // Deduplica leadIds: teoricamente um lead pode ter mais de uma posição no funil.
+      const leadIds = [...new Set(Array.from(selectedMap.values()))]
+      const result = await api.bulkAssignLeads(leadIds, responsibleUserId, companyId)
+
+      if (result.updated === result.requested) {
+        toast.success(
+          `${result.updated} oportunidade${result.updated !== 1 ? 's' : ''} atualizada${result.updated !== 1 ? 's' : ''} com sucesso.`
+        )
+      } else if (result.updated > 0) {
+        toast(`${result.updated} de ${result.requested} oportunidades atualizadas. Algumas podem não ter sido alteradas por restrições de acesso.`, {
+          icon: '⚠️',
+        })
+      } else {
+        toast.error('Nenhuma oportunidade foi atualizada. Verifique suas permissões.')
+      }
+
+      setShowBulkAssignModal(false)
+      clearSelection()
+      boardRefresh()
+      refreshCounts().catch(err => console.error('[FunnelBoard] bulk assign — erro ao atualizar contadores:', err))
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : undefined
+      toast.error(message ?? 'Erro ao atribuir responsável. Tente novamente.')
+      // Modal permanece aberto e seleção preservada para nova tentativa.
+    } finally {
+      setBulkAssignLoading(false)
+    }
+  }, [selectedMap, companyId, clearSelection, boardRefresh, refreshCounts])
+
+  // ── Reconciliação: remove posições obsoletas após atualização do board ──
+  // Executa quando stageMap muda (realtime, refetch, drag & drop).
+  // Usa setSelectedMap com callback para acessar estado atual sem incluir
+  // selectedMap nas deps — evita loop de render.
+  useEffect(() => {
+    const allPositionIds = new Set<string>()
+    for (const stageState of stageMap.values()) {
+      for (const pos of stageState.positions) allPositionIds.add(pos.id)
+    }
+
+    setSelectedMap(prev => {
+      if (prev.size === 0) return prev // nada selecionado — early exit
+
+      let hasStale = false
+      for (const posId of prev.keys()) {
+        if (!allPositionIds.has(posId)) { hasStale = true; break }
+      }
+      if (!hasStale) return prev // sem alteração — mesma referência → sem re-render
+
+      const next = new Map(prev)
+      for (const posId of [...next.keys()]) {
+        if (!allPositionIds.has(posId)) next.delete(posId)
+      }
+      return next
+    })
+  }, [stageMap])
+
+  // =====================================================
   // DRAG & DROP — OTIMISTA COM ROLLBACK
   // Fluxo normal (active→active): optimisticMove → move → rollback se erro
   // Fluxo com modal (qualquer transição que muda status):
@@ -582,6 +690,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
 
   const handleDragStart = () => {
+    // Limpa seleção ao iniciar drag — evita estado inconsistente
+    // (card selecionado sendo movido sem refletir na seleção).
+    clearSelection()
     setIsDragging(true)
     const trackMouse = (e: PointerEvent | MouseEvent) => {
       lastMouseXRef.current = e.clientX
@@ -1004,6 +1115,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 isDragDisabled={isDragDisabledForStage(stage.id)}
                 isOverride={isOverride(stage.id)}
                 customFieldValuesMap={customFieldValuesMap}
+                canSelect={canBulkAssignLeads}
+                selectedPositionIds={canBulkAssignLeads ? selectedPositionIds : undefined}
+                onToggleSelect={canBulkAssignLeads ? toggleSelectPosition : undefined}
+                onSelectLoadedInStage={canBulkAssignLeads ? selectLoadedInStage : undefined}
+                onDeselectLoadedInStage={canBulkAssignLeads ? deselectLoadedInStage : undefined}
               />
             </div>
           ))}
@@ -1013,6 +1129,32 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       {/* Overlay durante drag */}
       {isDragging && (
         <div className="fixed inset-0 bg-black bg-opacity-5 pointer-events-none z-40" />
+      )}
+
+      {/* Barra flutuante de seleção múltipla */}
+      {canBulkAssignLeads && selectedMap.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-full shadow-xl pointer-events-auto">
+          <span className="text-sm font-medium">
+            {selectedMap.size === 1
+              ? '1 oportunidade selecionada'
+              : `${selectedMap.size} oportunidades selecionadas`}
+          </span>
+          <div className="w-px h-4 bg-white/30" />
+          <button
+            type="button"
+            onClick={() => setShowBulkAssignModal(true)}
+            className="text-sm font-medium text-blue-300 hover:text-blue-200 transition-colors"
+          >
+            Atribuir responsável
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
+          >
+            Limpar
+          </button>
+        </div>
       )}
 
       {/* Modais */}
@@ -1119,6 +1261,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           fromStageName={bulkMoveRequest.fromStageName}
           fromStageType={bulkMoveRequest.fromStageType}
           filters={bulkMoveRequest.filters}
+        />
+      )}
+
+      {/* Modal de atribuição em massa de responsável */}
+      {canBulkAssignLeads && (
+        <BulkAssignModal
+          isOpen={showBulkAssignModal}
+          onClose={() => setShowBulkAssignModal(false)}
+          onConfirm={handleBulkAssign}
+          selectedCount={selectedMap.size}
+          companyUsers={companyUsers}
+          loading={bulkAssignLoading}
         />
       )}
     </div>
