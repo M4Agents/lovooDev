@@ -22,7 +22,9 @@ import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { extractToken, getUserFromToken, assertMembership, jsonError } from '../lib/dashboard/auth.js'
 
 const MAX_BULK_ASSIGN = 200
-const ALLOWED_ROLES   = new Set(['super_admin', 'system_admin', 'admin', 'manager'])
+// manager excluído por decisão de produto: apenas admin e acima podem atribuir em lote.
+// Alinhado com canBulkAssignLeads no frontend (useAccessControl.ts).
+const ALLOWED_ROLES   = new Set(['super_admin', 'system_admin', 'admin'])
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')

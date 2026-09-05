@@ -8,7 +8,7 @@
 import React, { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Draggable } from '@hello-pangea/dnd'
-import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle } from 'lucide-react'
+import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle, Check } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition, CustomFieldValueEntry } from '../../types/sales-funnel'
@@ -42,6 +42,12 @@ interface LeadCardProps {
   companyUsers?: CompanyUser[]
   /** Mapa de valores de campos personalizados, indexado por lead_id. */
   customFieldValuesMap?: Record<number, CustomFieldValueEntry[]>
+  /** Quando true, exibe checkbox e permite seleção deste card. */
+  canSelect?: boolean
+  /** Estado atual de seleção deste card. */
+  isSelected?: boolean
+  /** Callback disparado ao clicar no checkbox. */
+  onToggleSelect?: (positionId: string, leadId: number) => void
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -53,7 +59,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   companyId,
   onDetailClick,
   companyUsers = [],
-  customFieldValuesMap = {}
+  customFieldValuesMap = {},
+  canSelect = false,
+  isSelected = false,
+  onToggleSelect,
 }) => {
   const { t } = useTranslation('funnel')
   const opportunity = position.opportunity
@@ -99,14 +108,43 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           {...provided.dragHandleProps}
           onClick={handleClick}
           className={`
-            group bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-3
+            group relative bg-white rounded-lg shadow-sm border p-4 mb-3
             cursor-pointer transition-all duration-200
-            hover:shadow-md hover:border-blue-300
-            ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-400 rotate-2' : ''}
+            hover:shadow-md
+            ${snapshot.isDragging
+              ? 'shadow-lg ring-2 ring-blue-400 rotate-2 border-gray-200'
+              : isSelected
+                ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50 hover:border-blue-500'
+                : 'border-gray-200 hover:border-blue-300'}
           `}
         >
+          {/* Checkbox de seleção — canto superior esquerdo, isolado do DnD */}
+          {canSelect && (
+            <div
+              className="absolute top-2 left-2 z-10"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleSelect?.(position.id, lead.id)
+              }}
+            >
+              <div
+                className={`
+                  w-4 h-4 rounded border-2 cursor-pointer flex items-center justify-center
+                  transition-all duration-150
+                  ${isSelected
+                    ? 'border-blue-500 bg-blue-500'
+                    : 'border-gray-400 bg-white/90 opacity-0 group-hover:opacity-100'}
+                `}
+              >
+                {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+              </div>
+            </div>
+          )}
+
           {/* Header com foto e nome */}
-          <div className="flex items-start gap-3 mb-3 relative">
+          <div className={`flex items-start gap-3 mb-3 relative ${canSelect ? 'pl-6' : ''}`}>
             {isFieldVisible('photo') && (
               <div className="flex-shrink-0">
                 <Avatar

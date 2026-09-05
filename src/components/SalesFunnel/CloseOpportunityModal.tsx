@@ -259,7 +259,6 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
         ? selectedIds.filter(x => x !== id)
         : [...selectedIds, id]
     )
-    setOpen(false) // fecha dropdown após qualquer seleção/deseleção
   }
 
   const CHIPS_VISIBLE = 2
@@ -270,8 +269,8 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <Tag className="w-4 h-4 text-gray-500 flex-shrink-0" />
-        <span className="text-sm font-medium text-gray-700">
+        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+        <span className="text-sm font-medium text-red-900">
           {t('closeOpportunity.lostLossTypeTitle')}
         </span>
       </div>
@@ -296,10 +295,8 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
             className={[
               'w-full flex items-center gap-2 min-h-[40px] px-3 py-2 bg-white border rounded-lg text-left transition-colors',
               open
-                ? 'border-green-400 ring-1 ring-green-400'
-                : selectedIds.length > 0
-                  ? 'border-green-300 hover:border-green-400'
-                  : 'border-gray-300 hover:border-green-300',
+                ? 'border-red-400 ring-1 ring-red-400'
+                : 'border-gray-300 hover:border-red-300',
               disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
             ].join(' ')}
           >
@@ -313,7 +310,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                   {visibleChips.map(lt => (
                     <span
                       key={lt.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded-full"
                     >
                       {lt.name}
                       {!disabled && (
@@ -321,7 +318,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                           role="button"
                           aria-label={`Remover ${lt.name}`}
                           onMouseDown={e => { e.stopPropagation(); toggle(lt.id) }}
-                          className="ml-0.5 text-green-500 hover:text-green-700"
+                          className="ml-0.5 text-red-500 hover:text-red-700"
                         >
                           <X className="w-3 h-3" />
                         </span>
@@ -349,11 +346,11 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
                     key={lt.id}
                     type="button"
                     onMouseDown={e => { e.preventDefault(); toggle(lt.id) }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-green-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-red-50 transition-colors"
                   >
                     <span className={[
                       'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center',
-                      checked ? 'bg-green-600 border-green-600' : 'border-gray-300 bg-white',
+                      checked ? 'bg-red-600 border-red-600' : 'border-gray-300 bg-white',
                     ].join(' ')}>
                       {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                     </span>
@@ -430,7 +427,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const showItemSelector = isWon && requireItems && !hasItems
   const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
   // Seletor de tipos de perda: espelho exato de showSaleTypeSelector
-  const showLossTypeSelector = !isWon
+  const showLossTypeSelector = !isWon && requireLossType && !hasLossTypes
 
   // #region agent log
   if (isOpen) {
@@ -592,12 +589,8 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
 
   const itemSelectorBlocking = showItemSelector && draftItems.length === 0
   const saleTypeSelectorBlocking = showSaleTypeSelector && selectedSaleTypeIds.length === 0
-  // Bloqueio para tipos de perda: só bloqueia se o funil exigir E a oportunidade não tiver tipos já associados E nenhum selecionado agora
-  const lossTypeSelectorBlocking =
-    showLossTypeSelector &&
-    requireLossType &&
-    !hasLossTypes &&
-    selectedLossTypeIds.length === 0
+  // Bloqueio para tipos de perda — espelho de saleTypeSelectorBlocking
+  const lossTypeSelectorBlocking = showLossTypeSelector && selectedLossTypeIds.length === 0
 
   const currentList = addType === 'product' ? products : services
 
@@ -610,12 +603,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       setError(t('closeOpportunity.wonSaleTypeRequired'))
       return
     }
-    if (
-      showLossTypeSelector &&
-      requireLossType &&
-      !hasLossTypes &&
-      selectedLossTypeIds.length === 0
-    ) {
+    if (showLossTypeSelector && selectedLossTypeIds.length === 0) {
       setError(t('closeOpportunity.lostLossTypeRequired'))
       return
     }

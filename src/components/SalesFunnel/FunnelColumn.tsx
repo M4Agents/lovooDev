@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react'
 import { Droppable } from '@hello-pangea/dnd'
 import { useTranslation } from 'react-i18next'
-import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check, ArrowUpDown, ChevronRight } from 'lucide-react'
+import { Plus, MoreVertical, Users, Pencil, ArrowRightLeft, BookOpen, Check, ArrowUpDown, ChevronRight, CheckSquare } from 'lucide-react'
 import type { FunnelStage, LeadFunnelPosition, SortOption, CustomFieldValueEntry } from '../../types/sales-funnel'
 import type { CompanyUser } from '../../types/user'
 import { LeadCard } from './LeadCard'
@@ -88,6 +88,16 @@ interface FunnelColumnProps {
   isOverride?: boolean
   /** Mapa de valores de campos personalizados, indexado por lead_id. */
   customFieldValuesMap?: Record<number, CustomFieldValueEntry[]>
+  /** Habilita seleção de oportunidades — passado pelo FunnelBoard quando o usuário tem canBulkAssignLeads. */
+  canSelect?: boolean
+  /** IDs das posições atualmente selecionadas no board inteiro. */
+  selectedPositionIds?: Set<string>
+  /** Alterna seleção individual de um card. */
+  onToggleSelect?: (positionId: string, leadId: number) => void
+  /** Seleciona todos os cards carregados nesta coluna. */
+  onSelectLoadedInStage?: (positions: LeadFunnelPosition[]) => void
+  /** Desmarca todos os cards carregados nesta coluna. */
+  onDeselectLoadedInStage?: (positions: LeadFunnelPosition[]) => void
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -114,7 +124,12 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onSortChange,
   isDragDisabled = false,
   isOverride = false,
-  customFieldValuesMap
+  customFieldValuesMap,
+  canSelect = false,
+  selectedPositionIds,
+  onToggleSelect,
+  onSelectLoadedInStage,
+  onDeselectLoadedInStage,
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -150,6 +165,20 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   const nextLoadCount  = Math.min(remainingCount, pageSize)
 
   const isLastPage     = nextLoadCount < pageSize
+
+  // ── Seleção de oportunidades ──────────────────────────────
+  // "allLoadedSelected": todos os cards atualmente visíveis estão selecionados.
+  const allLoadedSelected =
+    canSelect &&
+    leads.length > 0 &&
+    leads.every(p => selectedPositionIds?.has(p.id))
+
+  // Texto do botão de seleção em massa — só mostra total quando confiável (vem do servidor).
+  const selectLabel: string = allLoadedSelected
+    ? 'Desmarcar carregados'
+    : (hasMore && count !== undefined && count !== null)
+        ? `Selecionar carregados (${loadedCount} de ${displayCount})`
+        : 'Selecionar carregados'
 
   const getHeaderColor = (color: string) => {
     return {
@@ -228,8 +257,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
             </button>
           )}
           
-          {/* Bloco 1: ações administrativas — bloqueadas em system stages */}
-          {(onEditStage || onBulkMoveRequest || onSortChange) && !stage.is_system_stage && (
+          {/* Bloco 1: ações administrativas e seleção */}
+          {(((onEditStage || onBulkMoveRequest || onSortChange) && !stage.is_system_stage) || (canSelect && leads.length > 0)) && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen(prev => !prev)}
@@ -344,6 +373,27 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                       </button>
                     </>
                   )}
+
+                  {/* Seleção em massa — visível apenas quando canSelect e há cards carregados */}
+                  {canSelect && leads.length > 0 && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false)
+                          if (allLoadedSelected) {
+                            onDeselectLoadedInStage?.(leads)
+                          } else {
+                            onSelectLoadedInStage?.(leads)
+                          }
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <CheckSquare className="w-4 h-4 text-blue-400" />
+                        {selectLabel}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -403,6 +453,9 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   onDetailClick={onDetailClick}
                   companyUsers={companyUsers}
                   customFieldValuesMap={customFieldValuesMap}
+                  canSelect={canSelect}
+                  isSelected={selectedPositionIds?.has(position.id) ?? false}
+                  onToggleSelect={onToggleSelect}
                 />
               ))
             )}
