@@ -110,7 +110,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
-  const { canBulkAssignLeads } = useAccessControl()
+  const { canSelectOpportunities, canBulkAssignLeads } = useAccessControl()
   const companyId = company?.id
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
@@ -1115,11 +1115,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 isDragDisabled={isDragDisabledForStage(stage.id)}
                 isOverride={isOverride(stage.id)}
                 customFieldValuesMap={customFieldValuesMap}
-                canSelect={canBulkAssignLeads}
-                selectedPositionIds={canBulkAssignLeads ? selectedPositionIds : undefined}
-                onToggleSelect={canBulkAssignLeads ? toggleSelectPosition : undefined}
-                onSelectLoadedInStage={canBulkAssignLeads ? selectLoadedInStage : undefined}
-                onDeselectLoadedInStage={canBulkAssignLeads ? deselectLoadedInStage : undefined}
+                canSelect={canSelectOpportunities}
+                selectedPositionIds={canSelectOpportunities ? selectedPositionIds : undefined}
+                onToggleSelect={canSelectOpportunities ? toggleSelectPosition : undefined}
+                onSelectLoadedInStage={canSelectOpportunities ? selectLoadedInStage : undefined}
+                onDeselectLoadedInStage={canSelectOpportunities ? deselectLoadedInStage : undefined}
               />
             </div>
           ))}

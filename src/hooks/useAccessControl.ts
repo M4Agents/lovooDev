@@ -289,11 +289,19 @@ export function useAccessControl() {
   const canViewAllLeads = hasPermission('view_all_leads')
   const canEditAllLeads = hasPermission('edit_all_leads')
 
+  // ── Funil de Vendas: seleção múltipla de oportunidades ───────
+  // Infraestrutura de seleção disponível para todos os membros ativos.
+  // Utilizada hoje para bulk assign (admin+) e no futuro para mover
+  // oportunidades em lote (todos os roles).
+  // Qualquer membro ativo da empresa tem currentRole != null.
+  const canSelectOpportunities = !!currentRole
+
   // ── Funil de Vendas: atribuição em massa de responsável ────
   // Espelha EXATAMENTE a matriz ALLOWED_ROLES do endpoint api/leads/bulk-assign.ts:
-  //   { 'super_admin', 'system_admin', 'admin', 'manager' }
+  //   { 'super_admin', 'system_admin', 'admin' }
   // Baseado EXCLUSIVAMENTE em company_users.role.
   // NÃO consulta: hasPermission, permissions JSONB, template de permissões.
+  // manager: excluído — permissão insuficiente para esta ação de produto.
   // isImpersonating: o JWT do super_admin continua válido e o backend aceita
   // a operação via assertMembership (Trilha 2 parent→child). Sem isImpersonating
   // a UI ocultaria a feature enquanto o backend a aceita — divergência indesejada.
@@ -301,7 +309,6 @@ export function useAccessControl() {
     currentRole === 'super_admin'  ||
     currentRole === 'system_admin' ||
     currentRole === 'admin'        ||
-    currentRole === 'manager'      ||
     isImpersonating
 
   // ── Relatório do Agente de IA ──────────────────────────────
@@ -394,7 +401,8 @@ export function useAccessControl() {
     canViewAllLeads,
     canEditAllLeads,
 
-    // Funil de Vendas — atribuição em massa de responsável
+    // Funil de Vendas — seleção múltipla e atribuição em massa
+    canSelectOpportunities,
     canBulkAssignLeads,
 
     // Histórico de importações via API
