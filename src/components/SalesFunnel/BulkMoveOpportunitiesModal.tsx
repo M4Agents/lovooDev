@@ -109,14 +109,16 @@ export function BulkMoveOpportunitiesModal({
     if (!selectedFunnelId) return
     setStages([])
     setSelectedStageId('')
-    setEligibleCount(null)
+    // byIds: eligibleCount é fixo (= opportunityIds.length) — não resetar ao trocar funil.
+    // Modo filtros: count depende da etapa, então deve ser zerado para recalcular.
+    if (!isByIds) setEligibleCount(null)
     setExceedsLimit(false)
     setLoadingStages(true)
     funnelApi.getStages(selectedFunnelId)
       .then(data => setStages(data.filter(s => !s.is_hidden)))
       .catch(() => setStages([]))
       .finally(() => setLoadingStages(false))
-  }, [selectedFunnelId])
+  }, [selectedFunnelId, isByIds])
 
   // ── Consultar contagem real ao selecionar destino ──────────────────────
   const fetchCount = useCallback(async (toStageId: string) => {
