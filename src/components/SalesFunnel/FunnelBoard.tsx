@@ -777,7 +777,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // MULTI-DRAG: mover oportunidades selecionadas em massa
   // =====================================================
   const handleMultiDragToStage = useCallback(async (toStageId: string) => {
-    const selectedEntries = Array.from(selectedMap.entries())
+    // Usa ref para garantir leitura do selectedMap mais recente,
+    // independente de qual closure/versão do handleDragEnd chamou esta função.
+    const selectedEntries = Array.from(selectedMapRef.current.entries())
     const count = selectedEntries.length
 
     // 6.1 — Quantidade
@@ -841,7 +843,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       // Limpa seleção: reconciliação pós-refetch garantirá consistência
       clearSelection()
     }
-  }, [selectedMap, stages, funnelId, optimisticMultiMove, clearSelection, boardRefresh, refreshCounts])
+  }, [stages, funnelId, optimisticMultiMove, clearSelection, boardRefresh, refreshCounts])
 
   // ── Reconciliação: remove posições obsoletas após atualização do board ──
   // Executa quando stageMap muda (realtime, refetch, drag & drop).
