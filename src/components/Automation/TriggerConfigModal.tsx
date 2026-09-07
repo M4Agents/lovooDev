@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { X, Info } from 'lucide-react'
 import type { TriggerConfig } from '../../types/automation'
+import type { CustomActivityType } from '../../types/calendar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWhatsAppInstances } from '../../hooks/useWhatsAppInstances'
 import { useFunnels } from '../../hooks/useFunnels'
@@ -25,6 +26,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   const { funnels, loading: loadingFunnels } = useFunnels(company?.id || '')
   const [config, setConfig] = useState<Record<string, any>>(trigger?.config || {})
+  const [activityTypes, setActivityTypes] = useState<CustomActivityType[]>([])
   const [selectedFunnelId, setSelectedFunnelId] = useState<string>(config.funnelId || '')
   const { stages, loading: loadingStages } = useFunnelStages(selectedFunnelId)
   const [showKeywordHelp, setShowKeywordHelp] = useState(false)
@@ -35,6 +37,30 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
       setSelectedFunnelId(trigger.config?.funnelId || '')
     }
   }, [isOpen, trigger])
+
+  // Buscar tipos de atividade dinâmicos quando o modal abrir com gatilho de calendário
+  useEffect(() => {
+    const isCalendarTrigger =
+      trigger?.type === 'calendar.activity_due_soon' ||
+      trigger?.type === 'calendar.activity_overdue'
+    if (!isOpen || !isCalendarTrigger || !company?.id) return
+
+    fetch(`/api/activity-types?company_id=${company.id}`)
+      .then(res => res.json())
+      .then((data: CustomActivityType[]) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:fetchActivityTypes',message:'activity types fetched',data:{count:Array.isArray(data)?data.length:null,types:Array.isArray(data)?data.map(t=>({id:t.id,name:t.name,is_system:t.is_system})):data},timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
+        if (Array.isArray(data) && data.length > 0) {
+          setActivityTypes(data)
+        }
+      })
+      .catch((err) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:fetchActivityTypes',message:'fetch error',data:{error:String(err)},timestamp:Date.now()})}).catch(()=>{})
+        // #endregion
+      })
+  }, [isOpen, trigger?.type, company?.id])
 
   if (!isOpen || !trigger) return null
 
@@ -750,7 +776,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
         return (
           <div className="space-y-4">
             {/* #region agent log */}
-            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:due_soon',message:'due_soon form rendered',data:{minutes_before:config.minutes_before,activity_type:config.activity_type,priority:config.priority},timestamp:Date.now()})}).catch(()=>{}); return null })()}
+            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:due_soon',message:'due_soon form rendered',data:{minutes_before:config.minutes_before,activity_type:config.activity_type,priority:config.priority,activityTypesCount:activityTypes.length},timestamp:Date.now()})}).catch(()=>{}); return null })()}
             {/* #endregion */}
 
             {/* ANTECEDÊNCIA */}
@@ -788,13 +814,23 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Qualquer tipo</option>
-                <option value="call">Ligação</option>
-                <option value="meeting">Reunião</option>
-                <option value="email">E-mail</option>
-                <option value="task">Tarefa</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="demo">Demo</option>
-                <option value="other">Outro</option>
+                {activityTypes.length > 0 ? (
+                  activityTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="call">Ligação</option>
+                    <option value="meeting">Reunião</option>
+                    <option value="email">E-mail</option>
+                    <option value="task">Tarefa</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="demo">Demo</option>
+                    <option value="other">Outro</option>
+                  </>
+                )}
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Deixe vazio para disparar em qualquer tipo de atividade.
@@ -835,7 +871,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
         return (
           <div className="space-y-4">
             {/* #region agent log */}
-            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:overdue',message:'overdue form rendered',data:{minutes_after:config.minutes_after,activity_type:config.activity_type,priority:config.priority},timestamp:Date.now()})}).catch(()=>{}); return null })()}
+            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:overdue',message:'overdue form rendered',data:{minutes_after:config.minutes_after,activity_type:config.activity_type,priority:config.priority,activityTypesCount:activityTypes.length},timestamp:Date.now()})}).catch(()=>{}); return null })()}
             {/* #endregion */}
 
             {/* TEMPO APÓS O HORÁRIO */}
@@ -873,13 +909,23 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Qualquer tipo</option>
-                <option value="call">Ligação</option>
-                <option value="meeting">Reunião</option>
-                <option value="email">E-mail</option>
-                <option value="task">Tarefa</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="demo">Demo</option>
-                <option value="other">Outro</option>
+                {activityTypes.length > 0 ? (
+                  activityTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="call">Ligação</option>
+                    <option value="meeting">Reunião</option>
+                    <option value="email">E-mail</option>
+                    <option value="task">Tarefa</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="demo">Demo</option>
+                    <option value="other">Outro</option>
+                  </>
+                )}
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Deixe vazio para disparar em qualquer tipo de atividade.
