@@ -95,6 +95,7 @@ const WonSaleTypeSelector: React.FC<WonSaleTypeSelectorProps> = ({
         ? selectedIds.filter(x => x !== id)
         : [...selectedIds, id]
     )
+    setOpen(false)
   }
 
   const selectedTypes = saleTypes.filter(st => selectedIds.includes(st.id))
@@ -259,6 +260,7 @@ const LostLossTypeSelector: React.FC<LostLossTypeSelectorProps> = ({
         ? selectedIds.filter(x => x !== id)
         : [...selectedIds, id]
     )
+    setOpen(false)
   }
 
   const CHIPS_VISIBLE = 2
