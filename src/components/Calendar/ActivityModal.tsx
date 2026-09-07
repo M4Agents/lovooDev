@@ -5,6 +5,7 @@ import { calendarApi } from '../../services/calendarApi'
 import { supabase } from '../../lib/supabase'
 import type { LeadActivity, CreateActivityForm } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES, DURATION_OPTIONS, REMINDER_OPTIONS } from '../../types/calendar'
+import type { CustomActivityType } from '../../types/calendar'
 import ChatModalSimple from '../SalesFunnel/ChatModalSimple'
 
 interface ActivityModalProps {
@@ -45,6 +46,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [activityTypes, setActivityTypes] = useState<CustomActivityType[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [leads, setLeads] = useState<Lead[]>([])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
@@ -90,6 +92,25 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
     checkGoogleConnection()
   }, [user?.id])
+
+  // Carregar tipos de atividade dinâmicos (custom + sistema)
+  useEffect(() => {
+    if (!company?.id) return
+    fetch(`/api/activity-types?company_id=${company.id}`)
+      .then(res => res.json())
+      .then((data: CustomActivityType[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setActivityTypes(data)
+          // Para nova atividade sem tipo definido, usar o primeiro tipo disponível
+          if (!activity) {
+            setFormData(prev => ({ ...prev, activity_type: data[0].id }))
+          }
+        }
+      })
+      .catch(() => {
+        // Silencioso: fallback para lista estática no render
+      })
+  }, [company?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Buscar usuários da empresa
   useEffect(() => {
@@ -420,11 +441,30 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               required
             >
-              {ACTIVITY_TYPES.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.icon} {type.label}
-                </option>
-              ))}
+              {activityTypes.length > 0 ? (
+                <>
+                  {activityTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.name}
+                    </option>
+                  ))}
+                  {/* Fallback: se o valor atual é um tipo legado não presente na lista dinâmica */}
+                  {!activityTypes.some(t => t.id === formData.activity_type) &&
+                    ACTIVITY_TYPES.some(t => t.value === formData.activity_type) && (
+                    <option value={formData.activity_type} disabled>
+                      {ACTIVITY_TYPES.find(t => t.value === formData.activity_type)?.icon}{' '}
+                      {ACTIVITY_TYPES.find(t => t.value === formData.activity_type)?.label} (legado)
+                    </option>
+                  )}
+                </>
+              ) : (
+                // Enquanto carrega ou se empresa não tem tipos cadastrados
+                ACTIVITY_TYPES.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.icon} {type.label}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
