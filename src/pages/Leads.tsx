@@ -684,31 +684,38 @@ export const Leads: React.FC = () => {
               <p className="text-xs text-gray-400 mt-1">
                 {period.label} · Inclui novos leads e reentradas
               </p>
-              {stats && (
-                <div className="flex items-center gap-4 mt-3 flex-wrap">
-                  {/* Novos */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-sm font-semibold text-gray-800">{stats.newLeads}</span>
-                    <span className="text-xs text-gray-500">novos</span>
+              {stats && (() => {
+                // new_leads = distinct leads com 1ª entrada no período
+                // reentry_entries = total_entries − new_leads
+                // (um lead novo que entrou 2x no período gera 1 new_lead + 1 reentry_entry)
+                // Isso garante que: new_leads + reentry_entries = total_entries ✅
+                const reentryEntries = stats.totalEntries - stats.newLeads;
+                return (
+                  <div className="flex items-center gap-4 mt-3 flex-wrap">
+                    {/* Novos */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-sm font-semibold text-gray-800">{stats.newLeads}</span>
+                      <span className="text-xs text-gray-500">novos</span>
+                    </div>
+                    {/* Reentradas */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
+                      <span className="text-sm font-semibold text-gray-800">{reentryEntries}</span>
+                      <span className="text-xs text-gray-500">reentradas</span>
+                    </div>
+                    {/* Ver lista — exibe quando há leads que voltaram de períodos anteriores */}
+                    {stats.reentryLeads > 0 && (
+                      <button
+                        onClick={() => setShowReentriesModal(true)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors"
+                      >
+                        Ver lista →
+                      </button>
+                    )}
                   </div>
-                  {/* Reentradas */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
-                    <span className="text-sm font-semibold text-gray-800">{stats.reentryLeads}</span>
-                    <span className="text-xs text-gray-500">reentradas</span>
-                  </div>
-                  {/* Ver lista */}
-                  {stats.reentryLeads > 0 && (
-                    <button
-                      onClick={() => setShowReentriesModal(true)}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors"
-                    >
-                      Ver lista →
-                    </button>
-                  )}
-                </div>
-              )}
+                );
+              })()}
             </div>
             <ArrowDownUp className="w-10 h-10 text-green-600 opacity-80 flex-shrink-0 ml-4" />
           </div>
