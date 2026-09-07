@@ -45,6 +45,17 @@ export interface UseBoardPositionsReturn {
     newIndex: number
   ) => BoardPositionsSnapshot
   rollback: (snapshot: BoardPositionsSnapshot) => void
+  /**
+   * Move múltiplas oportunidades da mesma etapa de origem para a etapa de destino
+   * em UMA única atualização de estado (evita stale state do optimisticMove em loop).
+   * Preserva a ordem relativa dos cards na etapa de origem.
+   * Não retorna snapshot — rollback autoritativo via refresh().
+   */
+  optimisticMultiMove: (
+    opportunityIds: string[],
+    fromStageId: string,
+    toStageId: string
+  ) => void
 }
 
 const EMPTY_STATE: StagePositionState = {
@@ -250,5 +261,40 @@ export function useBoardPositions(
     })
   }, [])
 
-  return { stageMap, loadMore, refresh, optimisticMove, rollback }
+  // --------------------------------------------------
+  // OPTIMISTIC MULTI MOVE: move N cards da mesma origem em UMA única
+  // atualização de stageMap. Preserva ordem relativa da etapa de origem.
+  // Não retorna snapshot — rollback autoritativo via refresh() após erro.
+  // --------------------------------------------------
+  const optimisticMultiMove = useCallback(
+    (opportunityIds: string[], fromStageId: string, toStageId: string) => {
+      const cur       = stageMapRef.current
+      const fromState = cur.get(fromStageId)
+      const toState   = cur.get(toStageId)
+
+      const fromPositions = fromState?.positions ?? []
+      const toPositions   = toState?.positions   ?? []
+
+      const idsSet = new Set(opportunityIds)
+
+      // Extrair cards na ordem em que aparecem na coluna de origem
+      const movingCards: OpportunityFunnelPosition[] = fromPositions
+        .filter(p => idsSet.has(p.opportunity_id))
+        .map(p  => ({ ...p, stage_id: toStageId }))
+
+      const newFromPositions = fromPositions.filter(p => !idsSet.has(p.opportunity_id))
+      // Adiciona os cards ao final da coluna destino
+      const newToPositions   = [...toPositions, ...movingCards]
+
+      setStageMap(prev => {
+        const next = new Map(prev)
+        next.set(fromStageId, { ...(fromState ?? EMPTY_STATE), positions: newFromPositions })
+        next.set(toStageId,   { ...(toState   ?? EMPTY_STATE), positions: newToPositions   })
+        return next
+      })
+    },
+    []
+  )
+
+  return { stageMap, loadMore, refresh, optimisticMove, rollback, optimisticMultiMove }
 }

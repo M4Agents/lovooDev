@@ -46,8 +46,16 @@ interface LeadCardProps {
   canSelect?: boolean
   /** Estado atual de seleção deste card. */
   isSelected?: boolean
-  /** Callback disparado ao clicar no checkbox. */
-  onToggleSelect?: (positionId: string, leadId: number) => void
+  /**
+   * Callback disparado ao clicar no checkbox.
+   * Recebe positionId, leadId, opportunityId e stageId — capturados no momento
+   * da seleção para não depender de stageMap em operações posteriores.
+   */
+  onToggleSelect?: (positionId: string, leadId: number, opportunityId: string, stageId: string) => void
+  /** Quando true, indica que há um multi-drag ativo (seleção sendo arrastada). */
+  isDraggingSelection?: boolean
+  /** Total de oportunidades selecionadas no board — usado no badge "+N". */
+  selectedCount?: number
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -63,6 +71,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   canSelect = false,
   isSelected = false,
   onToggleSelect,
+  isDraggingSelection = false,
+  selectedCount = 0,
 }) => {
   const { t } = useTranslation('funnel')
   const opportunity = position.opportunity
@@ -118,6 +128,13 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 : 'border-gray-200 hover:border-blue-300'}
           `}
         >
+          {/* Badge de multi-drag — visível apenas no card arrastado quando selção múltipla ativa */}
+          {snapshot.isDragging && isSelected && isDraggingSelection && selectedCount > 1 && (
+            <div className="absolute -top-2 -right-2 z-20 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md pointer-events-none select-none">
+              +{selectedCount - 1}
+            </div>
+          )}
+
           {/* Checkbox de seleção — canto superior esquerdo, isolado do DnD */}
           {canSelect && (
             <div
@@ -126,7 +143,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               onTouchStart={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
-                onToggleSelect?.(position.id, lead.id)
+                onToggleSelect?.(position.id, lead.id, position.opportunity_id, position.stage_id)
               }}
             >
               <div

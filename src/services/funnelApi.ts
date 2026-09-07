@@ -1410,6 +1410,50 @@ class FunnelApiService {
       return []
     }
   }
+
+  // =====================================================
+  // BULK MOVE BY IDS — Multi-drag de oportunidades selecionadas
+  // =====================================================
+
+  /**
+   * Move um conjunto explícito de oportunidades para uma etapa de destino.
+   * Usado pelo multi-drag do Funil de Vendas.
+   *
+   * PUT /api/funnel/bulk-move-by-ids
+   * Retorna { moved_count, moved_ids }
+   */
+  async bulkMoveByIds(params: {
+    opportunityIds: string[]
+    funnelId:       string
+    toStageId:      string
+  }): Promise<{ moved_count: number; moved_ids: string[] }> {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+    const response = await fetch('/api/funnel/bulk-move-by-ids', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:  `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        opportunityIds: params.opportunityIds,
+        funnelId:       params.funnelId,
+        toStageId:      params.toStageId,
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({})) as Record<string, unknown>
+      throw new Error(
+        (typeof err.error === 'string' ? err.error : undefined) ??
+        `Erro ao mover oportunidades (${response.status})`
+      )
+    }
+
+    return response.json() as Promise<{ moved_count: number; moved_ids: string[] }>
+  }
 }
 
 // =====================================================
