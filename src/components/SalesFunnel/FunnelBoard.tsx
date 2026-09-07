@@ -875,16 +875,24 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     }
 
     // ── CAMINHO MULTI-DRAG ────────────────────────────────────────────────────
-    // Quando isDraggingSelection, toda a lógica individual é ignorada.
-    // handleMultiDragToStage contém suas próprias validações e optimistic update.
-    if (isDraggingSelection) {
+    // opportunityId extraído aqui para reutilizar tanto na decisão multi-drag
+    // quanto no fluxo individual abaixo — evita declaração duplicada.
+    const opportunityId = draggableId.replace('opportunity-', '')
+
+    // Deriva localmente se o card arrastado pertence a uma seleção múltipla.
+    // NÃO usa isDraggingSelection: esse state é setado no handleDragStart e pode
+    // estar stale na closure capturada pelo @hello-pangea/dnd para onDragEnd.
+    // selectedMap é estável antes do drag iniciar — fonte de verdade segura.
+    const isMultiSelectionDrag =
+      selectedMap.size > 1 &&
+      Array.from(selectedMap.values()).some(item => item.opportunityId === opportunityId)
+
+    if (isMultiSelectionDrag) {
       setIsDraggingSelection(false)
       await handleMultiDragToStage(resolvedDroppableId)
       return
     }
     // ── FIM MULTI-DRAG ────────────────────────────────────────────────────────
-
-    const opportunityId = draggableId.replace('opportunity-', '')
     const fromStageId   = source.droppableId
     const toStageId     = resolvedDroppableId
     const newPosition   = resolvedIndex
