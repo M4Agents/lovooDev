@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DragDropContext, DropResult } from '@hello-pangea/dnd'
+import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
 import { BulkAssignModal } from '../BulkAssignModal'
@@ -116,11 +116,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
 
   // ── Seleção múltipla de oportunidades ────────────────────────
-  // Map<positionId, leadId>: captura leadId no momento da seleção para
-  // não depender de stageMap em consultas posteriores (ex: após realtime).
-  const [selectedMap, setSelectedMap]             = useState<Map<string, number>>(new Map())
+  // Map<positionId, SelectedOpportunity>: captura opportunityId, leadId e stageId
+  // no momento da seleção — não depende de stageMap após realtime/refetch.
+  interface SelectedOpportunity {
+    leadId:       number
+    opportunityId: string
+    stageId:      string
+  }
+  const [selectedMap, setSelectedMap]             = useState<Map<string, SelectedOpportunity>>(new Map())
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false)
+  /** true enquanto um drag de seleção múltipla está em andamento */
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false)
 
   /** Set derivado de selectedMap — memoizado para evitar nova referência a cada render. */
   const selectedPositionIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap])
@@ -207,7 +214,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     loadMore,
     refresh: boardRefresh,
     optimisticMove,
-    rollback
+    rollback,
+    optimisticMultiMove,
   } = useBoardPositions(funnelId, stages, companyId, filter, 20, stageSortMap)
 
   const { counts, refresh: refreshCounts } = useStageCounts(funnelId, companyId, filter)
@@ -591,19 +599,26 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // SELEÇÃO MÚLTIPLA DE OPORTUNIDADES
   // =====================================================
 
-  const toggleSelectPosition = useCallback((positionId: string, leadId: number) => {
+  const toggleSelectPosition = useCallback((
+    positionId:    string,
+    leadId:        number,
+    opportunityId: string,
+    stageId:       string,
+  ) => {
     setSelectedMap(prev => {
       const next = new Map(prev)
       if (next.has(positionId)) next.delete(positionId)
-      else next.set(positionId, leadId)
+      else next.set(positionId, { leadId, opportunityId, stageId })
       return next
     })
   }, [])
 
-  const selectLoadedInStage = useCallback((positions: { id: string; lead_id: number }[]) => {
+  const selectLoadedInStage = useCallback((positions: { id: string; lead_id: number; opportunity_id: string; stage_id: string }[]) => {
     setSelectedMap(prev => {
       const next = new Map(prev)
-      for (const pos of positions) next.set(pos.id, pos.lead_id)
+      for (const pos of positions) {
+        next.set(pos.id, { leadId: pos.lead_id, opportunityId: pos.opportunity_id, stageId: pos.stage_id })
+      }
       return next
     })
   }, [])
@@ -625,7 +640,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     setBulkAssignLoading(true)
     try {
       // Deduplica leadIds: teoricamente um lead pode ter mais de uma posição no funil.
-      const leadIds = [...new Set(Array.from(selectedMap.values()))]
+      const leadIds = [...new Set(Array.from(selectedMap.values()).map(v => v.leadId))]
       const result = await api.bulkAssignLeads(leadIds, responsibleUserId, companyId)
 
       if (result.updated === result.requested) {
@@ -652,6 +667,76 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       setBulkAssignLoading(false)
     }
   }, [selectedMap, companyId, clearSelection, boardRefresh, refreshCounts])
+
+  // =====================================================
+  // MULTI-DRAG: mover oportunidades selecionadas em massa
+  // =====================================================
+  const handleMultiDragToStage = useCallback(async (toStageId: string) => {
+    const selectedEntries = Array.from(selectedMap.entries())
+    const count = selectedEntries.length
+
+    // 6.1 — Quantidade
+    if (count <= 1) {
+      toast.error('Selecione mais de uma oportunidade para mover em grupo.')
+      return
+    }
+    if (count > 50) {
+      toast.error('Limite de 50 oportunidades por operação excedido. Reduza a seleção.')
+      return
+    }
+
+    // 6.2 — Mesma etapa de origem
+    const stageIds = new Set(selectedEntries.map(([, v]) => v.stageId))
+    if (stageIds.size > 1) {
+      toast.error('Para mover várias oportunidades juntas, selecione oportunidades da mesma etapa.')
+      return
+    }
+    const fromStageId = selectedEntries[0][1].stageId
+
+    // 6.3 — Origem active
+    const fromStage = stages.find(s => s.id === fromStageId)
+    if (!fromStage || fromStage.stage_type !== 'active') {
+      toast.error('Movimentação em massa não está disponível para oportunidades de etapas de fechamento.')
+      return
+    }
+
+    // 6.4 — Destino active
+    const toStage = stages.find(s => s.id === toStageId)
+    if (!toStage || toStage.stage_type !== 'active') {
+      toast.error('Movimentação em massa para etapas de fechamento não está disponível nesta versão.')
+      return
+    }
+
+    // Destino igual à origem — sem ação (não é erro)
+    if (fromStageId === toStageId) return
+
+    const opportunityIds = selectedEntries.map(([, v]) => v.opportunityId)
+
+    // Atualização otimista: UMA única mutação de estado (evita stale state)
+    optimisticMultiMove(opportunityIds, fromStageId, toStageId)
+
+    try {
+      const result = await funnelApi.bulkMoveByIds({ opportunityIds, funnelId, toStageId })
+      const movedCount = result.moved_count ?? opportunityIds.length
+      toast.success(
+        `${movedCount} oportunidade${movedCount !== 1 ? 's' : ''} movida${movedCount !== 1 ? 's' : ''} para "${toStage.name}".`
+      )
+      clearSelection()
+      // Refresh autoritativo para sincronizar com banco
+      boardRefresh(fromStageId)
+      boardRefresh(toStageId)
+      refreshCounts().catch(err => console.error('[FunnelBoard] multi-drag counts:', err))
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : undefined
+      toast.error(message ?? 'Erro ao mover oportunidades. Tente novamente.')
+      // Rollback autoritativo — UI volta ao estado real do banco
+      boardRefresh(fromStageId)
+      boardRefresh(toStageId)
+      refreshCounts().catch(err => console.error('[FunnelBoard] multi-drag err counts:', err))
+      // Limpa seleção: reconciliação pós-refetch garantirá consistência
+      clearSelection()
+    }
+  }, [selectedMap, stages, funnelId, optimisticMultiMove, clearSelection, boardRefresh, refreshCounts])
 
   // ── Reconciliação: remove posições obsoletas após atualização do board ──
   // Executa quando stageMap muda (realtime, refetch, drag & drop).
@@ -689,10 +774,22 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   //   → cancelar: rollback visual
   // =====================================================
 
-  const handleDragStart = () => {
-    // Limpa seleção ao iniciar drag — evita estado inconsistente
-    // (card selecionado sendo movido sem refletir na seleção).
-    clearSelection()
+  const handleDragStart = (dragStart: DragStart) => {
+    // Determina se o card arrastado faz parte de uma seleção múltipla.
+    // Se sim: preserva a seleção e ativa o modo multi-drag.
+    // Se não (ou seleção unitária): limpa seleção e executa drag individual.
+    const draggedOpportunityId = dragStart.draggableId.replace('opportunity-', '')
+    const isPartOfMultiSelection =
+      selectedMap.size > 1 &&
+      Array.from(selectedMap.values()).some(v => v.opportunityId === draggedOpportunityId)
+
+    if (isPartOfMultiSelection) {
+      setIsDraggingSelection(true)
+      // Seleção preservada intencionalmente
+    } else {
+      clearSelection()
+      setIsDraggingSelection(false)
+    }
     setIsDragging(true)
     const trackMouse = (e: PointerEvent | MouseEvent) => {
       lastMouseXRef.current = e.clientX
@@ -728,8 +825,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
     const { source, destination, draggableId } = result
 
-    if (!destination) return
+    if (!destination) {
+      setIsDraggingSelection(false)
+      return
+    }
 
+    // ETAPA G + DATETIME.2C.2: Bloquear novo drag se há transição pendente (questions, close/reopen ou activity)
+    if (pendingTransitionQuestions || pendingTransition || pendingActivity) {
+      console.warn('Drag bloqueado: existe transição/atividade pendente aguardando confirmação')
+      setIsDraggingSelection(false)
+      return
+    }
     // @hello-pangea/dnd não atualiza o cache de posições dos Droppables quando o
     // container horizontal (overflow-x-auto) é rolado durante o drag. Para corrigir,
     // usamos getBoundingClientRect() no momento do drop (sempre correto) combinado
@@ -763,7 +869,20 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     if (
       source.droppableId === resolvedDroppableId &&
       source.index === resolvedIndex
-    ) return
+    ) {
+      setIsDraggingSelection(false)
+      return
+    }
+
+    // ── CAMINHO MULTI-DRAG ────────────────────────────────────────────────────
+    // Quando isDraggingSelection, toda a lógica individual é ignorada.
+    // handleMultiDragToStage contém suas próprias validações e optimistic update.
+    if (isDraggingSelection) {
+      setIsDraggingSelection(false)
+      await handleMultiDragToStage(resolvedDroppableId)
+      return
+    }
+    // ── FIM MULTI-DRAG ────────────────────────────────────────────────────────
 
     const opportunityId = draggableId.replace('opportunity-', '')
     const fromStageId   = source.droppableId
@@ -1120,6 +1239,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 onToggleSelect={canSelectOpportunities ? toggleSelectPosition : undefined}
                 onSelectLoadedInStage={canSelectOpportunities ? selectLoadedInStage : undefined}
                 onDeselectLoadedInStage={canSelectOpportunities ? deselectLoadedInStage : undefined}
+                isDraggingSelection={isDraggingSelection}
+                selectedCount={selectedMap.size}
               />
             </div>
           ))}
@@ -1131,22 +1252,27 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-5 pointer-events-none z-40" />
       )}
 
-      {/* Barra flutuante de seleção múltipla */}
-      {canBulkAssignLeads && selectedMap.size > 0 && (
+      {/* Barra flutuante de seleção múltipla — visível para todos os usuários com seleção ativa */}
+      {canSelectOpportunities && selectedMap.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-full shadow-xl pointer-events-auto">
           <span className="text-sm font-medium">
             {selectedMap.size === 1
               ? '1 oportunidade selecionada'
               : `${selectedMap.size} oportunidades selecionadas`}
           </span>
+          {canBulkAssignLeads && (
+            <>
+              <div className="w-px h-4 bg-white/30" />
+              <button
+                type="button"
+                onClick={() => setShowBulkAssignModal(true)}
+                className="text-sm font-medium text-blue-300 hover:text-blue-200 transition-colors"
+              >
+                Atribuir responsável
+              </button>
+            </>
+          )}
           <div className="w-px h-4 bg-white/30" />
-          <button
-            type="button"
-            onClick={() => setShowBulkAssignModal(true)}
-            className="text-sm font-medium text-blue-300 hover:text-blue-200 transition-colors"
-          >
-            Atribuir responsável
-          </button>
           <button
             type="button"
             onClick={clearSelection}

@@ -88,16 +88,23 @@ interface FunnelColumnProps {
   isOverride?: boolean
   /** Mapa de valores de campos personalizados, indexado por lead_id. */
   customFieldValuesMap?: Record<number, CustomFieldValueEntry[]>
-  /** Habilita seleção de oportunidades — passado pelo FunnelBoard quando o usuário tem canBulkAssignLeads. */
+  /** Habilita seleção de oportunidades — passado pelo FunnelBoard quando o usuário tem canSelectOpportunities. */
   canSelect?: boolean
   /** IDs das posições atualmente selecionadas no board inteiro. */
   selectedPositionIds?: Set<string>
-  /** Alterna seleção individual de um card. */
-  onToggleSelect?: (positionId: string, leadId: number) => void
+  /**
+   * Alterna seleção individual de um card.
+   * Recebe positionId, leadId, opportunityId e stageId.
+   */
+  onToggleSelect?: (positionId: string, leadId: number, opportunityId: string, stageId: string) => void
   /** Seleciona todos os cards carregados nesta coluna. */
   onSelectLoadedInStage?: (positions: LeadFunnelPosition[]) => void
   /** Desmarca todos os cards carregados nesta coluna. */
   onDeselectLoadedInStage?: (positions: LeadFunnelPosition[]) => void
+  /** Quando true, indica que há um multi-drag ativo — repassado aos LeadCards para o badge. */
+  isDraggingSelection?: boolean
+  /** Total de oportunidades selecionadas no board — repassado ao LeadCard para o badge "+N". */
+  selectedCount?: number
 }
 
 export const FunnelColumn: React.FC<FunnelColumnProps> = ({
@@ -130,6 +137,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   onToggleSelect,
   onSelectLoadedInStage,
   onDeselectLoadedInStage,
+  isDraggingSelection = false,
+  selectedCount = 0,
 }) => {
   const { t } = useTranslation('funnel')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -456,6 +465,8 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   canSelect={canSelect}
                   isSelected={selectedPositionIds?.has(position.id) ?? false}
                   onToggleSelect={onToggleSelect}
+                  isDraggingSelection={isDraggingSelection}
+                  selectedCount={selectedCount}
                 />
               ))
             )}
