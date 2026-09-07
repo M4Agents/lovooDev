@@ -1528,14 +1528,22 @@ export const api = {
   async getLeadStats(
     companyId: string,
     dateRange?: { start: string; end: string },
-    tagIds?: string[]
+    tagIds?: string[],
+    filters?: {
+      status?: string;
+      origin?: string;
+      responsibleUserId?: string;
+    }
   ): Promise<{ totalLeads: number; totalEntries: number; newLeads: number; reentryLeads: number }> {
     try {
       const { data, error } = await supabase.rpc('get_lead_dashboard_stats', {
-        p_company_id: companyId,
-        p_start_date: dateRange?.start ?? null,
-        p_end_date:   dateRange?.end   ?? null,
-        p_tag_ids:    tagIds?.length   ? tagIds : null,
+        p_company_id:           companyId,
+        p_start_date:           dateRange?.start           ?? null,
+        p_end_date:             dateRange?.end             ?? null,
+        p_tag_ids:              tagIds?.length             ? tagIds : null,
+        p_status:               filters?.status            ?? null,
+        p_origin:               filters?.origin            ?? null,
+        p_responsible_user_id:  filters?.responsibleUserId ?? null,
       });
 
       if (error) throw error;
@@ -1555,7 +1563,12 @@ export const api = {
   async getLeadReentriesList(
     companyId: string,
     dateRange?: { start: string; end: string },
-    tagIds?: string[]
+    tagIds?: string[],
+    filters?: {
+      status?: string;
+      origin?: string;
+      responsibleUserId?: string;
+    }
   ): Promise<Array<{
     lead_id: number;
     lead_name: string;
@@ -1565,10 +1578,13 @@ export const api = {
     last_entry_at: string;
   }>> {
     const { data, error } = await supabase.rpc('get_lead_reentries_list', {
-      p_company_id: companyId,
-      p_start_date: dateRange?.start ?? null,
-      p_end_date:   dateRange?.end   ?? null,
-      p_tag_ids:    tagIds?.length   ? tagIds : null,
+      p_company_id:           companyId,
+      p_start_date:           dateRange?.start           ?? null,
+      p_end_date:             dateRange?.end             ?? null,
+      p_tag_ids:              tagIds?.length             ? tagIds : null,
+      p_status:               filters?.status            ?? null,
+      p_origin:               filters?.origin            ?? null,
+      p_responsible_user_id:  filters?.responsibleUserId ?? null,
     });
 
     if (error) throw error;

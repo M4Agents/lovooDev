@@ -269,7 +269,16 @@ export const Leads: React.FC = () => {
           limit: LEADS_PER_PAGE,
           offset: offset > 0 ? offset : undefined,
         }),
-        api.getLeadStats(company.id, dateRange, effectiveTagIds.length > 0 ? effectiveTagIds : undefined)
+        api.getLeadStats(
+          company.id,
+          dateRange,
+          effectiveTagIds.length > 0 ? effectiveTagIds : undefined,
+          {
+            status:            statusFilter    || undefined,
+            origin:            originFilter    || undefined,
+            responsibleUserId: responsibleFilter || undefined,
+          }
+        )
       ]);
       
       setLeads(leadsResult.data);
@@ -1343,6 +1352,12 @@ export const Leads: React.FC = () => {
           }}
           periodLabel={period.label}
           dateRange={periodToDateRange(period)}
+          tagIds={tagFilter.length > 0 ? tagFilter : undefined}
+          filters={{
+            status:            statusFilter     || undefined,
+            origin:            originFilter     || undefined,
+            responsibleUserId: responsibleFilter || undefined,
+          }}
         />
       )}
     </div>

@@ -18,6 +18,12 @@ interface LeadReentriesModalProps {
   onLeadClick: (leadId: number) => void
   periodLabel: string
   dateRange?: { start: string; end: string }
+  tagIds?: string[]
+  filters?: {
+    status?: string
+    origin?: string
+    responsibleUserId?: string
+  }
 }
 
 function formatDate(iso: string): string {
@@ -34,6 +40,8 @@ export function LeadReentriesModal({
   onLeadClick,
   periodLabel,
   dateRange,
+  tagIds,
+  filters,
 }: LeadReentriesModalProps) {
   const { company } = useAuth()
   const [items, setItems] = useState<LeadReentry[]>([])
@@ -46,7 +54,12 @@ export function LeadReentriesModal({
     setLoading(true)
     setError(null)
     try {
-      const data = await api.getLeadReentriesList(company.id, dateRange)
+      const data = await api.getLeadReentriesList(
+        company.id,
+        dateRange,
+        tagIds?.length ? tagIds : undefined,
+        filters
+      )
       setItems(data as unknown as LeadReentry[])
     } catch (err: any) {
       setError('Erro ao carregar reentradas. Tente novamente.')
@@ -54,7 +67,7 @@ export function LeadReentriesModal({
     } finally {
       setLoading(false)
     }
-  }, [company?.id, dateRange])
+  }, [company?.id, dateRange, tagIds, filters])
 
   useEffect(() => {
     if (isOpen) load()
