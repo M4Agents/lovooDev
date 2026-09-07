@@ -132,6 +132,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     stageId:      string
   }
   const [selectedMap, setSelectedMap]             = useState<Map<string, SelectedOpportunity>>(new Map())
+  /** Ref sempre sincronizado com selectedMap — garante leitura do valor mais recente
+   *  em closures capturadas pelo DnD (handleDragStart / handleDragEnd). */
+  const selectedMapRef = useRef<Map<string, SelectedOpportunity>>(new Map())
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false)
   /** true enquanto um drag de seleção múltipla está em andamento */
@@ -139,6 +142,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   /** Set derivado de selectedMap — memoizado para evitar nova referência a cada render. */
   const selectedPositionIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap])
+
+  // Mantém selectedMapRef sempre atualizado a cada render — leitura segura em qualquer closure.
+  useEffect(() => {
+    selectedMapRef.current = selectedMap
+  }, [selectedMap])
 
   useEffect(() => {
     if (!companyId) return
@@ -886,9 +894,11 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     // Se sim: preserva a seleção e ativa o modo multi-drag.
     // Se não (ou seleção unitária): limpa seleção e executa drag individual.
     const draggedOpportunityId = dragStart.draggableId.replace('opportunity-', '')
+    // Usa ref para garantir selectedMap atual, independente da closure capturada pelo DnD.
+    const currentMap = selectedMapRef.current
     const isPartOfMultiSelection =
-      selectedMap.size > 1 &&
-      Array.from(selectedMap.values()).some(v => v.opportunityId === draggedOpportunityId)
+      currentMap.size > 1 &&
+      Array.from(currentMap.values()).some(v => v.opportunityId === draggedOpportunityId)
 
     if (isPartOfMultiSelection) {
       setIsDraggingSelection(true)
@@ -987,12 +997,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const opportunityId = draggableId.replace('opportunity-', '')
 
     // Deriva localmente se o card arrastado pertence a uma seleção múltipla.
-    // NÃO usa isDraggingSelection: esse state é setado no handleDragStart e pode
-    // estar stale na closure capturada pelo @hello-pangea/dnd para onDragEnd.
-    // selectedMap é estável antes do drag iniciar — fonte de verdade segura.
+    // Usa ref para garantir selectedMap atual — closure do DnD pode ser anterior às seleções.
     const isMultiSelectionDrag =
-      selectedMap.size > 1 &&
-      Array.from(selectedMap.values()).some(item => item.opportunityId === opportunityId)
+      selectedMapRef.current.size > 1 &&
+      Array.from(selectedMapRef.current.values()).some(item => item.opportunityId === opportunityId)
 
     if (isMultiSelectionDrag) {
       setIsDraggingSelection(false)

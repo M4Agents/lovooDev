@@ -123,15 +123,26 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             hover:shadow-md
             ${snapshot.isDragging
               ? 'shadow-lg ring-2 ring-blue-400 rotate-2 border-gray-200'
-              : isSelected
-                ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50 hover:border-blue-500'
-                : 'border-gray-200 hover:border-blue-300'}
+              : isSelected && isDraggingSelection
+                ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50 opacity-70'
+                : isSelected
+                  ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50 hover:border-blue-500'
+                  : 'border-gray-200 hover:border-blue-300'}
           `}
         >
-          {/* Badge de multi-drag — visível apenas no card arrastado quando selção múltipla ativa */}
+          {/* Banner de multi-drag — exibido no card arrastado quando há seleção múltipla */}
           {snapshot.isDragging && isSelected && isDraggingSelection && selectedCount > 1 && (
-            <div className="absolute -top-2 -right-2 z-20 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md pointer-events-none select-none">
-              +{selectedCount - 1}
+            <div className="absolute inset-x-0 bottom-0 z-20 bg-blue-600 text-white text-xs font-semibold py-2 text-center rounded-b-lg pointer-events-none select-none">
+              Movendo {selectedCount} oportunidades
+            </div>
+          )}
+
+          {/* Overlay nos cards parceiros — selecionados mas não arrastados durante multi-drag */}
+          {!snapshot.isDragging && isDraggingSelection && isSelected && (
+            <div className="absolute inset-0 z-10 rounded-lg bg-blue-600/10 border-2 border-dashed border-blue-500 flex items-center justify-center pointer-events-none">
+              <span className="bg-blue-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow">
+                será movida ↗
+              </span>
             </div>
           )}
 
