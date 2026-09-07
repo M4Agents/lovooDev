@@ -22,6 +22,7 @@ import { TagsManagementModal } from '../components/TagsManagementModal';
 import { BulkAssignModal } from '../components/BulkAssignModal';
 import { BulkMergeModal } from '../components/BulkMergeModal';
 import { LeadTableColumnCustomizer } from '../components/LeadTableColumnCustomizer';
+import { LeadReentriesModal } from '../components/LeadReentriesModal';
 import { useLeadTablePreferences } from '../hooks/useLeadTablePreferences';
 import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
@@ -68,6 +69,8 @@ type Lead = CanonicalLead & {
 interface LeadStats {
   totalLeads: number;
   totalEntries: number;
+  newLeads: number;
+  reentryLeads: number;
 }
 
 const LEADS_PER_PAGE = 100;
@@ -132,6 +135,9 @@ export const Leads: React.FC = () => {
   // NOVOS ESTADOS PARA EXPORTAÇÃO
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+
+  // Modal de reentradas
+  const [showReentriesModal, setShowReentriesModal] = useState(false);
 
   // Filtro de período
   const [period, setPeriod] = useState<PeriodFilterType>({ type: 'all', label: 'Todo período' });
@@ -648,6 +654,11 @@ export const Leads: React.FC = () => {
                 {stats ? stats.totalLeads : '—'}
               </p>
               <p className="text-xs text-gray-400 mt-1">Identidades únicas no sistema</p>
+              {stats && period.type !== 'all' && stats.newLeads > 0 && (
+                <p className="text-xs text-green-600 mt-1 font-medium">
+                  +{stats.newLeads} novos no período
+                </p>
+              )}
             </div>
             <Users className="w-10 h-10 text-blue-600 opacity-80" />
           </div>
@@ -664,6 +675,31 @@ export const Leads: React.FC = () => {
               <p className="text-xs text-gray-400 mt-1">
                 {period.label} · Inclui novos leads e reentradas
               </p>
+              {stats && (
+                <div className="flex items-center gap-4 mt-3 flex-wrap">
+                  {/* Novos */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                    <span className="text-sm font-semibold text-gray-800">{stats.newLeads}</span>
+                    <span className="text-xs text-gray-500">novos</span>
+                  </div>
+                  {/* Reentradas */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
+                    <span className="text-sm font-semibold text-gray-800">{stats.reentryLeads}</span>
+                    <span className="text-xs text-gray-500">reentradas</span>
+                  </div>
+                  {/* Ver lista */}
+                  {stats.reentryLeads > 0 && (
+                    <button
+                      onClick={() => setShowReentriesModal(true)}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors"
+                    >
+                      Ver lista →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <ArrowDownUp className="w-10 h-10 text-green-600 opacity-80 flex-shrink-0 ml-4" />
           </div>
@@ -1291,6 +1327,24 @@ export const Leads: React.FC = () => {
         onMergeComplete={handleBulkMergeComplete}
         notifications={bulkMergeNotifications}
       />
+
+      {/* Modal de Reentradas */}
+      {showReentriesModal && (
+        <LeadReentriesModal
+          isOpen={showReentriesModal}
+          onClose={() => setShowReentriesModal(false)}
+          onLeadClick={(leadId) => {
+            setShowReentriesModal(false);
+            const lead = leads.find(l => l.id === leadId);
+            if (lead) {
+              setSelectedLead(lead);
+              setShowViewModal(true);
+            }
+          }}
+          periodLabel={period.label}
+          dateRange={periodToDateRange(period)}
+        />
+      )}
     </div>
   );
 };

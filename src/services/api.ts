@@ -1529,7 +1529,7 @@ export const api = {
     companyId: string,
     dateRange?: { start: string; end: string },
     tagIds?: string[]
-  ): Promise<{ totalLeads: number; totalEntries: number }> {
+  ): Promise<{ totalLeads: number; totalEntries: number; newLeads: number; reentryLeads: number }> {
     try {
       const { data, error } = await supabase.rpc('get_lead_dashboard_stats', {
         p_company_id: companyId,
@@ -1541,13 +1541,38 @@ export const api = {
       if (error) throw error;
 
       return {
-        totalLeads: (data as any)?.total_leads ?? 0,
-        totalEntries: (data as any)?.total_entries ?? 0,
+        totalLeads:   (data as any)?.total_leads    ?? 0,
+        totalEntries: (data as any)?.total_entries  ?? 0,
+        newLeads:     (data as any)?.new_leads      ?? 0,
+        reentryLeads: (data as any)?.reentry_leads  ?? 0,
       };
     } catch (error) {
       console.error('Error in getLeadStats:', error);
       throw error;
     }
+  },
+
+  async getLeadReentriesList(
+    companyId: string,
+    dateRange?: { start: string; end: string },
+    tagIds?: string[]
+  ): Promise<Array<{
+    lead_id: number;
+    lead_name: string;
+    lead_phone: string | null;
+    lead_email: string | null;
+    reentry_count: number;
+    last_entry_at: string;
+  }>> {
+    const { data, error } = await supabase.rpc('get_lead_reentries_list', {
+      p_company_id: companyId,
+      p_start_date: dateRange?.start ?? null,
+      p_end_date:   dateRange?.end   ?? null,
+      p_tag_ids:    tagIds?.length   ? tagIds : null,
+    });
+
+    if (error) throw error;
+    return (data ?? []) as any[];
   },
 
   async exportLeads(companyId: string) {
