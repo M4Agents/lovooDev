@@ -123,13 +123,15 @@ export default async function handler(req, res) {
   }
 
   // ── 2. Extrair e validar campos obrigatórios ────────────────────────────
-  // opportunity_ids não existe mais — elegíveis são calculados pelos filtros.
+  // opportunity_ids (opcional): quando fornecido pelo frontend (modo byIds — seleção múltipla),
+  // bypassa a resolução via filtros e opera exatamente sobre os IDs explícitos.
   const {
     company_id,
     from_funnel_id,
     from_stage_id,
     to_funnel_id,
     to_stage_id,
+    opportunity_ids,
     search,
     origin,
     period_start,
@@ -137,6 +139,11 @@ export default async function handler(req, res) {
     tag_ids,
     tag_mode,
   } = req.body ?? {}
+
+  // Modo byIds: IDs explícitos fornecidos pelo frontend
+  const explicitIds = Array.isArray(opportunity_ids) && opportunity_ids.length > 0
+    ? opportunity_ids.map(String)
+    : null
 
   if (!company_id)     return res.status(400).json({ error: 'company_id é obrigatório',     field: 'company_id' })
   if (!from_funnel_id) return res.status(400).json({ error: 'from_funnel_id é obrigatório', field: 'from_funnel_id' })
@@ -224,40 +231,46 @@ export default async function handler(req, res) {
   }
 
   // ── 5. Resolver IDs elegíveis + verificar limite ──────────────────────────
-  // Único caminho para ambos os cenários (com ou sem filtros).
+  // Dois caminhos, mesma garantia: p_opportunity_ids nunca é NULL na RPC.
   //
-  // Sempre resolve os IDs antes de chamar a RPC — garante que:
-  //   - a contagem exibida ao usuário é exatamente o conjunto que será movido
-  //   - o limite de 200 é realmente respeitado (sem race condition entre count e move)
-  //   - p_opportunity_ids nunca é NULL: a RPC sempre opera sobre um conjunto fixo
+  // Caminho A — byIds (explicitIds != null):
+  //   Frontend forneceu IDs da seleção múltipla → usa diretamente.
+  //   Validação de pertencimento à empresa/etapa é feita pela RPC (SECURITY DEFINER).
   //
-  // Sem filtros → get_stage_opportunity_ids_filtered com todos os params NULL
-  //               retorna todos os IDs da etapa
-  // Com filtros → get_stage_opportunity_ids_filtered com os filtros ativos
-  //               retorna apenas os IDs que correspondem
+  // Caminho B — filtros (explicitIds == null):
+  //   Resolve via get_stage_opportunity_ids_filtered (com ou sem filtros).
+  //   Sem filtros → todos os IDs da etapa.
+  //   Com filtros → apenas os IDs correspondentes.
   const hasFilters = !!(search || origin || period_start || period_end || (Array.isArray(tag_ids) && tag_ids.length > 0))
 
-  const { data: ids, error: idsErr } = await svc.rpc('get_stage_opportunity_ids_filtered', {
-    p_funnel_id:   from_funnel_id,
-    p_stage_id:    from_stage_id,
-    p_company_id:  company_id,
-    p_search:      search       ?? null,
-    p_origin:      origin       ?? null,
-    p_period_days: null,
-    p_start_date:  period_start ?? null,
-    p_end_date:    period_end   ?? null,
-    p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
-    p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
-  })
+  let opportunityIds
+  if (explicitIds) {
+    // Caminho A: byIds — IDs já conhecidos
+    opportunityIds = explicitIds
+  } else {
+    // Caminho B: filtros — resolve via RPC auxiliar
+    const { data: ids, error: idsErr } = await svc.rpc('get_stage_opportunity_ids_filtered', {
+      p_funnel_id:   from_funnel_id,
+      p_stage_id:    from_stage_id,
+      p_company_id:  company_id,
+      p_search:      search       ?? null,
+      p_origin:      origin       ?? null,
+      p_period_days: null,
+      p_start_date:  period_start ?? null,
+      p_end_date:    period_end   ?? null,
+      p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
+      p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
+    })
 
-  if (idsErr) {
-    return res.status(500).json({ error: 'Erro ao resolver oportunidades elegíveis', detail: idsErr.message })
+    if (idsErr) {
+      return res.status(500).json({ error: 'Erro ao resolver oportunidades elegíveis', detail: idsErr.message })
+    }
+    opportunityIds = ids ?? []
   }
 
-  const opportunityIds = ids ?? []
-  const eligibleCount  = opportunityIds.length
+  const eligibleCount = opportunityIds.length
 
-  console.log(`[bulk-move] company=${company_id} stage=${from_stage_id} has_filters=${hasFilters} eligible=${eligibleCount}`)
+  console.log(`[bulk-move] company=${company_id} stage=${from_stage_id} by_ids=${!!explicitIds} has_filters=${hasFilters} eligible=${eligibleCount}`)
 
   if (eligibleCount === 0) {
     const msg = hasFilters

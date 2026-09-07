@@ -44,6 +44,13 @@ interface BulkMoveOpportunitiesModalProps {
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }
+
+  /**
+   * IDs específicos a mover (modo byIds — acionado pela seleção múltipla).
+   * Quando fornecido, bypassa a consulta de contagem ao backend:
+   * o count é exatamente opportunityIds.length.
+   */
+  opportunityIds?: string[]
 }
 
 const STAGE_TYPE_LABEL: Record<string, string> = {
@@ -65,7 +72,10 @@ export function BulkMoveOpportunitiesModal({
   fromStageName,
   fromStageType,
   filters,
+  opportunityIds,
 }: BulkMoveOpportunitiesModalProps) {
+  // Modo byIds: acionado pela seleção múltipla — a contagem é conhecida de antemão
+  const isByIds = Array.isArray(opportunityIds) && opportunityIds.length > 0
   const [funnels, setFunnels]               = useState<SalesFunnel[]>([])
   const [stages, setStages]                 = useState<FunnelStage[]>([])
   const [selectedFunnelId, setSelectedFunnelId] = useState<string>(fromFunnelId)
@@ -81,8 +91,8 @@ export function BulkMoveOpportunitiesModal({
   const [countError, setCountError]         = useState<string | null>(null)
   const [submitError, setSubmitError]       = useState<string | null>(null)
 
-  // Derivado do snapshot de filtros — não do estado global atual
-  const hasActiveFilters = !!(filters?.search || filters?.origin || filters?.period_start || filters?.period_end || filters?.tags?.length)
+  // Derivado do snapshot de filtros — não do estado global atual (irrelevante em byIds mode)
+  const hasActiveFilters = !isByIds && !!(filters?.search || filters?.origin || filters?.period_start || filters?.period_end || filters?.tags?.length)
 
   // ── Carregar funis da empresa ──────────────────────────────────────────
   useEffect(() => {
@@ -146,26 +156,36 @@ export function BulkMoveOpportunitiesModal({
     }
   }, [companyId, fromFunnelId, fromStageId, filters])
 
+  // ── Modo byIds: contagem é conhecida imediatamente (sem consulta ao backend) ──
   useEffect(() => {
+    if (!isOpen || !isByIds || !opportunityIds) return
+    setEligibleCount(opportunityIds.length)
+    setExceedsLimit(opportunityIds.length > MAX_OPPORTUNITIES)
+  }, [isOpen, isByIds, opportunityIds])
+
+  // ── Modo filtros: consulta contagem ao selecionar etapa destino ────────────
+  useEffect(() => {
+    if (isByIds) return // byIds: já definido acima
     if (selectedStageId) {
       fetchCount(selectedStageId)
     } else {
       setEligibleCount(null)
       setExceedsLimit(false)
     }
-  }, [selectedStageId, fetchCount])
+  }, [selectedStageId, fetchCount, isByIds])
 
   // ── Reset ao fechar ────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       setSelectedFunnelId(fromFunnelId)
       setSelectedStageId('')
-      setEligibleCount(null)
+      // byIds: eligibleCount permanece definido pela prop; resetado ao reabrir via effect acima
+      if (!isByIds) setEligibleCount(null)
       setExceedsLimit(false)
       setCountError(null)
       setSubmitError(null)
     }
-  }, [isOpen, fromFunnelId])
+  }, [isOpen, fromFunnelId, isByIds])
 
   // ── Executar bulk move ─────────────────────────────────────────────────
   const handleConfirm = async () => {
@@ -187,12 +207,18 @@ export function BulkMoveOpportunitiesModal({
           from_stage_id:  fromStageId,
           to_funnel_id:   selectedFunnelId,
           to_stage_id:    selectedStageId,
-          search:        filters?.search       ?? null,
-          origin:        filters?.origin       ?? null,
-          period_start:  filters?.period_start ?? null,
-          period_end:    filters?.period_end   ?? null,
-          tag_ids:       filters?.tags?.length ? filters.tags : null,
-          tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
+          // Modo byIds: envia os IDs explícitos (ignora filtros)
+          ...(isByIds
+            ? { opportunity_ids: opportunityIds }
+            : {
+                search:        filters?.search       ?? null,
+                origin:        filters?.origin       ?? null,
+                period_start:  filters?.period_start ?? null,
+                period_end:    filters?.period_end   ?? null,
+                tag_ids:       filters?.tags?.length ? filters.tags : null,
+                tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
+              }
+          ),
         }),
       })
       const json = await resp.json()
@@ -233,13 +259,15 @@ export function BulkMoveOpportunitiesModal({
             )}
           </div>
 
-          {/* Aviso contextual (filtros ativos ou não) */}
+          {/* Aviso contextual */}
           <div className="flex items-start gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
             <Filter className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-800">
-              {hasActiveFilters
-                ? 'Todas as oportunidades que correspondem aos filtros atuais serão consideradas, independentemente da paginação.'
-                : 'Todas as oportunidades desta etapa serão consideradas, mesmo que nem todas estejam carregadas na tela.'}
+              {isByIds
+                ? `Apenas as ${opportunityIds!.length} oportunidades selecionadas serão movidas para a etapa escolhida.`
+                : hasActiveFilters
+                  ? 'Todas as oportunidades que correspondem aos filtros atuais serão consideradas, independentemente da paginação.'
+                  : 'Todas as oportunidades desta etapa serão consideradas, mesmo que nem todas estejam carregadas na tela.'}
             </p>
           </div>
 
@@ -319,7 +347,10 @@ export function BulkMoveOpportunitiesModal({
                     <p className="text-sm text-gray-800">
                       <span className="font-semibold text-blue-700">{eligibleCount}</span>
                       {' '}
-                      {hasActiveFilters ? 'oportunidades filtradas' : 'oportunidades desta etapa'} serão movidas
+                      {isByIds
+                        ? 'oportunidades selecionadas'
+                        : hasActiveFilters ? 'oportunidades filtradas' : 'oportunidades desta etapa'
+                      } serão movidas
                     </p>
                   </div>
                 ) : (
@@ -336,7 +367,9 @@ export function BulkMoveOpportunitiesModal({
               </div>
             ) : (
               <p className="text-sm text-gray-500 italic">
-                Selecione a etapa de destino para calcular as oportunidades elegíveis.
+                {isByIds
+                  ? 'Selecione a etapa de destino para confirmar a movimentação.'
+                  : 'Selecione a etapa de destino para calcular as oportunidades elegíveis.'}
               </p>
             )}
           </div>

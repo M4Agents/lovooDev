@@ -43,6 +43,11 @@ export interface BulkMoveRequest {
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }
+  /**
+   * IDs explícitos das oportunidades selecionadas (modo byIds — barra flutuante).
+   * Quando presente, bypassa filtros e a consulta de contagem no modal.
+   */
+  opportunityIds?: string[]
 }
 
 interface FunnelColumnProps {

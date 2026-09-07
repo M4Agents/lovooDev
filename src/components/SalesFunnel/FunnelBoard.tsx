@@ -143,6 +143,16 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   /** Set derivado de selectedMap — memoizado para evitar nova referência a cada render. */
   const selectedPositionIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap])
 
+  /**
+   * true quando todos os itens selecionados pertencem à mesma etapa.
+   * Pré-requisito para "Mover para funil" via barra flutuante.
+   */
+  const isSelectionSameStage = useMemo(() => {
+    if (selectedMap.size === 0) return false
+    const stageIds = new Set(Array.from(selectedMap.values()).map(v => v.stageId))
+    return stageIds.size === 1
+  }, [selectedMap])
+
   // Mantém selectedMapRef sempre atualizado a cada render — leitura segura em qualquer closure.
   useEffect(() => {
     selectedMapRef.current = selectedMap
@@ -407,12 +417,39 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     })
   }, [searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode])
 
-  const handleBulkMoveSuccess = useCallback((movedCount: number) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleBulkMoveSuccess = useCallback((_movedCount: number) => {
+    const wasSelectionMove = !!bulkMoveRequest?.opportunityIds
     setBulkMoveRequest(null)
+    if (wasSelectionMove) clearSelection()
     // Refresh visual: recarregar contagens e cards das colunas afetadas
     refreshCounts().catch(err => console.error('[FunnelBoard] bulk move — erro ao atualizar contadores:', err))
     stages.forEach(s => boardRefresh(s.id))
-  }, [refreshCounts, boardRefresh, stages])
+  }, [refreshCounts, boardRefresh, stages, bulkMoveRequest, clearSelection])
+
+  /**
+   * Abre o modal "Mover para funil" com os IDs da seleção atual.
+   * Exige que todas as oportunidades selecionadas pertençam à mesma etapa.
+   */
+  const handleBulkMoveSelectionToFunnel = useCallback(() => {
+    if (selectedMap.size === 0 || !isSelectionSameStage) return
+
+    const entries      = Array.from(selectedMap.values())
+    const fromStageId  = entries[0].stageId
+    const fromStage    = stages.find(s => s.id === fromStageId)
+    if (!fromStage) return
+
+    const opportunityIds = entries.map(e => e.opportunityId)
+
+    setBulkMoveRequest({
+      fromFunnelId:   funnelId,
+      fromFunnelName: funnelName ?? '',
+      fromStageId:    fromStage.id,
+      fromStageName:  fromStage.name,
+      fromStageType:  fromStage.stage_type as 'active' | 'won' | 'lost',
+      opportunityIds,
+    })
+  }, [selectedMap, isSelectionSameStage, stages, funnelId, funnelName])
 
   const [isDragging, setIsDragging]                 = useState(false)
   const [visualDragOverStageId, setVisualDragOverStageId] = useState<string | null>(null)
@@ -1734,6 +1771,23 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
               ? '1 oportunidade selecionada'
               : `${selectedMap.size} oportunidades selecionadas`}
           </span>
+          {/* Mover para funil — visível para todos; desativado quando seleção mista de etapas */}
+          <>
+            <div className="w-px h-4 bg-white/30" />
+            <button
+              type="button"
+              onClick={isSelectionSameStage ? handleBulkMoveSelectionToFunnel : undefined}
+              disabled={!isSelectionSameStage}
+              title={!isSelectionSameStage ? 'Selecione oportunidades da mesma etapa para mover em massa' : undefined}
+              className={`text-sm font-medium transition-colors ${
+                isSelectionSameStage
+                  ? 'text-purple-300 hover:text-purple-200'
+                  : 'text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              Mover para funil
+            </button>
+          </>
           {canBulkAssignLeads && (
             <>
               <div className="w-px h-4 bg-white/30" />
@@ -1895,6 +1949,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           fromStageName={bulkMoveRequest.fromStageName}
           fromStageType={bulkMoveRequest.fromStageType}
           filters={bulkMoveRequest.filters}
+          opportunityIds={bulkMoveRequest.opportunityIds}
         />
       )}
 
