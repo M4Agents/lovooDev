@@ -417,15 +417,17 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     })
   }, [searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode])
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleBulkMoveSuccess = useCallback((_movedCount: number) => {
+  const handleBulkMoveSuccess = useCallback(() => {
     const wasSelectionMove = !!bulkMoveRequest?.opportunityIds
     setBulkMoveRequest(null)
-    if (wasSelectionMove) clearSelection()
+    // setSelectedMap (setter estável do useState) é usado diretamente para evitar
+    // referenciar clearSelection no dep array — clearSelection é declarada mais abaixo
+    // no componente e causaria TDZ (Temporal Dead Zone) se fosse incluída aqui.
+    if (wasSelectionMove) setSelectedMap(new Map())
     // Refresh visual: recarregar contagens e cards das colunas afetadas
     refreshCounts().catch(err => console.error('[FunnelBoard] bulk move — erro ao atualizar contadores:', err))
     stages.forEach(s => boardRefresh(s.id))
-  }, [refreshCounts, boardRefresh, stages, bulkMoveRequest, clearSelection])
+  }, [refreshCounts, boardRefresh, stages, bulkMoveRequest, setSelectedMap])
 
   /**
    * Abre o modal "Mover para funil" com os IDs da seleção atual.
