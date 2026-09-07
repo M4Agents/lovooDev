@@ -187,6 +187,7 @@ const BASE_TRIGGER_CATEGORIES: TriggerCategory[] = [
         description: 'Dispara quando uma atividade está prestes a ocorrer (X minutos antes do horário agendado)',
         icon: AlarmClock,
         color: 'yellow',
+        defaultConfig: { minutes_before: 60 },
       },
       {
         type: 'calendar.activity_overdue',
@@ -194,6 +195,7 @@ const BASE_TRIGGER_CATEGORIES: TriggerCategory[] = [
         description: 'Dispara quando uma atividade passa do horário agendado sem ser concluída (X minutos após)',
         icon: AlarmClockOff,
         color: 'red',
+        defaultConfig: { minutes_after: 0 },
       },
     ]
   },

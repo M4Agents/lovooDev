@@ -39,6 +39,9 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
   if (!isOpen || !trigger) return null
 
   const handleSave = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:handleSave',message:'trigger config saved',data:{triggerId:trigger.id,triggerType:trigger.type,config},timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
     onSave(trigger.id, config)
     onClose()
   }
@@ -739,6 +742,176 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 onChange={(e) => setConfig({ ...config, time: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+          </div>
+        )
+
+      case 'calendar.activity_due_soon':
+        return (
+          <div className="space-y-4">
+            {/* #region agent log */}
+            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:due_soon',message:'due_soon form rendered',data:{minutes_before:config.minutes_before,activity_type:config.activity_type,priority:config.priority},timestamp:Date.now()})}).catch(()=>{}); return null })()}
+            {/* #endregion */}
+
+            {/* ANTECEDÊNCIA */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Antecedência (minutos antes) <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={config.minutes_before ?? 60}
+                onChange={(e) => setConfig({ ...config, minutes_before: Number(e.target.value) })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value={5}>5 minutos</option>
+                <option value={15}>15 minutos</option>
+                <option value={30}>30 minutos</option>
+                <option value={60}>1 hora</option>
+                <option value={120}>2 horas</option>
+                <option value={240}>4 horas</option>
+                <option value={480}>8 horas</option>
+                <option value={1440}>1 dia</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Quantos minutos antes do horário agendado este gatilho deve disparar.
+              </p>
+            </div>
+
+            {/* TIPO DE ATIVIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo de Atividade
+              </label>
+              <select
+                value={config.activity_type || ''}
+                onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer tipo</option>
+                <option value="call">Ligação</option>
+                <option value="meeting">Reunião</option>
+                <option value="email">E-mail</option>
+                <option value="task">Tarefa</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="demo">Demo</option>
+                <option value="other">Outro</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer tipo de atividade.
+              </p>
+            </div>
+
+            {/* PRIORIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prioridade
+              </label>
+              <select
+                value={config.priority || ''}
+                onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer prioridade</option>
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer prioridade.
+              </p>
+            </div>
+
+            {/* INFO */}
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-800">
+                <strong>Ativação temporal:</strong> Este gatilho é processado pelo cron de automação de calendário. O disparo ocorre em até 1 minuto da janela configurada.
+              </p>
+            </div>
+          </div>
+        )
+
+      case 'calendar.activity_overdue':
+        return (
+          <div className="space-y-4">
+            {/* #region agent log */}
+            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:overdue',message:'overdue form rendered',data:{minutes_after:config.minutes_after,activity_type:config.activity_type,priority:config.priority},timestamp:Date.now()})}).catch(()=>{}); return null })()}
+            {/* #endregion */}
+
+            {/* TEMPO APÓS O HORÁRIO */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tempo após o horário <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={config.minutes_after ?? 0}
+                onChange={(e) => setConfig({ ...config, minutes_after: Number(e.target.value) })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value={0}>Imediatamente após o horário</option>
+                <option value={5}>5 minutos após</option>
+                <option value={15}>15 minutos após</option>
+                <option value={30}>30 minutos após</option>
+                <option value={60}>1 hora após</option>
+                <option value={120}>2 horas após</option>
+                <option value={240}>4 horas após</option>
+                <option value={1440}>1 dia após</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Quanto tempo após o horário agendado a atividade é considerada vencida. Aplica-se apenas a atividades com status <em>pendente</em>.
+              </p>
+            </div>
+
+            {/* TIPO DE ATIVIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo de Atividade
+              </label>
+              <select
+                value={config.activity_type || ''}
+                onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer tipo</option>
+                <option value="call">Ligação</option>
+                <option value="meeting">Reunião</option>
+                <option value="email">E-mail</option>
+                <option value="task">Tarefa</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="demo">Demo</option>
+                <option value="other">Outro</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer tipo de atividade.
+              </p>
+            </div>
+
+            {/* PRIORIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prioridade
+              </label>
+              <select
+                value={config.priority || ''}
+                onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer prioridade</option>
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer prioridade.
+              </p>
+            </div>
+
+            {/* INFO */}
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-800">
+                <strong>Ativação temporal:</strong> Este gatilho é processado pelo cron de automação de calendário. O disparo ocorre em até 1 minuto após a janela configurada.
+              </p>
             </div>
           </div>
         )
