@@ -481,6 +481,8 @@ export interface LeadCardData {
   }>
   /** TRUE quando o lead foi criado acima do limite max_leads do plano. Dados sensíveis são mascarados. */
   is_over_plan?: boolean
+  /** UUID do usuário atribuído como responsável pelo lead via "Atribuir Responsável". */
+  responsible_user_id?: string
 }
 
 // =====================================================
@@ -907,7 +909,8 @@ export const FUNNEL_CONSTANTS = {
     'status',
     'created_at',
     'last_contact_at',
-    'opportunity_number'
+    'opportunity_number',
+    'responsible'
   ],
   
   STAGE_TYPES: {

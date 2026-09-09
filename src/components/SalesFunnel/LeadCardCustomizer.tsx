@@ -31,7 +31,8 @@ const FIELD_LABELS: Record<string, string> = {
   status: 'Status',
   created_at: 'Data de Criação',
   last_contact_at: 'Último Contato',
-  opportunity_number: 'Número da Oportunidade'
+  opportunity_number: 'Número da Oportunidade',
+  responsible: 'Responsável pelo Lead'
 }
 
 const FIELD_DESCRIPTIONS: Record<string, string> = {
@@ -47,7 +48,8 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   status: 'Status atual do lead',
   created_at: 'Data em que o lead foi criado',
   last_contact_at: 'Data do último contato com o lead',
-  opportunity_number: 'Número sequencial único gerado automaticamente por empresa'
+  opportunity_number: 'Número sequencial único gerado automaticamente por empresa',
+  responsible: 'Nome do responsável atribuído ao lead'
 }
 
 const FIELD_TYPE_LABEL: Record<string, string> = {

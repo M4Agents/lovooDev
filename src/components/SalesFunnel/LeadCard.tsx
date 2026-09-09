@@ -8,7 +8,7 @@
 import React, { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Draggable } from '@hello-pangea/dnd'
-import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle, Check } from 'lucide-react'
+import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle, Check, UserCheck } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition, CustomFieldValueEntry } from '../../types/sales-funnel'
@@ -275,6 +275,23 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 <span className="truncate">{lead.company_name}</span>
               </div>
             )}
+
+            {/* Responsável pelo Lead — campo opcional, distinto do owner da oportunidade */}
+            {isFieldVisible('responsible') && lead?.responsible_user_id && (() => {
+              const responsibleUser = companyUsers.find(
+                user => user.user_id === lead.responsible_user_id
+              )
+              const label =
+                responsibleUser?.display_name ||
+                responsibleUser?.email
+              if (!label) return null
+              return (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <UserCheck className="w-3 h-3 flex-shrink-0 text-gray-400" />
+                  <span className="truncate">{label}</span>
+                </div>
+              )
+            })()}
 
             {/* Valor da Oportunidade com Probabilidade */}
             {isFieldVisible('deal_value') && opportunity.value > 0 && (
