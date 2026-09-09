@@ -20,6 +20,7 @@ import { DuplicateNotifications, DuplicateNotification } from '../components/Dup
 import { DuplicateMergeModal } from '../components/DuplicateMergeModal';
 import { TagsManagementModal } from '../components/TagsManagementModal';
 import { BulkAssignModal } from '../components/BulkAssignModal';
+import { BulkTagModal } from '../components/BulkTagModal';
 import { BulkMergeModal } from '../components/BulkMergeModal';
 import { LeadTableColumnCustomizer } from '../components/LeadTableColumnCustomizer';
 import { useLeadTablePreferences } from '../hooks/useLeadTablePreferences';
@@ -98,7 +99,7 @@ function getCustomFieldValue(
 export const Leads: React.FC = () => {
   const { company, user }                     = useAuth();
   const { canViewLead, canEditLead, canDeleteLead, isRestrictedToOwnLeads } = useLeadPermissions();
-  const { canImportLeads, canEditAllLeads }    = useAccessControl();
+  const { canImportLeads, canBulkAssignLeads, canBulkTagLeads, canSeeBulkBar } = useAccessControl();
   const { leadStats }                          = usePlanLeadStats(company?.id);
   // Visibilidade condicional — integração Nuvemshop (UX apenas; segurança no backend)
   const { hasNuvemshopEver }                   = useCompanyIntegration();
@@ -148,6 +149,10 @@ export const Leads: React.FC = () => {
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
+
+  // Atribuição de tags em lote
+  const [showBulkTagModal, setShowBulkTagModal] = useState(false);
+  const [bulkTagLoading, setBulkTagLoading] = useState(false);
 
   // Mesclagem em lote (duplicatas)
   const [bulkMergeNotifications, setBulkMergeNotifications] = useState<DuplicateNotification[]>([]);
@@ -396,6 +401,24 @@ export const Leads: React.FC = () => {
       toast.error(error?.message ?? 'Erro ao atribuir responsável. Tente novamente.');
     } finally {
       setBulkAssignLoading(false);
+    }
+  };
+
+  const handleBulkTagAssign = async (tagIds: string[]) => {
+    setBulkTagLoading(true);
+    try {
+      const ids = Array.from(selectedLeadIds);
+      const result = await api.bulkTagLeads(ids, tagIds);
+      setShowBulkTagModal(false);
+      setSelectedLeadIds(new Set());
+      await loadData();
+      toast.success(
+        `Tags atribuídas a ${result.requestedLeads} lead${result.requestedLeads !== 1 ? 's' : ''} com sucesso.`,
+      );
+    } catch (error: any) {
+      toast.error(error?.message ?? 'Erro ao atribuir tags. Tente novamente.');
+    } finally {
+      setBulkTagLoading(false);
     }
   };
 
@@ -857,7 +880,7 @@ export const Leads: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                {canEditAllLeads && (
+                {canSeeBulkBar && (
                   <th className="pl-4 pr-2 py-2 w-8">
                     <input
                       type="checkbox"
@@ -937,7 +960,7 @@ export const Leads: React.FC = () => {
                   key={lead.id}
                   className={`hover:bg-gray-50 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50' : ''}`}
                 >
-                  {canEditAllLeads && (
+                  {canSeeBulkBar && (
                     <td className="pl-4 pr-2 py-2 w-8 align-middle">
                       <input
                         type="checkbox"
@@ -1140,18 +1163,29 @@ export const Leads: React.FC = () => {
         </div>
 
         {/* Barra flutuante de seleção em lote */}
-        {selectedLeadIds.size > 0 && canEditAllLeads && (
+        {selectedLeadIds.size > 0 && canSeeBulkBar && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-gray-900 text-white rounded-xl shadow-2xl ring-1 ring-white/10">
             <span className="text-sm font-medium">
               {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''} selecionado{selectedLeadIds.size !== 1 ? 's' : ''}
             </span>
-            <button
-              onClick={() => setShowBulkAssignModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
-            >
-              <UserCheck className="w-4 h-4" />
-              Atribuir responsável
-            </button>
+            {canBulkAssignLeads && (
+              <button
+                onClick={() => setShowBulkAssignModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
+              >
+                <UserCheck className="w-4 h-4" />
+                Atribuir responsável
+              </button>
+            )}
+            {canBulkTagLeads && (
+              <button
+                onClick={() => setShowBulkTagModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Tag className="w-4 h-4" />
+                Atribuir Tags
+              </button>
+            )}
             <button
               onClick={() => setSelectedLeadIds(new Set())}
               className="flex items-center gap-1 px-2 py-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors"
@@ -1282,6 +1316,16 @@ export const Leads: React.FC = () => {
         selectedCount={selectedLeadIds.size}
         companyUsers={companyUsers}
         loading={bulkAssignLoading}
+      />
+
+      {/* Modal de Atribuição de Tags em Lote */}
+      <BulkTagModal
+        isOpen={showBulkTagModal}
+        onClose={() => setShowBulkTagModal(false)}
+        onConfirm={handleBulkTagAssign}
+        selectedCount={selectedLeadIds.size}
+        availableTags={availableTags.filter((t) => t.is_active)}
+        loading={bulkTagLoading}
       />
 
       {/* Modal de Mesclagem em Lote */}

@@ -311,6 +311,28 @@ export function useAccessControl() {
     currentRole === 'admin'        ||
     isImpersonating
 
+  // ── Leads: atribuição em massa de tags ─────────────────────
+  // Espelha a matriz ALLOWED_ROLES de api/leads/bulk-tag.ts:
+  //   { 'super_admin', 'system_admin', 'admin', 'manager' }
+  // Baseado EXCLUSIVAMENTE em company_users.role.
+  // NÃO consulta: hasPermission, permissions JSONB, template de permissões.
+  // manager: incluído por decisão de produto (09/09/2026) — tags são menos
+  //   críticas do que atribuição de responsável.
+  // partner / seller: bloqueados — sem permissão de edição em lote.
+  // isImpersonating: mesmo padrão de canBulkAssignLeads.
+  const canBulkTagLeads =
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'admin'        ||
+    currentRole === 'manager'      ||
+    isImpersonating
+
+  // ── Leads: visibilidade da barra de bulk actions ────────────
+  // Gate combinado para exibir checkboxes de seleção e barra flutuante.
+  // Garante que manager (autorizado para Bulk Tag mas não Bulk Assign) veja
+  // a infraestrutura de seleção sem depender de canEditAllLeads (template JSONB).
+  const canSeeBulkBar = canBulkAssignLeads || canBulkTagLeads
+
   // ── Relatório do Agente de IA ──────────────────────────────
   // Controle de UI apenas — a autorização real é feita na RPC.
   // manager e admin da empresa veem o relatório.
@@ -404,6 +426,10 @@ export function useAccessControl() {
     // Funil de Vendas — seleção múltipla e atribuição em massa
     canSelectOpportunities,
     canBulkAssignLeads,
+
+    // Leads — atribuição em massa de tags + visibilidade da barra
+    canBulkTagLeads,
+    canSeeBulkBar,
 
     // Histórico de importações via API
     canViewImportHistory,

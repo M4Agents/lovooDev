@@ -2071,4 +2071,26 @@ export const api = {
     if (!res.ok) throw new Error(json?.error ?? 'Erro ao atribuir responsável');
     return { updated: json.updated, requested: json.requested };
   },
+
+  async bulkTagLeads(
+    leadIds: number[],
+    tagIds: string[],
+  ): Promise<{ requestedLeads: number; requestedTags: number }> {
+    if (leadIds.length === 0) throw new Error('leadIds não pode ser vazio');
+    if (tagIds.length === 0)  throw new Error('tagIds não pode ser vazio');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Sessão inválida');
+
+    const res = await fetch('/api/leads/bulk-tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ leadIds, tagIds }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error ?? 'Erro ao atribuir tags');
+    return { requestedLeads: json.requestedLeads, requestedTags: json.requestedTags };
+  },
 };
