@@ -36,6 +36,8 @@ import { isStageTransitionQuestionsFeatureEnabled } from '../../hooks/dashboard/
 import { fetchStageConfig, fetchActiveQuestions } from '../../services/stageTransitionQuestionsTransport'
 import { StageTransitionFeatureDisabledError } from '../../services/stageTransitionQuestionsService'
 import type { StageTransitionQuestion, StageTransitionAnswer } from '../../types/stage-transition-questions'
+import { getTransitionErrorMessage, getPrecheckErrorMessage } from '../../services/stageTransitionErrors'
+import { withTimeout } from '../../utils/promiseTimeout'
 import { useLossTypeCheck } from '../../hooks/useLossTypeCheck'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
@@ -628,6 +630,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 
   const [pendingTransitionQuestions, setPendingTransitionQuestions] = useState<PendingTransitionQuestions | null>(null)
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false)
+  // FUNNEL.Q2 — Loading state para precheck de perguntas
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false)
 
   // =====================================================
   // DATETIME.2C.2 — PÓS-RPC ACTIVITY CANDIDATE
@@ -1166,12 +1170,28 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       } else {
         // CACHE MISS: fallback para requests (comportamento atual)
         try {
-          // Precheck: config + questions (fail-closed)
-          const config = await fetchStageConfig(toStageId)
+          // FUNNEL.Q2 — Loading state + toast durante precheck
+          setIsLoadingQuestions(true)
+          const loadingToast = toast.loading('Verificando perguntas da etapa...')
+
+          // Precheck: config + questions (fail-closed) com timeout 10s
+          const config = await withTimeout(
+            fetchStageConfig(toStageId),
+            10000,
+            'TIMEOUT: Não foi possível carregar configuração da etapa'
+          )
           
           if (config.enabled && config.activeQuestionCount > 0) {
-            // Carregar perguntas ativas
-            const questions = await fetchActiveQuestions(toStageId)
+            // Carregar perguntas ativas (timeout 10s)
+            const questions = await withTimeout(
+              fetchActiveQuestions(toStageId),
+              10000,
+              'TIMEOUT: Não foi possível carregar perguntas da etapa'
+            )
+            
+            // FUNNEL.Q2 — Dismiss toast após sucesso
+            toast.dismiss(loadingToast)
+            setIsLoadingQuestions(false)
             
             // Atualizar cache para próximos drags
             questionsCacheRef.current.set(toStageId, questions)
@@ -1195,11 +1215,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             }
           }
           
+          // FUNNEL.Q2 — Dismiss toast quando não há perguntas
+          toast.dismiss(loadingToast)
+          setIsLoadingQuestions(false)
+          
           // Atualizar cache: sem perguntas
           questionsCacheRef.current.set(toStageId, [])
           
           // Continuar com fluxo legado (v1) - snapshot já criado
         } catch (error) {
+          // FUNNEL.Q2 — Limpar loading state
+          setIsLoadingQuestions(false)
+          
           // Erro no precheck
           console.error('Erro ao verificar perguntas de transição:', error)
           
@@ -1207,9 +1234,10 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
             // Feature desabilitada de forma coerente - continuar fluxo legado
             // Snapshot já criado, não fazer rollback
           } else {
-            // Erro real - rollback e cancelar movimento
+            // FUNNEL.Q2 — Erro real com mensagem pt-BR
             rollback(snapshot)
-            alert('Erro ao carregar perguntas de transição. Movimento cancelado.')
+            const userMessage = getPrecheckErrorMessage(error)
+            toast.error(userMessage)
             return
           }
         }
@@ -1288,45 +1316,48 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       const snapshot = pendingTransitionQuestions.snapshot
 
       // =====================================================
-      // 3. CHAMAR move_opportunity_v2 — RPC BOUNDARY
+      // 3. CHAMAR move_opportunity_v2 — RPC BOUNDARY (timeout 15s)
       // =====================================================
       // ROLLBACK é permitido SOMENTE dentro deste try/catch.
       // Após RPC success, rollback é PROIBIDO.
       try {
-        await funnelApi.moveOpportunityWithTransitionQuestions({
-          opportunity_id: pendingTransitionQuestions.opportunityId,
-          funnel_id: funnelId,
-          from_stage_id: pendingTransitionQuestions.fromStageId,
-          to_stage_id: pendingTransitionQuestions.toStageId,
-          position_in_stage: pendingTransitionQuestions.positionInStage,
-          transition_answers: answers
-        })
+        await withTimeout(
+          funnelApi.moveOpportunityWithTransitionQuestions({
+            opportunity_id: pendingTransitionQuestions.opportunityId,
+            funnel_id: funnelId,
+            from_stage_id: pendingTransitionQuestions.fromStageId,
+            to_stage_id: pendingTransitionQuestions.toStageId,
+            position_in_stage: pendingTransitionQuestions.positionInStage,
+            transition_answers: answers
+          }),
+          15000,
+          'TIMEOUT: Não foi possível concluir a movimentação da oportunidade'
+        )
       } catch (error) {
         // ❌ RPC FAILURE: rollback autorizado
         console.error('Erro ao mover oportunidade com perguntas:', error)
         rollback(snapshot)
         
-        // Mapear erro semântico se possível
-        let userMessage = 'Erro ao mover oportunidade. Tente novamente.'
+        // FUNNEL.Q2 — Mensagem de erro centralizada em pt-BR
+        const userMessage = getTransitionErrorMessage(error)
         
-        if (error instanceof Error) {
-          // Tentar extrair código de erro do Supabase
-          const pgError = error as any
-          if (pgError.code || pgError.message) {
-            // Mapear erros conhecidos
-            if (pgError.message?.includes('MISSING_REQUIRED_ANSWER')) {
-              userMessage = 'Resposta obrigatória não foi fornecida.'
-            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION')) {
-              userMessage = 'Pergunta de transição inválida. As perguntas podem ter sido alteradas.'
-            } else if (pgError.message?.includes('UNAUTHORIZED')) {
-              userMessage = 'Você não tem permissão para mover esta oportunidade.'
-            } else if (pgError.message?.includes('INVALID_TRANSITION_QUESTION_CONFIG')) {
-              userMessage = 'Configuração inválida de perguntas. Por favor, contate o administrador.'
-            }
+        // Caso especial: concorrência detectada
+        if (error instanceof Error && error.message.includes('não está na etapa de origem')) {
+          // Reconciliar estado automaticamente
+          try {
+            await refreshCounts()
+          } catch (refreshError) {
+            console.error('[Concorrência] Erro ao reconciliar contadores:', refreshError)
           }
+          
+          // Limpar estado pendente
+          setPendingTransitionQuestions(null)
+          setIsSubmittingTransition(false)
+          toast.error(userMessage)
+          return
         }
         
-        alert(userMessage)
+        toast.error(userMessage)
         setIsSubmittingTransition(false)
         return  // CRITICAL: Impedir execução do código pós-RPC
       }
@@ -1413,6 +1444,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       // =====================================================
       setPendingTransitionQuestions(null)
       setIsSubmittingTransition(false)
+      
+      // FUNNEL.Q2 — Feedback visual de sucesso
+      toast.success(`Oportunidade movida para "${pendingTransitionQuestions.toStageName}" com sucesso!`)
       
       // DATETIME.2C.2 — Se há candidate, abrir prompt
       if (activityCandidate) {

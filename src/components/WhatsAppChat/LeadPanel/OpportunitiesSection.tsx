@@ -4,7 +4,7 @@
 // Objetivo: Seção de oportunidades dentro da aba Informações
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Briefcase, Plus, DollarSign, TrendingUp, Target, MapPin, Trash2, Pencil, ChevronDown, ChevronUp, History, Route, Phone } from 'lucide-react'
 import { useOpportunities } from '../../../hooks/useOpportunities'
 import { useWonItemCheck } from '../../../hooks/useWonItemCheck'
@@ -17,6 +17,8 @@ import { OpportunityDetailModal } from '../../SalesFunnel/OpportunityDetailModal
 import { CloseOpportunityModal } from '../../SalesFunnel/CloseOpportunityModal'
 import { ReopenOpportunityModal } from '../../SalesFunnel/ReopenOpportunityModal'
 import { StageTransitionModal } from '../../SalesFunnel/StageTransitionModal'
+import { ActivityModal } from '../../Calendar/ActivityModal'
+import { ActivityPromptModal } from '../../SalesFunnel/ActivityPromptModal'
 import { ContactAttemptModal } from '../ContactAttemptModal'
 import type { ContactAttemptModalState } from '../../../hooks/useContactCycleState'
 import { formatCurrency } from '../../../types/sales-funnel'
@@ -191,6 +193,15 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false)
   // CHAT.Q2 — Loading state para precheck de perguntas
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false)
+
+  // CHAT.Q3 — Estados para datetime activity
+  interface PendingActivityFromTransition {
+    canonicalDatetime: string  // ISO UTC
+    questionLabel: string
+    lead: { id: number; name: string }
+  }
+  const [pendingActivity, setPendingActivity] = useState<PendingActivityFromTransition | null>(null)
+  const [showActivityModal, setShowActivityModal] = useState(false)
 
   // ── Verificação de item obrigatório para won ──
   const wonPendingOppId = pendingStageTransition?.toStageType === 'won'
@@ -717,6 +728,44 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     // A partir daqui, rollback é PROIBIDO
     // Side effects executam independentemente
 
+    // CHAT.Q3 — Detectar datetime flagged para activity candidate
+    let activityCandidate: PendingActivityFromTransition | null = null
+    try {
+      const flaggedQuestion = pendingTransitionQuestions.questions.find(
+        q => q.active && q.field_type === 'datetime' && q.create_activity_on_answer === true
+      )
+
+      if (flaggedQuestion) {
+        const flaggedAnswer = answers.find(a => a.question_id === flaggedQuestion.id)
+
+        if (flaggedAnswer && flaggedAnswer.value) {
+          // Validar que datetime é parseável
+          const parsedDate = new Date(flaggedAnswer.value)
+          const isValidDate = !isNaN(parsedDate.getTime())
+
+          if (isValidDate && leadId) {
+            // Buscar dados do lead
+            const opp = opportunities.find(o => o.id === pendingTransitionQuestions.opportunityId)
+            const leadData = opp?.lead
+
+            if (leadData) {
+              activityCandidate = {
+                canonicalDatetime: flaggedAnswer.value,
+                questionLabel: flaggedQuestion.label,
+                lead: { id: leadData.id, name: leadData.name }
+              }
+            } else {
+              console.warn('[CHAT.Q3] Lead ausente para criar atividade — transição mantida')
+            }
+          } else if (!isValidDate) {
+            console.warn('[CHAT.Q3] Datetime inválido para criar atividade — transição mantida')
+          }
+        }
+      }
+    } catch (datetimeError) {
+      console.error('[CHAT.Q3] Erro ao detectar datetime — transição mantida:', datetimeError)
+    }
+
     // 1. AUTOMAÇÃO (não bloqueia)
     if (pendingTransitionQuestions.fromStageId !== pendingTransitionQuestions.toStageId) {
       try {
@@ -764,7 +813,106 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
     // CHAT.Q2 — Feedback visual de sucesso
     toast.success(`Oportunidade movida para "${pendingTransitionQuestions.toStageName}" com sucesso!`)
-  }, [pendingTransitionQuestions, fireAutomationAfterStageChange, refreshOpportunities])
+
+    // CHAT.Q3 — Se há candidate, abrir prompt de atividade
+    if (activityCandidate) {
+      setPendingActivity(activityCandidate)
+    }
+  }, [pendingTransitionQuestions, fireAutomationAfterStageChange, refreshOpportunities, opportunities, leadId])
+
+  // =====================================================
+  // CHAT.Q3 — HANDLERS PARA ACTIVITY PROMPT + MODAL
+  // =====================================================
+  const handleCancelActivityPrompt = useCallback(() => {
+    setPendingActivity(null)
+  }, [])
+
+  const handleConfirmActivityPrompt = useCallback(() => {
+    // Abrir ActivityModal (pendingActivity permanece para prefill)
+    setShowActivityModal(true)
+  }, [])
+
+  const handleCloseActivityModal = useCallback(() => {
+    // Cancelar ActivityModal — transição já foi confirmada
+    setShowActivityModal(false)
+    setPendingActivity(null)
+  }, [])
+
+  const handleSaveActivityModal = useCallback(() => {
+    // Atividade salva com sucesso
+    setShowActivityModal(false)
+    setPendingActivity(null)
+  }, [])
+
+  // =====================================================
+  // CHAT.Q3 — CONVERTER ISO UTC → LOCAL DATE/TIME (prefill)
+  // =====================================================
+  const activityPrefillData = useMemo(() => {
+    if (!pendingActivity || !showActivityModal) return null
+
+    try {
+      const date = new Date(pendingActivity.canonicalDatetime)
+      if (isNaN(date.getTime())) {
+        console.warn('[CHAT.Q3] Datetime inválido para prefill — fechando fluxo:', pendingActivity.canonicalDatetime)
+        return null
+      }
+
+      // Reconstruir wall clock LOCAL do browser
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+
+      const preSelectedDate = `${year}-${month}-${day}`
+      const preSelectedTime = `${hours}:${minutes}`
+
+      return {
+        lead: pendingActivity.lead,
+        preSelectedDate,
+        preSelectedTime
+      }
+    } catch (err) {
+      console.error('[CHAT.Q3] Erro ao preparar prefill — fechando fluxo:', err)
+      return null
+    }
+  }, [pendingActivity, showActivityModal])
+
+  // =====================================================
+  // CHAT.Q3 — FORMATAR DATA/HORA PARA PROMPT PT-BR
+  // =====================================================
+  const formattedPromptDateTime = useMemo(() => {
+    if (!pendingActivity) return ''
+
+    try {
+      const date = new Date(pendingActivity.canonicalDatetime)
+      if (isNaN(date.getTime())) {
+        console.warn('[CHAT.Q3] Datetime inválido para prompt — usando fallback')
+        return 'data/hora indisponível'
+      }
+
+      // Formato pt-BR: DD/MM/YYYY às HH:mm
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year = date.getFullYear()
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+
+      return `${day}/${month}/${year} às ${hours}:${minutes}`
+    } catch (err) {
+      console.warn('[CHAT.Q3] Erro ao formatar datetime para prompt:', err)
+      return 'data/hora indisponível'
+    }
+  }, [pendingActivity])
+
+  // Se prefill falhou mas modal está aberto, fechar fluxo
+  useEffect(() => {
+    if (showActivityModal && pendingActivity && !activityPrefillData) {
+      console.warn('[CHAT.Q3] Prefill inválido — fechando ActivityModal')
+      setShowActivityModal(false)
+      setPendingActivity(null)
+    }
+  }, [showActivityModal, pendingActivity, activityPrefillData])
 
   const handleUpdatePosition = async (
     opportunityId: string,
@@ -1334,6 +1482,28 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           onCancel={handleCancelTransitionQuestions}
           onConfirm={handleConfirmTransitionQuestions}
           isSubmitting={isSubmittingTransition}
+        />
+      )}
+
+      {/* CHAT.Q3 — Prompt para criar atividade pós-transição */}
+      {pendingActivity && !showActivityModal && (
+        <ActivityPromptModal
+          isOpen={true}
+          formattedDateTime={formattedPromptDateTime}
+          onConfirm={handleConfirmActivityPrompt}
+          onCancel={handleCancelActivityPrompt}
+        />
+      )}
+
+      {/* CHAT.Q3 — ActivityModal pré-preenchido */}
+      {showActivityModal && activityPrefillData && (
+        <ActivityModal
+          activity={null}
+          preSelectedLead={activityPrefillData.lead}
+          preSelectedDate={activityPrefillData.preSelectedDate}
+          preSelectedTime={activityPrefillData.preSelectedTime}
+          onClose={handleCloseActivityModal}
+          onSave={handleSaveActivityModal}
         />
       )}
     </div>
