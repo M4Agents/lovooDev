@@ -33,6 +33,8 @@ import { funnelApi } from '../../../services/funnelApi'
 import { isStageTransitionQuestionsFeatureEnabled } from '../../../hooks/dashboard/useFeatureFlags'
 import { fetchStageConfig, fetchActiveQuestions } from '../../../services/stageTransitionQuestionsTransport'
 import type { StageTransitionQuestion, StageTransitionAnswer } from '../../../types/stage-transition-questions'
+import { getTransitionErrorMessage, getPrecheckErrorMessage } from '../../../services/stageTransitionErrors'
+import { withTimeout } from '../../../utils/promiseTimeout'
 // triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 import toast from 'react-hot-toast'
 
@@ -187,6 +189,8 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
   const [pendingTransitionQuestions, setPendingTransitionQuestions] = useState<PendingTransitionQuestions | null>(null)
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false)
+  // CHAT.Q2 — Loading state para precheck de perguntas
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false)
 
   // ── Verificação de item obrigatório para won ──
   const wonPendingOppId = pendingStageTransition?.toStageType === 'won'
@@ -391,12 +395,24 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
       currentPosition.funnel_id === newFunnelId // Bloqueia cross-funnel (move_opportunity_v2 não suporta)
     ) {
       try {
-        // PRECHECK: verificar configuração da etapa destino
-        const config = await fetchStageConfig(newStageId)
+        // CHAT.Q2 — Loading state durante precheck
+        setIsLoadingQuestions(true)
+        const loadingToast = toast.loading('Verificando perguntas da etapa...')
+
+        // PRECHECK: verificar configuração da etapa destino (timeout 10s)
+        const config = await withTimeout(
+          fetchStageConfig(newStageId),
+          10000,
+          'TIMEOUT: Não foi possível carregar configuração da etapa'
+        )
 
         if (config.enabled && config.activeQuestionCount > 0) {
-          // Carregar perguntas ativas
-          const questions = await fetchActiveQuestions(newStageId)
+          // Carregar perguntas ativas (timeout 10s)
+          const questions = await withTimeout(
+            fetchActiveQuestions(newStageId),
+            10000,
+            'TIMEOUT: Não foi possível carregar perguntas da etapa'
+          )
 
           if (questions.length > 0) {
             // Encontrou perguntas: abrir modal
@@ -414,16 +430,22 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
               questions
             })
 
+            toast.dismiss(loadingToast)
+            setIsLoadingQuestions(false)
             // NÃO executar movimento — aguardar confirmação do modal
             return
           }
         }
 
         // Config indica zero perguntas: continuar fluxo normal
+        toast.dismiss(loadingToast)
+        setIsLoadingQuestions(false)
       } catch (error) {
-        // FAIL CLOSED: erro no precheck impede movimento
+        // CHAT.Q2 — FAIL CLOSED com mensagem pt-BR
+        setIsLoadingQuestions(false)
         console.error('❌ Erro ao verificar perguntas de transição:', error)
-        alert('Erro ao verificar perguntas da etapa. A movimentação foi cancelada.')
+        const userMessage = getPrecheckErrorMessage(error)
+        toast.error(userMessage)
         return
       }
     }
@@ -646,48 +668,41 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
 
     try {
       // =====================================================
-      // RPC BOUNDARY — move_opportunity_v2
+      // RPC BOUNDARY — move_opportunity_v2 (timeout 15s)
       // =====================================================
-      await funnelApi.moveOpportunityWithTransitionQuestions({
-        opportunity_id: pendingTransitionQuestions.opportunityId,
-        funnel_id: pendingTransitionQuestions.funnelId,
-        from_stage_id: pendingTransitionQuestions.fromStageId,
-        to_stage_id: pendingTransitionQuestions.toStageId,
-        position_in_stage: pendingTransitionQuestions.positionInStage,
-        transition_answers: answers
-      })
+      await withTimeout(
+        funnelApi.moveOpportunityWithTransitionQuestions({
+          opportunity_id: pendingTransitionQuestions.opportunityId,
+          funnel_id: pendingTransitionQuestions.funnelId,
+          from_stage_id: pendingTransitionQuestions.fromStageId,
+          to_stage_id: pendingTransitionQuestions.toStageId,
+          position_in_stage: pendingTransitionQuestions.positionInStage,
+          transition_answers: answers
+        }),
+        15000,
+        'TIMEOUT: Não foi possível concluir a movimentação da oportunidade'
+      )
     } catch (error) {
       // ❌ RPC FAILURE: movimento não persistiu
       console.error('❌ Erro ao mover oportunidade com perguntas:', error)
 
-      let userMessage = 'Erro ao mover oportunidade. Tente novamente.'
+      // CHAT.Q2 — Mensagem de erro centralizada em pt-BR
+      const userMessage = getTransitionErrorMessage(error)
 
-      if (error instanceof Error) {
-        const errorMessage = error.message || ''
-        
-        if (errorMessage.includes('MISSING_REQUIRED_ANSWER')) {
-          userMessage = 'Resposta obrigatória não foi fornecida.'
-        } else if (errorMessage.includes('INVALID_TRANSITION_QUESTION')) {
-          userMessage = 'Pergunta de transição inválida. As perguntas podem ter sido alteradas.'
-        } else if (errorMessage.includes('UNAUTHORIZED')) {
-          userMessage = 'Você não tem permissão para mover esta oportunidade.'
-        } else if (errorMessage.includes('não está na etapa de origem')) {
-          // Concorrência: outro usuário moveu a oportunidade
-          userMessage = 'A oportunidade foi movida por outro usuário.'
-          
-          // Reconciliar estado automaticamente
-          try {
-            await refreshOpportunities()
-          } catch (refreshError) {
-            console.error('[Concorrência] Erro ao reconciliar estado:', refreshError)
-          }
-          
-          // Limpar estado pendente (fromStageId obsoleto)
-          setPendingTransitionQuestions(null)
-          setIsSubmittingTransition(false)
-          alert(userMessage)
-          return
+      // Caso especial: concorrência detectada
+      if (error instanceof Error && error.message.includes('não está na etapa de origem')) {
+        // Reconciliar estado automaticamente
+        try {
+          await refreshOpportunities()
+        } catch (refreshError) {
+          console.error('[Concorrência] Erro ao reconciliar estado:', refreshError)
         }
+        
+        // Limpar estado pendente (fromStageId obsoleto)
+        setPendingTransitionQuestions(null)
+        setIsSubmittingTransition(false)
+        alert(userMessage)
+        return
       }
 
       alert(userMessage)
@@ -746,6 +761,9 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
     // 4. CLEANUP (sempre executa)
     setPendingTransitionQuestions(null)
     setIsSubmittingTransition(false)
+
+    // CHAT.Q2 — Feedback visual de sucesso
+    toast.success(`Oportunidade movida para "${pendingTransitionQuestions.toStageName}" com sucesso!`)
   }, [pendingTransitionQuestions, fireAutomationAfterStageChange, refreshOpportunities])
 
   const handleUpdatePosition = async (
@@ -1053,7 +1071,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                             setPendingFunnelIds(prev => ({ ...prev, [oppId]: newFunnelId }))
                           }
                         }}
-                        disabled={updatingPosition === oppId}
+                        disabled={updatingPosition === oppId || isLoadingQuestions}
                         className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="">Selecione um funil</option>
@@ -1083,7 +1101,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                               setPendingStageIds(prev => ({ ...prev, [oppId]: newStageId }))
                             }
                           }}
-                          disabled={updatingPosition === oppId}
+                          disabled={updatingPosition === oppId || isLoadingQuestions}
                           className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Selecione uma etapa</option>
@@ -1100,7 +1118,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                         <button
                           type="button"
                           onClick={handleConfirmPending}
-                          disabled={!canConfirm || updatingPosition === oppId}
+                          disabled={!canConfirm || updatingPosition === oppId || isLoadingQuestions}
                           className="flex-1 text-xs px-2 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Confirmar
@@ -1108,7 +1126,7 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                         <button
                           type="button"
                           onClick={handleCancelPending}
-                          disabled={updatingPosition === oppId}
+                          disabled={updatingPosition === oppId || isLoadingQuestions}
                           className="flex-1 text-xs px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
                         >
                           Cancelar
