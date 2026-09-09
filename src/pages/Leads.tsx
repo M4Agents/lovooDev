@@ -258,7 +258,7 @@ export const Leads: React.FC = () => {
       const page = overrides?.page ?? currentPage;
       const offset = (page - 1) * LEADS_PER_PAGE;
 
-      const [leadsResult, statsData] = await Promise.all([
+      const [leadsOutcome, statsOutcome] = await Promise.allSettled([
         api.getLeads(company.id, {
           search: searchTerm,
           status: statusFilter || undefined,
@@ -280,14 +280,23 @@ export const Leads: React.FC = () => {
           }
         )
       ]);
-      
-      setLeads(leadsResult.data);
-      setTotalLeads(leadsResult.total);
-      setStats(statsData);
+
+      if (leadsOutcome.status === 'rejected') {
+        throw leadsOutcome.reason;
+      }
+
+      setLeads(leadsOutcome.value.data);
+      setTotalLeads(leadsOutcome.value.total);
+
+      if (statsOutcome.status === 'fulfilled') {
+        setStats(statsOutcome.value);
+      } else {
+        console.error('Error loading lead stats:', statsOutcome.reason);
+      }
 
       // Carregar fotos dos leads a partir do telefone (se houver)
       const phones = Array.from(new Set(
-        leadsResult.data
+        leadsOutcome.value.data
           .map((lead) => lead.phone)
           .filter((phone): phone is string => !!phone)
       ));
