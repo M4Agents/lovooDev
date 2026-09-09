@@ -379,11 +379,69 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   // =====================================================
   const recentlyMovedRef = useRef<Map<string, number>>(new Map())
 
+  // =====================================================
+  // FASE 4.1 — COALESCING DE REFRESHES REALTIME
+  // Acumula stageIds de múltiplos eventos Realtime em janelas fixas
+  // de 300ms antes de disparar refreshes, evitando RPCs redundantes
+  // durante atividade intensa.
+  //
+  // JANELA FIXA: primeiro evento cria timer de 300ms, eventos
+  // subsequentes apenas acumulam no Set sem reiniciar o timer.
+  // Atraso máximo sempre 300ms, mesmo sob eventos contínuos.
+  // =====================================================
+  const pendingStagesRef = useRef<Set<string>>(new Set())
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const boardRefreshRef = useRef(boardRefresh)
+  boardRefreshRef.current = boardRefresh
+
+  const flushPendingRefreshes = useCallback(() => {
+    const stagesToRefresh = Array.from(pendingStagesRef.current)
+    pendingStagesRef.current.clear()
+    debounceTimerRef.current = null
+    stagesToRefresh.forEach(id => boardRefreshRef.current(id))
+  }, [])
+
+  const coalescedRealtimeRefresh = useCallback((stageIds: string[]) => {
+    // Acumular no Set (deduplica automaticamente)
+    stageIds.forEach(id => pendingStagesRef.current.add(id))
+
+    // JANELA FIXA: só criar timer se não existir
+    // Eventos subsequentes apenas acumulam, não reiniciam o timer
+    if (!debounceTimerRef.current) {
+      debounceTimerRef.current = setTimeout(flushPendingRefreshes, 300)
+    }
+  }, [flushPendingRefreshes])
+
+  // Cleanup ao trocar funil/empresa: cancelar timer e limpar Set
+  // Impede stages do contexto anterior de serem refrescadas no novo contexto
+  useEffect(() => {
+    const pendingStages = pendingStagesRef.current
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+      pendingStages.clear()
+    }
+  }, [funnelId, companyId])
+
+  // Cleanup no unmount: cancelar timer pendente e limpar Set
+  useEffect(() => {
+    const pendingStages = pendingStagesRef.current
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+      pendingStages.clear()
+    }
+  }, [])
+
   useFunnelRealtime(
     funnelId,
     companyId,
     FUNNEL_REALTIME_ENABLED,
-    (stageIds) => stageIds.forEach(id => boardRefresh(id)),
+    coalescedRealtimeRefresh,
     () => { refreshCounts().catch(err => console.error('Realtime: erro ao atualizar contadores:', err)) },
     recentlyMovedRef
   )
