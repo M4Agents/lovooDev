@@ -14,6 +14,7 @@ import { DragDropContext, DropResult, DragStart } from '@hello-pangea/dnd'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { FunnelColumn } from './FunnelColumn'
 import { BulkAssignModal } from '../BulkAssignModal'
+import { BulkTagModal } from '../BulkTagModal'
 import { BulkMoveOpportunitiesModal } from './BulkMoveOpportunitiesModal'
 import { EditStageModal } from './EditStageModal'
 import { PlaybookModal } from './PlaybookModal'
@@ -48,6 +49,7 @@ import { saleTypesApi } from '../../services/saleTypesApi'
 import { lossTypesApi } from '../../services/lossTypesApi'
 import { supabase } from '../../lib/supabase'
 import { getCompanyUsers } from '../../services/userApi'
+import { useAvailableTags } from '../../hooks/useAvailableTags'
 import type {
   LeadPositionFilter,
   FunnelStage,
@@ -120,8 +122,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
-  const { canSelectOpportunities, canBulkAssignLeads } = useAccessControl()
+  const { canSelectOpportunities, canBulkAssignLeads, canBulkTagLeads } = useAccessControl()
   const companyId = company?.id
+  const { tags: availableTags } = useAvailableTags(companyId)
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
   const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
 
@@ -139,6 +142,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const selectedMapRef = useRef<Map<string, SelectedOpportunity>>(new Map())
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false)
+  const [showBulkTagModal, setShowBulkTagModal]     = useState(false)
+  const [bulkTagLoading, setBulkTagLoading]         = useState(false)
   /** true enquanto um drag de seleção múltipla está em andamento */
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
 
@@ -154,6 +159,14 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     const stageIds = new Set(Array.from(selectedMap.values()).map(v => v.stageId))
     return stageIds.size === 1
   }, [selectedMap])
+
+  /** Leads únicos dentre as oportunidades selecionadas.
+   *  Um lead pode ter mais de uma posição no funil — deduplica via Set.
+   *  Fonte única para Bulk Tag: payload, selectedCount e limite de 200. */
+  const selectedLeadIds = useMemo(
+    () => [...new Set(Array.from(selectedMap.values()).map(item => item.leadId))],
+    [selectedMap],
+  )
 
   // Mantém selectedMapRef sempre atualizado a cada render — leitura segura em qualquer closure.
   useEffect(() => {
@@ -881,6 +894,48 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
       setBulkAssignLoading(false)
     }
   }, [selectedMap, companyId, clearSelection, boardRefresh, refreshCounts])
+
+  // ── Bulk Tag: abertura do modal com validação de limite ──────
+  const handleOpenBulkTagModal = useCallback(() => {
+    if (selectedLeadIds.length === 0) return
+
+    if (selectedLeadIds.length > 200) {
+      toast.error('Selecione no máximo 200 leads para atribuir tags em lote.')
+      return
+    }
+
+    setShowBulkTagModal(true)
+  }, [selectedLeadIds])
+
+  // ── Bulk Tag: atribuição aditiva de tags aos leads selecionados ──
+  const handleBulkTagAssign = useCallback(async (tagIds: string[]) => {
+    if (selectedLeadIds.length === 0) return
+
+    if (selectedLeadIds.length > 200) {
+      toast.error('Selecione no máximo 200 leads para atribuir tags em lote.')
+      return
+    }
+
+    setBulkTagLoading(true)
+
+    try {
+      await api.bulkTagLeads(selectedLeadIds, tagIds)
+
+      setShowBulkTagModal(false)
+      clearSelection()
+      boardRefresh()
+
+      toast.success(
+        `Tags atribuídas a ${selectedLeadIds.length} lead${selectedLeadIds.length !== 1 ? 's' : ''} com sucesso.`
+      )
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : undefined
+      toast.error(message ?? 'Erro ao atribuir tags. Tente novamente.')
+      // Modal permanece aberto e seleção preservada para nova tentativa.
+    } finally {
+      setBulkTagLoading(false)
+    }
+  }, [selectedLeadIds, clearSelection, boardRefresh])
 
   // =====================================================
   // MULTI-DRAG: mover oportunidades selecionadas em massa
@@ -1894,6 +1949,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
               </button>
             </>
           )}
+          {canBulkTagLeads && (
+            <>
+              <div className="w-px h-4 bg-white/30" />
+              <button
+                type="button"
+                onClick={handleOpenBulkTagModal}
+                className="text-sm font-medium text-emerald-300 hover:text-emerald-200 transition-colors"
+              >
+                Atribuir Tags
+              </button>
+            </>
+          )}
           <div className="w-px h-4 bg-white/30" />
           <button
             type="button"
@@ -2056,6 +2123,18 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
           selectedCount={selectedMap.size}
           companyUsers={companyUsers}
           loading={bulkAssignLoading}
+        />
+      )}
+
+      {/* Modal de atribuição de tags em lote */}
+      {canBulkTagLeads && (
+        <BulkTagModal
+          isOpen={showBulkTagModal}
+          onClose={() => setShowBulkTagModal(false)}
+          onConfirm={handleBulkTagAssign}
+          selectedCount={selectedLeadIds.length}
+          availableTags={availableTags.filter(tag => tag.is_active)}
+          loading={bulkTagLoading}
         />
       )}
     </div>
