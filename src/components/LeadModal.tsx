@@ -16,6 +16,8 @@ import { tagsApi } from '../services/tagsApi';
 import { LeadEntriesSection }    from './LeadEntriesSection';
 import { NuvemshopLeadTab }      from './Nuvemshop/NuvemshopLeadTab';
 import { useAccessControl }      from '../hooks/useAccessControl';
+import { funnelApi }             from '../services/funnelApi';
+import type { SalesFunnel }      from '../types/sales-funnel';
 import {
   X,
   Save,
@@ -33,6 +35,7 @@ import {
   AlertTriangle,
   AlertCircle,
   ShoppingCart,
+  TrendingUp,
 } from 'lucide-react';
 
 interface CustomField {
@@ -58,7 +61,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   lead,
   onSave
 }) => {
-  const { company } = useAuth();
+  const { company, user } = useAuth();
   const { canAssignLead, currentUserId, isRestrictedToOwnLeads } = useLeadPermissions();
   const { canViewNuvemshopData } = useAccessControl();
   const [loading, setLoading] = useState(false);
@@ -121,6 +124,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [cepLoading, setCepLoading] = useState(false);
+
+  // ── Seleção de Funil (apenas em criação) ───────────────────────────────
+  const [funnels, setFunnels] = useState<SalesFunnel[]>([]);
+  const [selectedFunnelId, setSelectedFunnelId] = useState<string>('');
+  const [defaultFunnelId, setDefaultFunnelId] = useState<string | null>(null);
+  const [funnelsLoading, setFunnelsLoading] = useState(false);
 
   // ── Detecção de duplicatas ──────────────────────────────────────────────
   type DuplicateAlertState = {
@@ -319,8 +328,40 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (!isOpen) {
       setDuplicateAlert(null);
       setInternalEditLead(null);
+      // Resetar funil ao fechar
+      setFunnels([]);
+      setSelectedFunnelId('');
+      setDefaultFunnelId(null);
     }
   }, [isOpen]);
+
+  // Carregar funis disponíveis (apenas em modo criação)
+  useEffect(() => {
+    if (!isOpen || !!lead?.id || !company?.id) return;
+
+    const loadFunnels = async () => {
+      setFunnelsLoading(true);
+      try {
+        const data = await funnelApi.getFunnels(company.id, {
+          company_id: company.id,
+          is_active: true,
+        });
+        setFunnels(data);
+        // Pré-selecionar o funil padrão
+        const defaultFunnel = data.find(f => f.is_default) || data[0];
+        if (defaultFunnel) {
+          setSelectedFunnelId(defaultFunnel.id);
+          setDefaultFunnelId(defaultFunnel.id);
+        }
+      } catch (error) {
+        console.error('Error loading funnels:', error);
+      } finally {
+        setFunnelsLoading(false);
+      }
+    };
+
+    loadFunnels();
+  }, [isOpen, lead?.id, company?.id]);
 
 
   // NOVO: Função para buscar CEP
@@ -530,6 +571,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       return;
     }
 
+    // ── Validar funil selecionado (somente em criação) ───────────────────
+    if (!activeLead?.id && !selectedFunnelId) {
+      alert('Por favor, selecione um funil para a oportunidade.');
+      return;
+    }
+
     // ── Verificação de duplicata (somente em criação) ────────────────────
     if (!activeLead?.id) {
       setLoading(true);
@@ -617,6 +664,37 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         // Criação
         const newLead = await api.createLead(leadData);
         savedLeadId = newLead.id;
+
+        // ── Reposicionar no funil selecionado (se diferente do padrão) ──
+        // O trigger z_add_lead_to_funnel insere o lead no funil padrão.
+        // Se o usuário escolheu outro funil, atualizamos o registro criado.
+        if (selectedFunnelId && defaultFunnelId && selectedFunnelId !== defaultFunnelId) {
+          try {
+            // Buscar a primeira etapa do funil selecionado
+            const { data: firstStage } = await supabase
+              .from('funnel_stages')
+              .select('id')
+              .eq('funnel_id', selectedFunnelId)
+              .order('position', { ascending: true })
+              .limit(1)
+              .single();
+
+            if (firstStage) {
+              await supabase
+                .from('opportunity_funnel_positions')
+                .update({
+                  funnel_id: selectedFunnelId,
+                  stage_id: firstStage.id,
+                  entered_stage_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('lead_id', newLead.id);
+            }
+          } catch (funnelErr) {
+            // Não bloqueia — lead foi criado com sucesso, posição pode ser corrigida manualmente
+            console.error('[LeadModal] Erro ao reposicionar funil:', funnelErr);
+          }
+        }
       }
 
       // Salvar tags do lead
@@ -1044,17 +1122,78 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                     <User className="w-4 h-4 inline mr-1" />
                     Responsável
                   </label>
-                  <UserSelector
-                    users={companyUsers}
-                    selectedUser={formData.responsible_user_id}
-                    onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
-                    showNoneOption={false}
-                    disabled={loading || !canAssignLead()}
-                  />
+                  {/* Seller em criação: auto-atribuído, sem dropdown */}
+                  {!activeLead?.id && !canAssignLead() ? (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="w-7 h-7 rounded-full bg-green-200 flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-green-700" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-green-800 truncate">
+                          {user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Você'}
+                        </p>
+                        <p className="text-xs text-green-600">Atribuído automaticamente a você</p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Admin/Manager ou edição: dropdown completo */
+                    <UserSelector
+                      users={companyUsers}
+                      selectedUser={formData.responsible_user_id}
+                      onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
+                      showNoneOption={false}
+                      disabled={loading || !canAssignLead()}
+                    />
+                  )}
                 </div>
 
               </div>
 
+              {/* ── Seletor de Funil (apenas em criação) ──────────────────── */}
+              {!activeLead?.id && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-blue-900">
+                      Funil de Vendas <span className="text-red-500">*</span>
+                    </span>
+                  </div>
+
+                  {funnelsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-blue-600">
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      Carregando funis...
+                    </div>
+                  ) : funnels.length === 0 ? (
+                    <p className="text-sm text-amber-700">
+                      Nenhum funil ativo encontrado. Configure um funil em Configurações.
+                    </p>
+                  ) : (
+                    <>
+                      <select
+                        value={selectedFunnelId}
+                        onChange={(e) => setSelectedFunnelId(e.target.value)}
+                        required
+                        disabled={loading}
+                        className="w-full px-4 py-3 border border-blue-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900"
+                      >
+                        <option value="">Selecionar funil...</option>
+                        {funnels.map(funnel => (
+                          <option key={funnel.id} value={funnel.id}>
+                            {funnel.name}{funnel.is_default ? ' (Padrão)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-blue-700">
+                        A oportunidade entrará na etapa inicial do funil selecionado.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* NOVOS CAMPOS - Informações Profissionais */}
               <div className="space-y-4">

@@ -243,13 +243,13 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               <div className="flex items-center gap-3">
                 <Avatar 
                   src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || currentUserData?.display_name || user?.email || t('profile.avatarFallbackName')}
+                  alt={userDisplayName || currentUserData?.display_name || user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email || t('profile.avatarFallbackName')}
                   size="lg"
-                  fallbackText={(userDisplayName || currentUserData?.display_name || user?.email)?.charAt(0)}
+                  fallbackText={(userDisplayName || currentUserData?.display_name || user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email)?.charAt(0)}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">
-                    {userDisplayName || currentUserData?.display_name || user?.email?.split('@')[0]}
+                    {userDisplayName || currentUserData?.display_name || user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email?.split('@')[0]}
                   </p>
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="flex min-w-0 items-center gap-1">
@@ -287,9 +287,9 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               <div className="relative">
                 <Avatar 
                   src={userPhoto || currentUserData?.profile_picture_url}
-                  alt={userDisplayName || user?.email || t('profile.avatarFallbackName')}
+                  alt={userDisplayName || user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email || t('profile.avatarFallbackName')}
                   size="md"
-                  fallbackText={(userDisplayName || user?.email)?.charAt(0)}
+                  fallbackText={(userDisplayName || user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email)?.charAt(0)}
                 />
                 {company?.plan && (
                   <Crown className="absolute -bottom-1 -right-1 w-3 h-3 text-yellow-400 bg-slate-900 rounded-full" />
