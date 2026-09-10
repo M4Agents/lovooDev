@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Plus, Pencil, Eye, EyeOff, X, Loader2, AlertCircle,
-  CheckCircle2, ChevronUp, ChevronDown, HelpCircle
+  CheckCircle2, ChevronUp, ChevronDown, HelpCircle, Trash2
 } from 'lucide-react'
 import { isStageTransitionQuestionsFeatureEnabled } from '../../hooks/dashboard/useFeatureFlags'
 import {
@@ -18,6 +18,7 @@ import {
   updateQuestion,
   setQuestionActive,
   reorderQuestions,
+  deleteQuestion,
   type CreateQuestionInput,
   type UpdateQuestionInput,
   type QuestionOrder
@@ -91,6 +92,8 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
   const [localError, setLocalError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Load questions
   useEffect(() => {
@@ -256,6 +259,14 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
           create_activity_on_answer: form.create_activity_on_answer
         }
 
+        // field_type e options só podem ser alterados se não houver respostas registradas
+        if (!editing.has_answers) {
+          input.field_type = form.field_type
+          input.options = (form.field_type === 'select' || form.field_type === 'multi_select')
+            ? form.options
+            : null
+        }
+
         await updateQuestion(input)
         flash('Pergunta atualizada com sucesso')
       } else {
@@ -317,6 +328,30 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
       }
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  // Delete
+  const handleDelete = async () => {
+    if (!pendingDeleteId) return
+
+    setDeleting(true)
+    setError(null)
+
+    try {
+      await deleteQuestion(pendingDeleteId)
+      setPendingDeleteId(null)
+      await loadQuestions()
+      flash('Pergunta excluída com sucesso')
+    } catch (err) {
+      if (err instanceof StageTransitionServiceError) {
+        setError(err.message)
+      } else {
+        setError('Erro ao excluir pergunta')
+      }
+      setPendingDeleteId(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -508,7 +543,11 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tipo *
               {editing && (
-                <span className="ml-2 text-xs text-gray-500">(não editável após criação)</span>
+                <span className="ml-2 text-xs text-gray-500">
+                  {editing.has_answers
+                    ? '(não editável — já existem respostas registradas)'
+                    : '(editável enquanto não houver respostas)'}
+                </span>
               )}
             </label>
             <select
@@ -522,7 +561,7 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
                   create_activity_on_answer: newType === 'datetime' ? prev.create_activity_on_answer : false
                 }))
               }}
-              disabled={saving || !!editing}
+              disabled={saving || (!!editing && (editing.has_answers ?? false))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
             >
               {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
@@ -535,10 +574,13 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
           {fieldTypeNeedsOptions && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Opções * {editing && <span className="text-xs text-gray-500">(não editável após respostas existentes)</span>}
+                Opções *{' '}
+                {editing && (editing.has_answers ?? false) && (
+                  <span className="text-xs text-gray-500">(não editável — já existem respostas registradas)</span>
+                )}
               </label>
               
-              {!editing && (
+              {(!editing || !(editing.has_answers ?? false)) && (
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
@@ -565,7 +607,7 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
                   {form.options.map((opt, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="flex-1 text-sm text-gray-900">{opt}</span>
-                      {!editing && (
+                      {(!editing || !(editing.has_answers ?? false)) && (
                         <>
                           <button
                             type="button"
@@ -773,15 +815,28 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
                           onClick={() => handleToggleActive(q)}
                           disabled={saving || togglingId === q.id}
                           className="p-2 hover:bg-gray-100 rounded disabled:opacity-30"
-                          title={q.active ? 'Desativar' : 'Ativar'}
+                          title={q.active ? 'Clique para desativar' : 'Clique para ativar'}
                         >
                           {togglingId === q.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                            <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
                           ) : q.active ? (
-                            <Eye className="w-4 h-4 text-gray-600" />
+                            <Eye className="w-4 h-4 text-green-600" />
                           ) : (
-                            <EyeOff className="w-4 h-4 text-gray-600" />
+                            <EyeOff className="w-4 h-4 text-gray-400" />
                           )}
+                        </button>
+                        {/* Excluir — só disponível se não tiver respostas */}
+                        <button
+                          onClick={() => setPendingDeleteId(q.id)}
+                          disabled={saving || deleting || (q.has_answers ?? false)}
+                          className="p-2 hover:bg-red-50 rounded disabled:opacity-30"
+                          title={
+                            (q.has_answers ?? false)
+                              ? 'Não é possível excluir — já existem respostas. Use Desativar.'
+                              : 'Excluir pergunta'
+                          }
+                        >
+                          <Trash2 className={`w-4 h-4 ${(q.has_answers ?? false) ? 'text-gray-300' : 'text-red-500'}`} />
                         </button>
                       </div>
                     )}
@@ -791,6 +846,34 @@ export const StageTransitionQuestionsPanel: React.FC<Props> = ({
                   {q.options && q.options.length > 0 && (
                     <div className="mt-2 text-xs text-gray-600">
                       <span className="font-medium">Opções:</span> {q.options.join(', ')}
+                    </div>
+                  )}
+
+                  {/* Confirmação de exclusão inline */}
+                  {pendingDeleteId === q.id && (
+                    <div className="mt-3 flex items-center justify-between gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <span className="text-sm text-red-800 font-medium">
+                        Excluir "{q.label}"? Esta ação não pode ser desfeita.
+                      </span>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          disabled={deleting}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {deleting && <Loader2 className="w-3 h-3 animate-spin" />}
+                          Excluir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteId(null)}
+                          disabled={deleting}
+                          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

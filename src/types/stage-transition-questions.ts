@@ -25,6 +25,8 @@ export interface StageTransitionQuestion {
   create_activity_on_answer: boolean  // datetime only: se true, oferece criação de atividade após responder
   created_at: string
   updated_at: string
+  /** Enriquecido pelo endpoint /list. true = já existem respostas — field_type/options imutáveis e exclusão bloqueada. */
+  has_answers?: boolean
 }
 
 /**

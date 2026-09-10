@@ -147,9 +147,30 @@ export default async function handler(req: any, res: any): Promise<void> {
       return
     }
 
+    // Enriquecer com has_answers: indica se já existem respostas registradas para cada pergunta.
+    // Usado pelo frontend para desabilitar edição de field_type/options e botão de exclusão.
+    let enrichedQuestions = (questions ?? []) as any[]
+
+    if (enrichedQuestions.length > 0) {
+      const questionIds = enrichedQuestions.map((q: any) => q.id as string)
+
+      const { data: answeredData } = await svc
+        .from('stage_transition_answers')
+        .select('question_id')
+        .in('question_id', questionIds)
+        .eq('company_id', companyId)
+
+      const answeredSet = new Set((answeredData ?? []).map((a: any) => a.question_id as string))
+
+      enrichedQuestions = enrichedQuestions.map((q: any) => ({
+        ...q,
+        has_answers: answeredSet.has(q.id),
+      }))
+    }
+
     res.status(200).json({
       ok: true,
-      data: { questions: questions ?? [] }
+      data: { questions: enrichedQuestions }
     })
 
   } catch (err) {

@@ -2021,14 +2021,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isReacting = reactingMessageId === message.id
   const { t } = useTranslation('chat')
-  const formatDateTime = (date: Date) => {
-    return date.toLocaleDateString('pt-BR', {
+  const formatDateTime = (date: Date | string) => {
+    const d = date instanceof Date ? date : new Date(date as string)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('pt-BR', {
       day: '2-digit',
-      month: '2-digit', 
+      month: '2-digit',
       year: 'numeric'
-    }) + ' ' + date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    }) + ' ' + d.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 

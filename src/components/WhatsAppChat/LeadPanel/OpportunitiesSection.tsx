@@ -744,19 +744,14 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
           const isValidDate = !isNaN(parsedDate.getTime())
 
           if (isValidDate && leadId) {
-            // Buscar dados do lead
-            const opp = opportunities.find(o => o.id === pendingTransitionQuestions.opportunityId)
-            const leadData = opp?.lead
-
-            if (leadData) {
+              // leadId e leadName já estão disponíveis como state/prop do componente.
+              // NÃO usar opp?.lead — getOpportunitiesByLead usa .select('*') sem join de lead,
+              // portanto opp.lead seria sempre undefined no contexto do chat.
               activityCandidate = {
                 canonicalDatetime: flaggedAnswer.value,
                 questionLabel: flaggedQuestion.label,
-                lead: { id: leadData.id, name: leadData.name }
+                lead: { id: leadId, name: leadName }
               }
-            } else {
-              console.warn('[CHAT.Q3] Lead ausente para criar atividade — transição mantida')
-            }
           } else if (!isValidDate) {
             console.warn('[CHAT.Q3] Datetime inválido para criar atividade — transição mantida')
           }

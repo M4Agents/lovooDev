@@ -37,6 +37,10 @@ export interface CreateQuestionInput {
 export interface UpdateQuestionInput {
   question_id: string
   label?: string
+  /** Editável somente quando has_answers === false. Backend rejeita com 409 se já houver respostas. */
+  field_type?: string
+  /** Editável somente quando has_answers === false. Backend rejeita com 409 se já houver respostas. */
+  options?: string[] | null
   required?: boolean
   sort_order?: number
   create_activity_on_answer?: boolean
@@ -372,4 +376,21 @@ export async function fetchStageConfig(
     enabled: response.enabled,
     activeQuestionCount: response.activeQuestionCount
   }
+}
+
+/**
+ * DELETE /api/stage-transition-questions/delete
+ * Exclui pergunta sem respostas registradas.
+ * Retorna 409 se já houver respostas — use setQuestionActive para desativar nesses casos.
+ */
+export async function deleteQuestion(questionId: string): Promise<void> {
+  ensureFeatureEnabled()
+
+  await apiFetch<{ deleted: boolean }>(
+    '/api/stage-transition-questions/delete',
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ question_id: questionId })
+    }
+  )
 }
