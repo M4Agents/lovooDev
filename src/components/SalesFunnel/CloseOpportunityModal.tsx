@@ -19,6 +19,7 @@ import type { CatalogProduct, CatalogService } from '../../types/sales-funnel'
 import { catalogApi } from '../../services/catalogApi'
 import { saleTypesApi } from '../../services/saleTypesApi'
 import { lossTypesApi } from '../../services/lossTypesApi'
+import { supabase } from '../../lib/supabase'
 
 // ── helpers de formatação monetária ──
 const centsToBRL = (cents: number): string =>
@@ -38,6 +39,16 @@ interface DraftItem {
   item_name: string
   unit_price: number
   quantity: number
+}
+
+// ── item já persistido em opportunity_items (somente leitura) ──
+interface ExistingItem {
+  id: string
+  line_type: string
+  name_snapshot: string
+  unit_price: number
+  quantity: number
+  line_total: number
 }
 
 // ──────────────────────────────────────────────────────
@@ -426,8 +437,10 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const isWon = stageType === 'won'
 
   // Determina se cada seletor deve aparecer
-  const showItemSelector = isWon && requireItems && !hasItems
-  const showSaleTypeSelector = isWon && requireSaleType && !hasSaleTypes
+  // Sempre exibir quando o funil exige — independente de já existirem dados,
+  // para que o usuário veja e possa modificar o que está registrado.
+  const showItemSelector = isWon && requireItems
+  const showSaleTypeSelector = isWon && requireSaleType
   // Seletor de tipos de perda: espelho exato de showSaleTypeSelector
   const showLossTypeSelector = !isWon && requireLossType && !hasLossTypes
 
@@ -453,6 +466,10 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   // ── Lista de rascunho de items ──
   const [draftItems, setDraftItems] = useState<DraftItem[]>([])
   const localIdRef = useRef(0)
+
+  // ── Itens já existentes em opportunity_items (somente leitura) ──
+  const [existingItems, setExistingItems] = useState<ExistingItem[]>([])
+  const [loadingExistingItems, setLoadingExistingItems] = useState(false)
 
   // ── Add row (items) ──
   const [addType, setAddType] = useState<'product' | 'service'>('product')
@@ -504,13 +521,43 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
       setLossReason('')
       setError(undefined)
       setDraftItems([])
+      setExistingItems([])
       setAddType('product')
       setAddItemId('')
       setAddPriceDisplay('')
       setAddQty(1)
       setSelectedSaleTypeIds([])
 
-      if (showItemSelector) loadCatalog()
+      // Carregar catálogo quando itens são exigidos
+      if (isWon && requireItems) loadCatalog()
+
+      // Carregar itens já existentes (somente leitura)
+      if (isWon && requireItems && opportunityId && companyId) {
+        setLoadingExistingItems(true)
+        supabase
+          .from('opportunity_items')
+          .select('id, line_type, name_snapshot, unit_price, quantity, line_total')
+          .eq('opportunity_id', opportunityId)
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: true })
+          .then(({ data }) => setExistingItems(data ?? []))
+          .catch(() => {})
+          .finally(() => setLoadingExistingItems(false))
+      }
+
+      // Pré-popular tipos de venda já vinculados (ON CONFLICT DO UPDATE no RPC → re-submeter é seguro)
+      if (isWon && requireSaleType && opportunityId && companyId) {
+        supabase
+          .from('opportunity_sale_types')
+          .select('sale_type_id')
+          .eq('opportunity_id', opportunityId)
+          .eq('company_id', companyId)
+          .then(({ data }) => {
+            const ids = (data ?? []).map((r: { sale_type_id: string }) => r.sale_type_id)
+            if (ids.length > 0) setSelectedSaleTypeIds(ids)
+          })
+          .catch(() => {})
+      }
     }
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -589,7 +636,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const hasAnyCatalogItem = products.length > 0 || services.length > 0
   const addRowValid = !!addItemId && brlToCents(addPriceDisplay) > 0
 
-  const itemSelectorBlocking = showItemSelector && draftItems.length === 0
+  const itemSelectorBlocking = showItemSelector && draftItems.length === 0 && existingItems.length === 0
   const saleTypeSelectorBlocking = showSaleTypeSelector && selectedSaleTypeIds.length === 0
   // Bloqueio para tipos de perda — espelho de saleTypeSelectorBlocking
   const lossTypeSelectorBlocking = showLossTypeSelector && selectedLossTypeIds.length === 0
@@ -597,7 +644,7 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
   const currentList = addType === 'product' ? products : services
 
   const handleConfirm = async () => {
-    if (showItemSelector && draftItems.length === 0) {
+    if (showItemSelector && draftItems.length === 0 && existingItems.length === 0) {
       setError(t('closeOpportunity.wonItemRequired'))
       return
     }
@@ -709,6 +756,37 @@ export const CloseOpportunityModal: React.FC<CloseOpportunityModalProps> = ({
                 <p className="text-sm text-amber-700">{t('closeOpportunity.wonItemEmptyCatalog')}</p>
               ) : (
                 <>
+                  {/* Itens já registrados — somente leitura */}
+                  {loadingExistingItems && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Carregando itens registrados...
+                    </div>
+                  )}
+                  {!loadingExistingItems && existingItems.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      <p className="text-xs font-medium text-emerald-700 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Itens já registrados
+                      </p>
+                      {existingItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between gap-2 bg-white border border-emerald-100 rounded-lg px-3 py-2 opacity-80">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-gray-700 truncate">{item.name_snapshot}</p>
+                            <p className="text-xs text-gray-400">
+                              {item.line_type === 'product' ? t('closeOpportunity.wonItemTypeProduct') : t('closeOpportunity.wonItemTypeService')}
+                              {' · '}Qtd {item.quantity}
+                              {' × '}
+                              {item.unit_price.toLocaleString('pt-BR', { style: 'currency', currency: currencyCode })}
+                            </p>
+                          </div>
+                          <p className="text-xs font-semibold text-emerald-600 flex-shrink-0">
+                            {item.line_total.toLocaleString('pt-BR', { style: 'currency', currency: currencyCode })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {/* Linha de adição */}
                   <div className="space-y-2">
                     <div className="flex gap-2">
