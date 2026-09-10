@@ -40,7 +40,8 @@ const convertChatContactToLead = (
   contact: ChatContact | null,
   phoneNumber: string,
   conversationData?: any,
-  associatedLeadId?: number | null
+  associatedLeadId?: number | null,
+  responsibleUserId?: string | null
 ): Lead => {
   return {
     // Usa o ID real da tabela leads — contact.id é um identificador de chat,
@@ -53,7 +54,10 @@ const convertChatContactToLead = (
     origin: 'whatsapp',
     status: 'novo',
     interest: '',
-    responsible_user_id: '',
+    // Usa o responsible_user_id real do lead no banco.
+    // Sem isso, o modal enviaria null no update, sobrescrevendo o responsável
+    // e causando violação de RLS (42501) em empresas com restrict_leads_to_owner = true.
+    responsible_user_id: responsibleUserId || '',
     visitor_id: '',
     record_type: 'Lead',
     
@@ -108,7 +112,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'biblioteca' | 'notas'>('info')
   const [conversation, setConversation] = useState<any>(null)
   const [averageResponseTime, setAverageResponseTime] = useState<string>('--')
-  const [associatedLead, setAssociatedLead] = useState<{id: number, name: string, phone?: string, email?: string} | null>(null)
+  const [associatedLead, setAssociatedLead] = useState<{id: number, name: string, phone?: string, email?: string, responsible_user_id?: string | null} | null>(null)
   
   // Estados para o LeadModal
   const [showLeadModal, setShowLeadModal] = useState(false)
@@ -208,7 +212,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         try {
           const { data: leadData, error: leadError } = await supabase
             .from('leads')
-            .select('id, name, phone, email')
+            .select('id, name, phone, email, responsible_user_id')
             .eq('company_id', companyId)
             .eq('phone', conv.contact_phone)
             .is('deleted_at', null)
@@ -367,6 +371,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             }}
             averageResponseTime={averageResponseTime}
             associatedLeadId={associatedLead?.id ?? null}
+            associatedLeadResponsibleUserId={associatedLead?.responsible_user_id ?? null}
           />
         ) : activeTab === 'schedule' ? (
           conversation?.instance_id ? (
@@ -507,6 +512,8 @@ interface ContactInfoProps {
   averageResponseTime: string
   /** ID numérico do lead na tabela leads (associatedLead.id). Null se lead não cadastrado. */
   associatedLeadId: number | null
+  /** responsible_user_id do lead no banco. Necessário para não sobrescrever com null no modal. */
+  associatedLeadResponsibleUserId?: string | null
 }
 
 const ContactInfo: React.FC<ContactInfoProps> = ({
@@ -516,7 +523,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   onUpdate,
   onOpenLeadModal,
   averageResponseTime,
-  associatedLeadId
+  associatedLeadId,
+  associatedLeadResponsibleUserId
 }) => {
   const { t } = useTranslation('chat')
   const [editing, setEditing] = useState(false)
@@ -922,10 +930,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             <button
               onClick={() => {
                 if (contact && conversation) {
-                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation, associatedLeadId)
-                  // #region agent log
-                  fetch('http://127.0.0.1:7720/ingest/d2f8cac3-ea7e-46a2-a261-0c2f15b0b14c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2d444'},body:JSON.stringify({sessionId:'e2d444',location:'LeadPanel.tsx:openModal',message:'lead aberto para edição',data:{leadId:leadData.id,associatedLeadId,contactId:contact?.id,idIsValid:typeof leadData.id === 'number' && !isNaN(leadData.id)},timestamp:Date.now()})}).catch(()=>{});
-                  // #endregion
+                  const leadData = convertChatContactToLead(contact, conversation.contact_phone, conversation, associatedLeadId, associatedLeadResponsibleUserId)
                   onOpenLeadModal(leadData)
                 }
               }}
