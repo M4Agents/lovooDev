@@ -8,6 +8,22 @@ import { UserSelector } from './WhatsAppChat/UserSelector';
 import { validateCNPJ, validateEmail, validateURL, validateCEP, validatePhone } from '../utils/validators';
 import { maskCNPJ, maskCEP, maskPhone, BRAZILIAN_STATES } from '../utils/masks';
 import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
+
+/**
+ * Formata o telefone para exibição no formulário.
+ * Remove o prefixo de país '55' do formato canônico (ex: '5511999198369' → '(11) 99919-8369')
+ * antes de aplicar a máscara, para que o usuário veja e edite apenas DDD + número local.
+ */
+const formatPhoneForDisplay = (phone: string): string => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  // Strip prefixo de país BR '55' se presente (12 ou 13 dígitos)
+  const localDigits =
+    (digits.length === 13 || digits.length === 12) && digits.startsWith('55')
+      ? digits.slice(2)
+      : digits;
+  return maskPhone(localDigits);
+};
 import { fetchCEPData, isValidCEPForSearch, formatAddress } from '../utils/cep';
 import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername, extractLinkedInUsername, extractTikTokUsername, isValidSocialUsername } from '../utils/socialMedia';
 import { LeadTagsField } from './LeadTagsField';
@@ -183,7 +199,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         setFormData({
           name: lead.name || '',
           email: lead.email || '',
-          phone: lead.phone || '',
+          phone: formatPhoneForDisplay(lead.phone || ''),
           origin: lead.origin || 'manual',
           status: lead.status || 'novo',
           interest: lead.interest || '',
@@ -556,7 +572,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (companyData.company_telefone && !validatePhone(companyData.company_telefone)) {
       errors.company_telefone = 'Telefone inválido';
     }
-    if (!activeLead?.id && formData.phone && !validatePhone(formData.phone)) {
+    if (formData.phone && !validatePhone(formData.phone)) {
       errors.phone = 'Telefone inválido. Informe DDD + número (10 ou 11 dígitos).';
     }
 
@@ -716,7 +732,13 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     let processedValue = value;
 
     if (field === 'phone') {
-      processedValue = maskPhone(value);
+      // Strip prefixo de país '55' se o usuário colar um número canônico (12-13 dígitos)
+      const digits = value.replace(/\D/g, '');
+      const localDigits =
+        (digits.length === 13 || digits.length === 12) && digits.startsWith('55')
+          ? digits.slice(2)
+          : digits;
+      processedValue = maskPhone(localDigits);
     }
 
     setFormData(prev => ({
