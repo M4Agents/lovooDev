@@ -81,10 +81,14 @@ export default async function handler(req: any, res: any) {
   if (!activity_type) {
     return res.status(400).json({ success: false, error: 'activity_type é obrigatório' })
   }
-  if (!(VALID_ACTIVITY_TYPES as readonly string[]).includes(activity_type)) {
+  // Validação de formato antecipada: deve ser valor legado OU UUID
+  // A validação de existência do UUID no banco ocorre após auth (abaixo)
+  const isLegacyType = (VALID_ACTIVITY_TYPES as readonly string[]).includes(activity_type)
+  const isUUIDType   = isUUID(activity_type)
+  if (!isLegacyType && !isUUIDType) {
     return res.status(400).json({
       success: false,
-      error: `activity_type inválido. Valores aceitos: ${VALID_ACTIVITY_TYPES.join(', ')}`,
+      error: `activity_type inválido. Forneça um valor legado (${VALID_ACTIVITY_TYPES.join(', ')}) ou um UUID de tipo customizado`,
     })
   }
   if (!scheduled_date || !DATE_REGEX.test(scheduled_date)) {
@@ -118,6 +122,26 @@ export default async function handler(req: any, res: any) {
   }
   const { ctx } = authResult
   const { userId, companyId, supabase } = ctx
+
+  // ── Validar activity_type UUID (quando não é valor legado) ───────────────
+  // Se for UUID: verificar se existe e está ativo em custom_activity_types da empresa
+  if (isUUIDType) {
+    const { data: customType, error: customTypeError } = await supabase
+      .from('custom_activity_types')
+      .select('id')
+      .eq('id', activity_type)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (customTypeError) {
+      console.error('[activities/create] erro ao validar custom activity_type:', customTypeError.message)
+      return res.status(500).json({ success: false, error: 'Erro ao validar tipo de atividade' })
+    }
+    if (!customType) {
+      return res.status(400).json({ success: false, error: 'activity_type não encontrado ou inativo para esta empresa' })
+    }
+  }
 
   // ── Validar lead pertence à empresa ──────────────────────────────────────
   // NUNCA inserir atividade para lead de outra empresa
