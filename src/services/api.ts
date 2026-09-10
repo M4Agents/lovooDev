@@ -1228,6 +1228,10 @@ export const api = {
         delete (leadUpdates as any).email;
       }
       
+      // #region agent log
+      fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'933d94'},body:JSON.stringify({sessionId:'933d94',location:'api.ts:updateLead:before',message:'leads UPDATE payload',data:{leadId,responsible_user_id:(leadUpdates as any).responsible_user_id,company_id:(leadUpdates as any).company_id,fieldCount:Object.keys(leadUpdates).length,hasResponsible:'responsible_user_id' in (leadUpdates as any),responsibleIsNull:(leadUpdates as any).responsible_user_id===null,responsibleIsEmpty:(leadUpdates as any).responsible_user_id===''},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      
       const { data: lead, error } = await supabase
         .from('leads')
         .update(leadUpdates)
@@ -1243,6 +1247,9 @@ export const api = {
 
       if (error) {
         console.error('❌ ERRO NO UPDATE LEADS:', error);
+        // #region agent log
+        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'933d94'},body:JSON.stringify({sessionId:'933d94',location:'api.ts:updateLead:error',message:'leads UPDATE error details',data:{code:error.code,message:error.message,details:error.details,hint:error.hint,status:(error as any).status,httpStatus:(error as any).httpStatus,responsible_user_id_sent:(leadUpdates as any).responsible_user_id,company_id_sent:(leadUpdates as any).company_id,leadId},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         throw error;
       }
 
