@@ -416,59 +416,45 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   };
 
   // ── Verifica se já existe lead com mesmo telefone ou e-mail na empresa ──
+  // Usa backend (service_role) para ignorar RLS — cobre restrict_leads_to_owner.
+  // Garante que usuários restritos ao próprio acervo não criem duplicatas invisíveis.
   const checkDuplicateLead = async (): Promise<boolean> => {
     if (!company?.id) return false;
 
-    const email = formData.email.trim().toLowerCase();
-
-    // Normaliza telefone canônico BR (mesma lógica de api.createLead)
     const phoneNorm = canonicalizeBrMobilePhone(formData.phone) || '';
-    const right11 = phoneNorm.slice(-11);
-    const withoutNinth =
-      phoneNorm.length === 13 && phoneNorm.startsWith('55') && phoneNorm.charAt(4) === '9'
-        ? phoneNorm.slice(0, 4) + phoneNorm.slice(5)
-        : null;
-    const lookupValues = phoneNorm.length >= 10
-      ? [...new Set([phoneNorm, right11, withoutNinth].filter(Boolean) as string[])]
-      : [];
+    const emailNorm = formData.email.trim().toLowerCase();
 
-    const conditions: string[] = [];
-    if (lookupValues.length > 0) {
-      conditions.push(`phone_normalized.in.(${lookupValues.join(',')})`);
-    }
-    if (email && email.includes('@')) {
-      conditions.push(`email.ilike.${email}`);
-    }
-    if (conditions.length === 0) return false;
+    // Sem dados para buscar
+    if (!phoneNorm && !emailNorm.includes('@')) return false;
 
-    const { data: found } = await supabase
-      .from('leads')
-      .select('id, name, phone, email, responsible_user_id')
-      .eq('company_id', company.id)
-      .is('deleted_at', null)
-      .or(conditions.join(','))
-      .limit(1)
-      .maybeSingle();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return false;
 
-    if (!found) return false;
+    const response = await fetch('/api/leads/check-duplicate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        company_id: company.id,
+        phone: phoneNorm || undefined,
+        email: emailNorm.includes('@') ? emailNorm : undefined,
+      }),
+    });
 
-    const responsible = companyUsers.find(
-      u => (u.user_id ?? u.id) === found.responsible_user_id
-    );
-    const responsibleName = responsible
-      ? (responsible.display_name || responsible.email)
-      : found.responsible_user_id
-        ? 'usuário não identificado'
-        : null;
+    if (!response.ok) return false;
 
-    const matchedBy: 'phone' | 'email' =
-      lookupValues.length > 0 && found.phone ? 'phone' : 'email';
+    const data = await response.json();
+    if (!data.isDuplicate) return false;
+
+    const { existingLead } = data;
 
     setDuplicateAlert({
       type: isRestrictedToOwnLeads() ? 'restricted' : 'unrestricted',
-      existingLead: found,
-      responsibleName: responsibleName ?? '',
-      matchedBy,
+      existingLead,
+      responsibleName: existingLead.responsibleName ?? '',
+      matchedBy: existingLead.matchedBy,
     });
     return true;
   };
@@ -489,7 +475,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       setFormData({
         name: fullLead.name || '',
         email: fullLead.email || '',
-        phone: fullLead.phone || '',
+        phone: formatPhoneForDisplay(fullLead.phone || ''),
         origin: fullLead.origin || 'manual',
         status: fullLead.status || 'novo',
         interest: fullLead.interest || '',
@@ -603,8 +589,11 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           return;
         }
       } catch {
-        // Se a verificação falhar, prossegue com a criação normalmente
+        // Se a verificação falhar, bloquear criação para evitar duplicatas silenciosas.
+        // É mais seguro pedir que o usuário tente novamente do que criar duplicata.
         setLoading(false);
+        alert('Não foi possível verificar duplicatas. Verifique sua conexão e tente novamente.');
+        return;
       }
     }
 
