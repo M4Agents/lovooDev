@@ -599,7 +599,7 @@ export const Leads: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-8 h-8 text-blue-600" />
@@ -609,28 +609,31 @@ export const Leads: React.FC = () => {
             Gerencie seus leads e prospects
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowCustomFieldsModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            title="Campos Personalizados"
           >
             <Settings className="w-4 h-4" />
-            Campos Personalizados
+            <span className="hidden lg:inline">Campos Personalizados</span>
           </button>
           <button
             onClick={() => setShowTagsModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            title="Tags"
           >
             <Tag className="w-4 h-4" />
-            Tags
+            <span className="hidden lg:inline">Tags</span>
           </button>
           {canImportLeads && (
             <button
               onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Importar"
             >
               <Upload className="w-4 h-4" />
-              Importar
+              <span className="hidden lg:inline">Importar</span>
             </button>
           )}
           
@@ -642,10 +645,11 @@ export const Leads: React.FC = () => {
                 setShowExportDropdown(!showExportDropdown);
               }}
               disabled={exportLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              title="Exportar"
             >
               <Download className="w-4 h-4" />
-              {exportLoading ? 'Exportando...' : 'Exportar'}
+              <span className="hidden lg:inline">{exportLoading ? 'Exportando...' : 'Exportar'}</span>
               <ChevronDown className="w-4 h-4" />
             </button>
 
@@ -673,10 +677,10 @@ export const Leads: React.FC = () => {
           
           <button
             onClick={handleCreateLead}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Novo Lead
+            <span className="hidden sm:inline">Novo Lead</span>
           </button>
         </div>
       </div>
@@ -958,7 +962,7 @@ export const Leads: React.FC = () => {
                     />
                   </th>
                 )}
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
                   Lead
                 </th>
                 {visibleColumns.includes('contato') && (
@@ -1010,7 +1014,7 @@ export const Leads: React.FC = () => {
                     </th>
                   ))
                 }
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)]">
                   Ações
                 </th>
               </tr>
@@ -1019,7 +1023,7 @@ export const Leads: React.FC = () => {
               {leads.map((lead) => (
                 <tr
                   key={lead.id}
-                  className={`hover:bg-gray-50 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50' : ''}`}
+                  className={`group hover:bg-gray-50 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50' : ''}`}
                 >
                   {canSeeBulkBar && (
                     <td className="pl-4 pr-2 py-2 w-8 align-middle">
@@ -1038,7 +1042,7 @@ export const Leads: React.FC = () => {
                       />
                     </td>
                   )}
-                  <td className="px-4 py-2 whitespace-nowrap">
+                  <td className={`px-4 py-2 whitespace-nowrap sticky left-0 z-10 ${selectedLeadIds.has(lead.id) ? 'bg-blue-50 group-hover:bg-blue-100' : 'bg-white group-hover:bg-gray-50'}`}>
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-7 w-7">
                         <Avatar
@@ -1169,7 +1173,7 @@ export const Leads: React.FC = () => {
                       )
                     })
                   }
-                  <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                  <td className={`px-4 py-2 whitespace-nowrap text-right text-sm font-medium sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] ${selectedLeadIds.has(lead.id) ? 'bg-blue-50 group-hover:bg-blue-100' : 'bg-white group-hover:bg-gray-50'}`}>
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleViewLead(lead)}
