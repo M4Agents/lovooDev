@@ -6,6 +6,7 @@ import { api } from '../../services/api'
 import { supabase } from '../../lib/supabase'
 import { CompanyCard, daysUntil, formatDate } from './CompanyCard'
 import { CompaniesFilter } from './CompaniesFilter'
+import { Toggle } from '../ui/Toggle'
 import type {
   ClientCompany, TrialInfo, CreateResult, Plan,
   ViewMode, CompanyFilters,
@@ -45,7 +46,7 @@ const SET_PLAN_ERROR_MSGS: Record<string, string> = {
 
 export const CompaniesPanel: React.FC = () => {
   const { impersonateUser } = useAuth()
-  const { isSaaSAdmin, isSystemAdmin, canAccessCompanies } = useAccessControl()
+  const { isSaaSAdmin, isSystemAdmin, canAccessCompanies, canProvisionMetaWhatsApp } = useAccessControl()
 
   // ── Dados ─────────────────────────────────────────────────────────────────
   const [companies,       setCompanies]       = useState<ClientCompany[]>([])
@@ -84,6 +85,10 @@ export const CompaniesPanel: React.FC = () => {
   const [editLoading, setEditLoading] = useState(false)
   const [editError,   setEditError]   = useState<string | null>(null)
   const [editForm,    setEditForm]    = useState({ name: '', domain: '', status: '' })
+
+  // ── Meta WhatsApp Cloud API — toggle no modal de edição ──────────────────
+  const [metaWaLoading, setMetaWaLoading] = useState(false)
+  const [metaWaError,   setMetaWaError]   = useState<string | null>(null)
 
   // ── Modal de exclusão ─────────────────────────────────────────────────────
   const [deleteCompany, setDeleteCompany] = useState<ClientCompany | null>(null)
@@ -254,6 +259,7 @@ export const CompaniesPanel: React.FC = () => {
     setEditCompany(comp)
     setEditForm({ name: comp.name, domain: comp.domain ?? '', status: comp.status })
     setEditError(null)
+    setMetaWaError(null)
   }
 
   const handleEdit = async (e: React.FormEvent) => {
@@ -282,6 +288,43 @@ export const CompaniesPanel: React.FC = () => {
       setEditError(err?.message ?? 'Erro inesperado')
     } finally {
       setEditLoading(false)
+    }
+  }
+
+  // ── Toggle Meta WhatsApp Cloud API ───────────────────────────────────────
+
+  const handleToggleMetaWhatsApp = async (nextValue: boolean) => {
+    if (!editCompany || metaWaLoading) return
+    setMetaWaLoading(true)
+    setMetaWaError(null)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Sessão inválida')
+      const res = await fetch('/api/admin/companies/toggle-meta-whatsapp', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ company_id: editCompany.id, enabled: nextValue }),
+      })
+      const json = await res.json()
+      if (
+        !res.ok ||
+        json?.success !== true ||
+        json?.company_id !== editCompany.id ||
+        json?.meta_whatsapp_enabled !== nextValue
+      ) {
+        setMetaWaError('Erro ao atualizar configuração. Tente novamente.')
+        return
+      }
+      // Atualizar localmente sem reload completo — evita stale no modal
+      setEditCompany(prev => prev ? { ...prev, meta_whatsapp_enabled: nextValue } : prev)
+      setCompanies(prev =>
+        prev.map(c => c.id === editCompany.id ? { ...c, meta_whatsapp_enabled: nextValue } : c)
+      )
+    } catch {
+      setMetaWaError('Erro interno ao processar operação.')
+    } finally {
+      setMetaWaLoading(false)
     }
   }
 
@@ -745,6 +788,37 @@ export const CompaniesPanel: React.FC = () => {
                 </button>
               </div>
             </form>
+
+            {/* ─── Integrações — operação independente do Salvar ───── */}
+            {canProvisionMetaWhatsApp && (
+              <div className="px-6 pb-6">
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Integrações
+                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">WhatsApp Cloud API (Meta)</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Permite que esta empresa utilize a integração oficial com a WhatsApp Cloud API.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={Boolean(editCompany?.meta_whatsapp_enabled)}
+                      onChange={handleToggleMetaWhatsApp}
+                      disabled={metaWaLoading}
+                      size="sm"
+                    />
+                  </div>
+                  {metaWaLoading && (
+                    <p className="text-xs text-slate-500">Atualizando...</p>
+                  )}
+                  {metaWaError && (
+                    <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{metaWaError}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
