@@ -1176,5 +1176,31 @@
       "saveError": "Erro ao salvar landing page: {{message}}",
       "verifyGenericError": "Ocorreu um erro durante a verificação."
     }
+  },
+  "metaWhatsApp": {
+    "error": {
+      "retry": "Tentar novamente"
+    },
+    "empty": {
+      "title": "WhatsApp Cloud API (Meta)",
+      "description": "Conecte um número de WhatsApp oficial usando a API nativa da Meta (Cloud API). Sem número espelho — direto na plataforma oficial.",
+      "highlight1": "Número oficial verificado pela Meta",
+      "highlight2": "Envio de templates aprovados",
+      "highlight3": "Sem risco de ban por uso de API não oficial",
+      "connectButton": "Conectar WhatsApp",
+      "comingSoon": "Funcionalidade de conexão em breve"
+    },
+    "connected": {
+      "title": "Números conectados",
+      "subtitle": "{{count}} número(s) ativo(s) via WhatsApp Cloud API",
+      "refresh": "Atualizar",
+      "addButton": "Conectar outro número"
+    },
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "error": "Erro",
+      "token_revoked": "Token revogado"
+    }
   }
 }
