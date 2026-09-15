@@ -45,6 +45,12 @@ interface PendingComplete {
 // ── Interfaces públicas ───────────────────────────────────────────────────────
 
 export interface UseMetaOnboardingOptions {
+  /**
+   * Se false, o hook permanece idle sem criar sessão.
+   * Padrão: true (undefined → habilitado).
+   * SOMENTE lifecycle/UX — nunca usar como autorização.
+   */
+  enabled?: boolean
   /** Chamado após /complete bem-sucedido. Tipicamente dispara refresh da lista. */
   onSuccess?: () => void
 }
@@ -104,6 +110,14 @@ export function useMetaOnboarding(
   const listenerRef       = useRef<((e: MessageEvent) => void) | null>(null)
   const sessionExpiryRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onSuccessRef      = useRef(options?.onSuccess)
+  /**
+   * Ref estável de enabled — closures assíncronas consultam sem re-capturar.
+   * Sincronizado durante o render (não via effect) para eliminar a janela
+   * entre render e commit em que uma closure poderia observar valor antigo.
+   */
+  const enabledRef        = useRef(options?.enabled !== false)
+  // Atribuição direta durante render — não é side effect externo
+  enabledRef.current      = options?.enabled !== false
 
   useEffect(() => { onSuccessRef.current = options?.onSuccess }, [options?.onSuccess])
 
@@ -164,10 +178,14 @@ export function useMetaOnboarding(
 
     const expiresMs = new Date(session.expires_at).getTime()
 
-    // Fail-closed: expires_at inválido (NaN) → não criar timer
-    // NaN <= 0 é false em JS → setTimeout(fn, NaN) dispara em 1 ms → loop infinito
+    // Fail-closed: expires_at inválido (NaN) → não habilitar popup, não criar timer
+    // NaN <= 0 é false em JS → setTimeout(fn, NaN) dispara em ~1 ms → loop infinito
+    // Botão NUNCA fica ready com sessão inválida.
+    // Retry explícito via cancelFlow() — sem loop automático de /start.
     if (!Number.isFinite(expiresMs)) {
-      setStepAndRef('ready')
+      sessionRef.current = null
+      setOnboardingError('Erro ao preparar sessão de conexão')
+      setStepAndRef('idle')
       return
     }
 
@@ -177,8 +195,8 @@ export function useMetaOnboarding(
       return
     }
     sessionExpiryRef.current = setTimeout(() => {
-      // Renovar somente em ready — popup_open/completing não devem ser interrompidos
-      if (stepRef.current === 'ready') void startNewSession(flowGenRef.current)
+      // Renovar somente em ready E ainda habilitado — não interromper popup_open/completing
+      if (stepRef.current === 'ready' && enabledRef.current) void startNewSession(flowGenRef.current)
     }, delay)
 
     setStepAndRef('ready')
@@ -219,8 +237,11 @@ export function useMetaOnboarding(
         isCompletingRef.current = false
         pendingRef.current      = {}
         sessionRef.current      = null
-        onSuccessRef.current?.()                   // → refresh() da lista de instâncias
+        // idle ANTES de onSuccess para que o step já esteja limpo quando refresh()
+        // disparar o re-render; evita que qualquer código posterior nesta closure
+        // interfira no lifecycle iniciado por onSuccess.
         setStepAndRef('idle')
+        onSuccessRef.current?.()                   // → refresh() da lista de instâncias
         // Não preparar nova sessão após sucesso — painel decide quando retomar
       })
       .catch((err: unknown) => {
@@ -229,14 +250,17 @@ export function useMetaOnboarding(
         pendingRef.current      = {}
         sessionRef.current      = null             // state consumido — não reutilizar
         setOnboardingError(err instanceof Error ? err.message : 'Erro ao finalizar conexão')
-        void startNewSession(myGen)                // nova sessão para nova tentativa
+        // Nova sessão somente se ainda habilitado — evitar /start em painel descartado
+        if (enabledRef.current) void startNewSession(myGen)
+        else setStepAndRef('idle')
       })
   }
 
   // ── useEffect: mount + company change ────────────────────────────────────
 
   useEffect(() => {
-    if (!companyId) {
+    // enabled=false → limpar e permanecer idle (somente lifecycle — não é autorização)
+    if (!companyId || options?.enabled === false) {
       removeMessageListener()
       clearExpiryTimer()
       sessionRef.current      = null
@@ -250,7 +274,7 @@ export function useMetaOnboarding(
     void startNewSession(flowGenRef.current)
 
     return () => {
-      // Unmount ou company change — incrementar gen descarta todos os async em voo
+      // Unmount, company change ou enabled→false — incrementar gen descarta async em voo
       // SEM setState (componente pode estar sendo desmontado)
       flowGenRef.current += 1
       removeMessageListener()
@@ -260,7 +284,7 @@ export function useMetaOnboarding(
       isCompletingRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId])
+  }, [companyId, options?.enabled])
 
   // ── triggerPopup ─────────────────────────────────────────────────────────
 
@@ -295,7 +319,8 @@ export function useMetaOnboarding(
       sessionRef.current = null   // state antigo não deve ser reutilizado
       if (result.kind === 'ERROR') setOnboardingError('Erro no fluxo de conexão Meta')
       setStepAndRef('idle')
-      void startNewSession(myGen)
+      // Preparar nova sessão somente se ainda habilitado — evita loading_session indevido
+      if (enabledRef.current) void startNewSession(myGen)
     }
 
     listenerRef.current = listener
@@ -314,7 +339,8 @@ export function useMetaOnboarding(
           removeMessageListener()
           pendingRef.current = {}
           setStepAndRef('idle')
-          void startNewSession(myGen)   // nova sessão sem expor erro (UX de cancelamento)
+          // Nova sessão somente se habilitado — evita loading_session indevido
+          if (enabledRef.current) void startNewSession(myGen)
           return
         }
 
@@ -343,7 +369,7 @@ export function useMetaOnboarding(
     isCompletingRef.current = false
     setOnboardingError(null)
     setStepAndRef('idle')
-    if (companyId) void startNewSession(flowGenRef.current)
+    if (companyId && enabledRef.current) void startNewSession(flowGenRef.current)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId])
 

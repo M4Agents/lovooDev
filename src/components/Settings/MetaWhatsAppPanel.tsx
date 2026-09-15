@@ -21,6 +21,7 @@
 import { useTranslation }                  from 'react-i18next'
 import { AlertCircle, CheckCircle2, Loader2, MessageCircle, Phone, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import { useCompany }                      from '../../hooks/useCompany'
+import { useMetaOnboarding }              from '../../hooks/useMetaOnboarding'
 import { useMetaWhatsAppInstances }        from '../../hooks/useMetaWhatsAppInstances'
 import type { MetaWhatsAppInstance }       from '../../types/meta-whatsapp'
 
@@ -102,6 +103,21 @@ export function MetaWhatsAppPanel() {
   const { company }                       = useCompany()
   const { instances, loading, error, refresh } = useMetaWhatsAppInstances(company?.id)
 
+  // Onboarding habilitado somente quando company presente, GET concluído e sem erro
+  const { step, onboardingError, triggerPopup, cancelFlow, isReady } = useMetaOnboarding({
+    enabled:   Boolean(company?.id) && !loading && !error,
+    onSuccess: refresh,
+  })
+
+  // Derivados do step — calculados antes dos early returns (sem hooks aqui)
+  const isProcessing       = step === 'loading_session' || step === 'completing'
+  const progressLabel      = step === 'loading_session'
+    ? mw('onboarding.preparing')
+    : mw('onboarding.completing')
+  const connectButtonIcon  = isProcessing
+    ? <Loader2 className="w-4 h-4 animate-spin" />
+    : <MessageCircle className="w-4 h-4" />
+
   // ── 1. Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -160,18 +176,35 @@ export function MetaWhatsAppPanel() {
           ))}
         </div>
 
-        {/* Botão desabilitado — onboarding habilitado na próxima fase */}
+        {/* Botão Conectar + estados de onboarding */}
         <div className="flex flex-col items-center gap-2">
           <button
-            disabled
-            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg opacity-50 cursor-not-allowed"
+            onClick={triggerPopup}
+            disabled={!isReady}
+            className={`flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg ${isReady ? 'hover:bg-green-700 transition-colors' : 'opacity-50 cursor-not-allowed'}`}
           >
-            <MessageCircle className="w-4 h-4" />
-            {mw('empty.connectButton')}
+            {connectButtonIcon}
+            {isProcessing ? progressLabel : mw('empty.connectButton')}
           </button>
-          <p className="text-xs text-slate-400">
-            {mw('empty.comingSoon')}
-          </p>
+
+          {/* comingSoon: somente idle sem erro de onboarding */}
+          {step === 'idle' && !onboardingError && (
+            <p className="text-xs text-slate-400">{mw('empty.comingSoon')}</p>
+          )}
+
+          {/* Erro de onboarding — visualmente separado do erro de GET instances */}
+          {onboardingError && (
+            <div className="flex flex-col items-center gap-1.5">
+              <p className="text-xs text-red-500">{onboardingError}</p>
+              <button
+                onClick={cancelFlow}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                {mw('error.retry')}
+              </button>
+            </div>
+          )}
         </div>
 
       </div>
@@ -208,14 +241,29 @@ export function MetaWhatsAppPanel() {
         ))}
       </div>
 
-      {/* Botão de adicionar — desabilitado por enquanto */}
+      {/* Botão conectar outro número */}
       <button
-        disabled
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg opacity-50 cursor-not-allowed"
+        onClick={triggerPopup}
+        disabled={!isReady}
+        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg ${isReady ? 'hover:bg-green-100 transition-colors' : 'opacity-50 cursor-not-allowed'}`}
       >
-        <MessageCircle className="w-4 h-4" />
-        {mw('connected.addButton')}
+        {connectButtonIcon}
+        {isProcessing ? progressLabel : mw('connected.addButton')}
       </button>
+
+      {/* Erro de onboarding — separado do erro de GET instances */}
+      {onboardingError && (
+        <div className="flex items-center justify-center gap-2 mt-1.5">
+          <p className="text-xs text-red-500">{onboardingError}</p>
+          <button
+            onClick={cancelFlow}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            {mw('error.retry')}
+          </button>
+        </div>
+      )}
 
     </div>
   )

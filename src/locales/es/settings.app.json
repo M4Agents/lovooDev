@@ -1112,6 +1112,10 @@
       "disconnected": "Desconectado",
       "error": "Error",
       "token_revoked": "Token revocado"
+    },
+    "onboarding": {
+      "preparing": "Preparando conexión...",
+      "completing": "Finalizando..."
     }
   }
 }
