@@ -223,6 +223,10 @@ export function useMetaOnboarding(
 
     setStepAndRef('completing')
 
+    // #region agent log — debug 0b23ea (complete_attempt) — H-B H-C
+    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:complete_attempt',message:'complete_attempt',data:{event:'complete_attempt',generation:myGen,currentGeneration:flowGenRef.current,hasCode:typeof code==='string'&&code.length>0,hasWabaId:typeof wabaId==='string'&&wabaId.length>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
+    // #endregion
+
     const payload: OnboardingCompletePayload = {
       state:   session.state,
       code,                           // valor original, sem mutação
@@ -303,6 +307,10 @@ export function useMetaOnboarding(
       const result = parseWaEmbeddedSignup(event)
       if (result.kind === 'IGNORE') return
 
+      // #region agent log — debug 0b23ea (window_message) — H-B H-C
+      void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:window_message',message:'window_message',data:{event:'window_message',generation:myGen,currentGeneration:flowGenRef.current,origin:event.origin,dataType:typeof event.data,embeddedEvent:result.kind},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
+      // #endregion
+
       if (result.kind === 'FINISH') {
         // Salvar wabaId — code pode ainda não ter chegado (timing: FINISH→code)
         // NÃO limpar pendingRef — code ainda pode chegar pelo FB.login callback
@@ -326,8 +334,16 @@ export function useMetaOnboarding(
     listenerRef.current = listener
     window.addEventListener('message', listener)
 
+    // #region agent log — debug 0b23ea (fb_login_call) — H-A H-D
+    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:fb_login_call',message:'fb_login_call',data:{event:'fb_login_call',generation:myGen,currentGeneration:flowGenRef.current,step:stepRef.current,hasSession:!!sessionRef.current,hasFB:!!window.FB},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
+    // #endregion
+
     window.FB?.login(
       (response) => {
+        // #region agent log — debug 0b23ea (fb_login_callback) — H-A H-B H-D
+        void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:fb_login_callback',message:'fb_login_callback',data:{event:'fb_login_callback',generation:myGen,currentGeneration:flowGenRef.current,step:stepRef.current,status:response.status,hasAuthResponse:response.authResponse!==null&&response.authResponse!==undefined,hasCode:typeof response.authResponse?.code==='string'&&(response.authResponse?.code?.length??0)>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
+        // #endregion
+
         // Guard: ignorar se popup_open já foi encerrado (ex: CANCEL via message)
         if (stepRef.current !== 'popup_open') return
 
