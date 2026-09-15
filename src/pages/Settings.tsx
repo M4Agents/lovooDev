@@ -30,6 +30,7 @@ import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegration
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { InstagramConnectionPanel } from '../components/Settings/InstagramConnectionPanel';
 import { NuvemshopConnectionPanel } from '../components/Settings/NuvemshopConnectionPanel';
+import { MetaWhatsAppPanel }        from '../components/Settings/MetaWhatsAppPanel';
 import { NuvemshopBrandIcon } from '../components/icons/NuvemshopIcon';
 import { NotificationsPanel } from '../components/Settings/NotificationsPanel';
 import { ApiImportHistory } from '../components/Settings/ApiImportHistory';
@@ -1646,22 +1647,7 @@ export const Settings: React.FC = () => {
               
               {/* Cloud API WhatsApp */}
               {whatsappTab === 'cloud-api' && (
-                <div className="text-center py-12">
-                  <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4">
-                    <Cloud className="w-8 h-8 text-green-600 mx-auto mt-2" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    {t('integrations.placeholders.cloudApi.title')}
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    {t('integrations.placeholders.cloudApi.subtitle')}
-                  </p>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-md mx-auto">
-                    <p className="text-sm text-green-800">
-                      {t('integrations.placeholders.cloudApi.body')}
-                    </p>
-                  </div>
-                </div>
+                <MetaWhatsAppPanel />
               )}
               
               {/* Modelos */}
