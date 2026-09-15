@@ -27,10 +27,11 @@
 // Não exportados — o caller usa window.FB via inferência da augmentação global.
 
 interface FbInitParams {
-  appId:   string
-  version: string
-  xfbml:   boolean
-  cookie:  boolean
+  appId:     string
+  version:   string
+  xfbml:     boolean
+  cookie:    boolean
+  useFedcm?: boolean
 }
 
 /** Resposta do callback de FB.login. */
@@ -157,9 +158,10 @@ export function loadFacebookSdk(appId: string): Promise<void> {
         try {
           window.FB!.init({
             appId,
-            version: 'v26.0',  // alinhado com GRAPH_VERSION = 'v26.0' em config.js
-            xfbml:   false,
-            cookie:  false,
+            version:  'v26.0',  // alinhado com GRAPH_VERSION = 'v26.0' em config.js
+            xfbml:    false,
+            cookie:   false,
+            useFedcm: false,    // desabilita diálogo FedCM nativo do Chrome
           })
           resolve()
         } catch {
