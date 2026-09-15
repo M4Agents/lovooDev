@@ -39,12 +39,16 @@ interface FbLoginResponse {
   authResponse: { code?: string } | null
 }
 
-/** Opções do FB.login para o fluxo Embedded Signup (sem Coexistence, sem featureType). */
+/** Opções do FB.login para o fluxo Embedded Signup. */
 interface FbLoginOptions {
   config_id:                      string
   response_type:                  'code'
   override_default_response_type: true
-  extras:                         { setup: Record<string, never> }
+  extras: {
+    setup:             Record<string, never>
+    featureType:       string
+    sessionInfoVersion: string
+  }
 }
 
 /** Interface mínima do window.FB usada pelo projeto. */
