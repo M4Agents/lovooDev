@@ -178,6 +178,12 @@ export function useAccessControl() {
     currentRole === 'system_admin' ||
     isImpersonating
 
+  // ── Provisionamento Meta WhatsApp Cloud API ────────────────
+  // Habilitar/desabilitar companies.meta_whatsapp_enabled via endpoint administrativo.
+  // Alinhado com o backend (E1): super_admin e system_admin de empresa parent.
+  // Esta capability é somente UX — o backend valida a relação parent→client.
+  const canProvisionMetaWhatsApp = isSaaSAdmin || isSystemAdmin
+
   // ── Integração Nuvemshop ────────────────────────────────────
   // Espelha a matriz do backend (validateNuvemshopCaller.js):
   //   VIEW_DATA_ROLES      → ver dados NS em Leads e Oportunidades (inclui seller)
@@ -443,6 +449,9 @@ export function useAccessControl() {
     // Integração Instagram
     canManageInstagramIntegration,
     canConnectInstagram,
+
+    // Meta WhatsApp Cloud API — provisionamento administrativo
+    canProvisionMetaWhatsApp,
 
     // Integração Nuvemshop
     canViewNuvemshopData,
