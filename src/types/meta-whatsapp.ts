@@ -82,3 +82,20 @@ export interface OnboardingCompleteInstance {
 export interface OnboardingCompleteResponse {
   instance: OnboardingCompleteInstance
 }
+
+// ── OnboardingStep ────────────────────────────────────────────────────────────
+// Máquina de estados do fluxo Embedded Signup Meta.
+// Usada pelo hook useMetaOnboarding (1D.2) e pelo painel MetaWhatsAppPanel (1D.3).
+//
+// Fluxo normal:
+//   idle → loading_session → ready → popup_open → completing → idle
+//
+// Erros levam de qualquer estado para idle + onboardingError preenchido.
+// CANCEL do Meta leva para idle sem erro.
+
+export type OnboardingStep =
+  | 'idle'             // sem sessão pré-criada (estado inicial)
+  | 'loading_session'  // POST /start em andamento no mount do painel
+  | 'ready'            // sessão + SDK prontos — botão habilitado
+  | 'popup_open'       // FB.login aberto — aguardando code + waba_id
+  | 'completing'       // POST /complete em andamento
