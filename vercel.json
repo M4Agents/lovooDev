@@ -202,6 +202,10 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "identity-credentials-get=()"
         }
       ]
     }
