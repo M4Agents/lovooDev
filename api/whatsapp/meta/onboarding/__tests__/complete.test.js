@@ -1920,4 +1920,339 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
 
   }); // end F2 describe
 
-});
+  // ============================================================================
+  // INSTR — Instrumentação diagnóstica temporária (T1–T12)
+  //   Valida: eventos emitidos, allowlist, denylist e isolamento entre requests.
+  //   console.log mockado de forma isolada e restaurado após cada teste.
+  // ============================================================================
+
+  describe('INSTR — logPhase diagnóstico temporário', () => {
+    let consoleSpy;
+
+    beforeEach(() => {
+      // Silencia e captura console.log — sem poluir output do runner.
+      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
+
+    /** Parseia calls de console.log → objetos JSON com campo 'event'. */
+    function getLogEvents() {
+      return consoleSpy.mock.calls
+        .map(([arg]) => { try { return JSON.parse(arg); } catch { return null; } })
+        .filter(e => e !== null && typeof e.event === 'string');
+    }
+
+    // ── INSTR-T1: token exchange success ────────────────────────────────────
+    describe('INSTR-T1: token exchange success → token_exchange_result success=true', () => {
+      it('loga token_exchange_result com success=true e durationMs numérico', async () => {
+        setupHappyPath();
+        await handler(makeReq(), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'token_exchange_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(true);
+        expect(typeof evt.durationMs).toBe('number');
+        expect(evt.durationMs).toBeGreaterThanOrEqual(0);
+      });
+    });
+
+    // ── INSTR-T2: token exchange error sanitizado ────────────────────────────
+    describe('INSTR-T2: token exchange error → safeErrorCategory sem err.message raw', () => {
+      it('loga safeErrorCategory=code_exchange_failed sem expor mensagem interna', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        const err = new Error('CANARY_SECRET_MSG: token exchange internal detail');
+        err.code = 'code_exchange_failed';
+        mockExchangeCodeForToken.mockRejectedValue(err);
+
+        await handler(makeReq(), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'token_exchange_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(false);
+        expect(evt.safeErrorCategory).toBe('code_exchange_failed');
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain('CANARY_SECRET_MSG');
+      });
+    });
+
+    // ── INSTR-T3: discovery 1 WABA → count=1, nenhum ID nos logs ────────────
+    describe('INSTR-T3: discovery 1 WABA → wabaCount=1, sem WABA ID nos logs', () => {
+      it('loga wabaCount=1 e não expõe WABA ID', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupRpcOk();
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'waba_discovery_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(true);
+        expect(evt.wabaCount).toBe(1);
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain(FAKE_WABA_ID);
+      });
+    });
+
+    // ── INSTR-T4: discovery 0 WABAs → count=0 no log ────────────────────────
+    describe('INSTR-T4: discovery retorna [] → waba_discovery_result wabaCount=0', () => {
+      it('loga wabaCount=0 (sucesso da chamada, não do fluxo)', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([]);
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'waba_discovery_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(true);
+        expect(evt.wabaCount).toBe(0);
+      });
+    });
+
+    // ── INSTR-T5: discovery >1 WABAs → somente count, sem IDs ──────────────
+    describe('INSTR-T5: discovery 2 WABAs → wabaCount=2 sem WABA IDs nos logs', () => {
+      it('loga wabaCount=2 e não expõe IDs das WABAs', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'waba_discovery_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(true);
+        expect(evt.wabaCount).toBe(2);
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain(FAKE_WABA_ID);
+        expect(allLogs).not.toContain(FAKE_WABA_ID_2);
+      });
+    });
+
+    // ── INSTR-T6: phone list → somente phoneCount, sem IDs/números ──────────
+    describe('INSTR-T6: phone list → phoneCount no log, sem phone IDs ou números', () => {
+      it('loga phoneCount=1 sem expor phone ID ou número de telefone', async () => {
+        setupHappyPath(); // 1 phone (PHONE_A)
+
+        await handler(makeReq(), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'phone_list_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(true);
+        expect(evt.phoneCount).toBe(1);
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain(FAKE_PHONE_ID);
+        expect(allLogs).not.toContain(FAKE_PHONE_NUMBER);
+        expect(allLogs).not.toContain(FAKE_VERIFIED_NAME);
+      });
+    });
+
+    // ── INSTR-T7: crypto failure → crypto_error sem secret/token ────────────
+    describe('INSTR-T7: encryptMetaToken throws → token_encryption_result crypto_error sem dados sensíveis', () => {
+      it('loga crypto_error sem expor token, key ou mensagem raw', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        mockEncryptMetaToken.mockImplementation(() => {
+          throw new Error('META_TOKEN_ENC_KEY_CANARY: chave inválida');
+        });
+
+        await handler(makeReq(), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'token_encryption_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(false);
+        expect(evt.safeErrorCategory).toBe('crypto_error');
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain('META_TOKEN_ENC_KEY_CANARY');
+        expect(allLogs).not.toContain(FAKE_ACCESS_TOKEN);
+      });
+    });
+
+    // ── INSTR-T8: RPC failure → rpc_error sem payload/IDs ──────────────────
+    describe('INSTR-T8: RPC failure → connection_rpc_result rpc_error sem payload nem IDs', () => {
+      it('loga rpc_error sem expor company_id, waba_id, phone_number_id ou message', async () => {
+        setupHappyPath();
+        mockSvc.rpc.mockResolvedValue({
+          data:  null,
+          error: { code: 'XX000', message: 'CANARY_RPC_DETAIL internal', details: 'internal' },
+        });
+
+        await handler(makeReq(), makeRes());
+
+        const evt = getLogEvents().find(e => e.event === 'connection_rpc_result');
+        expect(evt).toBeDefined();
+        expect(evt.success).toBe(false);
+        expect(evt.safeErrorCategory).toBe('rpc_error');
+
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('');
+        expect(allLogs).not.toContain('CANARY_RPC_DETAIL');
+        expect(allLogs).not.toContain(FAKE_COMPANY_ID);
+        expect(allLogs).not.toContain(FAKE_WABA_ID);
+        expect(allLogs).not.toContain(FAKE_PHONE_ID);
+      });
+    });
+
+    // ── INSTR-T9: fluxo completo → sequência esperada e denylist ausente ────
+    describe('INSTR-T9: fluxo completo → eventos em sequência, nenhum dado sensível logado', () => {
+      it('emite eventos na ordem correta e não vaza dados do negócio', async () => {
+        setupHappyPath(); // normal path
+        await handler(makeReq(), makeRes());
+
+        const events    = getLogEvents();
+        const eventNames = events.map(e => e.event);
+
+        // Subconjunto ordenado obrigatório (caminho normal — sem discovery).
+        const expectedSequence = [
+          'request_start',
+          'auth_check_result',
+          'token_exchange_start',
+          'token_exchange_result',
+          'phone_list_start',
+          'phone_list_result',
+          'connection_rpc_start',
+          'connection_rpc_result',
+        ];
+        let lastIdx = -1;
+        for (const name of expectedSequence) {
+          const idx = eventNames.indexOf(name);
+          expect(idx, `evento '${name}' ausente ou fora de ordem`).toBeGreaterThan(lastIdx);
+          lastIdx = idx;
+        }
+
+        // Denylist: IDs e tokens de negócio não devem aparecer em nenhum log.
+        const allLogs = consoleSpy.mock.calls.map(([a]) => String(a)).join('\n');
+        const denyItems = [
+          FAKE_ACCESS_TOKEN,
+          FAKE_CIPHERTEXT,
+          FAKE_CODE,
+          FAKE_STATE,
+          FAKE_PHONE_NUMBER,
+          FAKE_VERIFIED_NAME,
+          'fake-jwt-token',
+        ];
+        for (const item of denyItems) {
+          expect(allLogs, `denylist violado: '${item}' encontrado nos logs`).not.toContain(item);
+        }
+      });
+    });
+
+    // ── INSTR-T10: correlationId consistente por request, único entre requests
+    describe('INSTR-T10: correlationId idêntico em todos os eventos da request, diferente entre requests', () => {
+      it('todos os eventos da mesma request compartilham o mesmo correlationId', async () => {
+        setupHappyPath();
+        await handler(makeReq(), makeRes());
+
+        const events = getLogEvents();
+        expect(events.length).toBeGreaterThan(1);
+        const uniqueCids = [...new Set(events.map(e => e.correlationId))];
+        expect(uniqueCids).toHaveLength(1);
+        expect(typeof uniqueCids[0]).toBe('string');
+        expect(uniqueCids[0].length).toBeGreaterThan(0);
+      });
+
+      it('requests consecutivas têm correlationIds distintos', async () => {
+        // Primeira request
+        setupHappyPath();
+        await handler(makeReq(), makeRes());
+        const events1 = getLogEvents();
+        const cid1    = events1.find(e => e.event === 'request_start')?.correlationId;
+
+        // Reset: vi.clearAllMocks() limpa estado de todos os mocks (incluindo consoleSpy).
+        vi.clearAllMocks();
+        setupHappyPath();
+
+        // Segunda request
+        await handler(makeReq(), makeRes());
+        const events2 = getLogEvents();
+        const cid2    = events2.find(e => e.event === 'request_start')?.correlationId;
+
+        expect(cid1).toBeDefined();
+        expect(cid2).toBeDefined();
+        expect(cid1).not.toBe(cid2);
+      });
+    });
+
+    // ── INSTR-T11: normal mode → discovery events ausentes; wabaSource=body ─
+    describe('INSTR-T11: mode=normal → waba_discovery events ausentes, wabaSource=body', () => {
+      it('não emite eventos de discovery; phone_list usa wabaSource=body', async () => {
+        setupHappyPath(); // DEFAULT_BODY com waba_id → mode=normal
+        await handler(makeReq(), makeRes());
+
+        const events = getLogEvents();
+
+        // Eventos de discovery devem estar completamente ausentes.
+        expect(events.find(e => e.event === 'waba_discovery_start')).toBeUndefined();
+        expect(events.find(e => e.event === 'waba_discovery_result')).toBeUndefined();
+
+        // request_start deve declarar mode=normal.
+        const startEvt = events.find(e => e.event === 'request_start');
+        expect(startEvt?.mode).toBe('normal');
+
+        // phone_list_start deve declarar wabaSource=body.
+        const listEvt = events.find(e => e.event === 'phone_list_start');
+        expect(listEvt?.wabaSource).toBe('body');
+
+        // phone_list_result deve declarar wabaSource=body.
+        const listResultEvt = events.find(e => e.event === 'phone_list_result');
+        expect(listResultEvt?.wabaSource).toBe('body');
+      });
+    });
+
+    // ── INSTR-T12: discovery mode → discovery events presentes; wabaSource=discovery
+    describe('INSTR-T12: mode=discovery → waba_discovery events presentes, wabaSource=discovery', () => {
+      it('emite eventos de discovery; phone_list usa wabaSource=discovery', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupRpcOk();
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        const events = getLogEvents();
+
+        // Eventos de discovery devem estar presentes.
+        expect(events.find(e => e.event === 'waba_discovery_start')).toBeDefined();
+        expect(events.find(e => e.event === 'waba_discovery_result')).toBeDefined();
+
+        // request_start deve declarar mode=discovery.
+        const startEvt = events.find(e => e.event === 'request_start');
+        expect(startEvt?.mode).toBe('discovery');
+
+        // phone_list_start deve declarar wabaSource=discovery.
+        const listEvt = events.find(e => e.event === 'phone_list_start');
+        expect(listEvt?.wabaSource).toBe('discovery');
+
+        // phone_list_result deve declarar wabaSource=discovery.
+        const listResultEvt = events.find(e => e.event === 'phone_list_result');
+        expect(listResultEvt?.wabaSource).toBe('discovery');
+      });
+    });
+
+  }); // end INSTR describe
+
+}); // end outer describe
