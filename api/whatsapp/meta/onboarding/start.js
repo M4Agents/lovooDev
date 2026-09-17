@@ -8,7 +8,7 @@
 //   - Validar company_id no body
 //   - Autenticar + autorizar via validateMetaCaller (RBAC + feature flag)
 //   - Obter config pública Meta (appId, configId) — sem secrets
-//   - Calcular expires_at (now + 10 minutos)
+//   - Calcular expires_at (now + 30 minutos)
 //   - Inserir sessão em meta_whatsapp_onboarding
 //   - Retornar state (id gerado pelo Postgres), app_id, config_id, expires_at
 //
@@ -34,9 +34,9 @@ import { getSupabaseAdmin }                         from '../../../lib/automatio
 import { validateMetaCaller, META_CONNECT_ROLES }   from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { getMetaPublicConfig }                      from '../../../lib/meta-whatsapp/config.js';
 
-// TTL de uma sessão de onboarding.
-// Alinhado com o TTL do state JWT do Instagram (instagramState.js → 10 minutos).
-const ONBOARDING_TTL_MS = 10 * 60 * 1000;
+// TTL da sessão de onboarding.
+// 30 minutos para acomodar o fluxo interativo do Embedded Signup da Meta.
+const ONBOARDING_TTL_MS = 30 * 60 * 1000;
 
 export default async function handler(req, res) {
   // ── 1. Method guard ────────────────────────────────────────────────────────

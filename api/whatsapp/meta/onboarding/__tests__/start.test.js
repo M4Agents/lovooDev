@@ -22,7 +22,7 @@
 //   T-16  user_id inserido vem de auth.userId (JWT)
 //   T-17  req.body.user_id malicioso é ignorado
 //   T-18  id NÃO aparece no objeto enviado ao insert
-//   T-19  expires_at ≈ now + 10 min (fake timers)
+//   T-19  expires_at ≈ now + 30 min (fake timers)
 //   T-20  response usa session.expires_at retornado pelo DB
 //   T-21  response não contém app_secret
 //   T-22  response não contém user_id
@@ -471,8 +471,8 @@ describe('POST /api/whatsapp/meta/onboarding/start', () => {
   // ─────────────────────────────────────────────────────────────────────────
   // T-19: expires_at ≈ now + 10min (fake timers)
   // ─────────────────────────────────────────────────────────────────────────
-  describe('T-19: expires_at ≈ now + 10 minutos (fake timers)', () => {
-    it('expires_at inserido é now + 600000ms', async () => {
+  describe('T-19: expires_at ≈ now + 30 minutos (fake timers)', () => {
+    it('expires_at inserido é now + 1800000ms', async () => {
       const FIXED_NOW = new Date('2026-09-14T17:45:00.000Z').getTime();
       vi.useFakeTimers();
       vi.setSystemTime(FIXED_NOW);
@@ -484,7 +484,7 @@ describe('POST /api/whatsapp/meta/onboarding/start', () => {
       await handler(makeReq(), makeRes());
 
       const insertedObj   = mockInsert.mock.calls[0][0];
-      const expectedExpiry = new Date(FIXED_NOW + 10 * 60 * 1000).toISOString();
+      const expectedExpiry = new Date(FIXED_NOW + 30 * 60 * 1000).toISOString();
 
       expect(insertedObj.expires_at).toBe(expectedExpiry);
 
