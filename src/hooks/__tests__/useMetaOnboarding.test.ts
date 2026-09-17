@@ -1078,3 +1078,44 @@ describe('StrictMode', () => {
     }
   })
 })
+
+// ── 9. FB.login CONTRACT — options passados ao SDK ───────────────────────────
+// Garante que os options de FB.login sigam o contrato estável.
+// Evita regressão de parâmetros extras que alterem o comportamento do SDK Meta
+// (ex: `feature: 'whatsapp_embedded_signup'` ativa enforcement que bloqueia o flow).
+describe('FB.login contract — options', () => {
+  it('FB-OPT-01: triggerPopup passa featureType vazio e NÃO passa a propriedade `feature`', async () => {
+    let capturedOptions: unknown
+
+    // Substituir o mock padrão por um que também captura o segundo argumento.
+    // O beforeEach já colocou window.FB — apenas sobrescreve login para este teste.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).FB.login = vi.fn((cb: (r: unknown) => void, opts: unknown) => {
+      capturedLoginCb = cb
+      capturedOptions = opts
+    })
+
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => {})
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((window as any).FB.login).toHaveBeenCalledTimes(1)
+
+    const opts = capturedOptions as Record<string, unknown>
+    expect(opts.config_id).toBe(FAKE_CONFIG_ID)
+    expect(opts.response_type).toBe('code')
+    expect(opts.override_default_response_type).toBe(true)
+
+    const extras = opts.extras as Record<string, unknown>
+    expect(extras.setup).toEqual({})
+    expect(extras.featureType).toBe('')
+    expect(extras.sessionInfoVersion).toBe('3')
+
+    // REGRESSÃO GUARD: `feature` NÃO deve estar presente nos extras.
+    // Se presente, o Meta SDK pode rejeitar o flow sem status BSP/TP.
+    expect('feature' in extras).toBe(false)
+  })
+})
