@@ -104,13 +104,21 @@ export function MetaWhatsAppPanel() {
   const { instances, loading, error, refresh } = useMetaWhatsAppInstances(company?.id)
 
   // Onboarding habilitado somente quando company presente, GET concluído e sem erro
-  const { step, onboardingError, triggerPopup, cancelFlow, isReady } = useMetaOnboarding({
+  const {
+    step,
+    onboardingError,
+    triggerPopup,
+    cancelFlow,
+    isReady,
+    selectionOptions,
+    selectWaba,
+  } = useMetaOnboarding({
     enabled:   Boolean(company?.id) && !loading && !error,
     onSuccess: refresh,
   })
 
   // Derivados do step — calculados antes dos early returns (sem hooks aqui)
-  const isProcessing       = step === 'loading_session' || step === 'completing'
+  const isProcessing       = step === 'loading_session' || step === 'completing' || step === 'resolving_selection'
   const progressLabel      = step === 'loading_session'
     ? mw('onboarding.preparing')
     : mw('onboarding.completing')
@@ -146,7 +154,78 @@ export function MetaWhatsAppPanel() {
     )
   }
 
-  // ── 3. Sem conexão ─────────────────────────────────────────────────────────
+  // ── 3. Seleção de WABA (múltiplos WABAs autorizados) ──────────────────────
+  // Renderizado quando awaiting_selection OU resolving_selection.
+  // Nunca expõe IDs técnicos (WABA ID, phone_number_id, continuation_token).
+  if (step === 'awaiting_selection' || step === 'resolving_selection') {
+    const isResolving = step === 'resolving_selection'
+    return (
+      <div className="flex flex-col items-center gap-5 py-8 text-center">
+
+        {/* Ícone */}
+        <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100">
+          <Phone className="w-8 h-8 text-green-600" />
+        </div>
+
+        {/* Título + descrição */}
+        <div className="space-y-1.5 max-w-sm">
+          <h3 className="text-base font-semibold text-slate-900">
+            {mw('selection.title')}
+          </h3>
+          <p className="text-sm text-slate-500">
+            {mw('selection.description')}
+          </p>
+        </div>
+
+        {/* Lista de opções */}
+        <div className="flex flex-col gap-2 w-full max-w-md">
+          {(selectionOptions ?? []).map((option) => (
+            <button
+              key={option.index}
+              onClick={() => selectWaba(option.index)}
+              disabled={isResolving}
+              className={`flex flex-col items-start gap-0.5 w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-left transition-colors ${
+                isResolving
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:border-green-400 hover:bg-green-50'
+              }`}
+            >
+              {/* name (verified_name) se disponível — NÃO renderizar IDs técnicos */}
+              {option.name && (
+                <span className="text-sm font-medium text-slate-900">{option.name}</span>
+              )}
+              {/* label: número de telefone formatado */}
+              <span className="flex items-center gap-1.5 text-sm text-slate-500">
+                <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                {option.label}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Loading durante resolving_selection */}
+        {isResolving && (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {mw('selection.selecting')}
+          </div>
+        )}
+
+        {/* Cancelar — usa lifecycle seguro existente */}
+        {!isResolving && (
+          <button
+            onClick={cancelFlow}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            {mw('selection.cancelButton')}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // ── 4. Sem conexão ─────────────────────────────────────────────────────────
   if (instances.length === 0) {
     return (
       <div className="flex flex-col items-center gap-5 py-8 text-center">
@@ -211,7 +290,7 @@ export function MetaWhatsAppPanel() {
     )
   }
 
-  // ── 4. Conectado — listar instâncias ───────────────────────────────────────
+  // ── 5. Conectado — listar instâncias ───────────────────────────────────────
   return (
     <div className="space-y-4">
 

@@ -20,7 +20,7 @@ import type { UseMetaOnboardingResult } from '../useMetaOnboarding'
 vi.mock('../useCompany', () => ({ useCompany: vi.fn() }))
 
 vi.mock('../../services/metaWhatsAppApi', () => ({
-  metaWhatsAppApi: { startOnboarding: vi.fn(), completeOnboarding: vi.fn() },
+  metaWhatsAppApi: { startOnboarding: vi.fn(), completeOnboarding: vi.fn(), resolveWabaSelection: vi.fn() },
 }))
 
 vi.mock('../../lib/facebookSdk', () => ({ loadFacebookSdk: vi.fn() }))
@@ -40,6 +40,27 @@ const FAKE_CODE      = 'auth-code-fake-xxxx'
 const FAKE_WABA_ID   = '333333333333'
 const FAKE_PHONE_ID  = '444444444444'
 const RENEW_MS       = 60_000   // igual ao RENEW_THRESHOLD_MS interno do hook
+
+// ── Fixtures S7 ──────────────────────────────────────────────────────────────
+const FAKE_INSTANCE = {
+  id:              'inst-h-001',
+  phone_number_id: '555555555555',
+  waba_id:         '666666666666',
+  phone_number:    '+55 11 99999-0001',
+  verified_name:   null,
+  status:          'connected' as const,
+}
+const FAKE_CONNECTED_RESULT = { kind: 'connected' as const, instance: FAKE_INSTANCE }
+const FAKE_CONTINUATION_TOKEN = 'FAKE_CONT_TOKEN_FOR_TESTS'
+const FAKE_SELECTION_OPTIONS = [
+  { index: 5, label: '+55 11 99999-0005', name: 'WABA Cinco'  },
+  { index: 7, label: '+55 11 99999-0007', name: null           },
+]
+const FAKE_SELECTION_RESULT = {
+  kind:               'selection' as const,
+  continuation_token: FAKE_CONTINUATION_TOKEN,
+  options:            FAKE_SELECTION_OPTIONS,
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -81,8 +102,12 @@ beforeEach(() => {
   vi.mocked(loadFacebookSdk).mockResolvedValue(undefined as any)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(metaWhatsAppApi.startOnboarding).mockResolvedValue(makeSession() as any)
+  // completeOnboarding retorna CompleteResult — default: connected (preserva testes existentes)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue({} as any)
+  vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT as any)
+  // resolveWabaSelection retorna OnboardingCompleteInstance por padrão
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockResolvedValue(FAKE_INSTANCE as any)
   capturedLoginCb = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(window as any).FB = {
@@ -688,8 +713,9 @@ describe('Timers (fake timers)', () => {
 
     let resolveComplete!: () => void
     vi.mocked(metaWhatsAppApi.completeOnboarding).mockImplementation(
+      // completeOnboarding retorna CompleteResult — usar FAKE_CONNECTED_RESULT para step=idle
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => new Promise<any>(r => { resolveComplete = () => r({}) }),
+      () => new Promise<any>(r => { resolveComplete = () => r(FAKE_CONNECTED_RESULT) }),
     )
     vi.mocked(metaWhatsAppApi.startOnboarding)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1173,5 +1199,353 @@ describe('FB.login contract — options', () => {
     } finally {
       infoSpy.mockRestore()
     }
+  })
+})
+
+// =============================================================================
+// S7 — Seleção de WABA (múltiplos WABAs acessíveis)
+// =============================================================================
+
+describe('S7 — WABA selection flow', () => {
+
+  // ── H1: connected preservado ─────────────────────────────────────────────
+  it('H1: completeOnboarding connected → step idle + onSuccess 1x (fluxo existente preservado)', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_CONNECTED_RESULT as never)
+    const { result } = await renderReady({ onSuccess })
+
+    await triggerComplete(result)
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(result.current.selectionOptions).toBeNull()
+  })
+
+  // ── H2: selection → awaiting_selection ───────────────────────────────────
+  it('H2: completeOnboarding selection → step awaiting_selection com opções', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    const { result } = await renderReady({ onSuccess })
+
+    await triggerComplete(result)
+    await act(async () => {})
+
+    expect(result.current.step).toBe('awaiting_selection')
+    expect(result.current.selectionOptions).toEqual(FAKE_SELECTION_OPTIONS)
+  })
+
+  // ── H3: awaiting_selection NÃO chama onSuccess ───────────────────────────
+  it('H3: awaiting_selection NÃO chama onSuccess', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    const { result } = await renderReady({ onSuccess })
+
+    await triggerComplete(result)
+    await act(async () => {})
+
+    expect(result.current.step).toBe('awaiting_selection')
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+
+  // ── H4: seleção válida → resolving_selection ─────────────────────────────
+  it('H4: selectWaba com index válido → step resolving_selection (antes da resposta)', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    // Suspender resolve para capturar o estado intermediate
+    let resolveFn!: () => void
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockReturnValueOnce(
+      new Promise((resolve) => { resolveFn = () => resolve(FAKE_INSTANCE as never) }),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+    expect(result.current.step).toBe('awaiting_selection')
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    expect(result.current.step).toBe('resolving_selection')
+
+    // cleanup
+    await act(async () => { resolveFn() })
+  })
+
+  // ── H5: sucesso → onSuccess exatamente 1x ────────────────────────────────
+  it('H5: selectWaba sucesso → step idle + onSuccess exatamente 1x + selectionOptions null', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockResolvedValueOnce(FAKE_INSTANCE as never)
+    const { result } = await renderReady({ onSuccess })
+
+    await triggerComplete(result)
+    await act(async () => {})
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(result.current.selectionOptions).toBeNull()
+  })
+
+  // ── H6: double click → exatamente 1 POST ─────────────────────────────────
+  it('H6: dois clicks rápidos em selectWaba → exatamente 1 POST resolveWabaSelection', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    let resolveFn!: () => void
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockReturnValueOnce(
+      new Promise((resolve) => { resolveFn = () => resolve(FAKE_INSTANCE as never) }),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    // Dois clicks síncronos
+    act(() => {
+      result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index)
+      result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index)
+    })
+
+    expect(vi.mocked(metaWhatsAppApi.resolveWabaSelection)).toHaveBeenCalledTimes(1)
+    // cleanup
+    await act(async () => { resolveFn() })
+  })
+
+  // ── H7: index inexistente → zero request ─────────────────────────────────
+  it('H7: selectWaba com index inexistente nas opções → nenhum POST', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(999) })
+    await act(async () => {})
+
+    expect(vi.mocked(metaWhatsAppApi.resolveWabaSelection)).not.toHaveBeenCalled()
+    expect(result.current.step).toBe('awaiting_selection')
+  })
+
+  // ── H8: cancel limpa token/options ───────────────────────────────────────
+  it('H8: cancelFlow em awaiting_selection limpa token e options', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+    expect(result.current.selectionOptions).toEqual(FAKE_SELECTION_OPTIONS)
+
+    act(() => { result.current.cancelFlow() })
+    await act(async () => {})
+
+    expect(result.current.selectionOptions).toBeNull()
+    // step deve ter saído de awaiting_selection
+    expect(result.current.step).not.toBe('awaiting_selection')
+  })
+
+  // ── H9: unmount limpa ────────────────────────────────────────────────────
+  it('H9: unmount em awaiting_selection limpa refs (sem crash)', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    const { result, unmount } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+    expect(result.current.step).toBe('awaiting_selection')
+
+    // Unmount não deve lançar
+    expect(() => { act(() => { unmount() }) }).not.toThrow()
+  })
+
+  // ── H10: company change limpa ─────────────────────────────────────────────
+  it('H10: company change em awaiting_selection limpa selectionOptions', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT as any)
+    const { result, rerender } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+    expect(result.current.step).toBe('awaiting_selection')
+
+    // Trocar company
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useCompany).mockReturnValue({ company: COMPANY_B } as any)
+    rerender()
+    await act(async () => {})
+
+    expect(result.current.selectionOptions).toBeNull()
+  })
+
+  // ── H11: invalid_continuation → sem retry automático ─────────────────────
+  it('H11: resolveWabaSelection → invalid_continuation → idle + erro + SEM startNewSession', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('invalid_continuation'),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(result.current.onboardingError).toContain('Seleção expirada')
+    // startOnboarding NÃO deve ter sido chamado novamente (apenas 1 vez no mount)
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H12: 403 → sem retry automático ──────────────────────────────────────
+  it('H12: resolveWabaSelection → forbidden → idle + erro seguro + SEM startNewSession', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('forbidden'),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(result.current.onboardingError).toBeTruthy()
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H13: 500 → sem retry automático ──────────────────────────────────────
+  it('H13: resolveWabaSelection → internal_error → idle + erro seguro + SEM startNewSession', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('internal_error'),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(result.current.onboardingError).toContain('Erro interno')
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H14: network error → sem retry automático ─────────────────────────────
+  it('H14: resolveWabaSelection → erro de rede → idle + erro seguro + SEM startNewSession', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('Failed to fetch'),
+    )
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(result.current.onboardingError).toBeTruthy()
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H15: 409 → NÃO onSuccess e sem retry ─────────────────────────────────
+  it('H15: resolveWabaSelection → phone_number_already_connected → NÃO onSuccess + SEM retry', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('phone_number_already_connected'),
+    )
+    const { result } = await renderReady({ onSuccess })
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(result.current.onboardingError).toContain('já está conectado')
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H16: F3 preservado ────────────────────────────────────────────────────
+  it('H16: discovery fallback (F3) preservado — sem wabaId → scheduleDiscoveryFallback', async () => {
+    vi.useFakeTimers()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT as never)
+    const onSuccess = vi.fn()
+    const { result } = await renderReady({ onSuccess })
+
+    act(() => { result.current.triggerPopup() })
+    // Somente code, sem FINISH
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Avançar FINISH_GRACE_MS para disparar o fallback
+    await act(async () => { vi.advanceTimersByTime(5_100) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  // ── H17: FINISH normal preservado ────────────────────────────────────────
+  it('H17: FINISH normal → completeOnboarding connected → idle + onSuccess 1x', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_CONNECTED_RESULT as never)
+    const { result } = await renderReady({ onSuccess })
+
+    await triggerComplete(result)
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(metaWhatsAppApi.completeOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  // ── H18: token nunca em console ──────────────────────────────────────────
+  it('H18: continuation_token nunca aparece nos logs de console', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const logSpy   = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const infoSpy  = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const warnSpy  = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errSpy   = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+      vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockResolvedValueOnce(FAKE_INSTANCE as never)
+      const { result } = await renderReady()
+      await triggerComplete(result)
+      await act(async () => {})
+      act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+      await act(async () => {})
+
+      const allCalls = [
+        ...debugSpy.mock.calls,
+        ...logSpy.mock.calls,
+        ...infoSpy.mock.calls,
+        ...warnSpy.mock.calls,
+        ...errSpy.mock.calls,
+      ]
+      const serialized = JSON.stringify(allCalls)
+      expect(serialized).not.toContain(FAKE_CONTINUATION_TOKEN)
+    } finally {
+      debugSpy.mockRestore()
+      logSpy.mockRestore()
+      infoSpy.mockRestore()
+      warnSpy.mockRestore()
+      errSpy.mockRestore()
+    }
+  })
+
+  // ── H19: selectWaba usa option.index real, não posição no array ───────────
+  it('H19: selectWaba envia option.index real como selected_index (não posição no array)', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockResolvedValueOnce(FAKE_INSTANCE as never)
+    const { result } = await renderReady()
+    await triggerComplete(result)
+    await act(async () => {})
+
+    // Clicar no segundo elemento (posição 1 no array, mas option.index = 7)
+    const secondOption = FAKE_SELECTION_OPTIONS[1]
+    act(() => { result.current.selectWaba(secondOption.index) })
+    await act(async () => {})
+
+    expect(vi.mocked(metaWhatsAppApi.resolveWabaSelection)).toHaveBeenCalledWith(
+      FAKE_CONTINUATION_TOKEN,
+      7,   // option.index real — não a posição 1
+    )
   })
 })

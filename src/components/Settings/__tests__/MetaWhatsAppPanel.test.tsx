@@ -79,18 +79,22 @@ const FAKE_INSTANCE: MetaWhatsAppInstance = {
 let mockRefresh:      ReturnType<typeof vi.fn> = vi.fn()
 let mockTriggerPopup: ReturnType<typeof vi.fn> = vi.fn()
 let mockCancelFlow:   ReturnType<typeof vi.fn> = vi.fn()
+let mockSelectWaba:   ReturnType<typeof vi.fn> = vi.fn()
 
 function makeOnboardingResult(
   overrides: Partial<UseMetaOnboardingResult> = {},
 ): UseMetaOnboardingResult {
   return {
-    step:            'ready',
-    onboardingError: null,
+    step:             'ready',
+    onboardingError:  null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    triggerPopup:    mockTriggerPopup as unknown as () => void,
+    triggerPopup:     mockTriggerPopup as unknown as () => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cancelFlow:      mockCancelFlow as unknown as () => void,
-    isReady:         true,
+    cancelFlow:       mockCancelFlow as unknown as () => void,
+    isReady:          true,
+    selectionOptions: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    selectWaba:       mockSelectWaba as unknown as (index: number) => void,
     ...overrides,
   }
 }
@@ -103,6 +107,7 @@ beforeEach(() => {
   mockRefresh      = vi.fn()
   mockTriggerPopup = vi.fn()
   mockCancelFlow   = vi.fn()
+  mockSelectWaba   = vi.fn()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(useCompany).mockReturnValue({ company: COMPANY } as any)
@@ -319,5 +324,141 @@ describe('MetaWhatsAppPanel — integration wiring', () => {
     fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
     expect(mockCancelFlow).toHaveBeenCalledTimes(1)
     expect(mockRefresh).not.toHaveBeenCalled()
+  })
+})
+
+// =============================================================================
+// S7 — Seleção de WABA (UI)
+// =============================================================================
+
+const PANEL_SELECTION_OPTIONS = [
+  { index: 3, label: '+55 11 99999-0003', name: 'WABA Três' },
+  { index: 9, label: '+55 11 99999-0009', name: null         },
+]
+
+describe('MetaWhatsAppPanel — S7 WABA selection UI', () => {
+
+  // ── P1: awaiting_selection renderiza opções ────────────────────────────────
+  it('P1: step=awaiting_selection → renderiza lista de opções de seleção', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'awaiting_selection',
+      isReady:          false,
+      selectionOptions: PANEL_SELECTION_OPTIONS,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // Título e descrição da tela de seleção
+    screen.getByText('Escolha o número para conectar')
+    screen.getByText(/Encontramos mais de um número autorizado/)
+  })
+
+  // ── P2: name + número ─────────────────────────────────────────────────────
+  it('P2: opção com name → exibe verified_name E número formatado', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'awaiting_selection',
+      isReady:          false,
+      selectionOptions: PANEL_SELECTION_OPTIONS,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // verified_name exibido
+    screen.getByText('WABA Três')
+    // label (número) exibido
+    screen.getByText('+55 11 99999-0003')
+  })
+
+  // ── P3: name null → somente número ───────────────────────────────────────
+  it('P3: opção com name=null → exibe somente número (sem texto null/undefined)', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'awaiting_selection',
+      isReady:          false,
+      selectionOptions: PANEL_SELECTION_OPTIONS,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // Número da segunda opção (name=null) deve aparecer
+    screen.getByText('+55 11 99999-0009')
+    // Não deve haver texto 'null' ou 'undefined' no DOM
+    expect(screen.queryByText('null')).toBeNull()
+    expect(screen.queryByText('undefined')).toBeNull()
+  })
+
+  // ── P4: resolving_selection desabilita botões ─────────────────────────────
+  it('P4: step=resolving_selection → botões de opção desabilitados + loading visível', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'resolving_selection',
+      isReady:          false,
+      selectionOptions: PANEL_SELECTION_OPTIONS,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // Texto de loading
+    screen.getByText('Conectando...')
+
+    // Todos os botões de opção devem estar disabled
+    const buttons = screen.getAllByRole('button') as HTMLButtonElement[]
+    const optionButtons = buttons.filter(b => b.textContent?.includes('+55'))
+    optionButtons.forEach(btn => expect(btn.disabled).toBe(true))
+  })
+
+  // ── P5: click chama selectWaba(option.index) ──────────────────────────────
+  it('P5: click em opção chama selectWaba com option.index real (não posição no array)', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'awaiting_selection',
+      isReady:          false,
+      selectionOptions: PANEL_SELECTION_OPTIONS,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // Clicar no botão da segunda opção (posição 1, index=9)
+    const buttons = screen.getAllByRole('button') as HTMLButtonElement[]
+    // Encontrar o botão que contém o label da segunda opção
+    const secondBtn = buttons.find(b => b.textContent?.includes('+55 11 99999-0009'))!
+    expect(secondBtn).toBeDefined()
+    fireEvent.click(secondBtn)
+
+    // selectWaba deve ter sido chamado com o option.index = 9, não com 1
+    expect(mockSelectWaba).toHaveBeenCalledWith(9)
+    expect(mockSelectWaba).toHaveBeenCalledTimes(1)
+  })
+
+  // ── P6: IDs/token nunca renderizados ─────────────────────────────────────
+  it('P6: WABA IDs, phone_number_id e continuation_token nunca aparecem no DOM', () => {
+    const sensitiveId  = '999888777666'
+    const sensitiveToken = 'SENSITIVE_CONTINUATION_TOKEN'
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:             'awaiting_selection',
+      isReady:          false,
+      // selectionOptions não expõe IDs técnicos — somente label e name
+      selectionOptions: [
+        { index: 0, label: '+55 11 99999-0000', name: 'Safe Name' },
+      ],
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    const html = document.body.innerHTML
+    // O componente não deve renderizar IDs técnicos que não estão em selectionOptions
+    expect(html).not.toContain(sensitiveId)
+    expect(html).not.toContain(sensitiveToken)
+    // Conteúdo seguro deve estar presente
+    expect(html).toContain('Safe Name')
+    expect(html).toContain('+55 11 99999-0000')
+  })
+
+  // ── P7: connected UI existente preservada ─────────────────────────────────
+  it('P7: step=ready (fluxo normal) → UI existente preservada (sem regressão)', () => {
+    vi.mocked(useMetaOnboarding).mockReturnValue(makeOnboardingResult({
+      step:    'ready',
+      isReady: true,
+    }))
+    render(<MetaWhatsAppPanel />)
+
+    // Título da tela sem conexão deve aparecer (instances=[])
+    screen.getByText('WhatsApp Cloud API (Meta)')
+    // Botão conectar presente e habilitado
+    const btn = screen.getByRole('button', { name: /Conectar WhatsApp/ }) as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    // Tela de seleção NÃO deve aparecer
+    expect(screen.queryByText('Escolha o número para conectar')).toBeNull()
   })
 })

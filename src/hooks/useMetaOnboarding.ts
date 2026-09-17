@@ -14,9 +14,11 @@ import { loadFacebookSdk }  from '../lib/facebookSdk'
 import { metaWhatsAppApi }  from '../services/metaWhatsAppApi'
 import { useCompany }       from './useCompany'
 import type {
-  OnboardingStep,
+  CompleteResult,
+  MetaWabaSelectionOption,
   OnboardingCompletePayload,
   OnboardingStartResponse,
+  OnboardingStep,
 } from '../types/meta-whatsapp'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -64,6 +66,14 @@ export interface UseMetaOnboardingResult {
   /** Cancelar fluxo e preparar nova sessão. */
   cancelFlow:      () => void
   isReady:         boolean    // alias: step === 'ready'
+  /** Opções de WABA disponíveis para seleção. Não-null somente em awaiting_selection. */
+  selectionOptions: MetaWabaSelectionOption[] | null
+  /**
+   * Selecionar um WABA/número durante awaiting_selection.
+   * @param index - O option.index exato recebido do backend (não a posição no array).
+   * No-op se step !== 'awaiting_selection' ou se já houver seleção em andamento.
+   */
+  selectWaba:       (index: number) => void
 }
 
 // ── Parser fail-closed ────────────────────────────────────────────────────────
@@ -91,6 +101,27 @@ function parseWaEmbeddedSignup(event: MessageEvent): WaEventResult {
   return { kind: 'FINISH', data: { wabaId } }
 }
 
+// ── mapSelectionError ─────────────────────────────────────────────────────────
+// Mapeia códigos de erro de /resolve-waba para mensagens seguras ao usuário.
+// Nenhuma informação técnica sensível deve aparecer na UI.
+
+function mapSelectionError(code: string): string {
+  switch (code) {
+    case 'invalid_continuation':
+      return 'Seleção expirada. Inicie a conexão novamente.'
+    case 'phone_number_already_connected':
+      return 'Este número já está conectado. Verifique a lista de instâncias.'
+    case 'invalid_selection':
+      return 'Seleção inválida. Tente iniciar a conexão novamente.'
+    case 'forbidden':
+      return 'Sem permissão para esta operação. Verifique suas configurações.'
+    case 'internal_error':
+      return 'Erro interno ao conectar número. Tente novamente mais tarde.'
+    default:
+      return 'Erro ao conectar número. Verifique sua conexão e tente novamente.'
+  }
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useMetaOnboarding(
@@ -101,6 +132,8 @@ export function useMetaOnboarding(
 
   const [step,            setStep]           = useState<OnboardingStep>('idle')
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
+  // selectionOptions: estado de renderização — atualizado junto com selectionOptionsRef
+  const [selectionOptions, setSelectionOptions] = useState<MetaWabaSelectionOption[] | null>(null)
 
   // Refs — acessíveis em closures assíncronas sem causar re-render
   const stepRef           = useRef<OnboardingStep>('idle')   // mirror do step
@@ -112,6 +145,11 @@ export function useMetaOnboarding(
   const sessionExpiryRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const recoveryTimerRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onSuccessRef      = useRef(options?.onSuccess)
+  // Refs S7 — seleção de WABA (múltiplos WABAs acessíveis)
+  // continuation_token: somente memória — nunca storage, URL, logs ou Supabase
+  const selectionTokenRef   = useRef<string | null>(null)
+  const selectionOptionsRef = useRef<MetaWabaSelectionOption[] | null>(null)
+  const isSelectingRef      = useRef(false)   // lock anti-double-select
   /**
    * Ref estável de enabled — closures assíncronas consultam sem re-capturar.
    * Sincronizado durante o render (não via effect) para eliminar a janela
@@ -146,6 +184,16 @@ export function useMetaOnboarding(
     recoveryTimerRef.current = undefined
   }
 
+  // Helper centralizado para limpar todo o estado de seleção S7.
+  // Manter selectionTokenRef e selectionOptionsRef sincronizados com state aqui.
+  // Token mantido SOMENTE em memória — nunca persistir.
+  function clearSelectionState(): void {
+    selectionTokenRef.current   = null
+    selectionOptionsRef.current = null
+    isSelectingRef.current      = false
+    setSelectionOptions(null)
+  }
+
   // ── startNewSession ──────────────────────────────────────────────────────
   // Pré-cria sessão via /start e carrega SDK. Resultado descartado se gen obsoleto.
   // Nunca chamar durante popup_open ou completing.
@@ -155,6 +203,7 @@ export function useMetaOnboarding(
 
     clearRecoveryTimer()    // defensivo — nova sessão descarta qualquer fallback pendente
     clearExpiryTimer()
+    clearSelectionState()   // limpar seleção pendente antes de iniciar nova sessão
     sessionRef.current      = null
     pendingRef.current      = {}
     isCompletingRef.current = false
@@ -272,19 +321,34 @@ export function useMetaOnboarding(
       // company_id: NUNCA — complete.js retorna 400 se presente
     }
 
-    // 10. POST /complete
+    // 10. POST /complete — retorna CompleteResult (discriminated union)
     metaWhatsAppApi.completeOnboarding(payload)
-      .then(() => {
+      .then((result: CompleteResult) => {
         if (myGen !== flowGenRef.current) return    // company mudou — descartar
-        isCompletingRef.current = false
-        pendingRef.current      = {}
-        sessionRef.current      = null
-        // idle ANTES de onSuccess para que o step já esteja limpo quando refresh()
-        // disparar o re-render; evita que qualquer código posterior nesta closure
-        // interfira no lifecycle iniciado por onSuccess.
-        setStepAndRef('idle')
-        onSuccessRef.current?.()                   // → refresh() da lista de instâncias
-        // Não preparar nova sessão após sucesso — painel decide quando retomar
+
+        if (result.kind === 'connected') {
+          // Caminho normal: instância criada — encerrar fluxo e notificar.
+          // idle ANTES de onSuccess para que o step já esteja limpo quando refresh()
+          // disparar o re-render; evita que qualquer código posterior nesta closure
+          // interfira no lifecycle iniciado por onSuccess.
+          isCompletingRef.current = false
+          pendingRef.current      = {}
+          sessionRef.current      = null
+          setStepAndRef('idle')
+          onSuccessRef.current?.()                  // → refresh() da lista de instâncias
+          // Não preparar nova sessão após sucesso — painel decide quando retomar
+        } else {
+          // kind === 'selection': múltiplos WABAs — aguardar escolha do usuário.
+          // Armazenar token e opções em refs (fonte operacional) e state (renderização).
+          // NÃO chamar onSuccess — fluxo ainda não está concluído.
+          selectionTokenRef.current   = result.continuation_token
+          selectionOptionsRef.current = result.options
+          isCompletingRef.current     = false
+          pendingRef.current          = {}
+          sessionRef.current          = null
+          setSelectionOptions(result.options)
+          setStepAndRef('awaiting_selection')
+        }
       })
       .catch((err: unknown) => {
         if (myGen !== flowGenRef.current) return
@@ -320,6 +384,7 @@ export function useMetaOnboarding(
       removeMessageListener()
       clearRecoveryTimer()
       clearExpiryTimer()
+      clearSelectionState()
       sessionRef.current      = null
       pendingRef.current      = {}
       isCompletingRef.current = false
@@ -337,6 +402,11 @@ export function useMetaOnboarding(
       removeMessageListener()
       clearRecoveryTimer()
       clearExpiryTimer()
+      // Limpar selection state: token fica somente em memória — sem persistência
+      selectionTokenRef.current   = null
+      selectionOptionsRef.current = null
+      isSelectingRef.current      = false
+      // Nota: setSelectionOptions NÃO é chamado aqui (componente pode estar desmontando)
       sessionRef.current      = null
       pendingRef.current      = {}
       isCompletingRef.current = false
@@ -468,6 +538,7 @@ export function useMetaOnboarding(
     removeMessageListener()
     clearRecoveryTimer()
     clearExpiryTimer()
+    clearSelectionState()
     sessionRef.current      = null
     pendingRef.current      = {}
     isCompletingRef.current = false
@@ -477,7 +548,66 @@ export function useMetaOnboarding(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId])
 
+  // ── selectWaba ────────────────────────────────────────────────────────────
+  // Aciona a resolução de seleção de WABA/número em awaiting_selection.
+  //
+  // Usa refs como fonte operacional (evita stale closure):
+  //   selectionOptionsRef → fonte de verdade das opções
+  //   selectionTokenRef   → continuation token (somente memória)
+  //   isSelectingRef      → lock anti-double-submit
+  //
+  // O índice recebido é o option.index exato — NÃO a posição no array.
+
+  const selectWaba = useCallback((index: number): void => {
+    // Guard 1: estado correto
+    if (stepRef.current !== 'awaiting_selection') return
+    // Guard 2: lock anti-double-submit
+    if (isSelectingRef.current) return
+
+    // Validar index: inteiro >= 0 E presente nas opções armazenadas
+    if (!Number.isInteger(index) || index < 0) return
+    const opts = selectionOptionsRef.current
+    if (!opts || opts.length === 0) return
+    const matchedOption = opts.find(o => o.index === index)
+    if (!matchedOption) return
+
+    // Token obrigatório
+    const token = selectionTokenRef.current
+    if (!token) return
+
+    // Adquirir lock sincronamente — nenhum await antes deste ponto
+    isSelectingRef.current = true
+    const myGen = flowGenRef.current
+    setStepAndRef('resolving_selection')
+
+    metaWhatsAppApi.resolveWabaSelection(token, matchedOption.index)
+      .then(() => {
+        if (myGen !== flowGenRef.current) return   // generation guard — company mudou
+        clearSelectionState()
+        setStepAndRef('idle')
+        onSuccessRef.current?.()                   // → refresh() da lista de instâncias
+      })
+      .catch((err: unknown) => {
+        if (myGen !== flowGenRef.current) return
+        clearSelectionState()
+        setStepAndRef('idle')
+        const code = err instanceof Error ? err.message : ''
+        setOnboardingError(mapSelectionError(code))
+        // NÃO iniciar nova sessão automaticamente — usuário decide próxima ação.
+        // NÃO retry automático para nenhum código de erro.
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])   // refs são estáveis — sem deps de valor
+
   // ── Retorno ───────────────────────────────────────────────────────────────
 
-  return { step, onboardingError, triggerPopup, cancelFlow, isReady: step === 'ready' }
+  return {
+    step,
+    onboardingError,
+    triggerPopup,
+    cancelFlow,
+    isReady: step === 'ready',
+    selectionOptions,
+    selectWaba,
+  }
 }

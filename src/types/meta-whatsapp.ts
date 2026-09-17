@@ -87,6 +87,30 @@ export interface OnboardingCompleteResponse {
   instance: OnboardingCompleteInstance
 }
 
+// ── S7: Seleção de WABA ───────────────────────────────────────────────────────
+// Usada quando /complete retorna status: 'selection_required' (múltiplos WABAs
+// acessíveis). O frontend apresenta a lista ao usuário e chama /resolve-waba
+// com o índice escolhido + continuation_token.
+//
+// index: identificador opaco da opção no backend — enviar como selected_index.
+//        NÃO assumir sequencialidade — validar via options.some(o => o.index === idx).
+// label: número de telefone formatado para exibição (ex: "+55 11 99999-9999").
+// name:  verified_name se disponível — null se ausente.
+
+export interface MetaWabaSelectionOption {
+  index: number
+  label: string
+  name:  string | null
+}
+
+// Resultado discriminado de completeOnboarding.
+//   connected  → fluxo concluído; instance disponível para uso.
+//   selection  → usuário precisa escolher WABA/número antes de prosseguir.
+
+export type CompleteResult =
+  | { kind: 'connected'; instance: OnboardingCompleteInstance }
+  | { kind: 'selection'; continuation_token: string; options: MetaWabaSelectionOption[] }
+
 // ── OnboardingStep ────────────────────────────────────────────────────────────
 // Máquina de estados do fluxo Embedded Signup Meta.
 // Usada pelo hook useMetaOnboarding (1D.2) e pelo painel MetaWhatsAppPanel (1D.3).
@@ -94,12 +118,17 @@ export interface OnboardingCompleteResponse {
 // Fluxo normal:
 //   idle → loading_session → ready → popup_open → completing → idle
 //
+// Fluxo selection (múltiplos WABAs):
+//   completing → awaiting_selection → resolving_selection → idle
+//
 // Erros levam de qualquer estado para idle + onboardingError preenchido.
 // CANCEL do Meta leva para idle sem erro.
 
 export type OnboardingStep =
-  | 'idle'             // sem sessão pré-criada (estado inicial)
-  | 'loading_session'  // POST /start em andamento no mount do painel
-  | 'ready'            // sessão + SDK prontos — botão habilitado
-  | 'popup_open'       // FB.login aberto — aguardando code + waba_id
-  | 'completing'       // POST /complete em andamento
+  | 'idle'                  // sem sessão pré-criada (estado inicial)
+  | 'loading_session'       // POST /start em andamento no mount do painel
+  | 'ready'                 // sessão + SDK prontos — botão habilitado
+  | 'popup_open'            // FB.login aberto — aguardando code + waba_id
+  | 'completing'            // POST /complete em andamento
+  | 'awaiting_selection'    // aguardando seleção explícita do usuário (múltiplos WABAs)
+  | 'resolving_selection'   // POST /resolve-waba em andamento

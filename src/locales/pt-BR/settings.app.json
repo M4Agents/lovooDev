@@ -1205,6 +1205,13 @@
     "onboarding": {
       "preparing": "Preparando conexão...",
       "completing": "Finalizando..."
+    },
+    "selection": {
+      "title": "Escolha o número para conectar",
+      "description": "Encontramos mais de um número autorizado. Selecione qual deseja conectar.",
+      "selectButton": "Conectar este número",
+      "selecting": "Conectando...",
+      "cancelButton": "Cancelar"
     }
   }
 }
