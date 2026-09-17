@@ -31,7 +31,12 @@
 //   T-24  code não-string → 400 invalid_request
 //   T-25  code vazio → 400 invalid_request
 //   T-26  code só whitespace → 400 invalid_request
-//   T-27  waba_id ausente → 400 invalid_request
+//
+//   T-27  REMOVIDO — contrato alterado pela F2:
+//         { state, code } sem waba_id NÃO é mais 400.
+//         Substituído por F2-T2 (caminho discovery).
+//         Ver CONTRACT_TEST_REPLACED: T-27 → F2-T2.
+//
 //   T-28  waba_id number JS → 400 invalid_request
 //   T-29  waba_id com letras → 400 invalid_request
 //   T-30  phone_number_id number JS → 400 invalid_request
@@ -93,6 +98,22 @@
 //   T-86  Zero leak: crypto failure não expõe canário
 //   T-87  Zero leak: RPC failure não expõe canário
 //   T-88  Zero leak: 23505 não expõe owner/canário
+//
+//   F2-T1   Normal path: discoverAuthorizedWabas NÃO chamado → 200
+//   F2-T2   Discovery: 1 WABA → 200 (substitui T-27)
+//   F2-T3   Discovery: 0 WABAs → 422 no_waba_authorized
+//   F2-T4   Discovery: >1 WABAs → 422 ambiguous_waba
+//   F2-T5   Discovery throws → 500 internal_error, sem leak
+//   F2-T6   waba_id presente inválido → 400 (discover não chamado)
+//   F2-T7   company_id + DISCOVERY_BODY → 400 (discover não chamado)
+//   F2-T8   Discovery + phone_number_id pertencente → 200
+//   F2-T9   Discovery + phone_number_id não pertencente → 422
+//   F2-T10  Discovery + 0 phones → 422 no_phone_numbers
+//   F2-T11  Discovery + >1 phones sem hint → 422 ambiguous_phone_numbers
+//   F2-T12  State inválido → discover NÃO chamado
+//   F2-T13  RBAC fail → discover NÃO chamado
+//   F2-T14  Discovery + RPC 23505 → 409
+//   F2-T15  Discovery success → 6 campos sanitizados exatos
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -119,11 +140,13 @@ vi.mock('../../../../lib/meta-whatsapp/validateMetaCaller.js', () => ({
 }));
 
 // Mock: graphClient
-const mockExchangeCodeForToken = vi.fn();
-const mockListWabaPhoneNumbers  = vi.fn();
+const mockExchangeCodeForToken    = vi.fn();
+const mockListWabaPhoneNumbers    = vi.fn();
+const mockDiscoverAuthorizedWabas = vi.fn();
 vi.mock('../../../../lib/meta-whatsapp/graphClient.js', () => ({
-  exchangeCodeForToken:  (...args) => mockExchangeCodeForToken(...args),
-  listWabaPhoneNumbers:  (...args) => mockListWabaPhoneNumbers(...args),
+  exchangeCodeForToken:    (...args) => mockExchangeCodeForToken(...args),
+  listWabaPhoneNumbers:    (...args) => mockListWabaPhoneNumbers(...args),
+  discoverAuthorizedWabas: (...args) => mockDiscoverAuthorizedWabas(...args),
 }));
 
 // Mock: tokenCrypto
@@ -172,11 +195,20 @@ const FAKE_RPC_ROW = {
   status:          'connected',
 };
 
-// Body padrão do happy path (sem phone_number_id)
+// WABA ID adicional para testes com múltiplas WABAs (F2-T4)
+const FAKE_WABA_ID_2 = '999888777666555';
+
+// Body padrão do happy path (com waba_id — caminho normal)
 const DEFAULT_BODY = {
   state:   FAKE_STATE,
   code:    FAKE_CODE,
   waba_id: FAKE_WABA_ID,
+};
+
+// Body do caminho discovery — waba_id intencionalmente ausente (F2)
+const DISCOVERY_BODY = {
+  state: FAKE_STATE,
+  code:  FAKE_CODE,
 };
 
 // =============================================================================
@@ -250,6 +282,10 @@ function setupGuardOk() {
 function setupGraphOk(phones = [PHONE_A]) {
   mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
   mockListWabaPhoneNumbers.mockResolvedValue(phones);
+}
+
+function setupDiscoveryOk(wabaIds = [FAKE_WABA_ID]) {
+  mockDiscoverAuthorizedWabas.mockResolvedValue(wabaIds);
 }
 
 function setupEncryptOk() {
@@ -550,11 +586,9 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       expect(res._status).toBe(400);
     });
 
-    it('T-27: waba_id ausente → 400 invalid_request', async () => {
-      const res = makeRes();
-      await handler(makeReq({ body: { state: FAKE_STATE, code: FAKE_CODE } }), res);
-      expect(res._status).toBe(400);
-    });
+    // T-27 REMOVIDO — ver cabeçalho do arquivo.
+    // CONTRACT_TEST_REPLACED: T-27 → F2-T2.
+    // { state, code } sem waba_id agora dispara caminho discovery (F2).
 
     it('T-28: waba_id number JS → 400 (sem coerção)', async () => {
       const res = makeRes();
@@ -1521,5 +1555,369 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       expect(bodyStr).not.toContain('already exists');
     });
   });
+
+  // ============================================================================
+  // F2 — WABA Discovery path
+  // CONTRACT_TEST_REPLACED: T-27 → F2-T2
+  // ============================================================================
+
+  describe('F2 — caminho discovery (waba_id ausente)', () => {
+
+    // ── F2-T1: Normal path não chama discoverAuthorizedWabas ─────────────────
+    describe('F2-T1: waba_id presente → discoverAuthorizedWabas NÃO chamado → 200', () => {
+      it('usa caminho normal sem acionar discovery', async () => {
+        setupHappyPath(); // DEFAULT_BODY com waba_id
+        const res = makeRes();
+        await handler(makeReq(), res); // makeReq usa DEFAULT_BODY por padrão
+
+        expect(res._status).toBe(200);
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+        expect(mockListWabaPhoneNumbers).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN, FAKE_WABA_ID);
+      });
+    });
+
+    // ── F2-T2: Discovery 1 WABA → 200 (substitui T-27) ────────────────────────
+    describe('F2-T2: waba_id ausente → discovery 1 WABA → 200', () => {
+      it('troca code, descobre WABA, lista números e persiste', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupRpcOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        // Discovery chamado com accessToken correto
+        expect(mockDiscoverAuthorizedWabas).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN);
+        // listWabaPhoneNumbers chamado com WABA descoberta
+        expect(mockListWabaPhoneNumbers).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN, FAKE_WABA_ID);
+        // RPC recebe resolvedWabaId (descoberto), não valor do body
+        const rpcParams = mockSvc.rpc.mock.calls[0][1];
+        expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID);
+        expect(rpcParams.p_company_id).toBe(FAKE_COMPANY_ID); // vem do state
+      });
+    });
+
+    // ── F2-T3: Discovery 0 WABAs → 422 no_waba_authorized ─────────────────────
+    describe('F2-T3: discovery retorna [] → 422 no_waba_authorized', () => {
+      it('retorna 422 sem chamar listWabaPhoneNumbers/crypto/RPC e sem leak', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('no_waba_authorized');
+        expect(mockListWabaPhoneNumbers).not.toHaveBeenCalled();
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+        // WABA ID não exposto na resposta
+        expect(JSON.stringify(res._body)).not.toContain(FAKE_WABA_ID);
+      });
+    });
+
+    // ── F2-T4: Discovery >1 WABAs → 422 ambiguous_waba ────────────────────────
+    describe('F2-T4: discovery retorna 2 WABAs → 422 ambiguous_waba', () => {
+      it('retorna 422 sem chamar listWabaPhoneNumbers/crypto/RPC e sem leak', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('ambiguous_waba');
+        expect(mockListWabaPhoneNumbers).not.toHaveBeenCalled();
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+        // WABA IDs não expostos na resposta
+        const bodyStr = JSON.stringify(res._body);
+        expect(bodyStr).not.toContain(FAKE_WABA_ID);
+        expect(bodyStr).not.toContain(FAKE_WABA_ID_2);
+      });
+    });
+
+    // ── F2-T5: Discovery throws Graph error → 500 sem leak ────────────────────
+    describe('F2-T5: discoverAuthorizedWabas throws → 500 internal_error sem leak', () => {
+      it('mapeia graph_debug_token_failed para 500 sem expor token', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        mockDiscoverAuthorizedWabas.mockRejectedValue(makeGraphError('graph_debug_token_failed'));
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(500);
+        expect(res._body.error).toBe('internal_error');
+        expect(mockListWabaPhoneNumbers).not.toHaveBeenCalled();
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+        // Sem leak de access token
+        expect(JSON.stringify(res._body)).not.toContain(FAKE_ACCESS_TOKEN);
+      });
+
+      it('graph_timeout em discovery → 500 internal_error', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        mockDiscoverAuthorizedWabas.mockRejectedValue(makeGraphError('graph_timeout'));
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(500);
+        expect(res._body.error).toBe('internal_error');
+      });
+    });
+
+    // ── F2-T6: waba_id presente inválido → 400 (discover não chamado) ─────────
+    describe('F2-T6: waba_id presente porém inválido → 400, discover não chamado', () => {
+      it('rejeita na validação de body antes de qualquer Graph call', async () => {
+        setupAuthOk();
+
+        const res = makeRes();
+        await handler(
+          makeReq({ body: { state: FAKE_STATE, code: FAKE_CODE, waba_id: 'abc-invalid' } }),
+          res,
+        );
+
+        expect(res._status).toBe(400);
+        expect(res._body.error).toBe('invalid_request');
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+        expect(mockExchangeCodeForToken).not.toHaveBeenCalled();
+      });
+
+      it('waba_id number JS → 400 (regressão T-28 explícita)', async () => {
+        setupAuthOk();
+        const res = makeRes();
+        await handler(
+          makeReq({ body: { state: FAKE_STATE, code: FAKE_CODE, waba_id: 123456789 } }),
+          res,
+        );
+        expect(res._status).toBe(400);
+        expect(res._body.error).toBe('invalid_request');
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T7: company_id + DISCOVERY_BODY → 400 (discover não chamado) ───────
+    describe('F2-T7: company_id presente com body sem waba_id → 400, discover não chamado', () => {
+      it('rejeita company_id antes de qualquer operação de banco ou Graph', async () => {
+        setupAuthOk();
+        const mockFrom = vi.fn();
+        mockSvc.from = mockFrom;
+
+        const res = makeRes();
+        await handler(
+          makeReq({ body: { company_id: FAKE_COMPANY_ID, ...DISCOVERY_BODY } }),
+          res,
+        );
+
+        expect(res._status).toBe(400);
+        expect(res._body.error).toBe('invalid_request');
+        expect(mockFrom).not.toHaveBeenCalled();
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+        expect(mockExchangeCodeForToken).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T8: Discovery + phone_number_id pertencente → 200 ──────────────────
+    describe('F2-T8: discovery + phone_number_id pertence à WABA descoberta → 200', () => {
+      it('seleciona o número explicitamente e persiste com WABA descoberta', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A, PHONE_B]);
+        setupEncryptOk();
+        setupRpcOk();
+
+        const res = makeRes();
+        await handler(
+          makeReq({ body: { ...DISCOVERY_BODY, phone_number_id: PHONE_B.id } }),
+          res,
+        );
+
+        expect(res._status).toBe(200);
+        const rpcParams = mockSvc.rpc.mock.calls[0][1];
+        expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID); // WABA descoberta, não do body
+        expect(rpcParams.p_phone_number_id).toBe(PHONE_B.id);
+        expect(rpcParams.p_phone_number).toBe(PHONE_B.displayPhoneNumber);
+      });
+    });
+
+    // ── F2-T9: Discovery + phone_number_id não pertencente → 422 ──────────────
+    describe('F2-T9: discovery + phone_number_id não pertence à WABA → 422', () => {
+      it('retorna requested_phone_not_in_waba sem chamar RPC', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        const res = makeRes();
+        await handler(
+          makeReq({ body: { ...DISCOVERY_BODY, phone_number_id: '000111222' } }),
+          res,
+        );
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('requested_phone_not_in_waba');
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T10: Discovery + 0 phones → 422 no_phone_numbers ──────────────────
+    describe('F2-T10: discovery path + WABA sem números → 422 no_phone_numbers', () => {
+      it('retorna 422 sem chamar crypto/RPC', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('no_phone_numbers');
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T11: Discovery + >1 phones sem hint → 422 ambiguous_phone_numbers ──
+    describe('F2-T11: discovery + >1 phones sem phone_number_id → 422 ambiguous_phone_numbers', () => {
+      it('retorna 422 sem escolher phones[0] como fallback', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A, PHONE_B]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('ambiguous_phone_numbers');
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T12: State inválido → discover NÃO chamado ────────────────────────
+    describe('F2-T12: state inválido/expirado → discoverAuthorizedWabas NÃO chamado', () => {
+      it('rejeita em 400 antes de chegar à etapa de WABA resolution', async () => {
+        setupAuthOk();
+        mockSvc.from = vi.fn().mockReturnValue(makeClaimChain(null, null));
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(400);
+        expect(res._body.error).toBe('invalid_or_expired_state');
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+        expect(mockExchangeCodeForToken).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T13: RBAC fail → discover NÃO chamado ─────────────────────────────
+    describe('F2-T13: validateMetaCaller falha → discoverAuthorizedWabas NÃO chamado', () => {
+      it('guard bloqueia antes de exchange e discovery', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        mockValidateMetaCaller.mockResolvedValue({ ok: false, status: 403, error: 'forbidden' });
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(403);
+        expect(mockDiscoverAuthorizedWabas).not.toHaveBeenCalled();
+        expect(mockExchangeCodeForToken).not.toHaveBeenCalled();
+        expect(mockListWabaPhoneNumbers).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T14: Discovery + RPC 23505 → 409 ──────────────────────────────────
+    describe('F2-T14: discovery path + RPC 23505 → 409 phone_number_already_connected', () => {
+      it('comportamento de conflito idêntico ao caminho normal', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        mockSvc.rpc.mockResolvedValue({
+          data:  null,
+          error: { code: '23505', message: 'duplicate key — CANARY', details: 'idx_mwi_phone' },
+        });
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(409);
+        expect(res._body.error).toBe('phone_number_already_connected');
+        expect(JSON.stringify(res._body)).not.toContain('CANARY');
+        expect(JSON.stringify(res._body)).not.toContain('duplicate key');
+      });
+    });
+
+    // ── F2-T15: Discovery success → 6 campos sanitizados exatos ──────────────
+    describe('F2-T15: discovery path success → response com exatamente 6 campos sanitizados', () => {
+      it('body contém somente os 6 campos públicos, sem secrets', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupRpcOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        expect(res._body).toEqual({
+          instance: {
+            id:              FAKE_INSTANCE_ID,
+            phone_number_id: FAKE_PHONE_ID,
+            waba_id:         FAKE_WABA_ID,
+            phone_number:    FAKE_PHONE_NUMBER,
+            verified_name:   FAKE_VERIFIED_NAME,
+            status:          'connected',
+          },
+        });
+        // Campos sensíveis ausentes
+        const body = res._body;
+        expect(body).not.toHaveProperty('accessToken');
+        expect(body).not.toHaveProperty('access_token');
+        expect(body).not.toHaveProperty('company_id');
+        expect(body.instance).not.toHaveProperty('connected_by');
+        expect(body.instance).not.toHaveProperty('access_token_enc');
+        expect(body.instance).not.toHaveProperty('encryption_version');
+      });
+    });
+
+  }); // end F2 describe
 
 });

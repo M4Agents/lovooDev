@@ -13,7 +13,7 @@
 //   7. Derivar company_id do state claimado — NUNCA do request
 //   8. RBAC + tenant + feature flag (validateMetaCaller)
 //   9. Code exchange (Graph API)
-//  10. WABA verification + listing phone numbers (Graph API)
+//  10. WABA resolution (normal: body; discovery: debug_token) + phone listing
 //  11. Phone number resolution
 //  12. Token encryption (AES-256-GCM via encryptMetaToken)
 //  13. Persistência atômica via rpc_create_meta_whatsapp_connection
@@ -39,7 +39,7 @@
 
 import { getSupabaseAdmin }                           from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_CONNECT_ROLES }     from '../../../lib/meta-whatsapp/validateMetaCaller.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers } from '../../../lib/meta-whatsapp/graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas } from '../../../lib/meta-whatsapp/graphClient.js';
 import { encryptMetaToken }                           from '../../../lib/meta-whatsapp/tokenCrypto.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
@@ -176,9 +176,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_request' });
   }
 
-  // waba_id: string, somente dígitos.
-  if (typeof wabaId !== 'string' || !META_ID_RE.test(wabaId)) {
-    return res.status(400).json({ error: 'invalid_request' });
+  // waba_id: opcional; se presente, deve ser string numérica.
+  // Ausente → caminho discovery na etapa 10.
+  if (wabaId !== undefined) {
+    if (typeof wabaId !== 'string' || !META_ID_RE.test(wabaId)) {
+      return res.status(400).json({ error: 'invalid_request' });
+    }
   }
 
   // phone_number_id: opcional; se presente, deve ser string numérica.
@@ -251,14 +254,46 @@ export default async function handler(req, res) {
     return res.status(mapped.status).json({ error: mapped.code });
   }
 
-  // ── 10. WABA verification + phone listing ─────────────────────────────────
-  // Prova simultaneamente:
-  //   - token é válido
-  //   - token tem acesso ao wabaId fornecido
-  // wabaId só é aceito como confiável após sucesso desta chamada.
+  // ── 10. WABA resolution + phone listing ──────────────────────────────────
+  //
+  // CAMINHO NORMAL  (waba_id presente no body):
+  //   wabaId validado na etapa 5; listWabaPhoneNumbers prova acesso.
+  //
+  // CAMINHO DISCOVERY (waba_id ausente — evento FINISH não disparou):
+  //   Descobre WABAs via debug_token (fail-closed: 0 ou >1 → 422).
+  //   App Access Token construído server-side — nunca exposto em resposta/log.
+  //
+  // resolvedWabaId é a fonte de verdade para chamadas subsequentes.
+  // Uma única chamada compartilhada de listWabaPhoneNumbers após resolução.
+  let resolvedWabaId;
+
+  if (wabaId !== undefined) {
+    // Caminho normal: wabaId vem do body (validado na etapa 5).
+    resolvedWabaId = wabaId;
+  } else {
+    // Caminho discovery: determinar WABA via Meta debug_token.
+    let wabaIds;
+    try {
+      wabaIds = await discoverAuthorizedWabas(accessToken);
+    } catch (err) {
+      const mapped = mapGraphError(err);
+      return res.status(mapped.status).json({ error: mapped.code });
+    }
+
+    if (wabaIds.length === 0) {
+      return res.status(422).json({ error: 'no_waba_authorized' });
+    }
+    if (wabaIds.length > 1) {
+      return res.status(422).json({ error: 'ambiguous_waba' });
+    }
+    // exatamente 1 WABA — seleção determinista
+    resolvedWabaId = wabaIds[0];
+  }
+
+  // Chamada compartilhada — prova acesso do token à WABA resolvida.
   let phones;
   try {
-    phones = await listWabaPhoneNumbers(accessToken, wabaId);
+    phones = await listWabaPhoneNumbers(accessToken, resolvedWabaId);
   } catch (err) {
     const mapped = mapGraphError(err);
     return res.status(mapped.status).json({ error: mapped.code });
@@ -293,7 +328,7 @@ export default async function handler(req, res) {
     {
       p_company_id:         companyId,
       p_connected_by:       user.id,
-      p_waba_id:            wabaId,
+      p_waba_id:            resolvedWabaId,
       p_phone_number_id:    selectedPhone.id,
       p_phone_number:       selectedPhone.displayPhoneNumber,
       p_verified_name:      selectedPhone.verifiedName,
