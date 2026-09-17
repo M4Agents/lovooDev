@@ -192,6 +192,15 @@ const PHONE_B = {
   verifiedName:       'Empresa B Fake',
 };
 
+// PHONE_C: id distinto de PHONE_A, mas displayPhoneNumber e verifiedName idênticos.
+// Usado exclusivamente nos testes S7.1 Case C (ambiguous_phone_display).
+// Não usar em outros testes — introduziria ambiguidade de display não intencional.
+const PHONE_C = {
+  id:                 '555444333',
+  displayPhoneNumber: FAKE_PHONE_NUMBER,   // = '+55 11 91234-5678' — igual a PHONE_A
+  verifiedName:       FAKE_VERIFIED_NAME,  // = 'Empresa Fake LTDA' — igual a PHONE_A
+};
+
 const FAKE_RPC_ROW = {
   instance_id:     FAKE_INSTANCE_ID,
   phone_number_id: FAKE_PHONE_ID,
@@ -1647,8 +1656,11 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        // Ambas as WABAs retornam phones → gera seleção
-        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        // Cada WABA retorna um phone distinto (IDs e display diferentes) → Case D
+        mockListWabaPhoneNumbers.mockImplementation((_tok, wabaId) => {
+          if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+          return Promise.resolve([PHONE_B]);
+        });
         setupEncryptOk();
         setupSelectionEncryptOk();
 
@@ -1680,7 +1692,10 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        mockListWabaPhoneNumbers.mockImplementation((_tok, wabaId) => {
+          if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+          return Promise.resolve([PHONE_B]);
+        });
         setupEncryptOk();
         setupSelectionEncryptOk();
 
@@ -1704,7 +1719,10 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        mockListWabaPhoneNumbers.mockImplementation((_tok, wabaId) => {
+          if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+          return Promise.resolve([PHONE_B]);
+        });
         setupEncryptOk();
         setupSelectionEncryptOk();
 
@@ -1728,7 +1746,11 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         // FAKE_WABA_ID = '123456789' < FAKE_WABA_ID_2 = '999888777666555'
         setupDiscoveryOk([FAKE_WABA_ID_2, FAKE_WABA_ID]); // ordem invertida intencional
-        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        // Phones distintos por WABA (Case D) — WABA_1→PHONE_A, WABA_2→PHONE_B
+        mockListWabaPhoneNumbers.mockImplementation((_tok, wabaId) => {
+          if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+          return Promise.resolve([PHONE_B]);
+        });
         setupEncryptOk();
         setupSelectionEncryptOk();
 
@@ -1740,37 +1762,31 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         expect(selPayload.opts[1].w).toBe(FAKE_WABA_ID_2);
       });
 
-      it('B8: WABA com múltiplos phones gera uma opção por phone', async () => {
+      it('B8: WABA_1 e WABA_2 retornam o mesmo phone_number_id (Case B) → 422 ambiguous_phone_ownership', async () => {
+        // B8 ATUALIZADO — S7.1: antes documentava 3 opts como comportamento esperado,
+        // mas o cenário descrito é Case B: mesmo phone_number_id (PHONE_A.id) em duas
+        // WABAs distintas → ambiguous_phone_ownership fail-closed.
         setupAuthOk();
         setupClaimOk();
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        // WABA 1 tem 2 phones, WABA 2 tem 1 phone → 3 opções no total
+        // WABA_1 → [PHONE_A, PHONE_B], WABA_2 → [PHONE_A]
+        // PHONE_A.id aparece em duas WABAs distintas → Case B
         mockListWabaPhoneNumbers
           .mockImplementation((_tok, wabaId) => {
             if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A, PHONE_B]);
             return Promise.resolve([PHONE_A]);
           });
-        setupEncryptOk();
-        setupSelectionEncryptOk();
 
         const res = makeRes();
         await handler(makeReq({ body: DISCOVERY_BODY }), res);
 
-        expect(res._status).toBe(200);
-        const selPayload = mockEncryptSelectionPayload.mock.calls[0][0];
-        expect(selPayload.opts).toHaveLength(3);
-        // opts[0] e opts[1] pertencem a FAKE_WABA_ID (ordenado por phone.id)
-        expect(selPayload.opts[0].w).toBe(FAKE_WABA_ID);
-        expect(selPayload.opts[1].w).toBe(FAKE_WABA_ID);
-        // opts[2] pertence a FAKE_WABA_ID_2
-        expect(selPayload.opts[2].w).toBe(FAKE_WABA_ID_2);
-        // options públicas têm 3 itens com indexes 0, 1, 2
-        expect(res._body.options).toHaveLength(3);
-        expect(res._body.options[0].index).toBe(0);
-        expect(res._body.options[2].index).toBe(2);
-        // RPC não chamada
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('ambiguous_phone_ownership');
+        // encryptMetaToken NÃO chamado — conflito detectado antes da crypto
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
         expect(mockSvc.rpc).not.toHaveBeenCalled();
       });
 
@@ -1780,7 +1796,11 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        // Phones distintos por WABA (Case D) para atingir a etapa de crypto
+        mockListWabaPhoneNumbers.mockImplementation((_tok, wabaId) => {
+          if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+          return Promise.resolve([PHONE_B]);
+        });
         setupEncryptOk();
         mockEncryptSelectionPayload.mockImplementation(() => { throw new Error('crypto fail'); });
 
@@ -1823,6 +1843,240 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         expect(mockSvc.rpc).not.toHaveBeenCalled();
       });
     });
+
+    // ── S7.1: Candidate identity validation (fail-closed) ────────────────────
+    describe('S7.1: Candidate identity validation', () => {
+
+      // ── T2: Case B — mesmo phone_number_id em WABAs distintas ───────────────
+      it('T2: Case B — mesmo phone_number_id em WABAs distintas → 422 ambiguous_phone_ownership', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // Ambas as WABAs retornam exatamente PHONE_A (mesmo phone_number_id)
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('ambiguous_phone_ownership');
+      });
+
+      // ── T3: Case C — IDs distintos, representação pública idêntica ──────────
+      it('T3: Case C — phone_number_ids diferentes, mesmo display+name → 422 ambiguous_phone_display', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // WABA_1 → PHONE_A; WABA_2 → PHONE_C (id distinto, mesmo display+name)
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+            return Promise.resolve([PHONE_C]);
+          });
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('ambiguous_phone_display');
+      });
+
+      // ── T4: Case D — phone_number_ids e displays distintos → selection_required
+      it('T4: Case D — candidatos com IDs e display distintos → 200 selection_required com 2 opções', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // WABA_1 → PHONE_A; WABA_2 → PHONE_B (id E display distintos)
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+            return Promise.resolve([PHONE_B]);
+          });
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        expect(res._body.status).toBe('selection_required');
+        expect(res._body.options).toHaveLength(2);
+        expect(res._body.continuation_token).toBe(FAKE_CONTINUATION_TOKEN);
+      });
+
+      // ── T5: Case B não chama crypto ──────────────────────────────────────────
+      it('T5: Case B — encryptMetaToken e encryptSelectionPayload NÃO chamados', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
+      });
+
+      // ── T6: Case B não chama RPC ──────────────────────────────────────────────
+      it('T6: Case B — RPC NÃO chamado', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+
+      // ── T7–T9: Case B response não vaza IDs/número ────────────────────────────
+      it('T7-T9: Case B response não expõe WABA IDs, phone_number_id nem número', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        const bodyStr = JSON.stringify(res._body);
+        expect(bodyStr).not.toContain(FAKE_WABA_ID);      // T7
+        expect(bodyStr).not.toContain(FAKE_WABA_ID_2);    // T7
+        expect(bodyStr).not.toContain(FAKE_PHONE_ID);     // T8
+        expect(bodyStr).not.toContain(FAKE_PHONE_NUMBER); // T9
+      });
+
+      // ── T10: FINISH normal preservado ─────────────────────────────────────────
+      it('T10: FINISH path (waba_id no body) não é afetado pelo S7.1', async () => {
+        setupHappyPath();
+        const res = makeRes();
+        await handler(makeReq(), res); // DEFAULT_BODY tem waba_id
+
+        expect(res._status).toBe(200);
+        expect(res._body.instance).toBeDefined();
+        expect(res._body.status).toBeUndefined();
+        expect(res._body.continuation_token).toBeUndefined();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
+      });
+
+      // ── T11: Case D discovery preservado ──────────────────────────────────────
+      it('T11: Case D com 2 candidatos distinguíveis → selection_required preservado', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+            return Promise.resolve([PHONE_B]);
+          });
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        expect(res._body.status).toBe('selection_required');
+        // continuation_token presente e opaco
+        expect(typeof res._body.continuation_token).toBe('string');
+        expect(res._body.continuation_token.length).toBeGreaterThan(0);
+        // RPC não chamada — nenhuma instância criada
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+
+      // ── T12: Case C não chama crypto nem RPC ─────────────────────────────────
+      it('T12: Case C — encryptMetaToken, encryptSelectionPayload e RPC NÃO chamados', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+            return Promise.resolve([PHONE_C]);
+          });
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+
+      // ── T13: Case C response não vaza IDs/número/name ────────────────────────
+      it('T13: Case C response não expõe WABA IDs, phone_number_ids, número nem verifiedName', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A]);
+            return Promise.resolve([PHONE_C]);
+          });
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        const bodyStr = JSON.stringify(res._body);
+        expect(bodyStr).not.toContain(FAKE_WABA_ID);
+        expect(bodyStr).not.toContain(FAKE_WABA_ID_2);
+        expect(bodyStr).not.toContain(FAKE_PHONE_ID);
+        expect(bodyStr).not.toContain(PHONE_C.id);
+        expect(bodyStr).not.toContain(FAKE_PHONE_NUMBER);
+        expect(bodyStr).not.toContain(FAKE_VERIFIED_NAME);
+      });
+
+      // ── T14: logs de conflito não contêm IDs/número/name ─────────────────────
+      it('T14: logs de conflito (candidate_conflict_result) contêm somente safeErrorCategory — sem IDs', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // Case B para exercitar o log de conflito
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+          await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+          // Filtrar apenas a linha de log do evento candidate_conflict_result
+          const conflictLogCall = logSpy.mock.calls.find(
+            (args) => typeof args[0] === 'string' && args[0].includes('candidate_conflict_result'),
+          );
+          expect(conflictLogCall).toBeDefined();
+
+          const logContent = conflictLogCall[0];
+          // Contém somente categoria segura fechada
+          expect(logContent).toContain('cross_waba_same_phone');
+          // Não expõe IDs técnicos nem números
+          expect(logContent).not.toContain(FAKE_WABA_ID);
+          expect(logContent).not.toContain(FAKE_WABA_ID_2);
+          expect(logContent).not.toContain(FAKE_PHONE_ID);
+          expect(logContent).not.toContain(FAKE_PHONE_NUMBER);
+          expect(logContent).not.toContain(FAKE_VERIFIED_NAME);
+        } finally {
+          logSpy.mockRestore();
+        }
+      });
+    }); // fim S7.1
 
     // ── F2-T16: Discovery 2 WABAs, 1 acessível → discriminação → 200 ──────────
     describe('F2-T16: discovery 2 WABAs, apenas 1 com phones acessíveis → 200', () => {

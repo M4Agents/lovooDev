@@ -424,6 +424,62 @@ export default async function handler(req, res) {
           }
         }
 
+        // ── S7.1: Candidate identity validation (fail-closed) ─────────────────
+        //
+        // Step 1 — Exact dedup by (w, p) pair.
+        // Defensive: guards against listWabaPhoneNumbers returning a duplicate
+        // phone.id within the same WABA across pagination pages.
+        // In practice, WABA IDs are already deduped by discoverAuthorizedWabas
+        // (Set), so exact (w, p) duplicates are not expected in the real path.
+        // Uses nested Map<w, Set<p>> — no separator collision possible.
+        const _uniqueCandidates = [];
+        {
+          const _seenPairs = new Map(); // wabaId → Set<phoneNumberId>
+          for (const _c of _allCandidates) {
+            if (!_seenPairs.has(_c.w)) _seenPairs.set(_c.w, new Set());
+            if (!_seenPairs.get(_c.w).has(_c.p)) {
+              _seenPairs.get(_c.w).add(_c.p);
+              _uniqueCandidates.push(_c);
+            }
+          }
+        }
+
+        // Step 2 — Cross-WABA phone_number_id conflict (Case B). Fail-closed.
+        // Same phone_number_id in 2+ distinct WABAs → ambiguous ownership.
+        // Cannot choose a WABA arbitrarily — would persist wrong association.
+        // Does not call encryptMetaToken, encryptSelectionPayload or RPC.
+        {
+          const _phoneToWabas = new Map(); // phoneNumberId → Set<wabaId>
+          for (const _c of _uniqueCandidates) {
+            if (!_phoneToWabas.has(_c.p)) _phoneToWabas.set(_c.p, new Set());
+            _phoneToWabas.get(_c.p).add(_c.w);
+          }
+          for (const [, _ws] of _phoneToWabas) {
+            if (_ws.size > 1) {
+              logPhase(_cid, 'candidate_conflict_result', { safeErrorCategory: 'cross_waba_same_phone' });
+              return res.status(422).json({ error: 'ambiguous_phone_ownership' });
+            }
+          }
+        }
+
+        // Step 3 — Public display ambiguity (Case C). Fail-closed (MVP).
+        // Two technically distinct candidates (different phone_number_id) with
+        // identical public representation (displayPhoneNumber + verifiedName)
+        // → user cannot make an informed choice between them.
+        // Does not call encryptMetaToken, encryptSelectionPayload or RPC.
+        {
+          const _displaySeen = new Set(); // `${d}\x00${n}` — null-byte separator (safe)
+          for (const _c of _uniqueCandidates) {
+            const _dk = `${_c.d ?? ''}\x00${_c.n ?? ''}`;
+            if (_displaySeen.has(_dk)) {
+              logPhase(_cid, 'candidate_conflict_result', { safeErrorCategory: 'ambiguous_display' });
+              return res.status(422).json({ error: 'ambiguous_phone_display' });
+            }
+            _displaySeen.add(_dk);
+          }
+        }
+        // ── fim S7.1 ──────────────────────────────────────────────────────────
+
         // Criptografar o access token antes de embuti-lo no continuation token.
         // O plaintext do access token nunca entra no continuation token.
         let _selEnc;
@@ -443,7 +499,7 @@ export default async function handler(req, res) {
             uid:  user.id,
             cid:  companyId,
             exp:  Date.now() + 10 * 60 * 1000,
-            opts: _allCandidates,
+            opts: _uniqueCandidates,
             enc:  _selEnc,
           });
         } catch {
@@ -451,10 +507,10 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'internal_error' });
         }
 
-        logPhase(_cid, 'selection_token_result', { success: true, optionCount: _allCandidates.length });
+        logPhase(_cid, 'selection_token_result', { success: true, optionCount: _uniqueCandidates.length });
 
         // Opções públicas: somente dados de exibição — sem IDs internos Meta.
-        const _publicOptions = _allCandidates.map((opt, index) => ({
+        const _publicOptions = _uniqueCandidates.map((opt, index) => ({
           index,
           label: opt.d,
           name:  opt.n,
