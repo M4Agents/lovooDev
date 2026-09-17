@@ -445,7 +445,7 @@ export function useMetaOnboarding(
         config_id:                      session.config_id,
         response_type:                  'code',
         override_default_response_type: true,
-        extras:                         { setup: {}, featureType: '', sessionInfoVersion: '3' },
+        extras:                         { setup: {}, feature: 'whatsapp_embedded_signup', sessionInfoVersion: '3' },
       },
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps

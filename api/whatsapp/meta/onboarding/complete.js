@@ -351,6 +351,9 @@ export default async function handler(req, res) {
   // resolvedWabaId é a fonte de verdade para chamadas subsequentes.
   // Uma única chamada compartilhada de listWabaPhoneNumbers após resolução.
   let resolvedWabaId;
+  // phones pode ser pré-carregado durante discriminação de multi-WABA discovery,
+  // evitando chamada redundante à Graph API na etapa seguinte.
+  let phones;
 
   if (wabaId !== undefined) {
     // Caminho normal: wabaId vem do body (validado na etapa 5).
@@ -374,18 +377,43 @@ export default async function handler(req, res) {
     if (wabaIds.length === 0) {
       return res.status(422).json({ error: 'no_waba_authorized' });
     }
-    if (wabaIds.length > 1) {
-      return res.status(422).json({ error: 'ambiguous_waba' });
+
+    if (wabaIds.length === 1) {
+      // exatamente 1 WABA — seleção determinista
+      resolvedWabaId = wabaIds[0];
+    } else {
+      // Múltiplas WABAs — discriminar por acessibilidade de números de telefone.
+      // O access token do Embedded Signup tem acesso pleno à WABA recém-configurada;
+      // WABAs sem phones acessíveis são descartadas. Promise.allSettled nunca aborta:
+      // tenta todas antes de decidir — evita descarte precipitado por timeout parcial.
+      const _probeResults = await Promise.allSettled(
+        wabaIds.map(id =>
+          listWabaPhoneNumbers(accessToken, id).then(ps => ({ wabaId: id, phones: ps }))
+        )
+      );
+      const _accessible = _probeResults
+        .filter(r => r.status === 'fulfilled' && r.value.phones.length > 0)
+        .map(r => r.value);
+
+      // Diagnóstico: quantas WABAs ficaram acessíveis após discriminação por phones.
+      logPhase(_cid, 'waba_disambiguation_result', { wabaCount: _accessible.length });
+
+      if (_accessible.length === 0) {
+        return res.status(422).json({ error: 'no_waba_authorized' });
+      }
+      if (_accessible.length > 1) {
+        return res.status(422).json({ error: 'ambiguous_waba' });
+      }
+      // Exatamente 1 WABA com números acessíveis — seleção determinista.
+      resolvedWabaId = _accessible[0].wabaId;
+      phones         = _accessible[0].phones; // pré-carregado — evita chamada redundante
     }
-    // exatamente 1 WABA — seleção determinista
-    resolvedWabaId = wabaIds[0];
   }
 
-  // Chamada compartilhada — prova acesso do token à WABA resolvida.
+  // Listagem de phones — omitida se já pré-carregada durante discriminação multi-WABA.
   // wabaSource: 'body' (normal) | 'discovery' (fallback sem evento FINISH).
   const _wabaSource = _mode === 'normal' ? 'body' : 'discovery';
-  let phones;
-  {
+  if (phones === undefined) {
     const _t = Date.now();
     logPhase(_cid, 'phone_list_start', { wabaSource: _wabaSource });
     try {
@@ -396,6 +424,9 @@ export default async function handler(req, res) {
       const mapped = mapGraphError(err);
       return res.status(mapped.status).json({ error: mapped.code });
     }
+  } else {
+    // phones pré-carregado na discriminação — sem chamada adicional à Graph API.
+    logPhase(_cid, 'phone_list_result', { success: true, phoneCount: phones.length, wabaSource: _wabaSource });
   }
 
   // ── 11. Phone number resolution ───────────────────────────────────────────

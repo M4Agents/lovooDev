@@ -1625,27 +1625,112 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       });
     });
 
-    // ── F2-T4: Discovery >1 WABAs → 422 ambiguous_waba ────────────────────────
-    describe('F2-T4: discovery retorna 2 WABAs → 422 ambiguous_waba', () => {
-      it('retorna 422 sem chamar listWabaPhoneNumbers/crypto/RPC e sem leak', async () => {
+    // ── F2-T4: Discovery >1 WABAs → discriminação → 422 ambiguous_waba ─────────
+    // Com a discriminação por phones, múltiplas WABAs são testadas via
+    // listWabaPhoneNumbers. Se ambas retornam phones acessíveis, retorna ambiguous_waba.
+    describe('F2-T4: discovery 2 WABAs ambas acessíveis → 422 ambiguous_waba', () => {
+      it('tenta phones de cada WABA; retorna 422 quando ambas acessíveis', async () => {
         setupAuthOk();
         setupClaimOk();
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // Ambas as WABAs retornam phones → ambíguo
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
 
         const res = makeRes();
         await handler(makeReq({ body: DISCOVERY_BODY }), res);
 
         expect(res._status).toBe(422);
         expect(res._body.error).toBe('ambiguous_waba');
-        expect(mockListWabaPhoneNumbers).not.toHaveBeenCalled();
+        // listWabaPhoneNumbers DEVE ser chamado para ambas as WABAs (discriminação)
+        expect(mockListWabaPhoneNumbers).toHaveBeenCalledTimes(2);
         expect(mockEncryptMetaToken).not.toHaveBeenCalled();
         expect(mockSvc.rpc).not.toHaveBeenCalled();
         // WABA IDs não expostos na resposta
         const bodyStr = JSON.stringify(res._body);
         expect(bodyStr).not.toContain(FAKE_WABA_ID);
         expect(bodyStr).not.toContain(FAKE_WABA_ID_2);
+      });
+
+      it('discovery 2 WABAs, nenhuma com phones → 422 no_waba_authorized', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // Ambas retornam lista vazia → nenhuma acessível
+        mockListWabaPhoneNumbers.mockResolvedValue([]);
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(422);
+        expect(res._body.error).toBe('no_waba_authorized');
+        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── F2-T16: Discovery 2 WABAs, 1 acessível → discriminação → 200 ──────────
+    describe('F2-T16: discovery 2 WABAs, apenas 1 com phones acessíveis → 200', () => {
+      it('discrimina pela acessibilidade de phones e persiste usando a WABA correta', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+
+        // WABA_ID_2 retorna phones (inacessível via graph_waba_inaccessible),
+        // FAKE_WABA_ID retorna [PHONE_A] → discriminador seleciona FAKE_WABA_ID.
+        mockListWabaPhoneNumbers
+          .mockImplementation((_token, wabaId) => {
+            if (wabaId === FAKE_WABA_ID_2) {
+              return Promise.reject(makeGraphError('graph_waba_inaccessible'));
+            }
+            return Promise.resolve([PHONE_A]);
+          });
+
+        setupEncryptOk();
+        setupRpcOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        // Deve ter tentado ambas as WABAs (discriminação)
+        expect(mockListWabaPhoneNumbers).toHaveBeenCalledTimes(2);
+        // RPC usa a WABA correta (a acessível)
+        const rpcParams = mockSvc.rpc.mock.calls[0][1];
+        expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID);
+        expect(rpcParams.p_company_id).toBe(FAKE_COMPANY_ID);
+      });
+
+      it('WABA acessível com erro de rede no probe é ignorada (fail-safe)', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+
+        // Uma WABA com network error (rejeitada), outra com phones → seleção correta
+        mockListWabaPhoneNumbers
+          .mockImplementation((_token, wabaId) => {
+            if (wabaId === FAKE_WABA_ID_2) {
+              return Promise.reject(makeGraphError('graph_network_error'));
+            }
+            return Promise.resolve([PHONE_A]);
+          });
+
+        setupEncryptOk();
+        setupRpcOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        const rpcParams = mockSvc.rpc.mock.calls[0][1];
+        expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID);
       });
     });
 
