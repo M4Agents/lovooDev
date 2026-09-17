@@ -55,12 +55,16 @@ export interface OnboardingStartResponse {
 // ── POST /api/whatsapp/meta/onboarding/complete ───────────────────────────────
 // Payload enviado pelo frontend ao encerrar o Embedded Signup.
 // company_id NÃO pertence a este payload — o backend extrai via JWT/guard.
+//
+// waba_id é opcional:
+//   presente  → caminho normal (FINISH chegou com wabaId)
+//   ausente   → caminho discovery (FINISH não chegou; backend usa debug_token)
 
 export interface OnboardingCompletePayload {
-  state:            string
-  code:             string
-  waba_id:          string
-  phone_number_id?: string
+  state:             string
+  code:              string
+  waba_id?:          string   // opcional — ausente no caminho discovery
+  phone_number_id?:  string
 }
 
 // Subconjunto da instância retornado por complete.js (linhas 325-332).

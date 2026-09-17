@@ -25,6 +25,7 @@ import type {
 const ACCEPTED_ORIGIN    = 'https://www.facebook.com' as const
 const META_ID_RE         = /^[0-9]+$/     // idêntica a complete.js
 const RENEW_THRESHOLD_MS = 60_000         // renovar sessão 60 s antes de expirar
+const FINISH_GRACE_MS    = 5_000          // janela conservadora de espera pelo evento FINISH
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ export function useMetaOnboarding(
   const isCompletingRef   = useRef(false)                    // lock anti-double-complete
   const listenerRef       = useRef<((e: MessageEvent) => void) | null>(null)
   const sessionExpiryRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const recoveryTimerRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onSuccessRef      = useRef(options?.onSuccess)
   /**
    * Ref estável de enabled — closures assíncronas consultam sem re-capturar.
@@ -139,6 +141,11 @@ export function useMetaOnboarding(
     sessionExpiryRef.current = undefined
   }
 
+  function clearRecoveryTimer(): void {
+    clearTimeout(recoveryTimerRef.current)
+    recoveryTimerRef.current = undefined
+  }
+
   // ── startNewSession ──────────────────────────────────────────────────────
   // Pré-cria sessão via /start e carrega SDK. Resultado descartado se gen obsoleto.
   // Nunca chamar durante popup_open ou completing.
@@ -146,6 +153,7 @@ export function useMetaOnboarding(
   const startNewSession = useCallback(async (myGen: number): Promise<void> => {
     if (!companyId) return
 
+    clearRecoveryTimer()    // defensivo — nova sessão descarta qualquer fallback pendente
     clearExpiryTimer()
     sessionRef.current      = null
     pendingRef.current      = {}
@@ -204,37 +212,67 @@ export function useMetaOnboarding(
   }, [companyId])
 
   // ── tryComplete ──────────────────────────────────────────────────────────
-  // Chamado de dois streams: FINISH (message event) e FB.login callback.
-  // Suporta os dois timings: FINISH→code e code→FINISH.
-  // Aguarda ambas as peças antes de disparar /complete.
+  // Chamado de três streams: FINISH (message event), FB.login callback e
+  // timer de discovery fallback. Suporta os dois timings: FINISH→code e
+  // code→FINISH. Com allowDiscovery=true, permite completar sem wabaId.
+  //
+  // Ordem do lock (sincronamente, antes de qualquer await):
+  //   1. generation guard
+  //   2. validar code
+  //   3. decidir suficiência: wabaId OU allowDiscovery
+  //   4. verificar isCompletingRef
+  //   5. setar isCompletingRef = true
+  //   6. clearRecoveryTimer
+  //   7. removeMessageListener
+  //   8. clearExpiryTimer
+  //   9. construir payload
+  //  10. POST
 
-  function tryComplete(myGen: number): void {
+  function tryComplete(myGen: number, opts: { allowDiscovery?: boolean } = {}): void {
+    // 1. Generation guard — descarta chamadas de gerações obsoletas
+    if (myGen !== flowGenRef.current) return
+
     const { code, wabaId, phoneNumberId } = pendingRef.current
-    if (typeof code   !== 'string' || code.length   === 0) return
-    if (typeof wabaId !== 'string' || wabaId.length === 0) return
+
+    // 2. code sempre obrigatório em ambos os caminhos
+    if (typeof code !== 'string' || code.length === 0) return
+
+    // 3. Suficiência: wabaId presente → normal; ausente → somente se allowDiscovery
+    if (!wabaId && !opts.allowDiscovery) return
+
+    // 4. Lock anti-double-complete
     if (isCompletingRef.current) return
 
+    // 5. Adquirir lock sincronamente — nenhum await antes deste ponto
     isCompletingRef.current = true
-    removeMessageListener()   // idempotente — pode já ter sido removido no FINISH
-    clearExpiryTimer()
+    clearRecoveryTimer()        // 6. cancelar timer de fallback pendente
+    removeMessageListener()     // 7. idempotente — pode já ter sido removido no FINISH
+    clearExpiryTimer()          // 8.
 
     const session = sessionRef.current
     if (!session) { isCompletingRef.current = false; return }
 
     setStepAndRef('completing')
 
+    // Mode derivado dos dados reais — nunca de opts.allowDiscovery diretamente
+    const mode: 'normal' | 'discovery' = wabaId ? 'normal' : 'discovery'
+
     // #region agent log — debug 0b23ea (complete_attempt) — H-B H-C
-    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:complete_attempt',message:'complete_attempt',data:{event:'complete_attempt',generation:myGen,currentGeneration:flowGenRef.current,hasCode:typeof code==='string'&&code.length>0,hasWabaId:typeof wabaId==='string'&&wabaId.length>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
+    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:complete_attempt',message:'complete_attempt',data:{event:'complete_attempt',mode,generation:myGen,currentGeneration:flowGenRef.current,hasCode:typeof code==='string'&&code.length>0,hasWabaId:typeof wabaId==='string'&&wabaId.length>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
     // #endregion
 
+    // 9. Payload: waba_id e phone_number_id incluídos condicionalmente.
+    //    Discovery path → estritamente { state, code } sem waba_id ou phone_number_id.
+    //    phone_number_id somente quando wabaId também existe (não inventar no discovery).
     const payload: OnboardingCompletePayload = {
-      state:   session.state,
-      code,                           // valor original, sem mutação
-      waba_id: wabaId,
-      ...(phoneNumberId ? { phone_number_id: phoneNumberId } : {}),
-      // company_id: NUNCA — complete.js retorna 400 se presente (linha 161)
+      state: session.state,
+      code,                                       // valor original, sem mutação
+      ...(wabaId                   ? { waba_id:         wabaId       } : {}),
+      ...(wabaId && phoneNumberId  ? { phone_number_id: phoneNumberId } : {}),
+      // company_id: NUNCA — complete.js retorna 400 se presente
     }
 
+    // 10. POST /complete
     metaWhatsAppApi.completeOnboarding(payload)
       .then(() => {
         if (myGen !== flowGenRef.current) return    // company mudou — descartar
@@ -260,12 +298,27 @@ export function useMetaOnboarding(
       })
   }
 
+  // ── scheduleDiscoveryFallback ─────────────────────────────────────────────
+  // Agenda POST /complete sem waba_id após FINISH_GRACE_MS caso FINISH não chegue.
+  // O timer NÃO verifica wabaId antecipadamente: tryComplete lê o snapshot atual
+  // e usa caminho normal se wabaId estiver disponível (tornando a race mais robusta).
+
+  function scheduleDiscoveryFallback(myGen: number): void {
+    clearRecoveryTimer()   // garantir que não há timer duplicado
+    recoveryTimerRef.current = setTimeout(() => {
+      if (myGen !== flowGenRef.current) return   // gen guard
+      if (isCompletingRef.current) return        // já completando
+      tryComplete(myGen, { allowDiscovery: true })
+    }, FINISH_GRACE_MS)
+  }
+
   // ── useEffect: mount + company change ────────────────────────────────────
 
   useEffect(() => {
     // enabled=false → limpar e permanecer idle (somente lifecycle — não é autorização)
     if (!companyId || options?.enabled === false) {
       removeMessageListener()
+      clearRecoveryTimer()
       clearExpiryTimer()
       sessionRef.current      = null
       pendingRef.current      = {}
@@ -282,6 +335,7 @@ export function useMetaOnboarding(
       // SEM setState (componente pode estar sendo desmontado)
       flowGenRef.current += 1
       removeMessageListener()
+      clearRecoveryTimer()
       clearExpiryTimer()
       sessionRef.current      = null
       pendingRef.current      = {}
@@ -299,6 +353,7 @@ export function useMetaOnboarding(
     if (!window.FB) return   // SDK não disponível — nunca entrar em popup_open sem FB
 
     const myGen = flowGenRef.current
+    clearRecoveryTimer()    // defensivo — descarta fallback de tentativa anterior
     pendingRef.current = {}
     setStepAndRef('popup_open')
 
@@ -316,12 +371,14 @@ export function useMetaOnboarding(
         // NÃO limpar pendingRef — code ainda pode chegar pelo FB.login callback
         pendingRef.current.wabaId        = result.data.wabaId
         pendingRef.current.phoneNumberId = result.data.phoneNumberId
+        clearRecoveryTimer()      // FINISH chegou — cancelar discovery fallback
         removeMessageListener()   // FINISH obtido — não há mais eventos WA esperados
         tryComplete(myGen)
         return
       }
 
       // CANCEL ou ERROR
+      clearRecoveryTimer()      // sem FINISH esperado — cancelar fallback
       removeMessageListener()
       pendingRef.current = {}
       sessionRef.current = null   // state antigo não deve ser reutilizado
@@ -352,6 +409,7 @@ export function useMetaOnboarding(
         if (typeof code !== 'string' || code.length === 0) {
           // Sem code — CANCEL, erro interno do SDK ou popup fechado pelo OS
           // Não afirmar que é CANCEL — pode ser outro motivo sem code
+          clearRecoveryTimer()    // sem code, sem recovery possível
           removeMessageListener()
           pendingRef.current = {}
           setStepAndRef('idle')
@@ -363,6 +421,12 @@ export function useMetaOnboarding(
         // Salvar code — wabaId pode ainda não ter chegado (timing: code→FINISH)
         pendingRef.current.code = code
         tryComplete(myGen)
+
+        // Se tryComplete não completou (wabaId ausente), agendar discovery fallback.
+        // Verificar generation e lock para evitar timer órfão.
+        if (myGen === flowGenRef.current && !isCompletingRef.current && !pendingRef.current.wabaId) {
+          scheduleDiscoveryFallback(myGen)
+        }
       },
       {
         config_id:                      session.config_id,
@@ -379,6 +443,7 @@ export function useMetaOnboarding(
   const cancelFlow = useCallback((): void => {
     flowGenRef.current += 1   // invalida todos os async em voo
     removeMessageListener()
+    clearRecoveryTimer()
     clearExpiryTimer()
     sessionRef.current      = null
     pendingRef.current      = {}

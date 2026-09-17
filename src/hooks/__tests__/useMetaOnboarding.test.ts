@@ -717,7 +717,322 @@ describe('Timers (fake timers)', () => {
   })
 })
 
-// ── 8. STRICTMODE ────────────────────────────────────────────────────────────
+// ── 8. F3 — DISCOVERY FALLBACK (FINISH_GRACE_MS) ─────────────────────────────
+// Garante o comportamento de recovery sem FINISH:
+//   • code + FINISH dentro de 5s  → POST normal com waba_id (FINISH cancela o timer)
+//   • code, sem FINISH, 5s+       → exatamente 1 POST sem waba_id
+//   • FINISH antes do callback    → normal, sem timer agendado
+//   • isCompletingRef setado pelo timer → FINISH tardio ignorado  (RACE-B)
+//   • wabaId presente quando timer dispara → normal path           (RACE-A)
+//   • cancelFlow / unmount        → timer cancelado, 0 POST
+//   • callback sem code           → timer NÃO agendado
+//   • discovery error             → sem segunda completion
+//   • discovery success           → onSuccess exatamente 1x
+
+describe('F3 — Discovery fallback (FINISH_GRACE_MS)', () => {
+  const FINISH_GRACE_MS = 5_000   // deve espelhar o internal FINISH_GRACE_MS do hook
+
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  // ── F3-T1: code + FINISH dentro de 5s → POST normal com waba_id ────────────
+  it('F3-T1: code chega + FINISH antes de 5s → 1 POST normal com waba_id, timer cancelado', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+    expect(result.current.step).toBe('ready')
+
+    act(() => { result.current.triggerPopup() })
+
+    // Code chega → tryComplete (wabaId ausente → early return) → timer agendado
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+
+    // FINISH chega antes de 5s → clearRecoveryTimer + tryComplete normal
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS - 1_000) })
+    await act(async () => { dispatchFinish() })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(payload.waba_id).toBe(FAKE_WABA_ID)
+    expect(payload).toHaveProperty('waba_id')
+
+    // Avançar além do timer original — timer foi cancelado → 0 POST adicional
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── F3-T2: code sem FINISH → antes: 0 POST; após 5s: 1 POST sem waba_id ───
+  it('F3-T2: code sem FINISH — antes de 5s: 0 POST; após 5s: 1 POST discovery sem waba_id', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+    expect(result.current.step).toBe('ready')
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Antes do timeout: zero POSTs
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS - 1) })
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+
+    // Após timeout: exatamente 1 POST sem waba_id
+    await act(async () => { vi.advanceTimersByTime(2) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(payload).not.toHaveProperty('waba_id')
+    expect(payload).not.toHaveProperty('phone_number_id')
+    expect(payload.code).toBe(FAKE_CODE)
+    expect(typeof payload.state).toBe('string')
+  })
+
+  // ── F3-T3: FINISH durante grace period → timer cancelado → POST normal ─────
+  it('F3-T3: FINISH chega durante grace period → clearRecoveryTimer + POST normal', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Dentro da janela (t=2000 < 5000)
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    await act(async () => { dispatchFinish() })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(payload.waba_id).toBe(FAKE_WABA_ID)
+
+    // Timer foi cancelado — avançar além do ponto original → 0 POST adicional
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS) })
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── F3-T4 (RACE-B): timer dispara → isCompletingRef=true → FINISH tardio ignorado ─
+  it('F3-T4 (RACE-B): timer dispara primeiro → discovery POST → FINISH tardio → exatamente 1 POST', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Timer dispara → tryComplete(allowDiscovery) → isCompletingRef=true → POST discovery
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const discoveryPayload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(discoveryPayload).not.toHaveProperty('waba_id')
+
+    // FINISH tardio — listener já removido por tryComplete → ignorado
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockClear()
+    await act(async () => { dispatchFinish() })
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()   // RACE-B provado
+
+    expect(result.current.step).toBe('idle')   // discovery POST resolveu
+  })
+
+  // ── RACE-A: FINISH durante grace period → normal path toma precedência ─────
+  // RACE-A: timer agendado, FINISH chega durante a janela.
+  // clearRecoveryTimer() no FINISH handler cancela o timer.
+  // POST usa caminho normal com waba_id — normal sempre preferível quando wabaId disponível.
+  it('F3-RACE-A: FINISH durante grace period → clearRecoveryTimer + POST normal com waba_id', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Avançar parcialmente (dentro da janela)
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS - 500) })
+
+    // FINISH chega → clearRecoveryTimer → tryComplete normal com waba_id
+    await act(async () => { dispatchFinish() })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(payload.waba_id).toBe(FAKE_WABA_ID)   // RACE-A: normal path, não discovery
+
+    // Timer foi cancelado — 0 POSTs adicionais
+    await act(async () => { vi.advanceTimersByTime(1_000) })
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── F3-T5: generation muda (cancelFlow) → timer cancelado → 0 POST ─────────
+  it('F3-T5: cancelFlow durante grace period → clearRecoveryTimer → 0 POST', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // cancelFlow: gen++, clearRecoveryTimer
+    await act(async () => { result.current.cancelFlow() })
+
+    // Avançar além de FINISH_GRACE_MS — timer foi cancelado
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── F3-T6: unmount com timer pendente → cleanup cancela timer → 0 POST ──────
+  it('F3-T6: unmount com timer pendente → clearRecoveryTimer no cleanup → 0 POST', async () => {
+    const { result, unmount } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+    expect(result.current.step).toBe('ready')
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Timer agendado (5000ms). Unmount → cleanup: gen++, clearRecoveryTimer
+    unmount()
+
+    // Timer foi cancelado pelo cleanup → 0 POST
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── F3-T7: unmount direto com timer pendente → 0 POST ─────────────────────
+  it('F3-T7: unmount com timer pendente → clearRecoveryTimer → 0 POST', async () => {
+    const { result, unmount } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Unmount → cleanup do useEffect cancela o timer
+    unmount()
+
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── F3-T8: callback sem code → timer NÃO agendado → 0 POST após 5s ─────────
+  it('F3-T8: callback sem code → clearRecoveryTimer defensivo, timer NÃO agendado', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+
+    // Callback sem code — o fallback não deve ser agendado
+    await act(async () => { capturedLoginCb?.({ authResponse: null }) })
+
+    // Avançar além de FINISH_GRACE_MS — nenhum timer para disparar
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+    expect(result.current.step).not.toBe('completing')
+  })
+
+  // ── F3-T9: FINISH antes do callback → caminho normal, sem timer agendado ───
+  it('F3-T9: FINISH antes do callback → normal, isCompletingRef=true impede fallback', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+
+    // FINISH primeiro — code ainda não chegou → tryComplete retorna early
+    await act(async () => { dispatchFinish() })
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+
+    // Code chega → tryComplete: code + wabaId presentes → normal path → 1 POST
+    // isCompletingRef=true → condição de fallback não satisfeita → timer NÃO agendado
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(payload.waba_id).toBe(FAKE_WABA_ID)
+
+    // Avançar além de FINISH_GRACE_MS — timer nunca foi agendado → 0 POST adicional
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── F3-T10: discovery error → onboardingError, sem segunda completion ────────
+  it('F3-T10: backend discovery retorna erro → completeOnboarding 1x, sem segunda completion automática', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockRejectedValue(new Error('no_waba_authorized'))
+    vi.mocked(metaWhatsAppApi.startOnboarding)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockResolvedValueOnce(makeSession() as any)    // sessão inicial
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockResolvedValue(makeSession() as any)        // retry após erro
+
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Timer dispara → discovery POST → falha
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+
+    // Sem segunda completion automática
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockClear()
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── F3-T11: discovery success → onSuccess exatamente 1x, step idle ──────────
+  it('F3-T11: discovery success → completeOnboarding 1x, onSuccess 1x, step idle', async () => {
+    const onSuccess = vi.fn()
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true, onSuccess }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Timer dispara → discovery POST → sucesso (mock padrão resolve com {})
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+    expect(result.current.step).toBe('idle')
+  })
+
+  // ── F3-T12 (RACE-B confirmação): timer → isCompletingRef → FINISH bloqueado ─
+  it('F3-T12 (RACE-B): discovery adquiriu lock → FINISH tardio NÃO gera segundo POST', async () => {
+    const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+
+    act(() => { result.current.triggerPopup() })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+    // Timer dispara → tryComplete({allowDiscovery:true}) → isCompletingRef=true → POST discovery
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS + 1) })
+    await act(async () => {})
+
+    const postCount = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls.length
+    expect(postCount).toBe(1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dPayload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as any
+    expect(dPayload).not.toHaveProperty('waba_id')   // é discovery
+
+    // FINISH tardio — listener já removido por tryComplete → ignorado
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockClear()
+    await act(async () => { dispatchFinish() })
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()   // RACE-B confirmado
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(0) // ainda exatamente 1 total
+  })
+})
+
+// ── 10. STRICTMODE ───────────────────────────────────────────────────────────
 
 describe('StrictMode', () => {
   it('TC-S01: timer da tentativa descartada (gen=0) não renova sessão — stale proof', async () => {
