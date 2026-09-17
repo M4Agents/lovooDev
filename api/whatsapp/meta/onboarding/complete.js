@@ -42,6 +42,7 @@ import { getSupabaseAdmin }                           from '../../../lib/automat
 import { validateMetaCaller, META_CONNECT_ROLES }     from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas } from '../../../lib/meta-whatsapp/graphClient.js';
 import { encryptMetaToken }                           from '../../../lib/meta-whatsapp/tokenCrypto.js';
+import { encryptSelectionPayload }                    from '../../../lib/meta-whatsapp/selectionTokenCrypto.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
@@ -402,7 +403,68 @@ export default async function handler(req, res) {
         return res.status(422).json({ error: 'no_waba_authorized' });
       }
       if (_accessible.length > 1) {
-        return res.status(422).json({ error: 'ambiguous_waba' });
+        // Múltiplas WABAs acessíveis — não é possível inferir deterministicamente
+        // qual asset o usuário pretende conectar. Retornar seleção explícita.
+        //
+        // Construção de candidatos por phone (não por WABA):
+        //   Uma WABA pode ter múltiplos phone_number_ids → cada phone é uma opção.
+        //   Ordenação estável: wabaId (string), depois phone.id (string).
+        //   Nenhum wabaId ou phone_number_id é exposto nas options públicas.
+        const _sortedWabas = [..._accessible].sort((a, b) => a.wabaId.localeCompare(b.wabaId));
+        const _allCandidates = [];
+        for (const { wabaId: _wid, phones: _wps } of _sortedWabas) {
+          const _sortedPhones = [..._wps].sort((a, b) => a.id.localeCompare(b.id));
+          for (const _ph of _sortedPhones) {
+            _allCandidates.push({
+              w: _wid,
+              p: _ph.id,
+              d: _ph.displayPhoneNumber ?? null,
+              n: _ph.verifiedName ?? null,
+            });
+          }
+        }
+
+        // Criptografar o access token antes de embuti-lo no continuation token.
+        // O plaintext do access token nunca entra no continuation token.
+        let _selEnc;
+        try {
+          _selEnc = encryptMetaToken(accessToken);
+        } catch {
+          logPhase(_cid, 'selection_token_result', { success: false, safeErrorCategory: 'crypto_error' });
+          return res.status(500).json({ error: 'internal_error' });
+        }
+
+        // Gerar continuation token AEAD (payload inteiro criptografado).
+        // TTL: 10 minutos — janela suficiente para o usuário selecionar.
+        let _continuationToken;
+        try {
+          _continuationToken = encryptSelectionPayload({
+            v:    1,
+            uid:  user.id,
+            cid:  companyId,
+            exp:  Date.now() + 10 * 60 * 1000,
+            opts: _allCandidates,
+            enc:  _selEnc,
+          });
+        } catch {
+          logPhase(_cid, 'selection_token_result', { success: false, safeErrorCategory: 'crypto_error' });
+          return res.status(500).json({ error: 'internal_error' });
+        }
+
+        logPhase(_cid, 'selection_token_result', { success: true, optionCount: _allCandidates.length });
+
+        // Opções públicas: somente dados de exibição — sem IDs internos Meta.
+        const _publicOptions = _allCandidates.map((opt, index) => ({
+          index,
+          label: opt.d,
+          name:  opt.n,
+        }));
+
+        return res.status(200).json({
+          status:             'selection_required',
+          continuation_token: _continuationToken,
+          options:            _publicOptions,
+        });
       }
       // Exatamente 1 WABA com números acessíveis — seleção determinista.
       resolvedWabaId = _accessible[0].wabaId;

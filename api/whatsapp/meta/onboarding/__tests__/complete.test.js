@@ -155,6 +155,12 @@ vi.mock('../../../../lib/meta-whatsapp/tokenCrypto.js', () => ({
   encryptMetaToken: (...args) => mockEncryptMetaToken(...args),
 }));
 
+// Mock: selectionTokenCrypto
+const mockEncryptSelectionPayload = vi.fn();
+vi.mock('../../../../lib/meta-whatsapp/selectionTokenCrypto.js', () => ({
+  encryptSelectionPayload: (...args) => mockEncryptSelectionPayload(...args),
+}));
+
 // Import do handler APÓS os mocks
 import handler from '../complete.js';
 
@@ -290,6 +296,12 @@ function setupDiscoveryOk(wabaIds = [FAKE_WABA_ID]) {
 
 function setupEncryptOk() {
   mockEncryptMetaToken.mockReturnValue(FAKE_CIPHERTEXT);
+}
+
+const FAKE_CONTINUATION_TOKEN = 'v1:FAKE_CONTINUATION_TOKEN_AEAD==';
+
+function setupSelectionEncryptOk() {
+  mockEncryptSelectionPayload.mockReturnValue(FAKE_CONTINUATION_TOKEN);
 }
 
 function setupRpcOk(rowOverrides = {}) {
@@ -1625,32 +1637,171 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       });
     });
 
-    // ── F2-T4: Discovery >1 WABAs → discriminação → 422 ambiguous_waba ─────────
-    // Com a discriminação por phones, múltiplas WABAs são testadas via
-    // listWabaPhoneNumbers. Se ambas retornam phones acessíveis, retorna ambiguous_waba.
-    describe('F2-T4: discovery 2 WABAs ambas acessíveis → 422 ambiguous_waba', () => {
-      it('tenta phones de cada WABA; retorna 422 quando ambas acessíveis', async () => {
+    // ── F2-T4 / B4: Discovery >1 WABAs ambas acessíveis → 200 selection_required ─
+    // Design alterado: ambiguous_waba deixou de ser erro terminal.
+    // Backend gera continuation token AEAD e retorna seleção ao usuário.
+    describe('F2-T4 / B4: discovery 2 WABAs ambas acessíveis → 200 selection_required', () => {
+      it('B4: retorna 200 { status: selection_required } quando ambas WABAs acessíveis', async () => {
         setupAuthOk();
         setupClaimOk();
         setupGuardOk();
         mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
         setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
-        // Ambas as WABAs retornam phones → ambíguo
+        // Ambas as WABAs retornam phones → gera seleção
         mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupSelectionEncryptOk();
 
         const res = makeRes();
         await handler(makeReq({ body: DISCOVERY_BODY }), res);
 
-        expect(res._status).toBe(422);
-        expect(res._body.error).toBe('ambiguous_waba');
-        // listWabaPhoneNumbers DEVE ser chamado para ambas as WABAs (discriminação)
+        expect(res._status).toBe(200);
+        expect(res._body.status).toBe('selection_required');
+        expect(res._body.continuation_token).toBe(FAKE_CONTINUATION_TOKEN);
+        // listWabaPhoneNumbers chamado para ambas as WABAs (discriminação)
         expect(mockListWabaPhoneNumbers).toHaveBeenCalledTimes(2);
-        expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        // encryptMetaToken chamado para embutir access token no continuation
+        expect(mockEncryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN);
+        // encryptSelectionPayload chamado com payload que inclui uid, cid e opts
+        expect(mockEncryptSelectionPayload).toHaveBeenCalledTimes(1);
+        const selPayload = mockEncryptSelectionPayload.mock.calls[0][0];
+        expect(selPayload.v).toBe(1);
+        expect(selPayload.uid).toBe(FAKE_USER_ID);
+        expect(selPayload.cid).toBe(FAKE_COMPANY_ID);
+        expect(selPayload.enc).toBe(FAKE_CIPHERTEXT);
+        expect(Array.isArray(selPayload.opts)).toBe(true);
+        // RPC NÃO chamada — nenhuma instance criada
         expect(mockSvc.rpc).not.toHaveBeenCalled();
-        // WABA IDs não expostos na resposta
+      });
+
+      it('B5: options públicas contêm somente index, label e name', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        const options = res._body.options;
+        expect(Array.isArray(options)).toBe(true);
+        expect(options.length).toBeGreaterThan(0);
+        for (const opt of options) {
+          // Somente estes três campos
+          expect(Object.keys(opt).sort()).toEqual(['index', 'label', 'name'].sort());
+          expect(typeof opt.index).toBe('number');
+        }
+      });
+
+      it('B6: response não expõe waba_id, phone_number_id, ciphertext, accessToken', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
         const bodyStr = JSON.stringify(res._body);
         expect(bodyStr).not.toContain(FAKE_WABA_ID);
         expect(bodyStr).not.toContain(FAKE_WABA_ID_2);
+        expect(bodyStr).not.toContain(FAKE_PHONE_ID);
+        expect(bodyStr).not.toContain(FAKE_ACCESS_TOKEN);
+        // O continuation_token é o valor retornado pelo mock (opaco)
+        expect(bodyStr).toContain(FAKE_CONTINUATION_TOKEN);
+        // Mas o token em si não deve conter IDs em plaintext (opaco por design AEAD)
+      });
+
+      it('B7: opções são ordenadas deterministicamente (wabaId asc, phoneId asc)', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        // FAKE_WABA_ID = '123456789' < FAKE_WABA_ID_2 = '999888777666555'
+        setupDiscoveryOk([FAKE_WABA_ID_2, FAKE_WABA_ID]); // ordem invertida intencional
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        await handler(makeReq({ body: DISCOVERY_BODY }), makeRes());
+
+        const selPayload = mockEncryptSelectionPayload.mock.calls[0][0];
+        // FAKE_WABA_ID ('123456789') deve vir antes de FAKE_WABA_ID_2 ('999888777666555')
+        expect(selPayload.opts[0].w).toBe(FAKE_WABA_ID);
+        expect(selPayload.opts[1].w).toBe(FAKE_WABA_ID_2);
+      });
+
+      it('B8: WABA com múltiplos phones gera uma opção por phone', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        // WABA 1 tem 2 phones, WABA 2 tem 1 phone → 3 opções no total
+        mockListWabaPhoneNumbers
+          .mockImplementation((_tok, wabaId) => {
+            if (wabaId === FAKE_WABA_ID) return Promise.resolve([PHONE_A, PHONE_B]);
+            return Promise.resolve([PHONE_A]);
+          });
+        setupEncryptOk();
+        setupSelectionEncryptOk();
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(200);
+        const selPayload = mockEncryptSelectionPayload.mock.calls[0][0];
+        expect(selPayload.opts).toHaveLength(3);
+        // opts[0] e opts[1] pertencem a FAKE_WABA_ID (ordenado por phone.id)
+        expect(selPayload.opts[0].w).toBe(FAKE_WABA_ID);
+        expect(selPayload.opts[1].w).toBe(FAKE_WABA_ID);
+        // opts[2] pertence a FAKE_WABA_ID_2
+        expect(selPayload.opts[2].w).toBe(FAKE_WABA_ID_2);
+        // options públicas têm 3 itens com indexes 0, 1, 2
+        expect(res._body.options).toHaveLength(3);
+        expect(res._body.options[0].index).toBe(0);
+        expect(res._body.options[2].index).toBe(2);
+        // RPC não chamada
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+
+      it('B9: falha ao gerar continuation token (encryptSelectionPayload lança) → 500', async () => {
+        setupAuthOk();
+        setupClaimOk();
+        setupGuardOk();
+        mockExchangeCodeForToken.mockResolvedValue({ accessToken: FAKE_ACCESS_TOKEN });
+        setupDiscoveryOk([FAKE_WABA_ID, FAKE_WABA_ID_2]);
+        mockListWabaPhoneNumbers.mockResolvedValue([PHONE_A]);
+        setupEncryptOk();
+        mockEncryptSelectionPayload.mockImplementation(() => { throw new Error('crypto fail'); });
+
+        const res = makeRes();
+        await handler(makeReq({ body: DISCOVERY_BODY }), res);
+
+        expect(res._status).toBe(500);
+        expect(res._body.error).toBe('internal_error');
+        expect(mockSvc.rpc).not.toHaveBeenCalled();
+      });
+
+      it('B10: normal path (waba_id no body) NÃO gera continuation token', async () => {
+        setupHappyPath();
+        const res = makeRes();
+        await handler(makeReq(), res); // DEFAULT_BODY tem waba_id
+
+        expect(res._status).toBe(200);
+        expect(res._body.instance).toBeDefined();
+        expect(res._body.status).toBeUndefined();
+        expect(res._body.continuation_token).toBeUndefined();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
       });
 
       it('discovery 2 WABAs, nenhuma com phones → 422 no_waba_authorized', async () => {
@@ -1668,6 +1819,7 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         expect(res._status).toBe(422);
         expect(res._body.error).toBe('no_waba_authorized');
         expect(mockEncryptMetaToken).not.toHaveBeenCalled();
+        expect(mockEncryptSelectionPayload).not.toHaveBeenCalled();
         expect(mockSvc.rpc).not.toHaveBeenCalled();
       });
     });
