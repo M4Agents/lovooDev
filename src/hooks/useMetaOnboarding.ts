@@ -359,6 +359,19 @@ export function useMetaOnboarding(
 
     // Instalar listener de forma síncrona ANTES do FB.login
     const listener = (event: MessageEvent): void => {
+      // #region diag-finish — remover após diagnóstico do FINISH event
+      // Captura TODA mensagem recebida antes de qualquer filtro — visible em DevTools.
+      // Permite confirmar se Meta envia de origem diferente de www.facebook.com.
+      // Não loga conteúdo — apenas origin, type e event.
+      if (typeof event.data === 'object' && event.data !== null) {
+        const _dt = (event.data as Record<string, unknown>)['type']
+        const _de = (event.data as Record<string, unknown>)['event']
+        if (_dt === 'WA_EMBEDDED_SIGNUP' || String(event.origin).includes('facebook') || String(event.origin).includes('fb.com')) {
+          console.log('[meta-finish-diag]', { origin: event.origin, type: _dt, event: _de })
+        }
+      }
+      // #endregion diag-finish
+
       const result = parseWaEmbeddedSignup(event)
       if (result.kind === 'IGNORE') return
 
