@@ -1118,4 +1118,60 @@ describe('FB.login contract — options', () => {
     // Se presente, o Meta SDK pode rejeitar o flow sem status BSP/TP.
     expect('feature' in extras).toBe(false)
   })
+
+  // ── FB-OPT-02: log de shape do authResponse — somente keys, nunca valores ──
+  // Garante que a instrumentação diagnóstica [meta-auth-response-shape] emite
+  // apenas os NOMES das propriedades de authResponse — nunca valores sensíveis.
+  it('FB-OPT-02: [meta-auth-response-shape] loga somente keys do authResponse, nunca valores', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+    try {
+      const { result } = renderHook(() => useMetaOnboarding({ enabled: true }))
+      await act(async () => {})
+
+      // Simular callback com authResponse que contém campos potencialmente sensíveis
+      act(() => { result.current.triggerPopup() })
+      await act(async () => {})
+
+      // Fornecer authResponse fictício com campos sensíveis misturados com campos extras
+      // que o FB SDK real poderia incluir (sessionInfo, grantedScopes, etc.)
+      const fakeAuthResponse = {
+        code:          'SECRET_CODE',
+        sessionInfo:   { waba_id: 'SECRET_WABA', phone_number_id: 'SECRET_PHONE' },
+        grantedScopes: 'SECRET_SCOPE',
+        userID:        'SECRET_USER',
+      }
+      act(() => { capturedLoginCb?.({ status: 'connected', authResponse: fakeAuthResponse }) })
+      await act(async () => {})
+
+      // Localizar a chamada com prefixo [meta-auth-response-shape]
+      const shapeCall = infoSpy.mock.calls.find(
+        (args) => args[0] === '[meta-auth-response-shape]'
+      )
+      expect(shapeCall).toBeDefined()
+
+      const payload = shapeCall![1] as { keys: string[] }
+
+      // Verificar estrutura: somente { keys: string[] }
+      expect(Object.keys(payload)).toEqual(['keys'])
+      expect(Array.isArray(payload.keys)).toBe(true)
+
+      // Verificar que as keys esperadas estão presentes (authResponse tinha 4 campos)
+      expect(payload.keys).toContain('code')
+      expect(payload.keys).toContain('sessionInfo')
+      expect(payload.keys).toContain('grantedScopes')
+      expect(payload.keys).toContain('userID')
+      expect(payload.keys).toHaveLength(4)
+
+      // Verificar que NENHUM VALOR sensível aparece na representação serializada do log
+      const serialized = JSON.stringify(infoSpy.mock.calls)
+      expect(serialized).not.toContain('SECRET_CODE')
+      expect(serialized).not.toContain('SECRET_WABA')
+      expect(serialized).not.toContain('SECRET_PHONE')
+      expect(serialized).not.toContain('SECRET_SCOPE')
+      expect(serialized).not.toContain('SECRET_USER')
+    } finally {
+      infoSpy.mockRestore()
+    }
+  })
 })

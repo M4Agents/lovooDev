@@ -417,6 +417,16 @@ export function useMetaOnboarding(
         // Guard: ignorar se popup_open já foi encerrado (ex: CANCEL via message)
         if (stepRef.current !== 'popup_open') return
 
+        // #region diag-authresponse-shape — remover após diagnóstico do authResponse
+        // Emite somente os NOMES das propriedades de authResponse — nunca valores.
+        // Permite identificar se o FB SDK inclui sessionInfo/grantedScopes/outros
+        // no authResponse com featureType='' + sessionInfoVersion='3'.
+        // TODO: remover após diagnóstico confirmado.
+        console.info('[meta-auth-response-shape]', {
+          keys: Object.keys(response.authResponse ?? {}).sort(),
+        })
+        // #endregion diag-authresponse-shape
+
         const code = response.authResponse?.code
 
         if (typeof code !== 'string' || code.length === 0) {
