@@ -5,12 +5,14 @@
 // Módulo funcional — sem estado, sem retry, sem persistência, sem crypto.
 //
 // Funções exportadas:
-//   exchangeCodeForToken(code)          → { accessToken }
-//   listWabaPhoneNumbers(token, wabaId) → [{ id, displayPhoneNumber, verifiedName }]
+//   exchangeCodeForToken(code)           → { accessToken }
+//   listWabaPhoneNumbers(token, wabaId)  → [{ id, displayPhoneNumber, verifiedName }]
+//   discoverAuthorizedWabas(token)       → string[]  — WABA IDs via debug_token
 //
 // SEGURANÇA:
 //   - URL de code exchange NUNCA logada (contém client_secret e code na query)
-//   - accessToken vai SOMENTE no header Authorization: Bearer
+//   - URL de debug_token NUNCA logada (contém App Access Token na query)
+//   - accessToken vai SOMENTE no header Authorization: Bearer (phone_numbers)
 //   - paging.next NUNCA executado como fetch destination (anti-SSRF)
 //   - Próxima página sempre reconstruída internamente usando somente cursors.after
 //   - Erros genéricos — nunca refletem secrets, tokens, wabaId ou Graph.message
@@ -20,7 +22,7 @@
 //   - api/lib/meta-whatsapp/config.js (getMetaServerConfig)
 //
 // NÃO presente neste módulo:
-//   debug_token | META_SYSTEM_USER_TOKEN | appsecret_proof
+//   META_SYSTEM_USER_TOKEN | appsecret_proof
 //   subscribed_apps | persistência | criptografia
 // =============================================================================
 
@@ -39,6 +41,9 @@ const MAX_PAGES        = 10;     // limite defensivo puro — não vinculado ao 
 // Não impõe limite de tamanho — documentação não garante comprimento máximo.
 // Rejeita: vazio, letras, espaços, '/', '?', '&', '=', '://', URLs completas.
 const META_ID_RE = /^[0-9]+$/;
+
+// Scope que identifica autorização de WhatsApp Business no granular_scopes do debug_token.
+const WA_SCOPE = 'whatsapp_business_management';
 
 // =============================================================================
 // Helpers internos
@@ -304,4 +309,119 @@ export async function listWabaPhoneNumbers(accessToken, wabaId) {
   }
 
   return allNumbers;
+}
+
+// =============================================================================
+// discoverAuthorizedWabas
+// =============================================================================
+
+/**
+ * Descobre os WABA IDs autorizados pelo access token via Meta debug_token +
+ * granular_scopes.
+ *
+ * Autentica com App Access Token (appId|appSecret) construído server-side —
+ * nunca exposto ao caller em resultado, log ou mensagem de erro.
+ * Retorna somente IDs do scope whatsapp_business_management.
+ *
+ * POLÍTICA DE TARGET_IDS INVÁLIDOS (fail-closed):
+ *   Se qualquer target_id em um entry válido do scope não for string numérica
+ *   não vazia, a operação inteira é rejeitada com graph_invalid_response.
+ *   Não é feita filtragem silenciosa de IDs inválidos — resposta estruturalmente
+ *   inconsistente indica dado não confiável e não deve ser aceita parcialmente.
+ *
+ * URL de debug_token NUNCA logada — contém App Access Token na query string.
+ *
+ * @param {string} accessToken Business token obtido via exchangeCodeForToken
+ * @returns {Promise<string[]>} WABA IDs numéricos deduplicados (pode ser [])
+ * @throws {Error} err.code in:
+ *   graph_debug_token_failed — HTTP não-2xx
+ *   graph_timeout            — timeout expirado
+ *   graph_network_error      — falha de rede
+ *   graph_invalid_response   — JSON inválido, payload malformado, target_id inválido
+ */
+export async function discoverAuthorizedWabas(accessToken) {
+  // ── Validação de entrada ─────────────────────────────────────────────────────
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    throw makeError('graph_invalid_response', 'Meta Graph request failed');
+  }
+
+  const { appId, appSecret, graphVersion } = getMetaServerConfig();
+
+  // App Access Token: appId|appSecret — somente em query param, nunca logado,
+  // nunca retornado, nunca presente em mensagens de erro.
+  const appAccessToken = `${appId}|${appSecret}`;
+
+  // URL contém access_token — nunca logada (mesma política de exchangeCodeForToken)
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/debug_token`);
+  url.searchParams.set('input_token',  accessToken);
+  url.searchParams.set('access_token', appAccessToken);
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, { method: 'GET' });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('graph_timeout', 'Meta Graph request timed out');
+    }
+    throw makeError('graph_network_error', 'Meta Graph network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('graph_debug_token_failed', 'Meta Graph debug_token request failed');
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  // data deve ser um objeto não-nulo — estrutura mínima esperada
+  if (typeof payload?.data !== 'object' || payload.data === null || Array.isArray(payload.data)) {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  const { granular_scopes } = payload.data;
+
+  // granular_scopes ausente (undefined) → token sem nenhum scope granular → []
+  // Válido semanticamente: token pode não ter autorizado nenhum recurso WABA.
+  if (granular_scopes === undefined) {
+    return [];
+  }
+
+  // granular_scopes presente mas não é array → inconsistência estrutural → fail-closed
+  if (!Array.isArray(granular_scopes)) {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  // ── Extração de WABA IDs ─────────────────────────────────────────────────────
+  // Set garante deduplicação entre múltiplos entries do mesmo scope
+  const wabaIds = new Set();
+
+  for (const entry of granular_scopes) {
+    // Ignorar silenciosamente entries que não são do scope WhatsApp Business.
+    // Qualquer outro scope é irrelevante — sem falha.
+    if (typeof entry?.scope !== 'string' || entry.scope !== WA_SCOPE) {
+      continue;
+    }
+
+    // Entry do scope correto mas target_ids não é array → inconsistência → fail-closed
+    if (!Array.isArray(entry.target_ids)) {
+      throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+    }
+
+    // target_ids vazio → scope presente mas sem WABAs autorizadas → contribui []
+    for (const id of entry.target_ids) {
+      // POLÍTICA FAIL-CLOSED:
+      // Qualquer ID inválido junto com IDs válidos → rejeita operação inteira.
+      // Resposta estruturalmente inconsistente não é aceita parcialmente.
+      if (typeof id !== 'string' || !META_ID_RE.test(id)) {
+        throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+      }
+      wabaIds.add(id);
+    }
+  }
+
+  return Array.from(wabaIds);
 }

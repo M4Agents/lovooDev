@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -47,6 +47,8 @@ const FAKE_CONFIG = {
 const FAKE_CODE      = 'FAKE_CODE_NOT_REAL_ABC123XYZ';
 const FAKE_TOKEN     = 'EAAAN_fake_business_token_not_real_XYZ789';
 const FAKE_WABA      = '102290129340398';
+const FAKE_WABA_2    = '987654321098765';
+const FAKE_APP_TOKEN = `${FAKE_APP_ID}|${FAKE_SECRET}`; // App Access Token composto
 const EVIL_URL       = 'https://evil.example/steal-token';
 
 const PHONE_1 = { id: '1906385232743451', display_phone_number: '+1 631-555-5555', verified_name: 'Jasper Market' };
@@ -701,5 +703,299 @@ describe('listWabaPhoneNumbers', () => {
         (err) => !err.message.includes(FAKE_SECRET),
       );
     });
+  });
+});
+
+// =============================================================================
+// discoverAuthorizedWabas
+// =============================================================================
+
+// Helpers para respostas do debug_token
+function makeDebugTokenOk(granularScopes) {
+  return makeOkResponse({ data: { granular_scopes: granularScopes } });
+}
+
+function makeDebugTokenOkNoScopes() {
+  // granular_scopes ausente — token sem scope granular
+  return makeOkResponse({ data: {} });
+}
+
+function makeWaScope(targetIds) {
+  return { scope: 'whatsapp_business_management', target_ids: targetIds };
+}
+
+describe('discoverAuthorizedWabas', () => {
+
+  // ── Sucesso ──────────────────────────────────────────────────────────────────
+
+  it('TC-D01: 1 WABA válida → ["<id>"]', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([FAKE_WABA]);
+  });
+
+  it('TC-D02: scope whatsapp_business_management ausente → []', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      { scope: 'instagram_basic', target_ids: ['999'] },
+    ]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([]);
+  });
+
+  it('TC-D03: scope presente com target_ids=[] → []', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([])]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([]);
+  });
+
+  it('TC-D04: múltiplas WABAs → array completo', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA, FAKE_WABA_2])]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toHaveLength(2);
+    expect(result).toContain(FAKE_WABA);
+    expect(result).toContain(FAKE_WABA_2);
+  });
+
+  it('TC-D05: target_ids duplicados → deduplicados', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      makeWaScope([FAKE_WABA, FAKE_WABA]), // mesmo ID repetido
+    ]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([FAKE_WABA]);
+  });
+
+  it('TC-D05b: duplicatas entre múltiplos entries → deduplicados', async () => {
+    // Dois entries do mesmo scope (possível na API) — ID repetido entre eles
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      makeWaScope([FAKE_WABA]),
+      makeWaScope([FAKE_WABA, FAKE_WABA_2]),
+    ]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toHaveLength(2);
+    expect(new Set(result).size).toBe(2); // sem duplicatas
+  });
+
+  it('TC-D15: granular_scopes ausente em data → []', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOkNoScopes());
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([]);
+  });
+
+  it('TC-D19: outros scopes presentes junto com WA → somente WABA IDs extraídos', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      { scope: 'pages_read_engagement', target_ids: ['111'] },
+      makeWaScope([FAKE_WABA]),
+      { scope: 'instagram_basic', target_ids: ['222'] },
+    ]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    expect(result).toEqual([FAKE_WABA]); // somente WABA ID — outros scopes ignorados
+  });
+
+  // ── Falhas HTTP ──────────────────────────────────────────────────────────────
+
+  it('TC-D06a: HTTP 400 → graph_debug_token_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_debug_token_failed' });
+  });
+
+  it('TC-D06b: HTTP 401 → graph_debug_token_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(401));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_debug_token_failed' });
+  });
+
+  it('TC-D06c: HTTP 500 → graph_debug_token_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_debug_token_failed' });
+  });
+
+  // ── Falhas de rede ───────────────────────────────────────────────────────────
+
+  it('TC-D07: AbortError → graph_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_timeout' });
+  });
+
+  it('TC-D08: TypeError de rede → graph_network_error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_network_error' });
+  });
+
+  // ── Falhas estruturais ───────────────────────────────────────────────────────
+
+  it('TC-D09: JSON inválido → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse());
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D13a: data ausente → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({}));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D13b: data null → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: null }));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D13c: data é array → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: [] }));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D14: granular_scopes presente mas não é array → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: { granular_scopes: 'invalid' } }));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D14b: granular_scopes é null → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: { granular_scopes: null } }));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D16: target_ids não é array em entry WA → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      { scope: 'whatsapp_business_management', target_ids: FAKE_WABA }, // string em vez de array
+    ]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D16b: target_ids null em entry WA → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      { scope: 'whatsapp_business_management', target_ids: null },
+    ]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  // ── Política fail-closed para target_id inválido ─────────────────────────────
+  // Comportamento documentado: não aceitar silenciosamente resposta estruturalmente
+  // inconsistente. Qualquer ID inválido em entry válido → rejeita operação inteira.
+
+  it('TC-D09b (fail-closed): target_id não-string → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([12345])]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D09c (fail-closed): target_id vazio → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([''])]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D09d (fail-closed): target_id com letras → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope(['abc123'])]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('TC-D09e (fail-closed): ID inválido junto com ID válido → rejeita tudo, não filtra', async () => {
+    // Confirma que não há filtragem silenciosa — operação inteira é rejeitada
+    fetch.mockResolvedValue(makeDebugTokenOk([
+      makeWaScope([FAKE_WABA, 'not-a-number']),
+    ]));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  // ── Validação de input ────────────────────────────────────────────────────────
+
+  it('TC-D17a: accessToken vazio → falha antes do fetch', async () => {
+    await expect(discoverAuthorizedWabas('')).rejects.toMatchObject({ code: 'graph_invalid_response' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-D17b: accessToken null → falha antes do fetch', async () => {
+    await expect(discoverAuthorizedWabas(null)).rejects.toMatchObject({ code: 'graph_invalid_response' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-D18: accessToken não-string (number) → falha antes do fetch', async () => {
+    await expect(discoverAuthorizedWabas(12345)).rejects.toMatchObject({ code: 'graph_invalid_response' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── Parâmetros e URL ──────────────────────────────────────────────────────────
+
+  it('TC-D10: graphVersion vindo de getMetaServerConfig é usado na URL', async () => {
+    getMetaServerConfig.mockReturnValue({ ...FAKE_CONFIG, graphVersion: 'v99.0' });
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    await discoverAuthorizedWabas(FAKE_TOKEN);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('/v99.0/');
+    expect(callUrl.toString()).toContain('debug_token');
+  });
+
+  it('TC-D10b: path é /{graphVersion}/debug_token', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    await discoverAuthorizedWabas(FAKE_TOKEN);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.pathname).toBe(`/${FAKE_VERSION}/debug_token`);
+  });
+
+  it('TC-D10c: input_token é o accessToken recebido', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    await discoverAuthorizedWabas(FAKE_TOKEN);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('input_token')).toBe(FAKE_TOKEN);
+  });
+
+  it('TC-D10d: access_token é App Access Token construído como appId|appSecret', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    await discoverAuthorizedWabas(FAKE_TOKEN);
+    const [callUrl] = fetch.mock.calls[0];
+    // Verificável em testes pois usa fixture — nunca logado em runtime
+    expect(callUrl.searchParams.get('access_token')).toBe(FAKE_APP_TOKEN);
+  });
+
+  // ── Segurança de secrets ─────────────────────────────────────────────────────
+
+  it('TC-D11a: resultado nunca contém appSecret, appToken ou accessToken', async () => {
+    fetch.mockResolvedValue(makeDebugTokenOk([makeWaScope([FAKE_WABA])]));
+    const result = await discoverAuthorizedWabas(FAKE_TOKEN);
+    const resultStr = JSON.stringify(result);
+    expect(resultStr).not.toContain(FAKE_SECRET);
+    expect(resultStr).not.toContain(FAKE_APP_TOKEN);
+    expect(resultStr).not.toContain(FAKE_TOKEN);
+  });
+
+  it('TC-D11b: erro HTTP não contém appSecret', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN)).rejects.toSatisfy(
+      (err) => !err.message.includes(FAKE_SECRET),
+    );
+  });
+
+  it('TC-D11c: erro HTTP não contém accessToken', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN)).rejects.toSatisfy(
+      (err) => !err.message.includes(FAKE_TOKEN),
+    );
+  });
+
+  it('TC-D11d: erro HTTP não contém App Access Token composto', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN)).rejects.toSatisfy(
+      (err) => !err.message.includes(FAKE_APP_TOKEN),
+    );
+  });
+
+  it('TC-D11e: erro estrutural não contém appSecret', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: null }));
+    await expect(discoverAuthorizedWabas(FAKE_TOKEN)).rejects.toSatisfy(
+      (err) => !err.message.includes(FAKE_SECRET),
+    );
   });
 });
