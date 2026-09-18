@@ -28,7 +28,6 @@ const ACCEPTED_ORIGIN    = 'https://www.facebook.com' as const
 const META_ID_RE         = /^[0-9]+$/     // idêntica a complete.js
 const RENEW_THRESHOLD_MS = 60_000         // renovar sessão 60 s antes de expirar
 const FINISH_GRACE_MS    = 5_000          // janela conservadora de espera pelo evento FINISH
-const LATE_DIAG_MS       = 10_000         // janela do listener diagnóstico tardio (após F3)
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -178,18 +177,6 @@ export function useMetaOnboarding(
   const selectionOptionsRef = useRef<MetaWabaSelectionOption[] | null>(null)
   const isSelectingRef      = useRef(false)   // lock anti-double-select
 
-  // Refs S7.5 — listener diagnóstico tardio (R4: FINISH após F3)
-  // Separado do listener funcional — somente console.log, sem efeito no fluxo.
-  //
-  // Lifecycle per-instance via useRef:
-  //   lateDiagActiveRef:   guarda booleana imediata (set false em removeLateDiagListener)
-  //   lateDiagListenerRef: função registrada em window (para removeEventListener direto)
-  //   lateDiagTimerRef:    ID do timer de auto-remoção (para clearTimeout)
-  //
-  // Não há mutable state module-level: cada instância gerencia seu próprio lifecycle.
-  const lateDiagActiveRef   = useRef(false)
-  const lateDiagListenerRef = useRef<((e: MessageEvent) => void) | null>(null)
-  const lateDiagTimerRef    = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   /**
    * Ref estável de enabled — closures assíncronas consultam sem re-capturar.
    * Sincronizado durante o render (não via effect) para eliminar a janela
@@ -224,85 +211,6 @@ export function useMetaOnboarding(
     recoveryTimerRef.current = undefined
   }
 
-  // ── Helpers de diagnóstico tardio (S7.5) ────────────────────────────────
-  // Puramente observabilidade — nenhuma interação com fluxo funcional.
-
-  // Remove o listener diagnóstico tardio ativo (se houver).
-  // lateDiagActiveRef.current = false é a guarda imediata (per-instance).
-  // removeEventListener remove o listener fisicamente da window.
-  function removeLateDiagListener(): void {
-    lateDiagActiveRef.current = false                     // guarda imediata per-instance
-    if (lateDiagListenerRef.current) {
-      window.removeEventListener('message', lateDiagListenerRef.current)
-      lateDiagListenerRef.current = null
-    }
-    clearTimeout(lateDiagTimerRef.current)
-    lateDiagTimerRef.current = undefined
-  }
-
-  // Instala um listener diagnóstico separado por LATE_DIAG_MS após F3 adquirir o lock.
-  // Detecta FINISH tardio (R4) sem interferir no fluxo funcional.
-  // Log seguro: somente origin, payloadType, type e event. Nunca data, IDs ou tokens.
-  //
-  // Lifecycle per-instance: removeLateDiagListener() seta lateDiagActiveRef.current = false
-  // e remove o listener da window diretamente. Cada instância do hook gerencia seus
-  // próprios refs — sem mutable state compartilhado entre instâncias.
-  function installLateDiagListener(): void {
-    removeLateDiagListener()                  // limpa listener anterior desta instância
-    lateDiagActiveRef.current = true          // ativa guarda per-instance
-
-    const diagListener = (event: MessageEvent): void => {
-      // Guarda per-instance — desativada imediatamente por removeLateDiagListener()
-      if (!lateDiagActiveRef.current) return
-
-      // Extrair type/event do payload sem logar conteúdo de data.
-      let _payloadType: 'object' | 'string' | null = null
-      let _dt: unknown
-      let _de: unknown
-
-      if (typeof event.data === 'object' && event.data !== null) {
-        _payloadType = 'object'
-        _dt = (event.data as Record<string, unknown>)['type']
-        _de = (event.data as Record<string, unknown>)['event']
-      } else if (typeof event.data === 'string') {
-        try {
-          const _p = JSON.parse(event.data) as Record<string, unknown>
-          if (typeof _p === 'object' && _p !== null) {
-            _payloadType = 'string'
-            _dt = _p['type']
-            _de = _p['event']
-          }
-        } catch { /* JSON inválido — ignorar */ }
-      }
-
-      if (_payloadType === null) return   // payload não reconhecível — ignorar
-
-      // Filtro: somente WA_EMBEDDED_SIGNUP ou origins Facebook
-      const _originStr = String(event.origin)
-      if (
-        _dt !== 'WA_EMBEDDED_SIGNUP' &&
-        !_originStr.includes('facebook') &&
-        !_originStr.includes('fb.com')
-      ) return
-
-      // Log seguro — somente metadados do envelope, nunca conteúdo de data
-      console.log('[meta-finish-diag-late]', {
-        origin:      event.origin,
-        payloadType: _payloadType,
-        type:        _dt,
-        event:       _de,
-      })
-    }
-
-    lateDiagListenerRef.current = diagListener
-    window.addEventListener('message', diagListener)
-
-    // Auto-remoção após LATE_DIAG_MS — seta active=false e remove listener da window
-    lateDiagTimerRef.current = setTimeout(() => {
-      removeLateDiagListener()
-    }, LATE_DIAG_MS)
-  }
-
   // Helper centralizado para limpar todo o estado de seleção S7.
   // Manter selectionTokenRef e selectionOptionsRef sincronizados com state aqui.
   // Token mantido SOMENTE em memória — nunca persistir.
@@ -322,7 +230,6 @@ export function useMetaOnboarding(
 
     clearRecoveryTimer()    // defensivo — nova sessão descarta qualquer fallback pendente
     clearExpiryTimer()
-    removeLateDiagListener()  // defensivo — nova sessão encerra janela diagnóstica tardia
     clearSelectionState()   // limpar seleção pendente antes de iniciar nova sessão
     sessionRef.current      = null
     pendingRef.current      = {}
@@ -423,13 +330,6 @@ export function useMetaOnboarding(
 
     setStepAndRef('completing')
 
-    // Mode derivado dos dados reais — nunca de opts.allowDiscovery diretamente
-    const mode: 'normal' | 'discovery' = wabaId ? 'normal' : 'discovery'
-
-    // #region agent log — debug 0b23ea (complete_attempt) — H-B H-C
-    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:complete_attempt',message:'complete_attempt',data:{event:'complete_attempt',mode,generation:myGen,currentGeneration:flowGenRef.current,hasCode:typeof code==='string'&&code.length>0,hasWabaId:typeof wabaId==='string'&&wabaId.length>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
-    // #endregion
-
     // 9. Payload: waba_id e phone_number_id incluídos condicionalmente.
     //    Discovery path → estritamente { state, code } sem waba_id ou phone_number_id.
     //    phone_number_id somente quando wabaId também existe (não inventar no discovery).
@@ -492,10 +392,6 @@ export function useMetaOnboarding(
     recoveryTimerRef.current = setTimeout(() => {
       if (myGen !== flowGenRef.current) return   // gen guard
       if (isCompletingRef.current) return        // já completando
-      // S7.5: instalar listener diagnóstico tardio ANTES de tryComplete remover o
-      // funcional — detecta R4 (FINISH chega após F3 adquirir lock).
-      // Puramente observabilidade — nenhum efeito no fluxo funcional.
-      installLateDiagListener()
       tryComplete(myGen, { allowDiscovery: true })
     }, FINISH_GRACE_MS)
   }
@@ -526,7 +422,6 @@ export function useMetaOnboarding(
       removeMessageListener()
       clearRecoveryTimer()
       clearExpiryTimer()
-      removeLateDiagListener()   // encerrar listener diagnóstico tardio se ativo
       // Limpar selection state: token fica somente em memória — sem persistência
       selectionTokenRef.current   = null
       selectionOptionsRef.current = null
@@ -554,41 +449,8 @@ export function useMetaOnboarding(
 
     // Instalar listener de forma síncrona ANTES do FB.login
     const listener = (event: MessageEvent): void => {
-      // #region diag-finish — remover após diagnóstico do FINISH event
-      // Captura TODA mensagem recebida antes de qualquer filtro — visible em DevTools.
-      // Permite confirmar se Meta envia de origem diferente de www.facebook.com.
-      // Não loga conteúdo — apenas origin, type e event.
-      if (typeof event.data === 'object' && event.data !== null) {
-        const _dt = (event.data as Record<string, unknown>)['type']
-        const _de = (event.data as Record<string, unknown>)['event']
-        if (_dt === 'WA_EMBEDDED_SIGNUP' || String(event.origin).includes('facebook') || String(event.origin).includes('fb.com')) {
-          console.log('[meta-finish-diag]', { origin: event.origin, type: _dt, event: _de })
-        }
-      } else if (typeof event.data === 'string') {
-        // #region diag-finish-str — R2: detecta payload WA enviado como JSON string
-        // Embedded Signup v2 enviava data como string; v4 envia como object.
-        // NÃO passa ao parser funcional — somente diagnóstico.
-        // NÃO loga o string original nem parsed.data (pode conter waba_id, phone_number_id).
-        try {
-          const _parsed = JSON.parse(event.data) as Record<string, unknown>
-          if (typeof _parsed === 'object' && _parsed !== null) {
-            const _dt = _parsed['type']
-            const _de = _parsed['event']
-            if (_dt === 'WA_EMBEDDED_SIGNUP' || String(event.origin).includes('facebook') || String(event.origin).includes('fb.com')) {
-              console.log('[meta-finish-diag-str]', { origin: event.origin, type: _dt, event: _de })
-            }
-          }
-        } catch { /* JSON inválido — ignorar silenciosamente */ }
-        // #endregion diag-finish-str
-      }
-      // #endregion diag-finish
-
       const result = parseWaEmbeddedSignup(event)
       if (result.kind === 'IGNORE') return
-
-      // #region agent log — debug 0b23ea (window_message) — H-B H-C
-      void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:window_message',message:'window_message',data:{event:'window_message',generation:myGen,currentGeneration:flowGenRef.current,origin:event.origin,dataType:typeof event.data,embeddedEvent:result.kind},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
-      // #endregion
 
       if (result.kind === 'FINISH') {
         // Salvar wabaId — code pode ainda não ter chegado (timing: FINISH→code)
@@ -615,28 +477,10 @@ export function useMetaOnboarding(
     listenerRef.current = listener
     window.addEventListener('message', listener)
 
-    // #region agent log — debug 0b23ea (fb_login_call) — H-A H-D
-    void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:fb_login_call',message:'fb_login_call',data:{event:'fb_login_call',generation:myGen,currentGeneration:flowGenRef.current,step:stepRef.current,hasSession:!!sessionRef.current,hasFB:!!window.FB},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
-    // #endregion
-
     window.FB?.login(
       (response) => {
-        // #region agent log — debug 0b23ea (fb_login_callback) — H-A H-B H-D
-        void (() => { const _p={sessionId:'0b23ea',location:'useMetaOnboarding.ts:fb_login_callback',message:'fb_login_callback',data:{event:'fb_login_callback',generation:myGen,currentGeneration:flowGenRef.current,step:stepRef.current,status:response.status,hasAuthResponse:response.authResponse!==null&&response.authResponse!==undefined,hasCode:typeof response.authResponse?.code==='string'&&(response.authResponse?.code?.length??0)>0},timestamp:Date.now()}; console.debug('[meta-onboarding-debug]',_p); fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0b23ea'},body:JSON.stringify(_p)}).catch(()=>{}); })();
-        // #endregion
-
         // Guard: ignorar se popup_open já foi encerrado (ex: CANCEL via message)
         if (stepRef.current !== 'popup_open') return
-
-        // #region diag-authresponse-shape — remover após diagnóstico do authResponse
-        // Emite somente os NOMES das propriedades de authResponse — nunca valores.
-        // Permite identificar se o FB SDK inclui sessionInfo/grantedScopes/outros
-        // no authResponse com featureType='' + sessionInfoVersion='3'.
-        // TODO: remover após diagnóstico confirmado.
-        console.info('[meta-auth-response-shape]', {
-          keys: Object.keys(response.authResponse ?? {}).sort(),
-        })
-        // #endregion diag-authresponse-shape
 
         const code = response.authResponse?.code
 
@@ -679,7 +523,6 @@ export function useMetaOnboarding(
     removeMessageListener()
     clearRecoveryTimer()
     clearExpiryTimer()
-    removeLateDiagListener()   // encerrar listener diagnóstico tardio se ativo
     clearSelectionState()
     sessionRef.current      = null
     pendingRef.current      = {}
