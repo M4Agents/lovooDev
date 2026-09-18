@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber, setTwoStepVerificationPin } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -1497,5 +1497,301 @@ describe('registerPhoneNumber', () => {
     const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
       .catch(e => e);
     expect(JSON.stringify(err)).not.toContain(FAKE_PIN);
+  });
+});
+
+// =============================================================================
+// setTwoStepVerificationPin
+// =============================================================================
+
+// Fixtures locais — fictícios, nunca reais
+const FAKE_PHONE_ID_SP = '2065473892011234'; // phoneNumberId para set-pin (diferente de REG)
+const FAKE_PIN_SP      = '150954';           // PIN fictício para set-pin
+const FAKE_TOKEN_SP    = 'EAAAN_fake_set_pin_token_not_real_ABCDEF';
+
+describe('setTwoStepVerificationPin', () => {
+
+  // ── Sucesso ─────────────────────────────────────────────────────────────────
+
+  it('SP-18: HTTP 200 {success:true} → {ok:true}', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    const result = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    expect(result).toEqual({ ok: true });
+  });
+
+  // ── Construção de URL e request ─────────────────────────────────────────────
+
+  it('SP-01: URL contém graphVersion e phoneNumberId SEM /register', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [calledUrl] = fetch.mock.calls[0];
+    const urlStr = calledUrl.toString();
+    expect(urlStr).toContain(`/${FAKE_VERSION}/${FAKE_PHONE_ID_SP}`);
+    expect(urlStr).not.toContain('/register');
+  });
+
+  it('SP-02: método é POST', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.method).toBe('POST');
+  });
+
+  it('SP-03: Authorization header contém o token', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN_SP}`);
+  });
+
+  it('SP-04: Content-Type é application/json', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('SP-05: body contém exatamente { pin } com valor correto', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [, options] = fetch.mock.calls[0];
+    const parsed = JSON.parse(options.body);
+    expect(parsed).toEqual({ pin: FAKE_PIN_SP });
+  });
+
+  it('SP-06: body NÃO contém messaging_product', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    const [, options] = fetch.mock.calls[0];
+    const parsed = JSON.parse(options.body);
+    expect(parsed).not.toHaveProperty('messaging_product');
+  });
+
+  // ── Validação de input — zero fetch ────────────────────────────────────────
+
+  it('SP-07: accessToken vazio → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin('', FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-08: accessToken whitespace → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin('   ', FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-09: phoneNumberId vazio → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, '', FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-10: phoneNumberId não numérico → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, 'abc-123', FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-11: PIN 5 dígitos → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '12345'))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-12: PIN 7 dígitos → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '1234567'))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-13: PIN com letras → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '12345a'))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-14: PIN com espaços → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '12 345'))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-15: PIN number (não string) → set_pin_invalid_input + zero fetch', async () => {
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, 123456))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SP-16: PIN "000000" é aceito (leading zeros válidos)', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '000000'))
+      .resolves.toEqual({ ok: true });
+  });
+
+  it('SP-17: PIN "999999" é aceito', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, '999999'))
+      .resolves.toEqual({ ok: true });
+  });
+
+  // ── Validação de resposta 2xx ───────────────────────────────────────────────
+
+  it('SP-19: HTTP 200 {success:false} → set_pin_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: false }));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_response' });
+  });
+
+  it('SP-20: HTTP 200 {} (sem success) → set_pin_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({}));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_response' });
+  });
+
+  it('SP-21: HTTP 200 null → set_pin_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse(null));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_response' });
+  });
+
+  it('SP-22: HTTP 200 array → set_pin_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse([{ success: true }]));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_response' });
+  });
+
+  it('SP-23: JSON inválido em 2xx → set_pin_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse()); // json() rejeita
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_invalid_response' });
+  });
+
+  // ── Non-2xx ─────────────────────────────────────────────────────────────────
+
+  it('SP-24: non-2xx → set_pin_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_failed' });
+  });
+
+  it('SP-25: graphStatus seguro preservado em non-2xx', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(422));
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(err.graphStatus).toBe(422);
+  });
+
+  it('SP-26: metaErrorCode preservado se numérico', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, error_subcode: 460 } }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(err.metaErrorCode).toBe(190);
+  });
+
+  it('SP-27: metaSubcode preservado se numérico', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, error_subcode: 460 } }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(err.metaSubcode).toBe(460);
+  });
+
+  it('SP-28: provider message NÃO preservado no erro', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, message: 'Sensitive provider message for set-pin' } }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain('Sensitive provider message');
+  });
+
+  it('SP-29: fbtrace_id NÃO preservado no erro', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, fbtrace_id: 'TRACE123ABC' } }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain('TRACE123ABC');
+    expect(err).not.toHaveProperty('fbtrace_id');
+  });
+
+  it('SP-30: error_data NÃO preservado no erro', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, error_data: { details: 'secret data' } } }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain('secret data');
+  });
+
+  it('SP-31: provider body NÃO preservado no erro (non-2xx)', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 190, message: 'Raw body content' }, raw: 'provider raw' }),
+    });
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain('provider raw');
+    expect(err).not.toHaveProperty('raw');
+  });
+
+  // ── Timeout / Network ────────────────────────────────────────────────────────
+
+  it('SP-32: AbortError → set_pin_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_timeout' });
+  });
+
+  it('SP-33: network failure → set_pin_network_error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP))
+      .rejects.toMatchObject({ code: 'set_pin_network_error' });
+  });
+
+  // ── Segurança — secrets não expostos ────────────────────────────────────────
+
+  it('SP-34: token não aparece no erro lançado (non-2xx)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain(FAKE_TOKEN_SP);
+  });
+
+  it('SP-35: PIN não aparece no erro lançado (non-2xx)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain(FAKE_PIN_SP);
+  });
+
+  it('SP-36: phoneNumberId não aparece no erro lançado (non-2xx)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    const err = await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain(FAKE_PHONE_ID_SP);
+  });
+
+  it('SP-37: primitive faz no máximo um fetch por chamada', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('SP-38: nenhum console.log chamado durante a primitive', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });

@@ -651,3 +651,119 @@ export async function registerPhoneNumber(accessToken, phoneNumberId, pin) {
 
   return { ok: true };
 }
+
+// =============================================================================
+// setTwoStepVerificationPin
+// =============================================================================
+
+/**
+ * Define ou altera o PIN de two-step verification de um phone_number_id
+ * já registrado na WhatsApp Cloud API.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}
+ *
+ * Payload construído INTERNAMENTE:
+ *   { pin }
+ *
+ * DIFERENÇA CRÍTICA vs registerPhoneNumber:
+ *   - NÃO inclui messaging_product no body
+ *   - NÃO exige conhecer o PIN anterior
+ *   - Funciona em números com status Connected
+ *   - Sucesso EXIGE payload { success: true } — não aceita body vazio
+ *
+ * SEGURANÇA:
+ *   - accessToken nunca logado, nunca presente em mensagem de erro
+ *   - PIN nunca logado, nunca presente em mensagem de erro
+ *   - phoneNumberId nunca logado
+ *   - URL construída internamente — sem SSRF por valor externo
+ *   - Em non-2xx: preserva SOMENTE graphStatus, metaErrorCode, metaSubcode
+ *
+ * @param {string} accessToken   Business token da instância (nunca logar)
+ * @param {string} phoneNumberId Phone Number ID da instância (numeric string)
+ * @param {string} pin           PIN de 6 dígitos exatos (nunca logar)
+ * @returns {Promise<{ ok: true }>}
+ * @throws {Error} err.code in:
+ *   set_pin_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   set_pin_failed           — HTTP não-2xx do Graph
+ *   set_pin_timeout          — AbortError / timeout expirado
+ *   set_pin_network_error    — falha de rede não-timeout
+ *   set_pin_invalid_response — HTTP 2xx mas payload ≠ { success: true }
+ */
+export async function setTwoStepVerificationPin(accessToken, phoneNumberId, pin) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+  if (typeof accessToken !== 'string' || accessToken.trim().length === 0) {
+    throw makeError('set_pin_invalid_input', 'Meta set_pin: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('set_pin_invalid_input', 'Meta set_pin: invalid input');
+  }
+
+  // PIN: exatamente 6 dígitos — mesma regex de pinCrypto.js
+  if (typeof pin !== 'string' || !/^[0-9]{6}$/.test(pin)) {
+    throw makeError('set_pin_invalid_input', 'Meta set_pin: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL construída internamente — endpoint é o phoneNumberId SEM sufixo /register
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}`);
+
+  // Payload contém SOMENTE { pin } — NÃO inclui messaging_product (diferença do /register)
+  const body = JSON.stringify({ pin });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('set_pin_timeout', 'Meta set_pin request timed out');
+    }
+    throw makeError('set_pin_network_error', 'Meta set_pin network error');
+  }
+
+  if (!res.ok) {
+    // Preservar SOMENTE campos seguros para diagnóstico — sem message, fbtrace, body raw.
+    const errObj = makeError('set_pin_failed', 'Meta set_pin failed');
+    errObj.graphStatus = res.status;
+    try {
+      const errPayload = await res.json();
+      const code    = errPayload?.error?.code;
+      const subcode = errPayload?.error?.error_subcode;
+      if (typeof code    === 'number') errObj.metaErrorCode = code;
+      if (typeof subcode === 'number') errObj.metaSubcode   = subcode;
+    } catch {
+      // Body não é JSON válido — sem dados adicionais.
+    }
+    throw errObj;
+  }
+
+  // ── Validação da resposta 2xx ──────────────────────────────────────────────
+  // O endpoint POST /{phoneNumberId} SEMPRE retorna { "success": true } em sucesso.
+  // Diferente de registerPhoneNumber, NÃO aceitamos body vazio como sucesso válido.
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('set_pin_invalid_response', 'Meta set_pin invalid response');
+  }
+
+  // Sucesso somente se payload é objeto não-array com success === true
+  if (
+    payload === null ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    payload.success !== true
+  ) {
+    throw makeError('set_pin_invalid_response', 'Meta set_pin invalid response');
+  }
+
+  return { ok: true };
+}
