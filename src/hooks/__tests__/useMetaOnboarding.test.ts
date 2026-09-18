@@ -90,6 +90,18 @@ const dispatchFinish = (wabaId = FAKE_WABA_ID, phoneId?: string) =>
 const dispatchCancel = () => dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'CANCEL' })
 const dispatchError  = () => dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'ERROR' })
 
+// ── S7.6 helpers ─────────────────────────────────────────────────────────────
+// dispatchWaStrMsg: serializa data como JSON string (simula Meta v2/mobile).
+function dispatchWaStrMsg(data: unknown, origin = 'https://www.facebook.com') {
+  window.dispatchEvent(new MessageEvent('message', { origin, data: JSON.stringify(data) }))
+}
+
+// dispatchWaRawStrMsg: despacha raw como string literal sem JSON.stringify.
+// Usar para testar JSON sintaticamente inválido (S76-05).
+function dispatchWaRawStrMsg(raw: string, origin = 'https://www.facebook.com') {
+  window.dispatchEvent(new MessageEvent('message', { origin, data: raw }))
+}
+
 // ── Setup global ──────────────────────────────────────────────────────────────
 
 let capturedLoginCb: ((r: unknown) => void) | null = null
@@ -1797,5 +1809,281 @@ describe('S7.5 — Diagnósticos de FINISH (observabilidade)', () => {
 
     // Cleanup explícito
     unmount()
+  })
+})
+
+// =============================================================================
+// S7.6 — JSON String FINISH support
+// =============================================================================
+// Cobre a normalização adicionada em parseWaEmbeddedSignup para aceitar
+// event.data como JSON string (comportamento confirmado em runtime — R2).
+//
+// Cada teste espelha um caso do parser OBJECT existente, garantindo que
+// a path JSON-string produz exatamente a mesma semântica.
+// =============================================================================
+
+describe('S7.6 — JSON String FINISH support', () => {
+  // Helper: monta hook e deixa em popup_open
+  async function inPopupOpen() {
+    const hook = await renderReady()
+    act(() => { hook.result.current.triggerPopup() })
+    expect(hook.result.current.step).toBe('popup_open')
+    return hook
+  }
+
+  // ── S76-01: FINISH string com waba_id + phone_number_id ───────────────────
+  it('S76-01: FINISH string válido (waba_id + phone_number_id) → complete com ambos os IDs', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({
+        type:  'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH',
+        data:  { waba_id: FAKE_WABA_ID, phone_number_id: FAKE_PHONE_ID },
+      })
+    })
+    // FINISH recebido — salvar wabaId; sem code ainda → step permanece popup_open
+    expect(result.current.onboardingError).toBeNull()
+
+    // Enviar code → tryComplete → completeOnboarding
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as Record<string, unknown>
+    expect(payload['waba_id']).toBe(FAKE_WABA_ID)
+    expect(payload['phone_number_id']).toBe(FAKE_PHONE_ID)
+    expect(result.current.step).toBe('idle')
+  })
+
+  // ── S76-02: FINISH string sem phone_number_id ─────────────────────────────
+  it('S76-02: FINISH string com waba_id sem phone_number_id → complete sem phoneId', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({
+        type:  'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH',
+        data:  { waba_id: FAKE_WABA_ID },
+      })
+    })
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(metaWhatsAppApi.completeOnboarding).mock.calls[0][0] as Record<string, unknown>
+    expect(payload['waba_id']).toBe(FAKE_WABA_ID)
+    expect(payload['phone_number_id']).toBeUndefined()
+    expect(result.current.step).toBe('idle')
+  })
+
+  // ── S76-03: CANCEL string → mesma semântica object ────────────────────────
+  it('S76-03: CANCEL string → fluxo encerrado (mesmo comportamento object)', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'CANCEL' })
+    })
+
+    expect(result.current.step).not.toBe('popup_open')
+    expect(result.current.step).not.toBe('completing')
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-04: ERROR string → mesma semântica object ─────────────────────────
+  it('S76-04: ERROR string → onboardingError setado + retry', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'ERROR' })
+    })
+
+    expect(result.current.step).not.toBe('popup_open')
+    expect(result.current.step).not.toBe('completing')
+    // 1 (mount) + 1 (retry pós-ERROR)
+    expect(metaWhatsAppApi.startOnboarding).toHaveBeenCalledTimes(2)
+  })
+
+  // ── S76-05: JSON sintaticamente inválido → IGNORE ─────────────────────────
+  // Usa dispatchWaRawStrMsg para garantir string sintaticamente inválida real.
+  it('S76-05: raw string JSON inválido → IGNORE, sem throw, sem complete', async () => {
+    const { result } = await inPopupOpen()
+
+    // String com JSON inválido — NÃO gerada por JSON.stringify
+    await act(async () => { dispatchWaRawStrMsg('{ broken json {{{') })
+
+    expect(result.current.step).toBe('popup_open')
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-06: JSON "null" → IGNORE ─────────────────────────────────────────
+  it('S76-06: string JSON null → IGNORE', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => { dispatchWaRawStrMsg('null') })
+
+    expect(result.current.step).toBe('popup_open')
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-07: JSON array → IGNORE ──────────────────────────────────────────
+  it('S76-07: string JSON array → IGNORE', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg([{ type: 'WA_EMBEDDED_SIGNUP', event: 'CANCEL' }])
+    })
+
+    expect(result.current.step).toBe('popup_open')
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-08: JSON primitivo → IGNORE ──────────────────────────────────────
+  it('S76-08: string JSON primitivo (número) → IGNORE', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => { dispatchWaRawStrMsg('42') })
+
+    expect(result.current.step).toBe('popup_open')
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-09: type incorreto → IGNORE ──────────────────────────────────────
+  it('S76-09: string com type incorreto → IGNORE, step permanece popup_open', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({ type: 'OTHER_SIGNUP_TYPE', event: 'CANCEL' })
+    })
+
+    expect(result.current.step).toBe('popup_open')
+  })
+
+  // ── S76-10: FINISH string sem waba_id → fail-closed ──────────────────────
+  it('S76-10: FINISH string sem waba_id → ERROR (fail-closed, mesmo que object)', async () => {
+    const { result } = await inPopupOpen()
+
+    await act(async () => {
+      dispatchWaStrMsg({
+        type:  'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH',
+        data:  {},       // waba_id ausente → typeof undefined !== 'string' → ERROR
+      })
+    })
+
+    expect(result.current.step).not.toBe('popup_open')
+    expect(metaWhatsAppApi.startOnboarding).toHaveBeenCalledTimes(2)
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── S76-11: FINISH string → code → complete 1x ───────────────────────────
+  it('S76-11: FINISH string → code → completeOnboarding exatamente 1 vez', async () => {
+    await inPopupOpen()
+
+    // FINISH string chega primeiro
+    await act(async () => {
+      dispatchWaStrMsg({
+        type:  'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH',
+        data:  { waba_id: FAKE_WABA_ID, phone_number_id: FAKE_PHONE_ID },
+      })
+    })
+
+    // Code chega depois
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── S76-12: code → FINISH string antes de F3 ─────────────────────────────
+  it('S76-12: code → FINISH string dentro de 5s → F3 cancelado, complete 1x', async () => {
+    vi.useFakeTimers()
+    try {
+      await inPopupOpen()
+
+      // Code chega primeiro → scheduleDiscoveryFallback agendado
+      await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+      // FINISH string chega dentro de 5s → cancela F3
+      await act(async () => {
+        dispatchWaStrMsg({
+          type:  'WA_EMBEDDED_SIGNUP',
+          event: 'FINISH',
+          data:  { waba_id: FAKE_WABA_ID },
+        })
+      })
+      await act(async () => {})
+
+      // Avançar além de FINISH_GRACE_MS — F3 não deve disparar (cancelado)
+      await act(async () => { vi.advanceTimersByTime(6_000) })
+      await act(async () => {})
+
+      expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // ── S76-13: FINISH object + FINISH string duplicados → complete 1x ────────
+  it('S76-13: FINISH object + FINISH string duplicados → completeOnboarding 1 vez', async () => {
+    await inPopupOpen()
+
+    // FINISH object chega primeiro — listener instalado antes do FB.login
+    await act(async () => { dispatchFinish(FAKE_WABA_ID, FAKE_PHONE_ID) })
+
+    // FINISH string chega depois — listener já removido pelo FINISH object
+    await act(async () => {
+      dispatchWaStrMsg({
+        type:  'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH',
+        data:  { waba_id: FAKE_WABA_ID, phone_number_id: FAKE_PHONE_ID },
+      })
+    })
+
+    // Code
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    await act(async () => {})
+
+    expect(metaWhatsAppApi.completeOnboarding).toHaveBeenCalledTimes(1)
+  })
+
+  // ── S76-14: FINISH string depois de F3 adquirir lock ─────────────────────
+  it('S76-14: FINISH string depois de F3 adquirir lock → não inicia segundo complete', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT)
+      const { unmount } = await renderReady()
+      act(() => { renderHook(() => useMetaOnboarding({ enabled: true })) })
+
+      // Montar hook e ir para popup_open
+      const hook = renderHook(() => useMetaOnboarding({ enabled: true }))
+      await act(async () => {})
+      act(() => { hook.result.current.triggerPopup() })
+
+      // Code sem FINISH → scheduleDiscoveryFallback
+      await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+
+      // F3 dispara → lock adquirido → completeOnboarding em voo
+      await act(async () => { vi.advanceTimersByTime(5_100) })
+      await act(async () => {})
+
+      vi.mocked(metaWhatsAppApi.completeOnboarding).mockClear()
+
+      // FINISH string tardio — isCompletingRef=true bloqueia segundo complete
+      await act(async () => {
+        dispatchWaStrMsg({
+          type:  'WA_EMBEDDED_SIGNUP',
+          event: 'FINISH',
+          data:  { waba_id: FAKE_WABA_ID },
+        })
+      })
+
+      expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+      unmount()
+      hook.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

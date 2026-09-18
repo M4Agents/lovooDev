@@ -81,8 +81,34 @@ export interface UseMetaOnboardingResult {
 
 function parseWaEmbeddedSignup(event: MessageEvent): WaEventResult {
   if (event.origin !== ACCEPTED_ORIGIN)                        return { kind: 'IGNORE' }
-  const raw = event.data as Record<string, unknown> | null | undefined
-  if (typeof raw !== 'object' || raw === null)                  return { kind: 'IGNORE' }
+
+  // ── S7.6: Normalização de event.data (object | JSON string) ──────────────
+  // Meta pode enviar event.data como object (v4+) ou como JSON string (v2/mobile).
+  // A origin já foi validada — a normalização não relaxa nenhuma validação funcional.
+  // Regras fail-closed:
+  //   object não-array não-null → usar diretamente
+  //   string → JSON.parse em try/catch
+  //             resultado: precisa ser object, non-null, non-array → usar
+  //             qualquer outro resultado → IGNORE
+  //   qualquer outro tipo → IGNORE
+  let raw: Record<string, unknown>
+  if (typeof event.data === 'object' && event.data !== null && !Array.isArray(event.data)) {
+    raw = event.data as Record<string, unknown>
+  } else if (typeof event.data === 'string') {
+    try {
+      const _parsed: unknown = JSON.parse(event.data)
+      if (typeof _parsed !== 'object' || _parsed === null || Array.isArray(_parsed)) {
+        return { kind: 'IGNORE' }
+      }
+      raw = _parsed as Record<string, unknown>
+    } catch {
+      return { kind: 'IGNORE' }           // JSON sintaticamente inválido
+    }
+  } else {
+    return { kind: 'IGNORE' }             // número, boolean, undefined, etc.
+  }
+  // ── fim S7.6 ──────────────────────────────────────────────────────────────
+
   if (raw['type'] !== 'WA_EMBEDDED_SIGNUP')                    return { kind: 'IGNORE' }
 
   const evt = raw['event']
