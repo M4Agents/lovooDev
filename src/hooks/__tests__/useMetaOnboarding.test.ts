@@ -10,7 +10,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, cleanup } from '@testing-library/react'
 import React from 'react'
 import { useMetaOnboarding } from '../useMetaOnboarding'
 import type { UseMetaOnboardingResult } from '../useMetaOnboarding'
@@ -115,9 +115,25 @@ beforeEach(() => {
   }
 })
 
-afterEach(() => {
+afterEach(async () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   delete (window as any).FB
+  // ── S7.5 ROOT-CAUSE FIX: flush React 18 passive effects ──────────────
+  // Contexto: Vitest executa afterEach em ordem LIFO — este hook roda ANTES
+  // do afterEach(cleanup) global registrado pelo RTL (que o importa antes).
+  //
+  // Problema: RTL cleanup() usa act() SÍNCRONO internamente. No React 18,
+  // act() síncrono NÃO garante flush de useEffect cleanups (passive effects).
+  // Estes são agendados via React scheduler (MessageChannel) e só são
+  // flushed com await act() assíncrono.
+  //
+  // Solução: chamar cleanup() explicitamente aqui (remove do tracking do RTL),
+  // depois await act() para flushar os passive effects agendados. O afterEach
+  // do RTL então encontra o set vazio e vira no-op.
+  //
+  // Cobre: F3 tests, H16 e qualquer teste que instale installLateDiagListener.
+  cleanup()
+  await act(async () => {})
 })
 
 // Montar o hook e aguardar estado ready
@@ -1547,5 +1563,239 @@ describe('S7 — WABA selection flow', () => {
       FAKE_CONTINUATION_TOKEN,
       7,   // option.index real — não a posição 1
     )
+  })
+})
+
+// =============================================================================
+// S7.5 — Diagnósticos de FINISH event (observabilidade apenas)
+// =============================================================================
+// Estes testes cobrem os blocos de diagnóstico temporário:
+//   [meta-finish-diag]      — payload object (existente — verificar preservação)
+//   [meta-finish-diag-str]  — payload JSON string (R2)
+//   [meta-finish-diag-late] — FINISH após F3 adquirir lock (R4)
+//
+// NENHUM destes testes verifica chamadas a completeOnboarding por vias novas.
+// O comportamento FUNCIONAL permanece idêntico ao descrito nos testes anteriores.
+// =============================================================================
+
+describe('S7.5 — Diagnósticos de FINISH (observabilidade)', () => {
+  // Espelha as constantes internas do hook
+  const FINISH_GRACE_MS = 5_000
+  const LATE_DIAG_MS    = 10_000
+
+  let logSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    logSpy.mockRestore()
+    vi.useRealTimers()
+  })
+
+  // Helper: monta hook + abre popup
+  async function setupWithPopup() {
+    const hookResult = renderHook(() => useMetaOnboarding({ enabled: true }))
+    await act(async () => {})
+    act(() => { hookResult.result.current.triggerPopup() })
+    await act(async () => {})
+    return hookResult
+  }
+
+  // Helper: envia code sem wabaId (→ scheduleDiscoveryFallback) e dispara F3.
+  // Usa dois avanços separados (padrão dos testes F3 existentes que passam).
+  async function sendCodeAndFireF3() {
+    await act(async () => { capturedLoginCb?.({ authResponse: { code: FAKE_CODE } }) })
+    // Dois avanços separados → padrão correto para vitest fake timers + act
+    await act(async () => { vi.advanceTimersByTime(FINISH_GRACE_MS - 1) })
+    await act(async () => { vi.advanceTimersByTime(2) })   // dispara F3 → installLateDiagListener
+    await act(async () => {})                               // flush completeOnboarding
+  }
+
+  // ── D1: diagnóstico object preservado ──────────────────────────────────────
+  it('D1: FINISH como object → [meta-finish-diag] logado (comportamento preservado)', async () => {
+    await setupWithPopup()
+
+    // Listener funcional ativo — dispatchar FINISH direto (sem act: só console.log)
+    dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: FAKE_WABA_ID } })
+
+    const diagCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag]')
+    expect(diagCall).toBeDefined()
+    const payload = diagCall![1] as Record<string, unknown>
+    expect(payload.origin).toBe('https://www.facebook.com')
+    expect(payload.type).toBe('WA_EMBEDDED_SIGNUP')
+    expect(payload.event).toBe('FINISH')
+    // Somente estes 3 campos — nenhum conteúdo de data
+    expect(Object.keys(payload).sort()).toEqual(['event', 'origin', 'type'])
+  })
+
+  // ── D2: JSON string WA_EMBEDDED_SIGNUP → [meta-finish-diag-str] ───────────
+  it('D2: FINISH como JSON string → [meta-finish-diag-str] logado, completeOnboarding NÃO chamado', async () => {
+    await setupWithPopup()
+
+    const strPayload = JSON.stringify({
+      type:  'WA_EMBEDDED_SIGNUP',
+      event: 'FINISH',
+      data:  { waba_id: FAKE_WABA_ID, phone_number_id: FAKE_PHONE_ID },
+    })
+
+    // Dispatch com data como string — NÃO processado pelo parser funcional
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: 'https://www.facebook.com',
+      data:   strPayload,
+    }))
+
+    // [meta-finish-diag-str] deve aparecer
+    const strDiagCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag-str]')
+    expect(strDiagCall).toBeDefined()
+    const strPayloadLogged = strDiagCall![1] as Record<string, unknown>
+    expect(strPayloadLogged.origin).toBe('https://www.facebook.com')
+    expect(strPayloadLogged.type).toBe('WA_EMBEDDED_SIGNUP')
+    expect(strPayloadLogged.event).toBe('FINISH')
+    expect(Object.keys(strPayloadLogged).sort()).toEqual(['event', 'origin', 'type'])
+
+    // completeOnboarding NÃO chamado — parser funcional não processa string
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  // ── D3: JSON string inválido → sem throw, sem log de conteúdo ──────────────
+  it('D3: string inválida (não JSON) → não lança, não loga conteúdo', async () => {
+    await setupWithPopup()
+
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: 'https://www.facebook.com',
+      data:   '{ broken json {{{}',
+    }))
+
+    // Nenhum log de diagnóstico WA deve aparecer
+    const anyWaDiag = logSpy.mock.calls.find(
+      args => typeof args[0] === 'string' && (args[0] as string).startsWith('[meta-finish-diag')
+    )
+    expect(anyWaDiag).toBeUndefined()
+    // Nenhuma exceção (vitest captura throws não tratados)
+  })
+
+  // ── D4: string com IDs → log nunca contém IDs ─────────────────────────────
+  it('D4: JSON string WA com IDs sensíveis → log [meta-finish-diag-str] não contém IDs', async () => {
+    const sensitiveWabaId  = '999888777000111'
+    const sensitivePhoneId = '111000777888999'
+
+    await setupWithPopup()
+
+    const strPayload = JSON.stringify({
+      type:  'WA_EMBEDDED_SIGNUP',
+      event: 'FINISH',
+      data:  { waba_id: sensitiveWabaId, phone_number_id: sensitivePhoneId },
+    })
+
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: 'https://www.facebook.com',
+      data:   strPayload,
+    }))
+
+    const serialized = JSON.stringify(logSpy.mock.calls)
+    expect(serialized).not.toContain(sensitiveWabaId)
+    expect(serialized).not.toContain(sensitivePhoneId)
+  })
+
+  // ── D5: FINISH após F3 → [meta-finish-diag-late] logado, sem segundo POST ──
+  it('D5: FINISH chega após F3 adquirir lock → [meta-finish-diag-late] logado, zero segundo complete', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT)
+    // Capturar unmount para garantir cleanup explícito dentro do contexto do teste
+    // (evitar que listener residual interfira nos testes seguintes)
+    const { unmount } = await setupWithPopup()
+    await sendCodeAndFireF3()
+
+    // F3 completou — zerar contagem para detectar apenas chamadas tardias
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockClear()
+
+    // FINISH tardio: listener funcional já removido pelo F3, late listener ativo
+    dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: FAKE_WABA_ID } })
+
+    // [meta-finish-diag-late] deve ter sido logado
+    const lateCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag-late]')
+    expect(lateCall).toBeDefined()
+    const latePayload = lateCall![1] as Record<string, unknown>
+    expect(latePayload.origin).toBe('https://www.facebook.com')
+    expect(latePayload.payloadType).toBe('object')
+    expect(latePayload.type).toBe('WA_EMBEDDED_SIGNUP')
+    expect(latePayload.event).toBe('FINISH')
+
+    // Nenhum segundo completeOnboarding
+    expect(metaWhatsAppApi.completeOnboarding).not.toHaveBeenCalled()
+
+    // Cleanup explícito dentro do contexto do teste (fake timers ainda ativos).
+    // await act(async () => {}) após unmount() força o flush das passive effects
+    // diferidas do React 18 (useEffect cleanup), garantindo que
+    // removeLateDiagListener() já rodou antes de D6 começar.
+    unmount()
+    await act(async () => {})
+  })
+
+  // ── D6: listener tardio desativado em unmount ─────────────────────────────
+  // Verifica que unmount → cleanup → removeLateDiagListener define active=false,
+  // bloqueando o log mesmo que o removeEventListener não seja síncrono em JSDOM.
+  it('D6: unmount durante janela diagnóstica tardia → active=false, sem log após unmount', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT)
+    const { unmount } = await setupWithPopup()
+    await sendCodeAndFireF3()
+
+    // Unmount → cleanup → lateDiagActiveRef.current = false.
+    // await act(async () => {}) força flush das passive effects do React 18
+    // para que removeLateDiagListener() rode antes do dispatch abaixo.
+    unmount()
+    await act(async () => {})
+    logSpy.mockClear()
+
+    // Dispatch síncrono — não precisa de act (só console.log, sem state React)
+    dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: FAKE_WABA_ID } })
+
+    const lateCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag-late]')
+    expect(lateCall).toBeUndefined()
+  })
+
+  // ── D7: listener tardio desativado em company change ─────────────────────
+  it('D7: company change durante janela → active=false, sem log tardio', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT)
+    const { rerender } = await setupWithPopup()
+    await sendCodeAndFireF3()
+
+    // Company change → dep change → cleanup → lateDiagActiveRef.current = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useCompany).mockReturnValue({ company: COMPANY_B } as any)
+    rerender()
+    await act(async () => {})   // flush cleanup + novo effect
+    logSpy.mockClear()
+
+    // Dispatch síncrono — active=false bloqueia o log
+    dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: FAKE_WABA_ID } })
+
+    const lateCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag-late]')
+    expect(lateCall).toBeUndefined()
+  })
+
+  // ── D8: listener tardio desativado após LATE_DIAG_MS ─────────────────────
+  // Dois avanços separados espelham o padrão dos testes F3 existentes.
+  it('D8: janela LATE_DIAG_MS expirada → active=false, sem log tardio', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValue(FAKE_CONNECTED_RESULT)
+    const { unmount } = await setupWithPopup()
+    await sendCodeAndFireF3()
+
+    // Avançar além da janela — timer auto-remove dispara → active=false
+    await act(async () => { vi.advanceTimersByTime(LATE_DIAG_MS - 1) })
+    await act(async () => { vi.advanceTimersByTime(2) })   // dispara timer de auto-remoção
+    await act(async () => {})
+    logSpy.mockClear()
+
+    // Dispatch síncrono — active=false bloqueia o log
+    dispatchWaMsg({ type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: FAKE_WABA_ID } })
+
+    const lateCall = logSpy.mock.calls.find(args => args[0] === '[meta-finish-diag-late]')
+    expect(lateCall).toBeUndefined()
+
+    // Cleanup explícito
+    unmount()
   })
 })

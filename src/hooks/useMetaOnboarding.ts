@@ -28,6 +28,7 @@ const ACCEPTED_ORIGIN    = 'https://www.facebook.com' as const
 const META_ID_RE         = /^[0-9]+$/     // idêntica a complete.js
 const RENEW_THRESHOLD_MS = 60_000         // renovar sessão 60 s antes de expirar
 const FINISH_GRACE_MS    = 5_000          // janela conservadora de espera pelo evento FINISH
+const LATE_DIAG_MS       = 10_000         // janela do listener diagnóstico tardio (após F3)
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -150,6 +151,19 @@ export function useMetaOnboarding(
   const selectionTokenRef   = useRef<string | null>(null)
   const selectionOptionsRef = useRef<MetaWabaSelectionOption[] | null>(null)
   const isSelectingRef      = useRef(false)   // lock anti-double-select
+
+  // Refs S7.5 — listener diagnóstico tardio (R4: FINISH após F3)
+  // Separado do listener funcional — somente console.log, sem efeito no fluxo.
+  //
+  // Lifecycle per-instance via useRef:
+  //   lateDiagActiveRef:   guarda booleana imediata (set false em removeLateDiagListener)
+  //   lateDiagListenerRef: função registrada em window (para removeEventListener direto)
+  //   lateDiagTimerRef:    ID do timer de auto-remoção (para clearTimeout)
+  //
+  // Não há mutable state module-level: cada instância gerencia seu próprio lifecycle.
+  const lateDiagActiveRef   = useRef(false)
+  const lateDiagListenerRef = useRef<((e: MessageEvent) => void) | null>(null)
+  const lateDiagTimerRef    = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   /**
    * Ref estável de enabled — closures assíncronas consultam sem re-capturar.
    * Sincronizado durante o render (não via effect) para eliminar a janela
@@ -184,6 +198,85 @@ export function useMetaOnboarding(
     recoveryTimerRef.current = undefined
   }
 
+  // ── Helpers de diagnóstico tardio (S7.5) ────────────────────────────────
+  // Puramente observabilidade — nenhuma interação com fluxo funcional.
+
+  // Remove o listener diagnóstico tardio ativo (se houver).
+  // lateDiagActiveRef.current = false é a guarda imediata (per-instance).
+  // removeEventListener remove o listener fisicamente da window.
+  function removeLateDiagListener(): void {
+    lateDiagActiveRef.current = false                     // guarda imediata per-instance
+    if (lateDiagListenerRef.current) {
+      window.removeEventListener('message', lateDiagListenerRef.current)
+      lateDiagListenerRef.current = null
+    }
+    clearTimeout(lateDiagTimerRef.current)
+    lateDiagTimerRef.current = undefined
+  }
+
+  // Instala um listener diagnóstico separado por LATE_DIAG_MS após F3 adquirir o lock.
+  // Detecta FINISH tardio (R4) sem interferir no fluxo funcional.
+  // Log seguro: somente origin, payloadType, type e event. Nunca data, IDs ou tokens.
+  //
+  // Lifecycle per-instance: removeLateDiagListener() seta lateDiagActiveRef.current = false
+  // e remove o listener da window diretamente. Cada instância do hook gerencia seus
+  // próprios refs — sem mutable state compartilhado entre instâncias.
+  function installLateDiagListener(): void {
+    removeLateDiagListener()                  // limpa listener anterior desta instância
+    lateDiagActiveRef.current = true          // ativa guarda per-instance
+
+    const diagListener = (event: MessageEvent): void => {
+      // Guarda per-instance — desativada imediatamente por removeLateDiagListener()
+      if (!lateDiagActiveRef.current) return
+
+      // Extrair type/event do payload sem logar conteúdo de data.
+      let _payloadType: 'object' | 'string' | null = null
+      let _dt: unknown
+      let _de: unknown
+
+      if (typeof event.data === 'object' && event.data !== null) {
+        _payloadType = 'object'
+        _dt = (event.data as Record<string, unknown>)['type']
+        _de = (event.data as Record<string, unknown>)['event']
+      } else if (typeof event.data === 'string') {
+        try {
+          const _p = JSON.parse(event.data) as Record<string, unknown>
+          if (typeof _p === 'object' && _p !== null) {
+            _payloadType = 'string'
+            _dt = _p['type']
+            _de = _p['event']
+          }
+        } catch { /* JSON inválido — ignorar */ }
+      }
+
+      if (_payloadType === null) return   // payload não reconhecível — ignorar
+
+      // Filtro: somente WA_EMBEDDED_SIGNUP ou origins Facebook
+      const _originStr = String(event.origin)
+      if (
+        _dt !== 'WA_EMBEDDED_SIGNUP' &&
+        !_originStr.includes('facebook') &&
+        !_originStr.includes('fb.com')
+      ) return
+
+      // Log seguro — somente metadados do envelope, nunca conteúdo de data
+      console.log('[meta-finish-diag-late]', {
+        origin:      event.origin,
+        payloadType: _payloadType,
+        type:        _dt,
+        event:       _de,
+      })
+    }
+
+    lateDiagListenerRef.current = diagListener
+    window.addEventListener('message', diagListener)
+
+    // Auto-remoção após LATE_DIAG_MS — seta active=false e remove listener da window
+    lateDiagTimerRef.current = setTimeout(() => {
+      removeLateDiagListener()
+    }, LATE_DIAG_MS)
+  }
+
   // Helper centralizado para limpar todo o estado de seleção S7.
   // Manter selectionTokenRef e selectionOptionsRef sincronizados com state aqui.
   // Token mantido SOMENTE em memória — nunca persistir.
@@ -203,6 +296,7 @@ export function useMetaOnboarding(
 
     clearRecoveryTimer()    // defensivo — nova sessão descarta qualquer fallback pendente
     clearExpiryTimer()
+    removeLateDiagListener()  // defensivo — nova sessão encerra janela diagnóstica tardia
     clearSelectionState()   // limpar seleção pendente antes de iniciar nova sessão
     sessionRef.current      = null
     pendingRef.current      = {}
@@ -372,6 +466,10 @@ export function useMetaOnboarding(
     recoveryTimerRef.current = setTimeout(() => {
       if (myGen !== flowGenRef.current) return   // gen guard
       if (isCompletingRef.current) return        // já completando
+      // S7.5: instalar listener diagnóstico tardio ANTES de tryComplete remover o
+      // funcional — detecta R4 (FINISH chega após F3 adquirir lock).
+      // Puramente observabilidade — nenhum efeito no fluxo funcional.
+      installLateDiagListener()
       tryComplete(myGen, { allowDiscovery: true })
     }, FINISH_GRACE_MS)
   }
@@ -402,6 +500,7 @@ export function useMetaOnboarding(
       removeMessageListener()
       clearRecoveryTimer()
       clearExpiryTimer()
+      removeLateDiagListener()   // encerrar listener diagnóstico tardio se ativo
       // Limpar selection state: token fica somente em memória — sem persistência
       selectionTokenRef.current   = null
       selectionOptionsRef.current = null
@@ -439,6 +538,22 @@ export function useMetaOnboarding(
         if (_dt === 'WA_EMBEDDED_SIGNUP' || String(event.origin).includes('facebook') || String(event.origin).includes('fb.com')) {
           console.log('[meta-finish-diag]', { origin: event.origin, type: _dt, event: _de })
         }
+      } else if (typeof event.data === 'string') {
+        // #region diag-finish-str — R2: detecta payload WA enviado como JSON string
+        // Embedded Signup v2 enviava data como string; v4 envia como object.
+        // NÃO passa ao parser funcional — somente diagnóstico.
+        // NÃO loga o string original nem parsed.data (pode conter waba_id, phone_number_id).
+        try {
+          const _parsed = JSON.parse(event.data) as Record<string, unknown>
+          if (typeof _parsed === 'object' && _parsed !== null) {
+            const _dt = _parsed['type']
+            const _de = _parsed['event']
+            if (_dt === 'WA_EMBEDDED_SIGNUP' || String(event.origin).includes('facebook') || String(event.origin).includes('fb.com')) {
+              console.log('[meta-finish-diag-str]', { origin: event.origin, type: _dt, event: _de })
+            }
+          }
+        } catch { /* JSON inválido — ignorar silenciosamente */ }
+        // #endregion diag-finish-str
       }
       // #endregion diag-finish
 
@@ -538,6 +653,7 @@ export function useMetaOnboarding(
     removeMessageListener()
     clearRecoveryTimer()
     clearExpiryTimer()
+    removeLateDiagListener()   // encerrar listener diagnóstico tardio se ativo
     clearSelectionState()
     sessionRef.current      = null
     pendingRef.current      = {}
