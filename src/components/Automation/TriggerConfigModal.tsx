@@ -48,26 +48,16 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
     fetch(`/api/activity-types?company_id=${company.id}`)
       .then(res => res.json())
       .then((data: CustomActivityType[]) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:fetchActivityTypes',message:'activity types fetched',data:{count:Array.isArray(data)?data.length:null,types:Array.isArray(data)?data.map(t=>({id:t.id,name:t.name,is_system:t.is_system})):data},timestamp:Date.now()})}).catch(()=>{})
-        // #endregion
         if (Array.isArray(data) && data.length > 0) {
           setActivityTypes(data)
         }
       })
-      .catch((err) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:fetchActivityTypes',message:'fetch error',data:{error:String(err)},timestamp:Date.now()})}).catch(()=>{})
-        // #endregion
-      })
+      .catch(() => {})
   }, [isOpen, trigger?.type, company?.id])
 
   if (!isOpen || !trigger) return null
 
   const handleSave = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:handleSave',message:'trigger config saved',data:{triggerId:trigger.id,triggerType:trigger.type,config},timestamp:Date.now()})}).catch(()=>{})
-    // #endregion
     onSave(trigger.id, config)
     onClose()
   }
@@ -775,9 +765,6 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
       case 'calendar.activity_due_soon':
         return (
           <div className="space-y-4">
-            {/* #region agent log */}
-            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:due_soon',message:'due_soon form rendered',data:{minutes_before:config.minutes_before,activity_type:config.activity_type,priority:config.priority,activityTypesCount:activityTypes.length},timestamp:Date.now()})}).catch(()=>{}); return null })()}
-            {/* #endregion */}
 
             {/* ANTECEDÊNCIA */}
             <div>
@@ -870,9 +857,6 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
       case 'calendar.activity_overdue':
         return (
           <div className="space-y-4">
-            {/* #region agent log */}
-            {(() => { fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2e0608'},body:JSON.stringify({sessionId:'2e0608',location:'TriggerConfigModal.tsx:overdue',message:'overdue form rendered',data:{minutes_after:config.minutes_after,activity_type:config.activity_type,priority:config.priority,activityTypesCount:activityTypes.length},timestamp:Date.now()})}).catch(()=>{}); return null })()}
-            {/* #endregion */}
 
             {/* TEMPO APÓS O HORÁRIO */}
             <div>
