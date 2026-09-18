@@ -541,3 +541,113 @@ export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
 
   return { messageId };
 }
+
+// =============================================================================
+// registerPhoneNumber
+// =============================================================================
+
+/**
+ * Registra um phone_number_id na WhatsApp Cloud API.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}/register
+ *
+ * Payload construído INTERNAMENTE:
+ *   { messaging_product: "whatsapp", pin }
+ *
+ * SEGURANÇA:
+ *   - accessToken nunca logado, nunca presente em mensagem de erro
+ *   - PIN nunca logado, nunca presente em mensagem de erro
+ *   - phoneNumberId nunca logado
+ *   - URL construída internamente — sem SSRF por valor externo
+ *   - Em non-2xx: preserva SOMENTE graphStatus, metaErrorCode, metaSubcode
+ *     (campos numéricos seguros para diagnóstico — sem message, fbtrace, body)
+ *
+ * @param {string} accessToken   Business token da instância (nunca logar)
+ * @param {string} phoneNumberId Phone Number ID da instância (numeric string)
+ * @param {string} pin           PIN de 6 dígitos exatos (nunca logar)
+ * @returns {Promise<{ ok: true }>}
+ * @throws {Error} err.code in:
+ *   register_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   register_failed           — HTTP não-2xx do Graph
+ *   register_timeout          — AbortError / timeout expirado
+ *   register_network_error    — falha de rede não-timeout
+ *   register_invalid_response — HTTP 2xx mas response semanticamente inválida
+ */
+export async function registerPhoneNumber(accessToken, phoneNumberId, pin) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    throw makeError('register_invalid_input', 'Meta register: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('register_invalid_input', 'Meta register: invalid input');
+  }
+
+  // PIN: exatamente 6 dígitos — mesma regex de pinCrypto.js
+  if (typeof pin !== 'string' || !/^[0-9]{6}$/.test(pin)) {
+    throw makeError('register_invalid_input', 'Meta register: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL construída internamente — nunca usa valor externo como base de URL
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}/register`);
+
+  // Payload construído internamente
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    pin,
+  });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('register_timeout', 'Meta register request timed out');
+    }
+    throw makeError('register_network_error', 'Meta register network error');
+  }
+
+  if (!res.ok) {
+    // Preservar SOMENTE campos seguros para diagnóstico — sem message, fbtrace, body raw.
+    // Leitura do body tentada em best-effort: falha silenciosa (body pode não ser JSON).
+    const errObj = makeError('register_failed', 'Meta register failed');
+    errObj.graphStatus = res.status;
+    try {
+      const errPayload = await res.json();
+      const code    = errPayload?.error?.code;
+      const subcode = errPayload?.error?.error_subcode;
+      if (typeof code    === 'number') errObj.metaErrorCode = code;
+      if (typeof subcode === 'number') errObj.metaSubcode   = subcode;
+    } catch {
+      // Body não é JSON válido — sem dados adicionais. Não falhar por isso.
+    }
+    throw errObj;
+  }
+
+  // ── Validação da resposta 2xx ──────────────────────────────────────────────
+  // A Graph API retorna { success: true } para registration bem-sucedido.
+  // Aceitar também resposta sem body (201 sem conteúdo) como sucesso válido.
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    // Corpo ausente ou não-JSON em 2xx — aceitar como sucesso (alguns 201 são empty)
+    return { ok: true };
+  }
+
+  // Se há body JSON, verificar que não indica falha explícita (success: false).
+  if (payload !== null && typeof payload === 'object' && payload.success === false) {
+    throw makeError('register_invalid_response', 'Meta register invalid response');
+  }
+
+  return { ok: true };
+}

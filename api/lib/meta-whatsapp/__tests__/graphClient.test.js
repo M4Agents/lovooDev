@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -1264,5 +1264,238 @@ describe('sendTextMessage', () => {
     fetch.mockResolvedValue(makeJsonErrorResponse());
     await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
       .rejects.toMatchObject({ code: 'send_invalid_response' });
+  });
+});
+
+// =============================================================================
+// registerPhoneNumber
+// =============================================================================
+
+const FAKE_PHONE_NUMBER_ID_REG = '1906385232743451';
+const FAKE_PIN = '042731';
+
+describe('registerPhoneNumber', () => {
+
+  // ── Sucesso ─────────────────────────────────────────────────────────────────
+
+  it('TC-R01: 200 com {success:true} → { ok: true }', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    const result = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('TC-R02: 200 com body vazio (JSON parse falha) → { ok: true } — aceita 201 empty', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse()); // json() rejeita
+    // makeJsonErrorResponse usa ok:true, então JSON parse error em 2xx → { ok: true }
+    const result = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('TC-R03: 200 com {success:false} → register_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: false }));
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_invalid_response' });
+  });
+
+  // ── Construção de URL e request ─────────────────────────────────────────────
+
+  it('TC-R04: URL inclui graphVersion e phoneNumberId', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [calledUrl] = fetch.mock.calls[0];
+    expect(calledUrl.toString()).toContain(`/${FAKE_VERSION}/${FAKE_PHONE_NUMBER_ID_REG}/register`);
+  });
+
+  it('TC-R05: method é POST', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.method).toBe('POST');
+  });
+
+  it('TC-R06: Authorization header contém o token', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+  });
+
+  it('TC-R07: Content-Type é application/json', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('TC-R08: body contém exatamente messaging_product e pin', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [, options] = fetch.mock.calls[0];
+    const parsedBody = JSON.parse(options.body);
+    expect(parsedBody).toEqual({ messaging_product: 'whatsapp', pin: FAKE_PIN });
+  });
+
+  it('TC-R09: body não contém campos extras', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN);
+    const [, options] = fetch.mock.calls[0];
+    const parsedBody = JSON.parse(options.body);
+    expect(Object.keys(parsedBody)).toEqual(['messaging_product', 'pin']);
+  });
+
+  // ── Validação de input — sem fetch ──────────────────────────────────────────
+
+  it('TC-R10: accessToken vazio → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber('', FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R11: accessToken non-string → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(null, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R12: phoneNumberId com letras → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, 'abc123', FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R13: phoneNumberId vazio → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, '', FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R14: PIN com 5 dígitos → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, '12345'))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R15: PIN com 7 dígitos → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, '1234567'))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R16: PIN com letras → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, '12345a'))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R17: PIN vazio → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, ''))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R18: PIN non-string → register_invalid_input, zero fetch', async () => {
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, 123456))
+      .rejects.toMatchObject({ code: 'register_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-R19: "000000" é aceito como PIN válido', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ success: true }));
+    const result = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, '000000');
+    expect(result).toEqual({ ok: true });
+  });
+
+  // ── Erros de rede ────────────────────────────────────────────────────────────
+
+  it('TC-R20: AbortError → register_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_timeout' });
+  });
+
+  it('TC-R21: erro de rede genérico → register_network_error', async () => {
+    fetch.mockRejectedValue(new Error('Network failure'));
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_network_error' });
+  });
+
+  // ── Erros Graph non-2xx — captura segura ────────────────────────────────────
+
+  it('TC-R22: Graph 400 → register_failed com graphStatus=400', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 131009, error_subcode: 2494010, message: 'PIN required' } }),
+    });
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_failed', graphStatus: 400, metaErrorCode: 131009, metaSubcode: 2494010 });
+  });
+
+  it('TC-R23: Graph 401 → register_failed com graphStatus=401', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 401,
+      json: async () => ({ error: { code: 190, message: 'Token expired' } }),
+    });
+    await expect(registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN))
+      .rejects.toMatchObject({ code: 'register_failed', graphStatus: 401, metaErrorCode: 190 });
+  });
+
+  it('TC-R24: Graph non-2xx sem metaErrorCode → register_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    expect(err.code).toBe('register_failed');
+    expect(err.graphStatus).toBe(500);
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(err.metaSubcode).toBeUndefined();
+  });
+
+  it('TC-R25: provider message não é preservado no erro', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 131009, message: 'Sensitive provider message' } }),
+    });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    // err.message deve ser genérico — nunca refletir o message do provider
+    expect(err.message).not.toContain('Sensitive provider message');
+    expect(err.message).not.toContain('provider');
+  });
+
+  it('TC-R26: fbtrace_id nunca preservado no erro', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 400,
+      json: async () => ({ error: { code: 131009, fbtrace_id: 'TRACE_ABC123' } }),
+    });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain('TRACE_ABC123');
+  });
+
+  it('TC-R27: Graph non-2xx com body não-JSON → register_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue({
+      ok: false, status: 503,
+      json: () => Promise.reject(new SyntaxError('Not JSON')),
+    });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    expect(err.code).toBe('register_failed');
+    expect(err.graphStatus).toBe(503);
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  // ── Segurança — secrets não expostos ────────────────────────────────────────
+
+  it('TC-R28: token não aparece no erro lançado', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 400, json: async () => ({}) });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('TC-R29: PIN não aparece no erro lançado', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 400, json: async () => ({}) });
+    const err = await registerPhoneNumber(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID_REG, FAKE_PIN)
+      .catch(e => e);
+    expect(JSON.stringify(err)).not.toContain(FAKE_PIN);
   });
 });
