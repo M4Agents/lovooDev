@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -997,5 +997,272 @@ describe('discoverAuthorizedWabas', () => {
     await expect(discoverAuthorizedWabas(FAKE_TOKEN)).rejects.toSatisfy(
       (err) => !err.message.includes(FAKE_SECRET),
     );
+  });
+});
+
+// =============================================================================
+// sendTextMessage
+// =============================================================================
+//
+// Fixtures adicionais
+//
+// FAKE_TOKEN  — reutilizado dos fixtures globais (business token fictício)
+// FAKE_CONFIG — reutilizado dos fixtures globais
+
+const FAKE_PHONE_NUMBER_ID = '106540352242922';     // numeric string, fictício
+const FAKE_TO              = '5511987654321';        // dígitos apenas, sem '+'
+const FAKE_TEXT            = 'Olá, esta é uma mensagem de teste MVP2.';
+const FAKE_WAMID           = 'wamid.HBgLNTU1MTk4NzY1NDMyMQIVAgARGBI4NzY1NDMyMQ==';
+
+/** Resposta Graph de sucesso para envio de mensagem */
+function makeSendOkResponse(wamid = FAKE_WAMID) {
+  return makeOkResponse({
+    messaging_product: 'whatsapp',
+    contacts: [{ input: FAKE_TO, wa_id: FAKE_TO }],
+    messages: [{ id: wamid }],
+  });
+}
+
+describe('sendTextMessage', () => {
+
+  // ── Sucesso ──────────────────────────────────────────────────────────────────
+
+  it('TC-M01: sucesso → { messageId: wamid }', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const result = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    expect(result).toEqual({ messageId: FAKE_WAMID });
+  });
+
+  it('TC-M01b: retorna somente { messageId } — sem token, to, text ou payload bruto', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const result = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    expect(Object.keys(result)).toEqual(['messageId']);
+  });
+
+  // ── URL e request ────────────────────────────────────────────────────────────
+
+  it('TC-M02: URL usa graphVersion e phoneNumberId corretamente', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain(`/${FAKE_VERSION}/`);
+    expect(callUrl.toString()).toContain(`/${FAKE_PHONE_NUMBER_ID}/messages`);
+  });
+
+  it('TC-M02b: graphVersion vindo de getMetaServerConfig é usado', async () => {
+    getMetaServerConfig.mockReturnValue({ ...FAKE_CONFIG, graphVersion: 'v99.0' });
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('/v99.0/');
+  });
+
+  it('TC-M03: Authorization header é "Bearer <accessToken>"', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+  });
+
+  it('TC-M03b: Content-Type é application/json', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('TC-M04: payload enviado ao Graph contém campos obrigatórios exatos', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.messaging_product).toBe('whatsapp');
+    expect(body.recipient_type).toBe('individual');
+    expect(body.to).toBe(FAKE_TO);
+    expect(body.type).toBe('text');
+    expect(body.text.body).toBe(FAKE_TEXT.trim());
+  });
+
+  it('TC-M04b: payload não contém campos além dos definidos internamente', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    const allowedKeys = ['messaging_product', 'recipient_type', 'to', 'type', 'text'];
+    expect(Object.keys(body).sort()).toEqual(allowedKeys.sort());
+  });
+
+  it('TC-M04c: method é POST', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.method).toBe('POST');
+  });
+
+  // ── Validação de input (sem fetch) ───────────────────────────────────────────
+
+  it('TC-M05a: phoneNumberId vazio → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, '', FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M05b: phoneNumberId com letras → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, 'abc123', FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M05c: phoneNumberId null → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, null, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M06a: to vazio → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, '', FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M06b: to com "+" → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, '+5511987654321', FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M06c: to com letras → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, 'abc5511987654321', FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M06d: to muito curto (< 7 dígitos) → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, '123456', FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M06e: to muito longo (> 15 dígitos) → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, '1234567890123456', FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M07a: text vazio → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, ''))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M07b: text somente espaços (trim vazio) → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, '   '))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M07c: text null → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, null))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M07d: text acima de 4096 chars → send_invalid_input sem fetch', async () => {
+    const longText = 'A'.repeat(4097);
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, longText))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M07e: text exatamente 4096 chars → fetch executado (limite inclusivo)', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const maxText = 'A'.repeat(4096);
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, maxText))
+      .resolves.toMatchObject({ messageId: FAKE_WAMID });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('TC-M-TOKEN-01: accessToken vazio → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage('', FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('TC-M-TOKEN-02: accessToken null → send_invalid_input sem fetch', async () => {
+    await expect(sendTextMessage(null, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── Falhas HTTP ──────────────────────────────────────────────────────────────
+
+  it('TC-M08a: HTTP 400 → send_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_failed' });
+  });
+
+  it('TC-M08b: HTTP 401 → send_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(401));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_failed' });
+  });
+
+  it('TC-M08c: HTTP 500 → send_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_failed' });
+  });
+
+  it('TC-M08d: erro send_failed não contém accessToken', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toSatisfy((err) => !err.message.includes(FAKE_TOKEN));
+  });
+
+  it('TC-M08e: erro send_failed não contém to', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toSatisfy((err) => !err.message.includes(FAKE_TO));
+  });
+
+  // ── Timeout e rede ───────────────────────────────────────────────────────────
+
+  it('TC-M09a: AbortError → send_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_timeout' });
+  });
+
+  it('TC-M09b: TypeError de rede → send_network_error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_network_error' });
+  });
+
+  // ── Resposta inválida ────────────────────────────────────────────────────────
+
+  it('TC-M10a: HTTP 200 sem messages → send_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp' }));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_response' });
+  });
+
+  it('TC-M10b: HTTP 200 com messages array vazio → send_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp', messages: [] }));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_response' });
+  });
+
+  it('TC-M10c: HTTP 200 com message id vazio → send_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp', messages: [{ id: '' }] }));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_response' });
+  });
+
+  it('TC-M10d: JSON inválido na resposta 200 → send_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse());
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({ code: 'send_invalid_response' });
   });
 });

@@ -33,6 +33,7 @@ import {
   validateMetaCaller,
   META_VIEW_ROLES,
   META_CONNECT_ROLES,
+  META_SEND_ROLES,
 } from '../validateMetaCaller.js';
 
 // ── Silenciar logs ─────────────────────────────────────────────────────────────
@@ -711,6 +712,37 @@ describe('validateMetaCaller', () => {
     it('nenhuma matriz usa comparação por tier — são arrays literais', () => {
       expect(Array.isArray(META_VIEW_ROLES)).toBe(true);
       expect(Array.isArray(META_CONNECT_ROLES)).toBe(true);
+    });
+
+    // ── META_SEND_ROLES ────────────────────────────────────────────────────────
+    it('META_SEND_ROLES é array literal independente', () => {
+      expect(Array.isArray(META_SEND_ROLES)).toBe(true);
+    });
+
+    it('META_SEND_ROLES contém exatamente os 6 roles esperados', () => {
+      const expected = ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'];
+      expect(META_SEND_ROLES).toHaveLength(expected.length);
+      expect(META_SEND_ROLES).toEqual(expect.arrayContaining(expected));
+    });
+
+    it('META_SEND_ROLES inclui seller (operadores de CRM devem poder enviar)', () => {
+      expect(META_SEND_ROLES).toContain('seller');
+    });
+
+    it('META_SEND_ROLES inclui manager', () => {
+      expect(META_SEND_ROLES).toContain('manager');
+    });
+
+    it('META_SEND_ROLES inclui partner (que exigirá assignment ativo)', () => {
+      expect(META_SEND_ROLES).toContain('partner');
+    });
+
+    it('META_SEND_ROLES é independente de META_VIEW_ROLES — referência diferente', () => {
+      expect(META_SEND_ROLES).not.toBe(META_VIEW_ROLES);
+    });
+
+    it('META_SEND_ROLES é independente de META_CONNECT_ROLES — referência diferente', () => {
+      expect(META_SEND_ROLES).not.toBe(META_CONNECT_ROLES);
     });
   });
 });

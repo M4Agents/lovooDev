@@ -45,6 +45,16 @@ const META_ID_RE = /^[0-9]+$/;
 // Scope que identifica autorização de WhatsApp Business no granular_scopes do debug_token.
 const WA_SCOPE = 'whatsapp_business_management';
 
+// Comprimento máximo aceito pela WhatsApp Cloud API para mensagens de texto.
+// Referência: https://developers.facebook.com/docs/whatsapp/cloud-api/messages/text-messages
+// Enforced fail-closed: texto acima deste limite é rejeitado antes do fetch.
+const MAX_TEXT_BODY_LENGTH = 4096;
+
+// Valida o número de destino para envio outbound.
+// Regra MVP: somente dígitos, 7–15 chars (cobre formatos internacionais sem '+').
+// A Graph API aceita E.164 com ou sem '+'; o caller deve remover '+' antes de passar.
+const TO_PHONE_RE = /^[0-9]{7,15}$/;
+
 // =============================================================================
 // Helpers internos
 // =============================================================================
@@ -424,4 +434,110 @@ export async function discoverAuthorizedWabas(accessToken) {
   }
 
   return Array.from(wabaIds);
+}
+
+// =============================================================================
+// sendTextMessage
+// =============================================================================
+
+/**
+ * Envia uma mensagem de texto via WhatsApp Cloud API.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}/messages
+ *
+ * Payload construído INTERNAMENTE — não aceita payload arbitrário do caller.
+ * Estrutura enviada ao Graph:
+ *   { messaging_product, recipient_type, to, type, text: { body } }
+ *
+ * SEGURANÇA:
+ *   - accessToken nunca logado, nunca presente em mensagem de erro
+ *   - to nunca logado
+ *   - text nunca logado
+ *   - URL construída internamente — sem SSRF por valor externo
+ *   - Payload construído internamente — sem injection de campos arbitrários
+ *
+ * @param {string} accessToken   Business token da instância (nunca logar)
+ * @param {string} phoneNumberId Phone Number ID da instância (numeric string)
+ * @param {string} to            Número de destino — somente dígitos, sem '+'
+ * @param {string} text          Corpo da mensagem (não vazio após trim, max 4096 chars)
+ * @returns {Promise<{ messageId: string }>}
+ * @throws {Error} err.code in:
+ *   send_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   send_failed           — HTTP não-2xx do Graph
+ *   send_timeout          — AbortError / timeout expirado
+ *   send_network_error    — falha de rede não-timeout
+ *   send_invalid_response — HTTP 2xx mas response sem message id válido
+ */
+export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    throw makeError('send_invalid_input', 'Meta send: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('send_invalid_input', 'Meta send: invalid input');
+  }
+
+  if (typeof to !== 'string' || !TO_PHONE_RE.test(to)) {
+    throw makeError('send_invalid_input', 'Meta send: invalid input');
+  }
+
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    throw makeError('send_invalid_input', 'Meta send: invalid input');
+  }
+
+  if (text.length > MAX_TEXT_BODY_LENGTH) {
+    throw makeError('send_invalid_input', 'Meta send: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL construída internamente — nunca usa valor externo como base de URL
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}/messages`);
+
+  // Payload construído internamente — não expõe campos arbitrários ao Graph
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to,
+    type:              'text',
+    text:              { body: text.trim() },
+  });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('send_timeout', 'Meta send request timed out');
+    }
+    throw makeError('send_network_error', 'Meta send network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('send_failed', 'Meta send failed');
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('send_invalid_response', 'Meta send invalid response');
+  }
+
+  // Extrair somente o primeiro message id válido da resposta Graph.
+  // Resposta esperada: { messages: [{ id: "wamid.xxx" }], ... }
+  const messageId = payload?.messages?.[0]?.id;
+  if (typeof messageId !== 'string' || messageId.length === 0) {
+    throw makeError('send_invalid_response', 'Meta send invalid response');
+  }
+
+  return { messageId };
 }

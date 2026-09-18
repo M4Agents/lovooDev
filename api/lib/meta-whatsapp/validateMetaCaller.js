@@ -72,6 +72,24 @@ export const META_CONNECT_ROLES = [
   'admin',
 ];
 
+/**
+ * Roles que podem enviar mensagens via Meta WhatsApp Cloud API.
+ *
+ * Matriz independente — não derivar de META_VIEW_ROLES ou META_CONNECT_ROLES.
+ * Inclui seller: finalidade primária do CRM é envio de mensagens por operadores.
+ *
+ * ATENÇÃO PARA PARTNER: exige obrigatoriamente assignment ativo em
+ * partner_company_assignments. O role sozinho NÃO garante acesso.
+ */
+export const META_SEND_ROLES = [
+  'super_admin',
+  'system_admin',
+  'partner',
+  'admin',
+  'manager',
+  'seller',
+];
+
 // =============================================================================
 // Função principal
 // =============================================================================
