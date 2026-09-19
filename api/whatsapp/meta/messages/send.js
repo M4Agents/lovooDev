@@ -14,7 +14,21 @@
 //   8.  Lookup de credencial (instance_id)
 //   9.  Decrypt do token (decryptMetaToken)
 //  10.  Envio via sendTextMessage (primitive isolado)
-//  11.  Resposta sanitizada
+//  11.  Persistência do wamid em meta_whatsapp_messages (INSERT explícito)
+//  12.  Resposta sanitizada
+//
+// Persistência (etapa 11):
+//   INSERT somente após Graph success confirmado.
+//   Campos: company_id, instance_id, meta_message_id, status='accepted'.
+//   Nenhum PII (to, body, token) é persistido.
+//   Falha de INSERT → 500 send_persistence_failed (Graph já executou).
+//   Unique violation (23505) → mesmo tratamento: 500 send_persistence_failed.
+//   Nenhum retry de Graph após falha de persistência.
+//
+// OPEN_DESIGN_ITEM_2C4 — Race webhook vs INSERT:
+//   Graph success → webhook status potencialmente chega antes do INSERT local.
+//   Decisão sobre wamid desconhecido no webhook (200 ou 5xx/pending) será
+//   tomada em 2C.4 após análise específica do webhook processor.
 //
 // Segurança:
 //   - company_id do body identifica o tenant solicitado — não autoriza acesso.
@@ -195,7 +209,36 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
-  // ── 11. Resposta sanitizada ────────────────────────────────────────────────
+  // ── 11. Persistir wamid em meta_whatsapp_messages ─────────────────────────
+  // Executado SOMENTE após Graph success confirmado.
+  // INSERT explícito — sem upsert/ignoreDuplicates para observar conflitos.
+  //
+  // Campos persistidos: somente company_id, instance_id, meta_message_id, status.
+  // NÃO persistir: to, message body, token, phone_number_id, Graph payload.
+  //
+  // Unique violation (23505) → send_persistence_failed (estado indeterminado).
+  // Qualquer outro erro DB   → send_persistence_failed.
+  // Nenhum retry de Graph ocorre após falha de persistência.
+  //
+  // Tenant: company_id = auth.companyId (validado).
+  //         instance_id = instance.id (lookup filtrado por auth.companyId).
+  //         FK composta no banco adiciona segunda garantia declarativa.
+  const { error: insertErr } = await svc
+    .from('meta_whatsapp_messages')
+    .insert({
+      company_id:      auth.companyId,
+      instance_id:     instance.id,
+      meta_message_id: result.messageId,
+      status:          'accepted',
+    });
+
+  if (insertErr) {
+    // Graph já executou — estado de entrega é indeterminado localmente.
+    // NÃO reenviar. NÃO expor erro bruto, wamid, telefone ou token.
+    return res.status(500).json({ error: 'send_persistence_failed' });
+  }
+
+  // ── 12. Resposta sanitizada ────────────────────────────────────────────────
   // Somente message_id (wamid) retornado — nunca token, credencial ou payload Graph.
   return res.status(200).json({ ok: true, message_id: result.messageId });
 

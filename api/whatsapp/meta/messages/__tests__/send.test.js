@@ -142,6 +142,13 @@ function makeCredChain(data, error = null) {
   };
 }
 
+/** Chain para meta_whatsapp_messages: insert() */
+function makeInsertChain(error = null) {
+  return {
+    insert: vi.fn().mockResolvedValue({ data: null, error }),
+  };
+}
+
 /** Request POST mínimo */
 function makeReq({ body = HAPPY_BODY, method = 'POST', headers = {} } = {}) {
   return {
@@ -177,12 +184,13 @@ function setupGuardFail(status, error) {
   mockValidateMetaCaller.mockResolvedValue({ ok: false, status, error });
 }
 
-/** Configura happy path completo: guard + instance + credential + decrypt + send */
+/** Configura happy path completo: guard + instance + credential + decrypt + send + insert */
 function setupHappyPath() {
   setupGuardOk();
   mockSvc.from = vi.fn()
     .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))   // meta_whatsapp_instances
-    .mockReturnValueOnce(makeCredChain(FAKE_CRED));      // meta_whatsapp_credentials
+    .mockReturnValueOnce(makeCredChain(FAKE_CRED))       // meta_whatsapp_credentials
+    .mockReturnValueOnce(makeInsertChain());              // meta_whatsapp_messages INSERT
   mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
   mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
 }
@@ -902,17 +910,21 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       expect(instanceIdCall[1]).toBe(FAKE_INSTANCE_ID);
     });
 
-    it('credential lookup ocorre SOMENTE na tabela correta', async () => {
+    it('credential lookup ocorre na tabela correta (segunda chamada de svc.from)', async () => {
       setupGuardOk();
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-        .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain()); // meta_whatsapp_messages (etapa 11)
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
       const res = makeRes();
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
-      expect(tables).toEqual(['meta_whatsapp_instances', 'meta_whatsapp_credentials']);
+      // Ordem esperada: instances → credentials → messages (persistência)
+      expect(tables[0]).toBe('meta_whatsapp_instances');
+      expect(tables[1]).toBe('meta_whatsapp_credentials');
+      expect(tables[2]).toBe('meta_whatsapp_messages');
     });
   });
 
@@ -932,6 +944,255 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       const res = makeRes();
       await handler(makeReq({ body: { ...HAPPY_BODY, to: '5511987654321' } }), res);
       expect(mockSendTextMessage.mock.calls[0][2]).toBe('5511987654321');
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PERSIST: persistência do wamid em meta_whatsapp_messages
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // Helper: configura tudo exceto o mock de INSERT (permite testar variações)
+  function setupPreInsert({ insertError = null } = {}) {
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain(insertError));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+  }
+
+  describe('PERSIST-01: Graph success + INSERT success → 200', () => {
+    it('retorna 200 com ok e message_id', async () => {
+      setupPreInsert();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    });
+  });
+
+  describe('PERSIST-02: Graph success + INSERT DB failure → 500 send_persistence_failed', () => {
+    it('retorna 500 send_persistence_failed quando INSERT falha', async () => {
+      setupPreInsert({ insertError: new Error('db error') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'send_persistence_failed' });
+    });
+
+    it('sendTextMessage é chamado exatamente uma vez antes da falha de INSERT', async () => {
+      setupPreInsert({ insertError: new Error('db error') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('PERSIST-03: Graph success + INSERT unique violation (23505) → 500 send_persistence_failed', () => {
+    it('retorna 500 send_persistence_failed (não 200) em conflito de unicidade', async () => {
+      const uniqueErr = Object.assign(new Error('duplicate key value'), { code: '23505' });
+      setupPreInsert({ insertError: uniqueErr });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'send_persistence_failed' });
+    });
+
+    it('unique violation NÃO retorna 200', async () => {
+      const uniqueErr = Object.assign(new Error('duplicate key value'), { code: '23505' });
+      setupPreInsert({ insertError: uniqueErr });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).not.toBe(200);
+    });
+  });
+
+  describe('PERSIST-04: Graph failure → nenhum acesso a meta_whatsapp_messages', () => {
+    it('quando Graph falha, INSERT não é tentado', async () => {
+      setupGuardOk();
+      const graphErr = Object.assign(new Error('send failed'), { code: 'send_failed' });
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockRejectedValue(graphErr);
+      const res = makeRes();
+      await handler(makeReq(), res);
+      // Somente 2 chamadas: instances + credentials. Nenhuma para messages.
+      expect(mockSvc.from).toHaveBeenCalledTimes(2);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+
+    it('send_timeout → sem INSERT', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockRejectedValue(
+        Object.assign(new Error('timeout'), { code: 'send_timeout' }),
+      );
+      const res = makeRes();
+      await handler(makeReq(), res);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-05: Auth failure → nenhum Graph, nenhum INSERT', () => {
+    it('guard falha → sem sendTextMessage, sem INSERT', async () => {
+      setupGuardFail(403, 'Permissão insuficiente');
+      mockSvc.from = vi.fn();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-06: Instance inexistente/cross-tenant → nenhum Graph, nenhum INSERT', () => {
+    it('instance não encontrada → sem sendTextMessage, sem INSERT', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn().mockReturnValue(makeInstChain(null));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-07: Instance disconnected → nenhum Graph, nenhum INSERT', () => {
+    it('status disconnected → sem INSERT', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn().mockReturnValue(
+        makeInstChain({ ...FAKE_INSTANCE, status: 'disconnected' }),
+      );
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-08: Credential/decrypt failure → nenhum INSERT', () => {
+    it('credential ausente → sem INSERT', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeCredChain(null));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+
+    it('decrypt falha → sem INSERT', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+      mockDecryptMetaToken.mockImplementation(() => { throw new Error('decrypt failed'); });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-09: INSERT target = meta_whatsapp_messages', () => {
+    it('terceira chamada de svc.from é para meta_whatsapp_messages', async () => {
+      setupPreInsert();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables[2]).toBe('meta_whatsapp_messages');
+    });
+  });
+
+  describe('PERSIST-10/11/12/13/14: campos do INSERT', () => {
+    let capturedInsertArg;
+
+    beforeEach(async () => {
+      setupGuardOk();
+      const insertChain = makeInsertChain();
+      // Capturar argumento passado ao insert()
+      insertChain.insert = vi.fn().mockImplementation((arg) => {
+        capturedInsertArg = arg;
+        return Promise.resolve({ data: null, error: null });
+      });
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(insertChain);
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+      await handler(makeReq(), makeRes());
+    });
+
+    it('PERSIST-10: INSERT contém exatamente 4 campos', () => {
+      expect(Object.keys(capturedInsertArg)).toHaveLength(4);
+      expect(Object.keys(capturedInsertArg).sort()).toEqual(
+        ['company_id', 'instance_id', 'meta_message_id', 'status'].sort(),
+      );
+    });
+
+    it('PERSIST-11: company_id = auth.companyId', () => {
+      expect(capturedInsertArg.company_id).toBe(FAKE_COMPANY_ID);
+    });
+
+    it('PERSIST-12: instance_id = instance.id (do banco)', () => {
+      expect(capturedInsertArg.instance_id).toBe(FAKE_INSTANCE_ID);
+    });
+
+    it('PERSIST-13: status = accepted', () => {
+      expect(capturedInsertArg.status).toBe('accepted');
+    });
+
+    it('PERSIST-14: meta_message_id = wamid retornado pelo Graph', () => {
+      expect(capturedInsertArg.meta_message_id).toBe(FAKE_WAMID);
+    });
+
+    it('PERSIST-14b: INSERT NÃO contém to, body, token, phone_number_id, waba_id', () => {
+      const keys = Object.keys(capturedInsertArg);
+      expect(keys).not.toContain('to');
+      expect(keys).not.toContain('toNormalized');
+      expect(keys).not.toContain('recipient');
+      expect(keys).not.toContain('phone_number_id');
+      expect(keys).not.toContain('waba_id');
+      expect(keys).not.toContain('access_token');
+      expect(keys).not.toContain('access_token_enc');
+      // Verificar valores também
+      const vals = JSON.stringify(capturedInsertArg);
+      expect(vals).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(vals).not.toContain(FAKE_ENC_TOKEN);
+    });
+  });
+
+  describe('PERSIST-15: resposta de persistence failure não expõe dados sensíveis', () => {
+    it('send_persistence_failed não expõe wamid, telefone, body, token, erro Supabase', async () => {
+      setupPreInsert({ insertError: new Error('SUPABASE_RAW_ERROR_SENTINEL') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      const bodyStr = JSON.stringify(res._body);
+      expect(bodyStr).not.toContain(FAKE_WAMID);
+      expect(bodyStr).not.toContain(FAKE_TO);
+      expect(bodyStr).not.toContain(FAKE_TEXT);
+      expect(bodyStr).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(bodyStr).not.toContain('SUPABASE_RAW_ERROR_SENTINEL');
+    });
+  });
+
+  describe('PERSIST-16: nenhum retry de Graph após persistence failure', () => {
+    it('sendTextMessage é chamado exatamente 1 vez mesmo quando INSERT falha', async () => {
+      setupPreInsert({ insertError: new Error('db error') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
     });
   });
 });
