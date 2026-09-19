@@ -26,15 +26,16 @@
 // =============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getMetaPublicConfig, getMetaServerConfig } from '../config.js';
+import { getMetaPublicConfig, getMetaServerConfig, getMetaWebhookConfig } from '../config.js';
 
 // =============================================================================
 // Fixtures — valores fictícios, nunca reais
 // =============================================================================
 
-const FAKE_APP_ID    = '111111111111111';
-const FAKE_CONFIG_ID = '222222222222222';
-const FAKE_SECRET    = 'fake_app_secret_fixture_not_real';
+const FAKE_APP_ID       = '111111111111111';
+const FAKE_CONFIG_ID    = '222222222222222';
+const FAKE_SECRET       = 'fake_app_secret_fixture_not_real';
+const FAKE_VERIFY_TOKEN = 'fake_webhook_verify_token_for_tests_only';
 
 // =============================================================================
 // Setup / Teardown — isolamento total de process.env
@@ -47,12 +48,14 @@ beforeEach(() => {
     META_APP_ID:                    process.env.META_APP_ID,
     META_EMBEDDED_SIGNUP_CONFIG_ID: process.env.META_EMBEDDED_SIGNUP_CONFIG_ID,
     META_APP_SECRET:                process.env.META_APP_SECRET,
+    META_WEBHOOK_VERIFY_TOKEN:      process.env.META_WEBHOOK_VERIFY_TOKEN,
   };
 
   // Configurar valores válidos como ponto de partida de cada teste
   process.env.META_APP_ID                    = FAKE_APP_ID;
   process.env.META_EMBEDDED_SIGNUP_CONFIG_ID = FAKE_CONFIG_ID;
   process.env.META_APP_SECRET                = FAKE_SECRET;
+  process.env.META_WEBHOOK_VERIFY_TOKEN      = FAKE_VERIFY_TOKEN;
 });
 
 afterEach(() => {
@@ -73,6 +76,12 @@ afterEach(() => {
     delete process.env.META_APP_SECRET;
   } else {
     process.env.META_APP_SECRET = savedEnv.META_APP_SECRET;
+  }
+
+  if (savedEnv.META_WEBHOOK_VERIFY_TOKEN === undefined) {
+    delete process.env.META_WEBHOOK_VERIFY_TOKEN;
+  } else {
+    process.env.META_WEBHOOK_VERIFY_TOKEN = savedEnv.META_WEBHOOK_VERIFY_TOKEN;
   }
 });
 
@@ -343,6 +352,59 @@ describe('config — Meta WhatsApp', () => {
       expect(process.env.META_APP_ID).toBe(beforeAppId);
       expect(process.env.META_EMBEDDED_SIGNUP_CONFIG_ID).toBe(beforeConfigId);
       expect(process.env.META_APP_SECRET).toBe(beforeSecret);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-WA: getMetaWebhookConfig — retorno correto
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-WA: getMetaWebhookConfig retorna verifyToken correto', () => {
+    it('retorna verifyToken igual ao valor de META_WEBHOOK_VERIFY_TOKEN', () => {
+      const { verifyToken } = getMetaWebhookConfig();
+      expect(verifyToken).toBe(FAKE_VERIFY_TOKEN);
+    });
+
+    it('retorna somente verifyToken — nenhuma outra chave exposta', () => {
+      const result = getMetaWebhookConfig();
+      expect(Object.keys(result)).toEqual(['verifyToken']);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-WB: getMetaWebhookConfig — falha sem META_WEBHOOK_VERIFY_TOKEN
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-WB: getMetaWebhookConfig falha sem META_WEBHOOK_VERIFY_TOKEN', () => {
+    it('lança erro quando META_WEBHOOK_VERIFY_TOKEN está ausente', () => {
+      delete process.env.META_WEBHOOK_VERIFY_TOKEN;
+      expect(() => getMetaWebhookConfig()).toThrow('META_WEBHOOK_VERIFY_TOKEN');
+    });
+
+    it('lança erro quando META_WEBHOOK_VERIFY_TOKEN é string vazia', () => {
+      process.env.META_WEBHOOK_VERIFY_TOKEN = '';
+      expect(() => getMetaWebhookConfig()).toThrow();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-WC: getMetaWebhookConfig — isolamento de responsabilidade
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-WC: getMetaWebhookConfig — isolamento', () => {
+    it('NÃO exige META_APP_SECRET', () => {
+      delete process.env.META_APP_SECRET;
+      expect(() => getMetaWebhookConfig()).not.toThrow();
+    });
+
+    it('NÃO retorna appSecret nem appId', () => {
+      const result = getMetaWebhookConfig();
+      expect(result).not.toHaveProperty('appSecret');
+      expect(result).not.toHaveProperty('appId');
+    });
+
+    it('mensagem de erro não reflete o conteúdo do token', () => {
+      delete process.env.META_WEBHOOK_VERIFY_TOKEN;
+      let errMsg = '';
+      try { getMetaWebhookConfig(); } catch (e) { errMsg = e.message; }
+      expect(errMsg).not.toContain(FAKE_VERIFY_TOKEN);
     });
   });
 

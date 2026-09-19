@@ -8,10 +8,12 @@
 //   META_APP_ID                    — App ID do Facebook App (público)
 //   META_EMBEDDED_SIGNUP_CONFIG_ID — Login for Business Configuration ID (público)
 //   META_APP_SECRET                — App Secret (SECRET — nunca ao frontend, nunca logar)
+//   META_WEBHOOK_VERIFY_TOKEN      — Token de verificação GET webhook (SECRET — nunca logar)
 //
 // Funções exportadas:
 //   getMetaPublicConfig()   — retorna appId + configId (não exige APP_SECRET)
 //   getMetaServerConfig()   — retorna appId + appSecret + configId + graphVersion
+//   getMetaWebhookConfig()  — retorna verifyToken (server-only, nunca ao frontend)
 //
 // SEGURANÇA:
 //   - Fail closed: qualquer ENV ausente/inválida causa throw imediato
@@ -19,6 +21,7 @@
 //   - Mensagens de erro nunca refletem o conteúdo das ENVs
 //   - APP_SECRET nunca é retornado por getMetaPublicConfig()
 //   - graphVersion não é retornado por getMetaPublicConfig() (backend only)
+//   - META_WEBHOOK_VERIFY_TOKEN: somente para GET verification — nunca como segredo HMAC
 //
 // Isolamento:
 //   - Não importa config do Instagram ou Nuvemshop
@@ -109,4 +112,22 @@ export function getMetaServerConfig() {
     configId,
     graphVersion: GRAPH_VERSION,
   };
+}
+
+/**
+ * Retorna a configuração de webhook Meta para uso exclusivo no backend.
+ *
+ * Valida e retorna:
+ *   - verifyToken  (META_WEBHOOK_VERIFY_TOKEN — SECRET, nunca expor ao frontend, nunca logar)
+ *
+ * AVISO: verifyToken é exclusivo para GET verification (hub.verify_token).
+ * NUNCA usar como segredo HMAC — para HMAC usar META_APP_SECRET via getMetaServerConfig().
+ *
+ * @returns {{ verifyToken: string }}
+ * @throws {Error} Fail closed se ENV estiver ausente ou vazia
+ */
+export function getMetaWebhookConfig() {
+  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+  requireEnv(verifyToken, 'META_WEBHOOK_VERIFY_TOKEN');
+  return { verifyToken };
 }

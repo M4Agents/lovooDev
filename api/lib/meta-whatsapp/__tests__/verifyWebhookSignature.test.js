@@ -4,7 +4,7 @@
 // Testes unitários para api/lib/meta-whatsapp/verifyWebhookSignature.js
 // Todos os secrets e corpos são fictícios — sem dados reais.
 //
-// COBERTURA:
+// COBERTURA — verifyMetaWebhookSignature:
 //   SIG-U01  assinatura válida → true
 //   SIG-U02  body alterado → false
 //   SIG-U03  signature alterada → false
@@ -18,11 +18,20 @@
 //   SIG-U11  rawBody Buffer vazio → false
 //   SIG-U12  case-insensitive no hex recebido → true
 //   SIG-U13  secret diferente → false
+//
+// COBERTURA — readRawBody:
+//   RRB-01  lê body pequeno corretamente
+//   RRB-02  lê body exatamente no limite → aceito
+//   RRB-03  body 1 byte acima do limite → body_too_large
+//   RRB-04  erro tem code='body_too_large'
+//   RRB-05  chunks são concatenados corretamente
+//   RRB-06  body vazio → Buffer vazio
+//   RRB-07  limite customizado respeitado
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'crypto';
-import { verifyMetaWebhookSignature } from '../verifyWebhookSignature.js';
+import { verifyMetaWebhookSignature, readRawBody } from '../verifyWebhookSignature.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -193,5 +202,87 @@ describe('verifyMetaWebhookSignature', () => {
     const sig = makeSignature(FAKE_BODY, FAKE_SECRET);
     expect(() => verifyMetaWebhookSignature(FAKE_BODY, sig, 42)).not.toThrow();
     expect(verifyMetaWebhookSignature(FAKE_BODY, sig, 42)).toBe(false);
+  });
+});
+
+// =============================================================================
+// readRawBody
+// =============================================================================
+
+/**
+ * Cria um async iterable simulando um Node.js IncomingMessage stream.
+ * Útil para testar readRawBody sem uma request HTTP real.
+ */
+function makeStream(chunks) {
+  return {
+    [Symbol.asyncIterator]() {
+      let i = 0;
+      return {
+        next() {
+          if (i < chunks.length) {
+            return Promise.resolve({ value: chunks[i++], done: false });
+          }
+          return Promise.resolve({ value: undefined, done: true });
+        },
+      };
+    },
+  };
+}
+
+describe('readRawBody', () => {
+  it('RRB-01: lê body pequeno corretamente como Buffer', async () => {
+    const data = Buffer.from('{"object":"whatsapp_business_account"}');
+    const req  = makeStream([data]);
+    const result = await readRawBody(req);
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result.equals(data)).toBe(true);
+  });
+
+  it('RRB-02: body exatamente no limite padrão (1 MB) → aceito', async () => {
+    const MAX = 1_048_576;
+    const data = Buffer.alloc(MAX, 0x61); // 1 MB de 'a'
+    const req  = makeStream([data]);
+    const result = await readRawBody(req);
+    expect(result.length).toBe(MAX);
+  });
+
+  it('RRB-03: body 1 byte acima do limite → rejeita com erro', async () => {
+    const MAX  = 1_048_576;
+    const data = Buffer.alloc(MAX + 1, 0x61);
+    const req  = makeStream([data]);
+    await expect(readRawBody(req)).rejects.toThrow();
+  });
+
+  it('RRB-04: erro de body_too_large tem code=body_too_large', async () => {
+    const data = Buffer.alloc(1_048_577, 0x61);
+    const req  = makeStream([data]);
+    try {
+      await readRawBody(req);
+      expect.fail('deveria ter lançado');
+    } catch (err) {
+      expect(err.code).toBe('body_too_large');
+    }
+  });
+
+  it('RRB-05: múltiplos chunks são concatenados corretamente', async () => {
+    const c1 = Buffer.from('hello');
+    const c2 = Buffer.from(' ');
+    const c3 = Buffer.from('world');
+    const req = makeStream([c1, c2, c3]);
+    const result = await readRawBody(req);
+    expect(result.toString('utf8')).toBe('hello world');
+  });
+
+  it('RRB-06: stream vazio → Buffer vazio', async () => {
+    const req = makeStream([]);
+    const result = await readRawBody(req);
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result.length).toBe(0);
+  });
+
+  it('RRB-07: limite customizado respeitado (100 bytes)', async () => {
+    const data = Buffer.alloc(101, 0x61);
+    const req  = makeStream([data]);
+    await expect(readRawBody(req, 100)).rejects.toMatchObject({ code: 'body_too_large' });
   });
 });

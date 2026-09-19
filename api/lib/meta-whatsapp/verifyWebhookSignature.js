@@ -1,5 +1,5 @@
 // =============================================================================
-// verifyWebhookSignature — Validação HMAC SHA-256 de webhooks Meta WhatsApp
+// verifyWebhookSignature — Raw body reading + Validação HMAC SHA-256
 //
 // Módulo exclusivo do namespace meta-whatsapp.
 // Não importa nem reutiliza implementação do módulo Instagram.
@@ -8,10 +8,14 @@
 //   X-Hub-Signature-256: sha256=<64 hex chars>
 //   Assinatura = HMAC-SHA256(rawBody, META_APP_SECRET)
 //
+// Funções exportadas:
+//   readRawBody(req, maxBytes?)        — lê body bruto com limite defensivo
+//   verifyMetaWebhookSignature(...)    — valida HMAC SHA-256
+//
 // CRÍTICO:
-//   - rawBody deve ser lido ANTES de qualquer parsing do body.
+//   - readRawBody deve ser chamado ANTES de qualquer parsing do body.
 //   - O arquivo webhook.js deve exportar: export const config = { api: { bodyParser: false } }
-//   - readRawBody pertence à Fase 2C — não implementado aqui.
+//   - Limite de 1 MB é uma decisão defensiva Lovoo — não um requisito Meta documentado.
 //
 // SEGURANÇA:
 //   - Usa timingSafeEqual para prevenir timing attacks.
@@ -21,6 +25,37 @@
 // =============================================================================
 
 import { createHmac, timingSafeEqual } from 'crypto';
+
+// Limite defensivo para leitura de raw body (1 MB).
+// Decisão Lovoo — Meta não documenta tamanho máximo de payload de webhook.
+const RAW_BODY_MAX_BYTES = 1_048_576; // 1 MB
+
+/**
+ * Lê o body bruto da request como Buffer com limite explícito de tamanho.
+ * Deve ser chamado ANTES de qualquer acesso a req.body ou JSON.parse.
+ * Compatível com Vercel Node.js runtime com bodyParser: false.
+ *
+ * O limite é aplicado durante a leitura do stream — não após carregar o body completo.
+ * Isso evita consumo excessivo de memória com payloads grandes.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {number} [maxBytes=RAW_BODY_MAX_BYTES] — limite em bytes
+ * @returns {Promise<Buffer>}
+ * @throws {Object} com code='body_too_large' se exceder o limite
+ */
+export async function readRawBody(req, maxBytes = RAW_BODY_MAX_BYTES) {
+  const chunks = [];
+  let totalBytes = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buf.length;
+    if (totalBytes > maxBytes) {
+      throw Object.assign(new Error('body_too_large'), { code: 'body_too_large' });
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
 
 // Regex para validar exatamente 64 chars hexadecimais (case-insensitive).
 // Garante que signatures com comprimento incorreto ou chars não-hex são
