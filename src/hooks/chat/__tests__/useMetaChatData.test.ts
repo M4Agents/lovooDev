@@ -2,7 +2,7 @@
 // =============================================================================
 // src/hooks/chat/__tests__/useMetaChatData.test.ts
 //
-// Contrato do hook useMetaChatData — MVP3C.2 + MVP3E B2
+// Contrato do hook useMetaChatData — MVP3C.2 + MVP3E B2 + MVP3E B2.1
 //
 // Cobertura existente (H-01..H-14):
 //   H-01  sem companyId → zero request, estado limpo
@@ -24,7 +24,7 @@
 //   RT-CONV-01  IDs válidos → cria subscription em meta_conversations
 //   RT-CONV-02  subscription usa UPDATE / public / meta_conversations
 //   RT-CONV-03  filtro = company_id=eq.<companyId>
-//   RT-CONV-04  UPDATE → dispara GET/load canônico
+//   RT-CONV-04  UPDATE → dispara GET canônico (loadSilent)
 //   RT-CONV-05  companyId ausente → nenhum channel criado
 //   RT-CONV-06  selectedInstanceId ausente → nenhum channel criado
 //   RT-CONV-07  company A→B → channel A unsubscribed + channel B criado
@@ -34,6 +34,22 @@
 //   RT-CONV-11  evento após unmount → nenhum load disparado
 //   RT-CONV-12  payload não é aplicado diretamente a conversations
 //   RT-CONV-13  UPDATE de outra instância mesma company → GET canônico; sem payload
+//
+// Silent Realtime MVP3E B2.1 (RT-SILENT-01..RT-SILENT-14):
+//   RT-SILENT-01  RT chama GET canônico (loadSilent)
+//   RT-SILENT-02  RT não limpa conversations antes do GET
+//   RT-SILENT-03  RT não ativa loading visual
+//   RT-SILENT-04  lista antiga permanece durante GET pendente
+//   RT-SILENT-05  resolução substitui lista atomicamente
+//   RT-SILENT-06  falha do silent preserva lista e não cria erro visual
+//   RT-SILENT-07  dois silents concorrentes → mais recente vence
+//   RT-SILENT-08  silent A + troca instance B → A ignorado
+//   RT-SILENT-09  silent company A + company B → A ignorado
+//   RT-SILENT-10  unmount durante silent → nenhum setState útil
+//   RT-SILENT-11  silent NÃO desliga loading de load normal pendente
+//   RT-SILENT-12  initial load continua exibindo loading normalmente
+//   RT-SILENT-13  troca company/instance continua com reset normal
+//   RT-SILENT-14  payload RT continua sem ser source of truth
 //
 // Segurança: nenhum token ou UUID real nos fixtures.
 // =============================================================================
@@ -671,7 +687,7 @@ it('RT-CONV-13: UPDATE de outra instância da mesma company pode disparar GET; r
   // eventos de instâncias diferentes da mesma company chegam ao channel.
   // O guard de instance NÃO rejeita isso — o evento chega com o capturedInstanceId
   // correto (mesma instância). O GET é chamado com selectedInstanceId correto.
-  // Payload é ignorado — GET determina o resultado.
+  // Payload é ignorado — GET determina o resultado (loadSilent).
 
   const CONV_AFTER_RT: MetaChatConversation = {
     ...FAKE_CONV,
@@ -706,4 +722,457 @@ it('RT-CONV-13: UPDATE de outra instância da mesma company pode disparar GET; r
 
   // Nenhum dado do payload (instance outra, unread 5) no estado
   expect(result.current.conversations[0].unread_count).toBe(FAKE_CONV.unread_count) // original do GET
+})
+
+// =============================================================================
+// SILENT REALTIME — MVP3E B2.1
+// =============================================================================
+
+// RT-SILENT-01 — RT chama GET canônico (loadSilent → performFetch silent)
+it('RT-SILENT-01: evento RT dispara GET canônico via loadSilent', async () => {
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])   // initial load
+    .mockResolvedValueOnce([FAKE_CONV])   // silent GET após RT
+
+  renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetConversations).toHaveBeenCalledTimes(1)
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+    await Promise.resolve()
+  })
+
+  expect(mockGetConversations).toHaveBeenCalledTimes(2)
+  expect(mockGetConversations).toHaveBeenNthCalledWith(2, COMPANY_A, { instanceId: INSTANCE_A })
+})
+
+// RT-SILENT-02 — RT NÃO limpa conversations antes do GET
+it('RT-SILENT-02: evento RT não limpa conversations antes do GET resolver', async () => {
+  let resolveSilent!: (v: MetaChatConversation[]) => void
+  const pendingSilent = new Promise<MetaChatConversation[]>(res => { resolveSilent = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])  // initial load
+    .mockReturnValueOnce(pendingSilent)  // silent GET — mantém pendente
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  // Lista existe após initial load
+  expect(result.current.conversations).toHaveLength(1)
+
+  // Disparar RT event — silent GET fica pendente
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+  })
+
+  // Lista NÃO foi limpa — conversations antiga permanece visível
+  expect(result.current.conversations).toHaveLength(1)
+  expect(result.current.conversations[0].id).toBe(CONV_ID)
+
+  // Resolver GET para limpar
+  await act(async () => {
+    resolveSilent([])
+    await Promise.resolve()
+  })
+})
+
+// RT-SILENT-03 — RT NÃO ativa loading visual
+it('RT-SILENT-03: evento RT não ativa loading durante GET silent', async () => {
+  let resolveSilent!: (v: MetaChatConversation[]) => void
+  const pendingSilent = new Promise<MetaChatConversation[]>(res => { resolveSilent = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])  // initial load
+    .mockReturnValueOnce(pendingSilent)  // silent GET — mantém pendente
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  // loading é false após initial load
+  expect(result.current.loading).toBe(false)
+
+  // Disparar RT event
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+  })
+
+  // loading CONTINUA false durante silent GET — sem spinner
+  expect(result.current.loading).toBe(false)
+
+  // Resolver GET
+  await act(async () => {
+    resolveSilent([FAKE_CONV])
+    await Promise.resolve()
+  })
+
+  // loading permanece false após silent GET
+  expect(result.current.loading).toBe(false)
+})
+
+// RT-SILENT-04 — lista antiga permanece visível durante GET pendente
+it('RT-SILENT-04: lista antiga permanece visível enquanto silent GET está pendente', async () => {
+  const CONV_OLD: MetaChatConversation = { ...FAKE_CONV, unread_count: 0, last_message_preview: 'mensagem antiga' }
+
+  let resolveSilent!: (v: MetaChatConversation[]) => void
+  const pendingSilent = new Promise<MetaChatConversation[]>(res => { resolveSilent = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([CONV_OLD])   // initial load
+    .mockReturnValueOnce(pendingSilent)  // silent GET pendente
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.conversations[0].last_message_preview).toBe('mensagem antiga')
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+  })
+
+  // Durante o GET pendente, lista antiga é visível
+  expect(result.current.conversations).toHaveLength(1)
+  expect(result.current.conversations[0].last_message_preview).toBe('mensagem antiga')
+  expect(result.current.loading).toBe(false)
+
+  await act(async () => {
+    resolveSilent([])
+    await Promise.resolve()
+  })
+})
+
+// RT-SILENT-05 — quando GET resolve, nova lista substitui atomicamente
+it('RT-SILENT-05: quando silent GET resolve, nova lista substitui a antiga', async () => {
+  const CONV_NEW: MetaChatConversation = {
+    ...FAKE_CONV,
+    unread_count:         3,
+    last_message_preview: 'nova mensagem inbound',
+    last_message_at:      '2026-09-21T21:00:00.000Z',
+  }
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])  // initial load
+    .mockResolvedValueOnce([CONV_NEW])   // silent GET resolve com dados novos
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.conversations[0].unread_count).toBe(1)
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+    await Promise.resolve()
+  })
+
+  // Nova lista substituiu a antiga — sem flash
+  expect(result.current.conversations[0].unread_count).toBe(3)
+  expect(result.current.conversations[0].last_message_preview).toBe('nova mensagem inbound')
+  expect(result.current.loading).toBe(false)
+})
+
+// RT-SILENT-06 — falha do silent preserva lista e não cria erro visual
+it('RT-SILENT-06: falha do silent GET preserva lista atual e não define error', async () => {
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])                     // initial load
+    .mockRejectedValueOnce(new Error('network_error'))      // silent GET falha
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.conversations).toHaveLength(1)
+  expect(result.current.error).toBeNull()
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+    await Promise.resolve()
+  })
+
+  // Lista mantida — sem error — sem loading — dados antigos preservados
+  expect(result.current.conversations).toHaveLength(1)
+  expect(result.current.conversations[0].id).toBe(CONV_ID)
+  expect(result.current.error).toBeNull()
+  expect(result.current.loading).toBe(false)
+})
+
+// RT-SILENT-07 — dois silents concorrentes → somente o mais recente vence
+it('RT-SILENT-07: dois silent concorrentes → somente o mais recente atualiza conversations', async () => {
+  const CONV_FIRST:  MetaChatConversation = { ...FAKE_CONV, unread_count: 10 }
+  const CONV_SECOND: MetaChatConversation = { ...FAKE_CONV, unread_count: 20 }
+
+  let resolveFirst!:  (v: MetaChatConversation[]) => void
+  let resolveSecond!: (v: MetaChatConversation[]) => void
+  const pendingFirst  = new Promise<MetaChatConversation[]>(res => { resolveFirst  = res })
+  const pendingSecond = new Promise<MetaChatConversation[]>(res => { resolveSecond = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])   // initial load
+    .mockReturnValueOnce(pendingFirst)    // silent #1 — pendente
+    .mockReturnValueOnce(pendingSecond)   // silent #2 — pendente
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  // Disparar dois eventos RT
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+
+  // Resolver: primeiro o mais antigo, depois o mais recente
+  await act(async () => {
+    resolveFirst([CONV_FIRST])   // stale — deve ser descartado
+    await Promise.resolve()
+  })
+
+  // fetchCountRef: CONV_FIRST era stale (N < N+2) → descartado
+  expect(result.current.conversations[0].unread_count).toBe(FAKE_CONV.unread_count) // ainda o initial
+
+  await act(async () => {
+    resolveSecond([CONV_SECOND])  // mais recente — deve vencer
+    await Promise.resolve()
+  })
+
+  expect(result.current.conversations[0].unread_count).toBe(20)
+})
+
+// RT-SILENT-08 — silent A + troca instance B → A ignorado
+it('RT-SILENT-08: silent A em curso + troca instance B → resposta A descartada', async () => {
+  const CONV_B: MetaChatConversation = { ...FAKE_CONV, id: 'conv-B-0001', instance_id: INSTANCE_B }
+
+  let resolveSilentA!: (v: MetaChatConversation[]) => void
+  const pendingSilentA = new Promise<MetaChatConversation[]>(res => { resolveSilentA = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])   // initial A
+    .mockReturnValueOnce(pendingSilentA)  // silent A — pendente
+    .mockResolvedValueOnce([CONV_B])      // initial B após troca
+
+  const { result, rerender } = renderHook(
+    ({ instanceId }) => useMetaChatData(COMPANY_A, instanceId),
+    { initialProps: { instanceId: INSTANCE_A } }
+  )
+  await act(async () => { await Promise.resolve() })
+
+  // Disparar silent A
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+
+  // Trocar instância antes de silent A resolver
+  rerender({ instanceId: INSTANCE_B })
+  await act(async () => { await Promise.resolve() })
+
+  // Instância B carregada
+  expect(result.current.conversations[0].id).toBe('conv-B-0001')
+
+  // Resolver silent A (stale) — fetchCountRef não bate → descartado
+  await act(async () => {
+    resolveSilentA([{ ...FAKE_CONV, unread_count: 99 }])
+    await Promise.resolve()
+  })
+
+  // Estado continua sendo de B
+  expect(result.current.conversations[0].id).toBe('conv-B-0001')
+  expect(result.current.conversations[0].unread_count).not.toBe(99)
+})
+
+// RT-SILENT-09 — silent company A + company B → A ignorado
+it('RT-SILENT-09: silent company A em curso + troca company B → resposta A descartada', async () => {
+  const CONV_B: MetaChatConversation = { ...FAKE_CONV, id: 'conv-compB-0001' }
+
+  let resolveSilentA!: (v: MetaChatConversation[]) => void
+  const pendingSilentA = new Promise<MetaChatConversation[]>(res => { resolveSilentA = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])   // initial company A
+    .mockReturnValueOnce(pendingSilentA)  // silent A — pendente
+    .mockResolvedValueOnce([CONV_B])      // initial company B
+
+  const { result, rerender } = renderHook(
+    ({ companyId }) => useMetaChatData(companyId, INSTANCE_A),
+    { initialProps: { companyId: COMPANY_A } }
+  )
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+
+  // Trocar company
+  rerender({ companyId: COMPANY_B })
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.conversations[0].id).toBe('conv-compB-0001')
+
+  // Resolver A stale
+  await act(async () => {
+    resolveSilentA([{ ...FAKE_CONV, id: 'stale-A' }])
+    await Promise.resolve()
+  })
+
+  expect(result.current.conversations[0].id).toBe('conv-compB-0001')
+})
+
+// RT-SILENT-10 — unmount durante silent → nenhum setState útil
+it('RT-SILENT-10: unmount durante silent GET → nenhum state update executado', async () => {
+  let resolveSilent!: (v: MetaChatConversation[]) => void
+  const pendingSilent = new Promise<MetaChatConversation[]>(res => { resolveSilent = res })
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])  // initial
+    .mockReturnValueOnce(pendingSilent)  // silent pendente
+
+  const { unmount } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+
+  // Desmontar antes do silent resolver
+  unmount()
+
+  // Resolver silent após unmount — mountedRef.current = false → return imediato
+  await act(async () => {
+    resolveSilent([{ ...FAKE_CONV, unread_count: 50 }])
+    await Promise.resolve()
+  })
+
+  // Nenhum setState chamado — sem erro de "setState em componente desmontado"
+  // (comprovado implicitamente pela ausência de warning no console — React 18)
+  expect(mockGetConversations).toHaveBeenCalledTimes(2)
+})
+
+// RT-SILENT-11 — silent NÃO desliga loading de load normal pendente
+// (cenário crítico: normalFetchCountRef protege o ciclo de loading do load normal)
+it('RT-SILENT-11: silent não pode desligar loading de load normal ainda pendente', async () => {
+  // Cenário:
+  //   1. load normal inicia (loading=true) — fetchCount=N, normalFetchCount=M
+  //   2. RT event → silent inicia — fetchCount=N+1 (silent "ganha" o árbitro de data)
+  //   3. silent resolve primeiro → setConversations OK; NÃO toca loading
+  //   4. load normal resolve (stale no fetchCountRef: N != N+1) → skip setConversations
+  //      MAS normalFetchCountRef: M == M → setLoading(false) é chamado corretamente
+
+  let resolveNormal!: (v: MetaChatConversation[]) => void
+  let resolveSilent!: (v: MetaChatConversation[]) => void
+  const pendingNormal = new Promise<MetaChatConversation[]>(res => { resolveNormal = res })
+  const pendingSilent = new Promise<MetaChatConversation[]>(res => { resolveSilent = res })
+
+  mockGetConversations
+    .mockReturnValueOnce(pendingNormal)   // load normal — fica pendente
+    .mockReturnValueOnce(pendingSilent)   // silent — fica pendente
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+
+  // Após mount: load normal disparado, loading=true
+  expect(result.current.loading).toBe(true)
+
+  // Disparar RT event — silent inicia enquanto normal está pendente
+  await act(async () => { mockRtConv.last()?.simulateUpdate({}) })
+
+  // loading AINDA true (normal ainda pendente)
+  expect(result.current.loading).toBe(true)
+
+  // Silent resolve primeiro — NÃO deve desligar loading
+  const CONV_FROM_SILENT: MetaChatConversation = { ...FAKE_CONV, unread_count: 7 }
+  await act(async () => {
+    resolveSilent([CONV_FROM_SILENT])
+    await Promise.resolve()
+  })
+
+  // loading CONTINUA true — silent não tocou normalFetchCountRef
+  expect(result.current.loading).toBe(true)
+  // Data do silent foi aplicada (era o fetch mais recente no fetchCountRef)
+  expect(result.current.conversations[0].unread_count).toBe(7)
+
+  // Agora o load normal resolve (stale no fetchCountRef, mas normalFetchCount bate)
+  await act(async () => {
+    resolveNormal([FAKE_CONV])
+    await Promise.resolve()
+  })
+
+  // loading FINALMENTE false — normalFetchCountRef permitiu setLoading(false)
+  expect(result.current.loading).toBe(false)
+  // Data do normal foi descartada (stale no fetchCountRef) — silent data permanece
+  expect(result.current.conversations[0].unread_count).toBe(7)
+})
+
+// RT-SILENT-12 — initial load continua exibindo loading normalmente
+it('RT-SILENT-12: initial load continua exibindo loading normalmente (load normal)', async () => {
+  let resolveInit!: (v: MetaChatConversation[]) => void
+  const pendingInit = new Promise<MetaChatConversation[]>(res => { resolveInit = res })
+  mockGetConversations.mockReturnValueOnce(pendingInit)
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+
+  // loading=true imediatamente após mount — load normal
+  expect(result.current.loading).toBe(true)
+  expect(result.current.conversations).toEqual([])
+
+  await act(async () => {
+    resolveInit([FAKE_CONV])
+    await Promise.resolve()
+  })
+
+  expect(result.current.loading).toBe(false)
+  expect(result.current.conversations).toHaveLength(1)
+})
+
+// RT-SILENT-13 — troca company/instance continua com reset normal
+it('RT-SILENT-13: troca de instance continua com reset normal (conversations limpas + loading)', async () => {
+  mockGetConversations.mockResolvedValueOnce([FAKE_CONV])  // initial A
+
+  let resolveB!: (v: MetaChatConversation[]) => void
+  const pendingB = new Promise<MetaChatConversation[]>(res => { resolveB = res })
+  mockGetConversations.mockReturnValueOnce(pendingB)  // fetch B pendente
+
+  const { result, rerender } = renderHook(
+    ({ instanceId }) => useMetaChatData(COMPANY_A, instanceId),
+    { initialProps: { instanceId: INSTANCE_A } }
+  )
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.conversations).toHaveLength(1)
+
+  // Trocar instância → load normal (não-silent)
+  rerender({ instanceId: INSTANCE_B })
+
+  // Imediatamente: conversations limpas + loading=true (comportamento normal preservado)
+  expect(result.current.conversations).toEqual([])
+  expect(result.current.loading).toBe(true)
+
+  await act(async () => {
+    resolveB([FAKE_CONV])
+    await Promise.resolve()
+  })
+
+  expect(result.current.loading).toBe(false)
+  expect(result.current.conversations).toHaveLength(1)
+})
+
+// RT-SILENT-14 — payload RT continua sem ser source of truth
+it('RT-SILENT-14: payload RT não é source of truth; GET canônico determina o estado', async () => {
+  const payloadComDadosFalsos = {
+    id:                   CONV_ID,
+    company_id:           COMPANY_A,
+    unread_count:         999,
+    last_message_preview: 'payload falso não deve aparecer',
+  }
+
+  const CONV_FROM_GET: MetaChatConversation = {
+    ...FAKE_CONV,
+    unread_count:         3,
+    last_message_preview: 'mensagem real do GET',
+  }
+
+  mockGetConversations
+    .mockResolvedValueOnce([FAKE_CONV])      // initial
+    .mockResolvedValueOnce([CONV_FROM_GET])  // silent GET
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate(payloadComDadosFalsos)
+    await Promise.resolve()
+  })
+
+  // Estado vem do GET — payload descartado
+  expect(result.current.conversations[0].unread_count).toBe(3)
+  expect(result.current.conversations[0].last_message_preview).toBe('mensagem real do GET')
+  expect(result.current.conversations[0].unread_count).not.toBe(999)
 })

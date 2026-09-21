@@ -3,7 +3,7 @@
 //
 // Hook isolado para leitura de conversas Meta WhatsApp no Chat.
 //
-// Responsabilidade (MVP3C.2 + MVP3E B2):
+// Responsabilidade (MVP3C.2 + MVP3E B2 + MVP3E B2.1):
 //   - Receber companyId + selectedInstanceId (Meta)
 //   - Buscar conversas via metaWhatsAppApi.getConversations()
 //   - Manter estado: conversations, loading, error, selectedConversationId
@@ -11,7 +11,12 @@
 //   - Refresh explícito
 //   - Limpar estado corretamente quando company/instance mudar
 //   - Realtime: subscription UPDATE em meta_conversations → sinal de invalidação
-//     (MVP3E B2 — quando inbound atualiza conversa, sidebar reflete automaticamente)
+//     silencioso (MVP3E B2.1 — sem flicker, sem spinner durante atualização RT)
+//
+// Estratégia de fetch (B2.1):
+//   - performFetch({ silent }) — única implementação do GET
+//   - load()       = performFetch({ silent: false }) → initial + troca + refresh manual
+//   - loadSilent() = performFetch({ silent: true  }) → somente Realtime
 //
 // Fora do escopo:
 //   - Busca de messages (useMetaChatMessages — B1)
@@ -19,13 +24,17 @@
 //   - Outbound sidebar update (send.js não atualiza meta_conversations — débito)
 //
 // Proteções:
-//   - Anti-stale: fetchCountRef descarta respostas de fetches anteriores
-//   - Anti-unmount: mountedRef evita setState após desmontagem
+//   - fetchCountRef (compartilhado): arbitra setConversations — apenas fetch mais
+//     recente pode atualizar a lista (normal e silent compartilham o mesmo contador)
+//   - normalFetchCountRef (exclusivo do load normal): arbitra setLoading(false) —
+//     silent nunca liga nem desliga loading; load normal antigo não desliga loading
+//     de load normal mais novo
+//   - mountedRef: evita setState após desmontagem
 //   - Troca de instance: limpa selectedConversationId e conversations imediatamente
 //   - companyId ou selectedInstanceId ausentes: zero request, estado limpo
 //   - Realtime guard company A→B: activeCompanyRef rastreia company ativa
 //   - Realtime guard instance A→B: activeInstanceRef rastreia instance ativa
-//   - Eventos tardios de channels anteriores descartados antes de load()
+//   - Eventos tardios de channels anteriores descartados antes de loadSilent()
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -55,10 +64,23 @@ export function useMetaChatData(
   const [error,                  setError]                  = useState<string | null>(null)
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
 
-  // Contador monotônico de fetches.
-  // Callbacks assíncronos só aplicam resultado se o número ainda bater —
-  // descarta respostas de fetches stale (instância antiga, refresh substituído).
-  const fetchCountRef = useRef(0)
+  // ── Contadores de fetch ────────────────────────────────────────────────────
+  //
+  // fetchCountRef (compartilhado — normal + silent):
+  //   Arbitra qual resposta pode atualizar conversations.
+  //   Incrementado a cada fetch (normal ou silent).
+  //   Resposta stale: currentFetch !== fetchCountRef.current → descartada.
+  //
+  // normalFetchCountRef (exclusivo de fetches não-silent):
+  //   Arbitra quando setLoading(false) pode ser chamado.
+  //   Incrementado apenas por load normal.
+  //   Garante:
+  //     1. silent nunca liga nem desliga loading
+  //     2. load normal antigo não desliga loading de load normal mais novo
+  //     3. silent não pode "roubar" o slot e deixar loading preso
+
+  const fetchCountRef       = useRef(0)
+  const normalFetchCountRef = useRef(0)
 
   // Guard de unmount: evita setState após desmontagem do componente.
   const mountedRef = useRef(true)
@@ -69,46 +91,87 @@ export function useMetaChatData(
     }
   }, [])
 
-  // ── Fetch principal ────────────────────────────────────────────────────────
+  // ── performFetch — única implementação do GET ──────────────────────────────
+  //
+  // silent=false (load normal): reseta estado + exibe loading antes do GET.
+  // silent=true  (loadSilent):  mantém estado atual + GET silencioso em background.
+  //
+  // Ambos usam fetchCountRef para arbitrar setConversations.
+  // Somente normal usa normalFetchCountRef para arbitrar setLoading.
 
-  const load = useCallback(() => {
-    // Sem company ou instância → estado limpo, zero request.
+  const performFetch = useCallback(({ silent }: { silent: boolean }) => {
+    // Sem IDs: somente load normal reseta estado; silent não interfere.
     if (!companyId || !selectedInstanceId) {
-      setConversations([])
-      setLoading(false)
-      setError(null)
+      if (!silent) {
+        setConversations([])
+        setLoading(false)
+        setError(null)
+      }
       return
     }
 
-    // Limpar dados da instância anterior imediatamente para evitar flash de dados stale.
-    setConversations([])
-    setError(null)
-    setLoading(true)
+    // Normal: limpar estado antigo e sinalizar loading.
+    // Silent: manter conversations atuais visíveis durante o GET.
+    if (!silent) {
+      setConversations([])
+      setError(null)
+      setLoading(true)
+    }
 
+    // Slot deste fetch no árbitro global de conversas.
     const currentFetch = ++fetchCountRef.current
+
+    // Slot deste fetch no árbitro exclusivo de loading.
+    // Silent recebe -1 (nunca bate com um valor real do normalFetchCountRef).
+    const currentNormalFetch = silent ? -1 : ++normalFetchCountRef.current
 
     metaWhatsAppApi
       .getConversations(companyId, { instanceId: selectedInstanceId })
       .then((result) => {
-        if (!mountedRef.current)                        return  // desmontado
-        if (currentFetch !== fetchCountRef.current)     return  // stale — ignorar
+        if (!mountedRef.current)                      return  // desmontado
+        if (currentFetch !== fetchCountRef.current)   return  // stale — fetch mais recente ganhou
         setConversations(result)
       })
       .catch((err: unknown) => {
-        if (!mountedRef.current)                        return
-        if (currentFetch !== fetchCountRef.current)     return
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'Erro ao carregar conversas Meta WhatsApp'
-        setError(message)
+        if (!mountedRef.current)                      return
+        if (currentFetch !== fetchCountRef.current)   return
+        // Silent error: preservar lista atual silenciosamente.
+        // Falha transitória de RT não substitui dados atuais por erro.
+        if (!silent) {
+          const message =
+            err instanceof Error
+              ? err.message
+              : 'Erro ao carregar conversas Meta WhatsApp'
+          setError(message)
+        }
       })
       .finally(() => {
-        if (!mountedRef.current)                        return
-        if (currentFetch !== fetchCountRef.current)     return
-        setLoading(false)
+        if (!mountedRef.current) return
+        // Loading gerenciado exclusivamente por normalFetchCountRef:
+        //   - silent nunca executa este bloco (currentNormalFetch === -1)
+        //   - load normal só desliga loading se ainda for o mais recente
+        //     (guard: currentNormalFetch === normalFetchCountRef.current)
+        if (!silent && currentNormalFetch === normalFetchCountRef.current) {
+          setLoading(false)
+        }
       })
   }, [companyId, selectedInstanceId])
+
+  // ── Wrappers públicos / internos ───────────────────────────────────────────
+
+  // load: initial load + troca company/instance + refresh manual.
+  // Produz indicador visual de loading — comportamento original preservado.
+  const load = useCallback(
+    () => performFetch({ silent: false }),
+    [performFetch]
+  )
+
+  // loadSilent: exclusivo para Realtime.
+  // GET em background — sem spinner, sem limpar conversations.
+  const loadSilent = useCallback(
+    () => performFetch({ silent: true }),
+    [performFetch]
+  )
 
   // ── Troca de instância → limpar conversa selecionada ──────────────────────
   // Executado antes do load() para garantir que nunca reutilizamos um
@@ -124,38 +187,34 @@ export function useMetaChatData(
     load()
   }, [load])
 
-  // ── Realtime — MVP3E B2: sinal de invalidação UPDATE em meta_conversations ─
+  // ── Realtime — MVP3E B2.1: sinal de invalidação silencioso ────────────────
   //
-  // Propósito: detectar atualizações de conversas (last_message_preview,
-  //   last_message_at, unread_count) causadas por mensagens inbound, sem polling.
+  // Propósito: detectar UPDATEs em meta_conversations (last_message_preview,
+  //   last_message_at, unread_count) causados por inbound, sem polling e sem flicker.
   //
-  // Estratégia: invalidation-only.
+  // Estratégia: invalidation-only + silent GET.
   //   O payload do evento NÃO é aplicado ao estado — nenhum merge local.
-  //   Apenas dispara load() — o GET canônico determina o estado final.
-  //   Ordenação e preview sempre refletem o backend.
+  //   loadSilent() dispara GET canônico em background.
+  //   Lista atual permanece visível enquanto GET executa.
+  //   Nova lista substitui atomicamente quando GET resolve.
+  //   Nenhum spinner, nenhum loading indicator.
   //
   // Filtro: company_id=eq.<companyId>
   //   Supabase postgres_changes suporta apenas um filtro simples (sem AND).
-  //   Portanto, UPDATEs de qualquer instância da company chegam ao channel.
-  //   Um GET desnecessário pode ocorrer se outra instância da mesma company
-  //   for atualizada — aceito como trade-off no MVP3E B2.
-  //   Segurança real: RLS meta_conversations_select_meta_view.
-  //   GET usa selectedInstanceId como parâmetro → retorna apenas conversas corretas.
+  //   UPDATEs de qualquer instância da company chegam ao channel.
+  //   Guard activeInstanceRef descarta eventos de instância divergente.
+  //   GET usa selectedInstanceId → retorna apenas conversas corretas.
   //
   // Guard company A→B / instance A→B:
-  //   activeCompanyRef e activeInstanceRef rastreiam os valores ativos.
-  //   Atualizados sincronamente durante render (sem useEffect intermediário).
-  //   capturedCompanyId e capturedInstanceId são capturados no closure do effect.
-  //   Handler descarta evento se qualquer ref divergir — não confia somente no
-  //   unsubscribe assíncrono do Supabase client.
+  //   Refs atualizadas sincronamente durante render (sem useEffect intermediário).
+  //   capturedCompanyId/capturedInstanceId capturados no closure do effect.
+  //   Handler descarta evento tardio sem depender somente de unsubscribe assíncrono.
   //
-  // Outbound: send.js não atualiza meta_conversations → B2 não cobre outbound.
-  //   Débito técnico documentado; fora do escopo de B2.
+  // Outbound: send.js não atualiza meta_conversations — débito técnico documentado.
   //
   // Cleanup: channel.unsubscribe() — padrão consolidado do projeto.
 
-  // Refs que rastreiam company/instance atualmente renderizados.
-  // Atualização síncrona durante render — sem janela de stale.
+  // Refs atualizadas sincronamente durante render.
   const activeCompanyRef  = useRef(companyId)
   activeCompanyRef.current  = companyId
 
@@ -165,8 +224,6 @@ export function useMetaChatData(
   useEffect(() => {
     if (!companyId || !selectedInstanceId) return
 
-    // Capturar valores no momento da criação do channel.
-    // Handler compara com refs para rejeitar eventos tardios.
     const capturedCompanyId  = companyId
     const capturedInstanceId = selectedInstanceId
 
@@ -181,22 +238,19 @@ export function useMetaChatData(
           filter: `company_id=eq.${companyId}`,
         },
         (_payload) => {
-          // Guard unmount: não disparar load após desmontagem.
+          // Guard unmount: não disparar GET após desmontagem.
           if (!mountedRef.current) return
 
           // Guard company A→B: descartar evento tardio de company anterior.
           if (activeCompanyRef.current !== capturedCompanyId) return
 
-          // Guard instance A→B: descartar evento de outra instância ou antiga.
-          // Nota: eventos de outra instância da mesma company também chegam via
-          // filtro company_id — este guard descarta apenas eventos de instâncias
-          // diferentes do contexto atual, não é discriminação por `instance_id`
-          // no payload (invalidation-only: payload não é acessado).
+          // Guard instance A→B: descartar evento quando instância mudou.
           if (activeInstanceRef.current !== capturedInstanceId) return
 
-          // Sinal de invalidação — _payload não é source of truth.
-          // O GET canônico (com selectedInstanceId) determina o estado final.
-          load()
+          // Sinal de invalidação silencioso — _payload não é source of truth.
+          // GET canônico (com selectedInstanceId) determina o estado final.
+          // Lista atual permanece visível durante o GET. Sem spinner.
+          loadSilent()
         }
       )
       .subscribe()
@@ -204,7 +258,7 @@ export function useMetaChatData(
     return () => {
       channel.unsubscribe()
     }
-  }, [companyId, selectedInstanceId, load])
+  }, [companyId, selectedInstanceId, loadSilent])
 
   // ── Handler de seleção de conversa (estado local apenas) ──────────────────
 
