@@ -1,7 +1,7 @@
 // =============================================================================
-// ChatLayout.routing.test.ts — MVP3C.3 / Etapa 2 + 2.1
+// ChatLayout.routing.test.ts — MVP3C.3 / Etapa 2 + 2.1 + MVP3C.4 / Etapa 3
 //
-// Testa a lógica pura de roteamento de instâncias do ChatLayout.
+// Testa a lógica pura de roteamento de instâncias e painel central do ChatLayout.
 //
 // Abordagem: espelha exatamente a lógica inline do componente como funções
 // puras. NÃO renderiza o componente (evita mocking excessivo/frágil de
@@ -13,6 +13,8 @@
 //   - Exibição da lista Meta:             ConversationSidebar.meta.test.tsx
 //   - Select sem provider_token:          chatApi.getCompanyInstances.test.ts
 //   - Hook useMetaChatData:               useMetaChatData.test.ts
+//   - Hook useMetaChatMessages:           useMetaChatMessages.test.ts
+//   - Render MetaChatArea:                MetaChatArea.test.tsx
 //
 // CL-01  seleção Meta: provider=meta, chatData recebe somente 'all'
 // CL-02  seleção Meta: ID Meta NÃO entra em chatData.setSelectedInstance
@@ -26,6 +28,16 @@
 // CL-10  hasNoWhatsAppInstances: false enquanto carregamento pendente
 // CL-11  metaInstanceId: undefined quando provider !== 'meta'
 // CL-12  metaInstanceId: ID correto quando provider === 'meta'
+//
+// MVP3C.4 — Routing do painel central (Etapa 3):
+// CL-13  Meta + conversationId → rota central = 'meta-chat' (MetaChatArea monta)
+// CL-14  Meta + conversationId null → rota central = 'meta-empty' (sem MetaChatArea)
+// CL-15  Uazapi + chatSelectedConversation → rota central = 'uazapi-chat'
+// CL-16  Meta → rota direita = 'meta-placeholder' (LeadPanel Uazapi bloqueado)
+// CL-17  Uazapi + chatSelectedConversation → rota direita = 'uazapi-lead'
+// CL-18  selectedMetaConversation: encontra pelo ID correto
+// CL-19  selectedMetaConversation: undefined quando ID não existe
+// CL-20  selectedMetaConversation: undefined quando conversationId é null
 // =============================================================================
 
 import { describe, it, expect } from 'vitest'
@@ -167,6 +179,166 @@ describe('ChatLayout routing — lógica pura (MVP3C.3)', () => {
     it('CL-12: provider="meta" → metaInstanceId é o ID Meta', () => {
       const s: SelectedWAInstance = { provider: 'meta', id: 'meta-uuid-001' }
       expect(deriveMetaInstanceId(s)).toBe('meta-uuid-001')
+    })
+  })
+})
+
+// =============================================================================
+// MVP3C.4 — ROUTING DO PAINEL CENTRAL (Etapa 3)
+//
+// Funções puras espelhando a lógica do ChatLayout para:
+//   1. Decisão do painel central (área de chat)
+//   2. Decisão do painel direito (LeadPanel)
+//   3. Derivação de selectedMetaConversation
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Tipos auxiliares de rota — espelham a estrutura ternária do ChatLayout
+// ---------------------------------------------------------------------------
+type CentralPanelRoute =
+  | 'instagram'
+  | 'meta-chat'     // MetaChatArea monta — conversationId presente
+  | 'meta-empty'    // Meta ativo mas sem conversa selecionada
+  | 'uazapi'        // ChatArea Uazapi (locked ou chat ou empty)
+
+type RightPanelRoute =
+  | 'instagram-right'
+  | 'meta-placeholder' // LeadPanel Uazapi bloqueado no branch Meta
+  | 'uazapi-lead'      // LeadPanel Uazapi ativo
+
+// ---------------------------------------------------------------------------
+// Funções puras — espelham exatamente os ternários de ChatLayout.tsx
+// ---------------------------------------------------------------------------
+
+/**
+ * Espelha:
+ *   selectedChannel === 'instagram' → 'instagram'
+ *   selectedWAInstance.provider === 'meta' && selectedConversationId → 'meta-chat'
+ *   selectedWAInstance.provider === 'meta' && !selectedConversationId → 'meta-empty'
+ *   else → 'uazapi'
+ */
+function resolveCentralRoute(
+  selectedChannel: 'whatsapp' | 'instagram',
+  provider: 'uazapi' | 'meta' | undefined,
+  selectedConversationId: string | null
+): CentralPanelRoute {
+  if (selectedChannel === 'instagram') return 'instagram'
+  if (provider === 'meta') {
+    return selectedConversationId ? 'meta-chat' : 'meta-empty'
+  }
+  return 'uazapi'
+}
+
+/**
+ * Espelha:
+ *   selectedChannel === 'instagram' → 'instagram-right'
+ *   selectedWAInstance.provider === 'meta' → 'meta-placeholder'
+ *   else → 'uazapi-lead'
+ */
+function resolveRightRoute(
+  selectedChannel: 'whatsapp' | 'instagram',
+  provider: 'uazapi' | 'meta' | undefined
+): RightPanelRoute {
+  if (selectedChannel === 'instagram') return 'instagram-right'
+  if (provider === 'meta') return 'meta-placeholder'
+  return 'uazapi-lead'
+}
+
+/**
+ * Espelha exatamente o useMemo de selectedMetaConversation:
+ *   !selectedConversationId → undefined
+ *   else → conversations.find(c => c.id === selectedConversationId)
+ *
+ * NÃO usa instance_id para inferir provider.
+ */
+function deriveSelectedMetaConversation(
+  conversations: Array<{ id: string; wa_id: string; contact_name: string | null }>,
+  selectedConversationId: string | null
+): { id: string; wa_id: string; contact_name: string | null } | undefined {
+  if (!selectedConversationId) return undefined
+  return conversations.find(c => c.id === selectedConversationId)
+}
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+const META_CONV_A = { id: 'meta-conv-aaa', wa_id: '+5511999990001', contact_name: 'Alice Meta' }
+const META_CONV_B = { id: 'meta-conv-bbb', wa_id: '+5511999990002', contact_name: 'Bob Meta' }
+
+// ---------------------------------------------------------------------------
+// Testes
+// ---------------------------------------------------------------------------
+describe('ChatLayout — Routing painel central MVP3C.4', () => {
+
+  describe('Painel central', () => {
+    it('CL-13: Meta + conversationId → rota = "meta-chat" (MetaChatArea monta)', () => {
+      expect(resolveCentralRoute('whatsapp', 'meta', 'meta-conv-aaa')).toBe('meta-chat')
+    })
+
+    it('CL-14: Meta + conversationId null → rota = "meta-empty" (sem MetaChatArea)', () => {
+      expect(resolveCentralRoute('whatsapp', 'meta', null)).toBe('meta-empty')
+    })
+
+    it('CL-15: Uazapi + conversationId → rota = "uazapi"', () => {
+      expect(resolveCentralRoute('whatsapp', 'uazapi', 'uazapi-conv-xyz')).toBe('uazapi')
+    })
+
+    it('CL-15b: provider=undefined ("all") → rota = "uazapi"', () => {
+      expect(resolveCentralRoute('whatsapp', undefined, null)).toBe('uazapi')
+    })
+
+    it('CL-15c: Instagram → rota = "instagram" (Meta/Uazapi ignorados)', () => {
+      // Mesmo que provider seja 'meta', canal Instagram sobrepõe
+      expect(resolveCentralRoute('instagram', 'meta', 'meta-conv-aaa')).toBe('instagram')
+    })
+  })
+
+  describe('Painel direito (LeadPanel)', () => {
+    it('CL-16: Meta → rota direita = "meta-placeholder" (LeadPanel Uazapi bloqueado)', () => {
+      expect(resolveRightRoute('whatsapp', 'meta')).toBe('meta-placeholder')
+    })
+
+    it('CL-17: Uazapi → rota direita = "uazapi-lead" (LeadPanel Uazapi ativo)', () => {
+      expect(resolveRightRoute('whatsapp', 'uazapi')).toBe('uazapi-lead')
+    })
+
+    it('CL-17b: provider=undefined → rota direita = "uazapi-lead"', () => {
+      expect(resolveRightRoute('whatsapp', undefined)).toBe('uazapi-lead')
+    })
+
+    it('CL-17c: Instagram → rota direita = "instagram-right"', () => {
+      expect(resolveRightRoute('instagram', undefined)).toBe('instagram-right')
+    })
+  })
+
+  describe('selectedMetaConversation derivation', () => {
+    it('CL-18: encontra a conversa pelo ID correto', () => {
+      const result = deriveSelectedMetaConversation([META_CONV_A, META_CONV_B], 'meta-conv-bbb')
+      expect(result).toEqual(META_CONV_B)
+    })
+
+    it('CL-19: retorna undefined quando ID não existe nas conversas', () => {
+      const result = deriveSelectedMetaConversation([META_CONV_A, META_CONV_B], 'meta-conv-inexistente')
+      expect(result).toBeUndefined()
+    })
+
+    it('CL-20: retorna undefined quando conversationId é null', () => {
+      const result = deriveSelectedMetaConversation([META_CONV_A, META_CONV_B], null)
+      expect(result).toBeUndefined()
+    })
+
+    it('CL-20b: retorna undefined quando lista está vazia', () => {
+      const result = deriveSelectedMetaConversation([], 'meta-conv-aaa')
+      expect(result).toBeUndefined()
+    })
+
+    it('CL-20c: NÃO usa instance_id para inferir provider (só usa id)', () => {
+      // instance_id NÃO é parte dos critérios de lookup
+      const convWithInstance = { id: 'meta-conv-aaa', wa_id: '+55119', contact_name: 'X' }
+      const result = deriveSelectedMetaConversation([convWithInstance], 'meta-conv-aaa')
+      expect(result?.id).toBe('meta-conv-aaa')
+      // O critério de lookup é exclusivamente o id — confirmado pelo fato de que
+      // a função não aceita nem usa instance_id como parâmetro
     })
   })
 })

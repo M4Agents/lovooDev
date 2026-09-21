@@ -19,6 +19,7 @@ import { ChatArea } from './ChatArea/ChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
 import { LockedChatPanel } from './LockedChatPanel'
 import { InstagramMainArea, InstagramRightPanel } from './InstagramAreaRenderer'
+import { MetaChatArea } from './MetaChatArea/MetaChatArea'
 import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
 import type { ChatChannel } from '../../types/instagram-chat'
 import type { InstagramCommentsFilter } from '../../types/instagram-comments'
@@ -218,6 +219,19 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     metaChatData.refresh,
   ])
 
+  // MVP3C.4 — Conversa Meta selecionada derivada exclusivamente de metaChatData.
+  // NÃO faz fetch adicional; NÃO usa instance ID para inferir provider.
+  // undefined quando nenhuma conversa estiver selecionada ou ID não encontrado.
+  const selectedMetaConversation = useMemo(
+    () =>
+      metaChatData.selectedConversationId
+        ? metaChatData.conversations.find(
+            c => c.id === metaChatData.selectedConversationId
+          )
+        : undefined,
+    [metaChatData.conversations, metaChatData.selectedConversationId]
+  )
+
   // Conversa clicada que está bloqueada (lead is_over_plan = true) — apenas WhatsApp
   const [lockedConversation, setLockedConversation] = useState<ChatConversation | null>(null)
 
@@ -392,22 +406,15 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             activeTab={activeIgTab}
           />
         ) : selectedWAInstance.provider === 'meta' ? (
-          /* MVP3C.3 — Meta selecionado: ChatArea Uazapi NÃO renderiza.
-             MetaChatArea será implementado em MVP3C.4. */
+          /* MVP3C.4 — MetaChatArea read-only.
+             Monta somente quando há conversationId selecionado.
+             ChatArea Uazapi nunca monta neste branch. */
           metaChatData.selectedConversationId ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
-                <div className="mb-4">
-                  <div className="mx-auto h-16 w-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                    </svg>
-                  </div>
-                </div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-1">Chat Meta</h3>
-                <p className="text-sm text-slate-500">Em breve</p>
-              </div>
-            </div>
+            <MetaChatArea
+              companyId={companyId}
+              conversationId={metaChatData.selectedConversationId}
+              conversation={selectedMetaConversation}
+            />
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
