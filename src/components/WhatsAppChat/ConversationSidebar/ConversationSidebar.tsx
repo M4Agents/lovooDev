@@ -14,6 +14,7 @@ import type {
   InstagramConnection,
   ChatChannel,
 } from '../../../types/instagram-chat'
+import type { WhatsAppProvider, MetaChatConversation } from '../../../types/meta-whatsapp'
 import type { UseInstagramCommentsDataReturn } from '../../../hooks/instagram/useInstagramCommentsData'
 import { InstanceSelector } from '../InstanceSelector'
 import { ChannelSelector } from '../ChannelSelector/ChannelSelector'
@@ -25,6 +26,22 @@ import { chatApi } from '../../../services/chat/chatApi'
 // =====================================================
 // TIPOS DO COMPONENTE
 // =====================================================
+
+// =====================================================
+// MVP3C.3 — CONTRATO META SIDEBAR
+// =====================================================
+// Dados de conversas Meta passados do ChatLayout.
+// Construído exclusivamente a partir de useMetaChatData.
+// NÃO contém dados Uazapi, lead_id, assigned_to ou avatar.
+
+export interface MetaSidebarData {
+  conversations:          MetaChatConversation[]
+  selectedConversationId: string | null
+  loading:                boolean
+  error:                  string | null
+  onSelectConversation:   (id: string) => void
+  onRefresh:              () => void
+}
 
 /** Dados do canal Instagram passados do ChatLayout */
 export interface InstagramSidebarData {
@@ -51,7 +68,8 @@ interface ConversationSidebarProps {
   selectedConversation?: string
   filter: ConversationFilter
   loading: boolean
-  onSelectInstance: (instanceId: string) => void
+  /** Ampliado para receber provider explícito do InstanceSelector — compatível com legado (provider undefined) */
+  onSelectInstance: (instanceId: string, provider?: WhatsAppProvider) => void
   onSelectConversation: (conversationId: string) => void
   onFilterChange: (filter: ConversationFilter) => void
   onRefresh: () => void
@@ -66,6 +84,10 @@ interface ConversationSidebarProps {
   igData?: InstagramSidebarData
   /** Dados de comentários Instagram (opcional) */
   igCommentsData?: UseInstagramCommentsDataReturn
+  /** MVP3C.3 — Dados das conversas Meta (opcional; presente somente quando Meta ativo) */
+  metaData?: MetaSidebarData
+  /** MVP3C.3 — Provider da instância selecionada; evita lookup por ID */
+  selectedProvider?: WhatsAppProvider
 }
 
 // =====================================================
@@ -92,6 +114,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onChannelChange,
   igData,
   igCommentsData,
+  metaData,
+  selectedProvider,
 }) => {
   const { t } = useTranslation('chat')
   const [searchTerm, setSearchTerm] = useState('')
@@ -103,7 +127,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   // Contador para descartar respostas de requests obsoletas (race condition)
   const searchRequestRef = useRef(0)
 
-  const isInstagram = selectedChannel === 'instagram'
+  const isInstagram  = selectedChannel === 'instagram'
+  // MVP3C.3 — provider explícito; nunca inferido por lookup
+  const isMetaActive = selectedProvider === 'meta'
 
   // Tab ativa para Instagram (incluindo 'comments' e 'pending')
   const activeIgTab = igData?.filter.type ?? 'all'
@@ -139,7 +165,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   // Respeita visibilidade de sellers (FASE 5ZC via RPC).
 
   useEffect(() => {
-    if (isInstagram || searchTerm.trim().length < 2) {
+    // Meta usa lista própria — busca Uazapi não deve disparar em modo Meta
+    if (isInstagram || isMetaActive || searchTerm.trim().length < 2) {
       setSearchResults([])
       setSearchError(false)
       return
@@ -174,15 +201,16 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     }, 400)
 
     return () => clearTimeout(timeout)
-  }, [searchTerm, companyId, userId, filter.type, selectedInstance, isInstagram])
+  }, [searchTerm, companyId, userId, filter.type, selectedInstance, isInstagram, isMetaActive])
 
   // =====================================================
   // CONVERSAS WA — origem dinâmica (busca ou lista paginada)
   // =====================================================
   // Quando busca ativa (>= 2 chars): usa resultados do banco.
   // Quando vazio/curto: usa lista paginada carregada (comportamento original).
+  // Meta: busca Uazapi nunca ativa em modo Meta.
 
-  const isSearchActive = searchTerm.trim().length >= 2 && !isInstagram
+  const isSearchActive = searchTerm.trim().length >= 2 && !isInstagram && !isMetaActive
 
   const filteredWaConversations = conversations.filter(conversation => {
     if (!searchTerm) return true
@@ -215,6 +243,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
   const activeLoading = isInstagram
     ? (isCommentTab ? (igCommentsData?.commentsLoading ?? false) : (igData?.loading ?? false))
+    : isMetaActive
+    ? (metaData?.loading ?? false)
     : loading
 
   return (
@@ -250,7 +280,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             />
             {/* Refresh */}
             <button
-              onClick={isInstagram ? igData?.onRefresh : onRefresh}
+              onClick={isInstagram ? igData?.onRefresh : isMetaActive ? metaData?.onRefresh : onRefresh}
               disabled={activeLoading}
               className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white/60 disabled:opacity-50 transition-all duration-200"
             >
@@ -308,8 +338,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         </div>
       </div>
 
-      {/* Filtros — chips horizontais com scroll */}
-      <div className="px-3 py-2 border-b border-slate-200/40 bg-slate-50/60">
+      {/* Filtros — chips horizontais com scroll (oculto em modo Meta) */}
+      {!isMetaActive && <div className="px-3 py-2 border-b border-slate-200/40 bg-slate-50/60">
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           {filterOptions.map(option => {
             const activeKey = isInstagram ? igData?.filter.type : filter.type
@@ -346,35 +376,202 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
             )
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Lista de Conversas / Comentários */}
       <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-slate-50/50">
-        {isInstagram
-          ? (
-            <InstagramSidebarContent
-              igData={igData}
-              igCommentsData={igCommentsData}
-              activeTab={activeIgTab}
-            />
-          )
-          : <WhatsAppConversationList
-              loading={loading}
-              filteredConversations={conversationsToShow}
-              selectedConversation={selectedConversation}
-              onSelectConversation={onSelectConversation}
-              selectedInstance={selectedInstance}
-              searchTerm={searchTerm}
-              isSearchActive={isSearchActive}
-              isSearching={isSearching}
-              searchError={searchError}
-              hasMoreConversations={!isSearchActive && hasMoreConversations}
-              loadMoreConversations={loadMoreConversations}
-              loadingMoreConversations={loadingMoreConversations}
-            />
-        }
+        {isInstagram ? (
+          <InstagramSidebarContent
+            igData={igData}
+            igCommentsData={igCommentsData}
+            activeTab={activeIgTab}
+          />
+        ) : isMetaActive ? (
+          /* MVP3C.3 — Lista Meta: isolada de conversas/estado Uazapi */
+          <MetaConversationList metaData={metaData} />
+        ) : (
+          <WhatsAppConversationList
+            loading={loading}
+            filteredConversations={conversationsToShow}
+            selectedConversation={selectedConversation}
+            onSelectConversation={onSelectConversation}
+            selectedInstance={selectedInstance}
+            searchTerm={searchTerm}
+            isSearchActive={isSearchActive}
+            isSearching={isSearching}
+            searchError={searchError}
+            hasMoreConversations={!isSearchActive && hasMoreConversations}
+            loadMoreConversations={loadMoreConversations}
+            loadingMoreConversations={loadingMoreConversations}
+          />
+        )}
       </div>
     </div>
+  )
+}
+
+// =====================================================
+// SUB-COMPONENTE: Lista Meta WhatsApp (MVP3C.3)
+// =====================================================
+// Renderiza somente campos do contrato MetaChatConversation.
+// NÃO assume lead_id, assigned_to, avatar, tags ou dados Uazapi.
+// onSelectConversation é o setter de useMetaChatData — isolado.
+
+interface MetaConversationListProps {
+  metaData?: MetaSidebarData
+}
+
+const MetaConversationList: React.FC<MetaConversationListProps> = ({ metaData }) => {
+  if (!metaData) return null
+
+  if (metaData.loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-blue-500" />
+      </div>
+    )
+  }
+
+  if (metaData.error) {
+    return (
+      <div className="text-center py-12 px-6">
+        <p className="text-sm text-red-500 mb-3">{metaData.error}</p>
+        <button
+          onClick={metaData.onRefresh}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    )
+  }
+
+  if (metaData.conversations.length === 0) {
+    return (
+      <div className="text-center py-12 px-6">
+        <div className="mb-4">
+          <div className="mx-auto h-16 w-16 bg-gradient-to-br from-slate-300 to-slate-400 rounded-2xl flex items-center justify-center shadow-sm">
+            <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+            </svg>
+          </div>
+        </div>
+        <h4 className="text-lg font-semibold text-slate-700 mb-2">Nenhuma conversa encontrada</h4>
+        <p className="text-slate-500 text-sm leading-relaxed">
+          Aguardando mensagens nesta instância Meta WhatsApp.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-slate-100">
+      {metaData.conversations.map(conversation => (
+        <MetaConversationItem
+          key={conversation.id}
+          conversation={conversation}
+          isSelected={conversation.id === metaData.selectedConversationId}
+          onClick={() => metaData.onSelectConversation(conversation.id)}
+        />
+      ))}
+    </div>
+  )
+}
+
+interface MetaConversationItemProps {
+  conversation: MetaChatConversation
+  isSelected:   boolean
+  onClick:      () => void
+}
+
+/** Formata timestamp ISO-8601 para exibição relativa */
+const formatMetaTime = (iso?: string | null): string => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now  = new Date()
+  const diff = now.getTime() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  const hrs  = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (mins < 1)  return 'agora'
+  if (mins < 60) return `${mins}m`
+  if (hrs  < 24) return `${hrs}h`
+  if (days < 7)  return `${days}d`
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+const MetaConversationItem: React.FC<MetaConversationItemProps> = ({
+  conversation,
+  isSelected,
+  onClick,
+}) => {
+  const displayName = conversation.contact_name || conversation.wa_id
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-4 text-left transition-all duration-200 ${
+        isSelected
+          ? 'bg-blue-50 border-r-4 border-blue-500 shadow-sm'
+          : conversation.unread_count > 0
+          ? 'bg-green-50 hover:bg-green-100 border-l-4 border-green-400 shadow-sm'
+          : 'hover:bg-white/80 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-start space-x-3">
+        {/* Avatar placeholder — Meta não fornece foto de perfil neste contrato */}
+        <div className="flex-shrink-0">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-300 to-blue-500 rounded-xl flex items-center justify-center shadow-sm">
+            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Conteúdo */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className={`text-sm truncate ${
+                  conversation.unread_count > 0 ? 'font-bold' : 'font-semibold'
+                } ${isSelected ? 'text-slate-800' : 'text-slate-700'}`}>
+                  {displayName}
+                </h4>
+                <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 leading-none">
+                  META
+                </span>
+              </div>
+              {/* wa_id como subtítulo quando contact_name existe */}
+              {conversation.contact_name && (
+                <p className={`text-xs truncate ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {conversation.wa_id}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center space-x-2 ml-3">
+              {conversation.last_message_at && (
+                <span className={`text-xs font-medium ${isSelected ? 'text-slate-600' : 'text-slate-500'}`}>
+                  {formatMetaTime(conversation.last_message_at)}
+                </span>
+              )}
+              {conversation.unread_count > 0 && (
+                <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-blue-500 rounded-full shadow-sm">
+                  {conversation.unread_count}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {conversation.last_message_preview && (
+            <p className={`text-sm truncate mt-1 ${isSelected ? 'text-slate-600' : 'text-slate-500'}`}>
+              {conversation.last_message_preview}
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
   )
 }
 

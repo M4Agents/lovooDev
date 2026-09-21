@@ -942,7 +942,7 @@ export class ChatApi {
     try {
       const { data, error } = await supabase
         .from('whatsapp_life_instances')
-        .select('*')
+        .select('id, instance_name, phone_number, profile_name, profile_picture_url, status, assigned_user_id, available_to_all')
         .eq('company_id', companyId)
         .eq('status', 'connected')
         .order('created_at', { ascending: false })

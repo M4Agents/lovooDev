@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Check } from 'lucide-react'
 import { InstanceAvatar } from './InstanceAvatar'
+import type { WhatsAppProvider } from '../../../types/meta-whatsapp'
 
 interface WhatsAppInstance {
   id: string
@@ -18,12 +19,16 @@ interface WhatsAppInstance {
   status: string
   assigned_user_id?: string | null
   available_to_all?: boolean | null
+  /** Identifica o provider da instância para badge visual.
+   *  undefined = Uazapi (comportamento legado, sem badge). */
+  provider?: WhatsAppProvider
 }
 
 interface InstanceSelectorProps {
   instances: WhatsAppInstance[]
   selectedInstance?: string
-  onSelectInstance: (id: string) => void
+  /** provider é repassado explicitamente — elimina lookup no handler do consumidor */
+  onSelectInstance: (id: string, provider?: WhatsAppProvider) => void
   showAllOption?: boolean
   conversationCount?: number
   className?: string
@@ -63,9 +68,9 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
 
   const selectedInstanceData = getSelectedInstance()
 
-  // Handler de seleção
-  const handleSelect = (id: string) => {
-    onSelectInstance(id)
+  // Handler de seleção — provider viaja explicitamente para eliminar lookup no consumidor
+  const handleSelect = (id: string, provider?: WhatsAppProvider) => {
+    onSelectInstance(id, provider)
     setIsOpen(false)
   }
 
@@ -100,9 +105,16 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
                 size="sm"
               />
               <div className="flex-1 min-w-0 text-left">
-                <p className="font-medium text-gray-900 truncate">
-                  {selectedInstanceData.profile_name || selectedInstanceData.instance_name}
-                </p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">
+                    {selectedInstanceData.profile_name || selectedInstanceData.instance_name}
+                  </p>
+                  {selectedInstanceData.provider === 'meta' && (
+                    <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 leading-none">
+                      META
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 truncate">
                   {selectedInstanceData.phone_number || selectedInstanceData.instance_name}
                 </p>
@@ -122,10 +134,10 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
       {/* Dropdown */}
       {isOpen && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
-          {/* Opção "Todas" */}
+          {/* Opção "Todas" — provider undefined (não é Uazapi nem Meta) */}
           {showAllOption && (
             <button
-              onClick={() => handleSelect('all')}
+              onClick={() => handleSelect('all', undefined)}
               className={`
                 w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                 ${selectedInstance === 'all' ? 'bg-blue-50' : ''}
@@ -162,7 +174,7 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
             instances.map((instance) => (
               <button
                 key={instance.id}
-                onClick={() => handleSelect(instance.id)}
+                onClick={() => handleSelect(instance.id, instance.provider)}
                 className={`
                   w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors
                   ${selectedInstance === instance.id ? 'bg-blue-50' : ''}
@@ -175,9 +187,16 @@ export const InstanceSelector: React.FC<InstanceSelectorProps> = ({
                   size="sm"
                 />
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="font-medium text-gray-900 truncate">
-                    {instance.profile_name || instance.instance_name}
-                  </p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
+                      {instance.profile_name || instance.instance_name}
+                    </p>
+                    {instance.provider === 'meta' && (
+                      <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 leading-none">
+                        META
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 truncate">
                     {instance.phone_number || instance.instance_name}
                   </p>

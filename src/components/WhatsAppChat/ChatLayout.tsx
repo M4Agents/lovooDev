@@ -11,15 +11,31 @@ import { useNavigate } from 'react-router-dom'
 import { useChatData } from '../../hooks/chat/useChatData'
 import { useInstagramChatData } from '../../hooks/chat/useInstagramChatData'
 import { useInstagramCommentsData } from '../../hooks/instagram/useInstagramCommentsData'
+import { useMetaWhatsAppInstances } from '../../hooks/useMetaWhatsAppInstances'
+import { useMetaChatData } from '../../hooks/chat/useMetaChatData'
 import { useAuth } from '../../contexts/AuthContext'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
+import { LockedChatPanel } from './LockedChatPanel'
 import { InstagramMainArea, InstagramRightPanel } from './InstagramAreaRenderer'
 import type { ChatConversation, ChatLayoutProps } from '../../types/whatsapp-chat'
 import type { ChatChannel } from '../../types/instagram-chat'
 import type { InstagramCommentsFilter } from '../../types/instagram-comments'
-import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
+import type { InstagramSidebarData, MetaSidebarData } from './ConversationSidebar/ConversationSidebar'
+import type { WhatsAppProvider } from '../../types/meta-whatsapp'
+
+// =====================================================
+// MVP3C.3 — TIPO DE SELEÇÃO UNIFICADA WHATSAPP
+// =====================================================
+// ChatLayout é o dono explícito desta seleção.
+// provider é parte da identidade — nunca inferido de estado derivado.
+// ID Meta NUNCA entra em useChatData/Uazapi.
+
+type SelectedWhatsAppInstance =
+  | { provider: 'uazapi'; id: string  }
+  | { provider: 'meta';   id: string  }
+  | { provider: undefined; id: 'all'  }
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -43,6 +59,81 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   const chatData = useChatData(companyId, userId, initialConversationId, visibilityContext)
 
+  // =====================================================
+  // MVP3C.3 — SELEÇÃO UNIFICADA WHATSAPP (desktop apenas)
+  // =====================================================
+
+  // Estado explícito com provider discriminado.
+  // Derivado de chatData.selectedInstance — que já leu localStorage internamente.
+  // useChatData é a única fonte de persistência Uazapi; ChatLayout não lê localStorage diretamente.
+  // IDs Meta nunca persistem: quando Meta é selecionado, chatData recebe 'all', que é o que persiste.
+  const [selectedWAInstance, setSelectedWAInstance] = useState<SelectedWhatsAppInstance>(() => {
+    const initial = chatData.selectedInstance  // 'all' ou ID Uazapi (nunca Meta)
+    if (initial === 'all') return { provider: undefined, id: 'all' }
+    return { provider: 'uazapi', id: initial }
+  })
+
+  // Hook Meta — instâncias conectadas da empresa
+  const metaInstances = useMetaWhatsAppInstances(companyId)
+
+  // ID Meta para useMetaChatData — undefined quando Uazapi ou 'all'
+  // garante que useMetaChatData não seja ativado para seleções Uazapi
+  const metaInstanceId: string | undefined =
+    selectedWAInstance.provider === 'meta' ? selectedWAInstance.id : undefined
+
+  // Hook Meta conversas — inativo enquanto provider !== 'meta'
+  const metaChatData = useMetaChatData(companyId, metaInstanceId)
+
+  // Adapter Uazapi → shape unificado (adiciona provider: 'uazapi')
+  // Preserva todos os campos visuais existentes sem alterar chatData.instances
+  const uazapiInstancesAdapted = useMemo(
+    () => (chatData.instances as Record<string, unknown>[]).map(i => ({
+      ...i,
+      provider: 'uazapi' as WhatsAppProvider,
+    })),
+    [chatData.instances]
+  )
+
+  // Adapter Meta → shape visual compatível com InstanceSelector
+  // Fallback para instance_name: display_name → phone_number → verified_name → id
+  const metaInstancesAdapted = useMemo(
+    () => metaInstances.instances.map(m => ({
+      id:                  m.id,
+      instance_name:       m.display_name || m.phone_number || m.verified_name || m.id,
+      phone_number:        m.phone_number  ?? undefined,
+      profile_name:        m.verified_name ?? undefined,
+      profile_picture_url: undefined as string | undefined,
+      status:              m.status,
+      provider:            'meta' as WhatsAppProvider,
+    })),
+    [metaInstances.instances]
+  )
+
+  // Lista unificada: Uazapi primeiro, Meta após — preserva ordem visual
+  const unifiedInstances = useMemo(
+    () => [...uazapiInstancesAdapted, ...metaInstancesAdapted],
+    [uazapiInstancesAdapted, metaInstancesAdapted]
+  )
+
+  // Handler unificado de seleção de instância.
+  // Provider viaja explicitamente desde o clique no InstanceSelector — zero lookup.
+  // ID Meta NUNCA é passado para chatData.setSelectedInstance.
+  const handleSelectInstance = useCallback((id: string, provider?: WhatsAppProvider) => {
+    if (id === 'all') {
+      setSelectedWAInstance({ provider: undefined, id: 'all' })
+      chatData.setSelectedInstance('all')
+      return
+    }
+    if (provider === 'meta') {
+      setSelectedWAInstance({ provider: 'meta', id })
+      chatData.setSelectedInstance('all')   // ← ID Meta NUNCA vai para useChatData
+    } else {
+      // provider === 'uazapi' ou undefined (compatibilidade com legado sem provider)
+      setSelectedWAInstance({ provider: 'uazapi', id })
+      chatData.setSelectedInstance(id)      // ← apenas IDs Uazapi
+    }
+  }, [chatData])
+
   // Canal ativo — persiste entre sessões com fallback seguro
   const [selectedChannel, setSelectedChannel] = useState<ChatChannel>(() => {
     const saved = localStorage.getItem(`chat_channel_${userId}`)
@@ -55,8 +146,12 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   }, [userId])
 
   // Derivados estáveis — primitivos booleanos para uso seguro em useEffect (evita arrays nas deps)
+  // G3: considera ambos os providers — Meta-only NÃO deve ativar a guarda de "sem WhatsApp"
   const hasNoWhatsAppInstances =
-    !chatData.instancesLoading && chatData.instances.length === 0
+    !chatData.instancesLoading        &&
+    !metaInstances.loading            &&
+    chatData.instances.length === 0   &&
+    metaInstances.instances.length === 0
 
   // igEnabled: ativa o hook IG quando canal = instagram OU quando WA está vazio
   // (necessário para verificar conexões IG antes de exibir o gate correto)
@@ -103,6 +198,24 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     igChatData.selectedConversationId,
     igChatData.filter,
     igChatData.conversationsLoading,
+  ])
+
+  // MVP3C.3 — metaSidebarData construído exclusivamente a partir de metaChatData
+  // NÃO cria novo fetch; NÃO chama metaWhatsAppApi diretamente.
+  const metaSidebarData: MetaSidebarData = useMemo(() => ({
+    conversations:          metaChatData.conversations,
+    selectedConversationId: metaChatData.selectedConversationId,
+    loading:                metaChatData.loading,
+    error:                  metaChatData.error,
+    onSelectConversation:   metaChatData.setSelectedConversation,
+    onRefresh:              metaChatData.refresh,
+  }), [
+    metaChatData.conversations,
+    metaChatData.selectedConversationId,
+    metaChatData.loading,
+    metaChatData.error,
+    metaChatData.setSelectedConversation,
+    metaChatData.refresh,
   ])
 
   // Conversa clicada que está bloqueada (lead is_over_plan = true) — apenas WhatsApp
@@ -245,13 +358,13 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           <ConversationSidebar
             companyId={companyId}
             userId={userId}
-            instances={chatData.instances}
+            instances={unifiedInstances}
             conversations={chatData.conversations}
-            selectedInstance={chatData.selectedInstance}
+            selectedInstance={selectedWAInstance.id}
             selectedConversation={chatData.selectedConversation}
             filter={chatData.filter}
             loading={chatData.conversationsLoading}
-            onSelectInstance={chatData.setSelectedInstance}
+            onSelectInstance={handleSelectInstance}
             onSelectConversation={handleSelectConversation}
             onFilterChange={chatData.setFilter}
             onRefresh={chatData.refreshConversations}
@@ -262,6 +375,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             onChannelChange={handleChannelChange}
             igData={igSidebarData}
             igCommentsData={igCommentsData}
+            metaData={metaSidebarData}
+            selectedProvider={selectedWAInstance.provider}
           />
         </div>
       )}
@@ -276,7 +391,44 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             igCommentsData={igCommentsData}
             activeTab={activeIgTab}
           />
+        ) : selectedWAInstance.provider === 'meta' ? (
+          /* MVP3C.3 — Meta selecionado: ChatArea Uazapi NÃO renderiza.
+             MetaChatArea será implementado em MVP3C.4. */
+          metaChatData.selectedConversationId ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+                <div className="mb-4">
+                  <div className="mx-auto h-16 w-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
+                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800 mb-1">Chat Meta</h3>
+                <p className="text-sm text-slate-500">Em breve</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center p-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 max-w-md">
+                <div className="mb-6">
+                  <div className="mx-auto h-20 w-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-3xl flex items-center justify-center shadow-lg">
+                    <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.697-.413l-2.725.725c-.25.067-.516-.073-.573-.323a.994.994 0 01-.006-.315l.725-2.725A8.955 8.955 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                    </svg>
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-3">
+                  {t('layout.selectConversationTitle')}
+                </h3>
+                <p className="text-slate-600 leading-relaxed text-sm">
+                  Selecione uma conversa Meta WhatsApp para visualizar as mensagens.
+                </p>
+              </div>
+            </div>
+          )
         ) : (
+          /* Uazapi / 'all' — fluxo original intacto */
           lockedConversation ? (
             <LockedChatPanel contactName={lockedConversation.contact_name} />
           ) : chatData.selectedConversation ? (
@@ -317,7 +469,25 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             igCommentsData={igCommentsData}
             activeTab={activeIgTab}
           />
+        ) : selectedWAInstance.provider === 'meta' ? (
+          /* MVP3C.3 — Meta selecionado: LeadPanel Uazapi NÃO renderiza.
+             Integração de lead Meta será implementada em etapa futura. */
+          <div className="flex items-center justify-center h-full p-6">
+            <div className="text-center">
+              <div className="mb-4">
+                <div className="mx-auto h-14 w-14 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
+                  <svg className="h-7 w-7 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Painel de lead disponível em breve para Meta WhatsApp.
+              </p>
+            </div>
+          </div>
         ) : (
+          /* Uazapi / 'all' — fluxo original intacto */
           selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (
             <LeadPanel
               conversationId={chatData.selectedConversation}

@@ -132,3 +132,69 @@ export type OnboardingStep =
   | 'completing'            // POST /complete em andamento
   | 'awaiting_selection'    // aguardando seleção explícita do usuário (múltiplos WABAs)
   | 'resolving_selection'   // POST /resolve-waba em andamento
+
+// ── Provider view-model ───────────────────────────────────────────────────────
+// Tipo de apresentação/routing no frontend.
+// NÃO representa unificação de tabelas, autenticação ou credenciais.
+// provider_token, waba_id, phone_number_id e credentials nunca pertencem aqui.
+
+export type WhatsAppProvider = 'uazapi' | 'meta'
+
+export interface WhatsAppChatInstance {
+  id:          string
+  provider:    WhatsAppProvider
+  /** Nome para exibição: display_name, phone_number, verified_name ou id como fallback */
+  label:       string
+  phoneNumber: string | null
+  status:      string
+}
+
+// ── META CHAT — Conversation ──────────────────────────────────────────────────
+// Espelho dos campos públicos retornados por:
+//   GET /api/whatsapp/meta/conversations
+//
+// Campos explicitamente excluídos pelo backend: company_id, meta_message_id.
+// Nullability reflete o schema real: last_message_at e last_message_preview
+// podem ser null em conversas sem mensagem ainda.
+
+export interface MetaChatConversation {
+  id:                   string
+  instance_id:          string
+  wa_id:                string
+  contact_name:         string | null
+  status:               'active' | 'archived'
+  unread_count:         number
+  last_message_at:      string | null   // ISO-8601 | null
+  last_message_preview: string | null
+  created_at:           string
+  updated_at:           string
+}
+
+// ── META CHAT — Message ───────────────────────────────────────────────────────
+// Espelho dos campos públicos retornados por:
+//   GET /api/whatsapp/meta/conversations/:id/messages
+//
+// Campos explicitamente excluídos pelo backend: company_id, meta_message_id, updated_at.
+// message_type é string (não literal union) porque o MVP3A entrega 'text' e
+// futuros tipos (image, document, etc.) serão adicionados sem breaking change.
+
+export interface MetaChatMessage {
+  id:                 string
+  conversation_id:    string
+  instance_id:        string
+  direction:          'inbound' | 'outbound'
+  message_type:       string          // 'text' no MVP3A; expansível sem breaking change
+  body:               string
+  provider_timestamp: string | null   // ISO-8601 | null
+  created_at:         string
+}
+
+// ── Response shapes ───────────────────────────────────────────────────────────
+
+export interface GetMetaConversationsResponse {
+  conversations: MetaChatConversation[]
+}
+
+export interface GetMetaMessagesResponse {
+  messages: MetaChatMessage[]
+}

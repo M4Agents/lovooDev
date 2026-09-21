@@ -22,7 +22,11 @@
 import { supabase } from '../lib/supabase'
 import type {
   CompleteResult,
+  GetMetaConversationsResponse,
   GetMetaInstancesResponse,
+  GetMetaMessagesResponse,
+  MetaChatConversation,
+  MetaChatMessage,
   MetaWabaSelectionOption,
   MetaWhatsAppInstance,
   OnboardingCompleteInstance,
@@ -214,5 +218,88 @@ export const metaWhatsAppApi = {
     }
 
     return data.instance
+  },
+
+  /**
+   * Lista as conversas Meta WhatsApp ativas da empresa.
+   *
+   * GET /api/whatsapp/meta/conversations
+   *   ?company_id=<uuid>
+   *   [&instance_id=<uuid>]
+   *   [&filter=all|unread]
+   *   [&limit=<n>]
+   *
+   * Parâmetros undefined/null NÃO são enviados na query string.
+   * Retorna array vazio se não houver conversas.
+   * Nunca acessa meta_conversations diretamente via Supabase.
+   */
+  async getConversations(
+    companyId: string,
+    options?: {
+      instanceId?: string
+      filter?:     'all' | 'unread'
+      limit?:      number
+    }
+  ): Promise<MetaChatConversation[]> {
+    const headers = await getAuthHeaders()
+
+    const params = new URLSearchParams({ company_id: companyId })
+    if (options?.instanceId != null) params.set('instance_id', options.instanceId)
+    if (options?.filter     != null) params.set('filter',      options.filter)
+    if (options?.limit      != null) params.set('limit',       String(options.limit))
+
+    const res = await fetch(`/api/whatsapp/meta/conversations?${params.toString()}`, {
+      method:  'GET',
+      headers: { Authorization: (headers as Record<string, string>)['Authorization'] },
+    })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as GetMetaConversationsResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao carregar conversas Meta WhatsApp')
+    }
+
+    return Array.isArray(data.conversations) ? data.conversations : []
+  },
+
+  /**
+   * Busca as mensagens de uma conversa Meta WhatsApp.
+   *
+   * GET /api/whatsapp/meta/conversations/:conversationId/messages
+   *   ?company_id=<uuid>
+   *   [&limit=<n>]
+   *
+   * conversationId é encodado na URL via encodeURIComponent.
+   * Retorna mensagens em ordem cronológica (oldest -> newest).
+   * Nunca acessa meta_messages diretamente via Supabase.
+   */
+  async getMessages(
+    companyId:      string,
+    conversationId: string,
+    options?: {
+      limit?: number
+    }
+  ): Promise<MetaChatMessage[]> {
+    const headers = await getAuthHeaders()
+
+    const params = new URLSearchParams({ company_id: companyId })
+    if (options?.limit != null) params.set('limit', String(options.limit))
+
+    const encodedId = encodeURIComponent(conversationId)
+    const res = await fetch(
+      `/api/whatsapp/meta/conversations/${encodedId}/messages?${params.toString()}`,
+      {
+        method:  'GET',
+        headers: { Authorization: (headers as Record<string, string>)['Authorization'] },
+      }
+    )
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as GetMetaMessagesResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao carregar mensagens Meta WhatsApp')
+    }
+
+    return Array.isArray(data.messages) ? data.messages : []
   },
 }
