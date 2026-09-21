@@ -2,9 +2,9 @@
 // =============================================================================
 // src/hooks/chat/__tests__/useMetaChatMessages.test.ts
 //
-// Contrato do hook useMetaChatMessages — MVP3C.4
+// Contrato do hook useMetaChatMessages — MVP3C.4 + MVP3E B1
 //
-// Cobertura:
+// Cobertura existente (M-01..M-14):
 //   M-01  companyId + conversationId válidos → chama getMessages corretamente
 //   M-02  resultado bem-sucedido → messages preenchidas, loading=false, error=null
 //   M-03  loading=true durante fetch, false ao concluir
@@ -20,7 +20,20 @@
 //   M-13  unmount durante request → resposta posterior não produz warning/state update
 //   M-14  rejeição não-Error → fallback de erro estável
 //
-// Sem Realtime, Supabase direto, EventBus ou envio.
+// Realtime MVP3E B1 (RT-MSG-01..RT-MSG-12):
+//   RT-MSG-01  IDs válidos → cria subscription em meta_messages
+//   RT-MSG-02  subscription usa event INSERT / schema public / table / filter corretos
+//   RT-MSG-03  INSERT da conversa ativa → dispara refresh canônico (load)
+//   RT-MSG-04  conversationId null → nenhum channel criado
+//   RT-MSG-05  companyId ausente → nenhum channel criado
+//   RT-MSG-06  A→B → channel A limpo, channel B criado
+//   RT-MSG-07  callback tardio do channel A após troca para B → NÃO dispara load de B
+//   RT-MSG-08  unmount → channel.unsubscribe() chamado
+//   RT-MSG-09  evento após unmount → nenhum setState útil
+//   RT-MSG-10  dois eventos rápidos → estado final vem do fetch mais recente (sem duplicata local)
+//   RT-MSG-11  payload Realtime NÃO é anexado diretamente ao array de messages
+//   RT-MSG-12  nenhum service_role/token/wa_id/meta_message_id usado no handler
+//
 // Segurança: nenhum token ou UUID real nos fixtures.
 // =============================================================================
 
@@ -28,6 +41,75 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act }                       from '@testing-library/react'
 import { useMetaChatMessages }                   from '../useMetaChatMessages'
 import type { MetaChatMessage }                  from '../../../types/meta-whatsapp'
+
+// ── Supabase Realtime mock ─────────────────────────────────────────────────────
+//
+// mockRt é declarado via vi.hoisted() para garantir que esteja disponível
+// dentro da factory de vi.mock (que é hoisted antes das imports).
+//
+// Cada chamada a supabase.channel() cria e registra uma entrada em mockRt.channels,
+// expondo channelName, config do .on(), unsubscribeFn e simulateInsert().
+
+interface RtChannelEntry {
+  channelName:   string
+  event:         string
+  schema:        string
+  table:         string
+  filter:        string
+  unsubscribeFn: ReturnType<typeof vi.fn>
+  simulateInsert: (payload?: object) => void
+}
+
+const mockRt = vi.hoisted(() => {
+  const channels: RtChannelEntry[] = []
+  return {
+    channels,
+    clear()  { channels.splice(0) },
+    last()   { return channels[channels.length - 1] ?? null },
+    get(i: number) { return channels[i] ?? null },
+  }
+})
+
+vi.mock('../../../lib/supabase', () => ({
+  supabase: {
+    channel: vi.fn().mockImplementation((channelName: string) => {
+      let registeredCb: ((payload: unknown) => void) | undefined
+      let capturedEvent  = ''
+      let capturedSchema = ''
+      let capturedTable  = ''
+      let capturedFilter = ''
+
+      const unsubscribeFn = vi.fn()
+
+      const channelObj = {
+        on: vi.fn().mockImplementation((_listenerType: string, config: Record<string, string>, cb: (p: unknown) => void) => {
+          // config contém: { event: 'INSERT', schema: 'public', table: '...', filter: '...' }
+          // O primeiro arg (_listenerType) é 'postgres_changes' — não é o event de negócio.
+          capturedEvent  = config?.event  ?? ''
+          capturedSchema = config?.schema ?? ''
+          capturedTable  = config?.table  ?? ''
+          capturedFilter = config?.filter ?? ''
+          registeredCb   = cb
+          return channelObj
+        }),
+        subscribe:   vi.fn().mockImplementation(() => channelObj),
+        unsubscribe: unsubscribeFn,
+      }
+
+      mockRt.channels.push({
+        channelName,
+        get event()  { return capturedEvent  },
+        get schema() { return capturedSchema },
+        get table()  { return capturedTable  },
+        get filter() { return capturedFilter },
+        unsubscribeFn,
+        simulateInsert: (payload = {}) => registeredCb?.(payload),
+      })
+
+      return channelObj
+    }),
+  },
+}))
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +125,7 @@ const mockGetMessages = metaWhatsAppApi.getMessages as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockRt.clear()
 })
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -361,4 +444,266 @@ it('M-14: fetch rejeita com não-Error → fallback de erro estável', async () 
   expect(result.current.error).toBe('Erro ao carregar mensagens')
   expect(result.current.messages).toEqual([])
   expect(result.current.loading).toBe(false)
+})
+
+// =============================================================================
+// REALTIME — MVP3E B1
+// =============================================================================
+
+// RT-MSG-01 — IDs válidos → cria subscription em meta_messages
+it('RT-MSG-01: companyId + conversationId válidos → cria channel Realtime', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  // Deve ter criado exatamente um channel
+  expect(mockRt.channels).toHaveLength(1)
+  expect(mockRt.last()?.channelName).toBe(`meta_messages_${COMPANY_A}_${CONV_A}`)
+})
+
+// RT-MSG-02 — configuração correta do .on()
+it('RT-MSG-02: subscription usa INSERT / public / meta_messages / filter correto', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const ch = mockRt.last()
+  expect(ch).not.toBeNull()
+  expect(ch!.event).toBe('INSERT')
+  expect(ch!.schema).toBe('public')
+  expect(ch!.table).toBe('meta_messages')
+  expect(ch!.filter).toBe(`conversation_id=eq.${CONV_A}`)
+})
+
+// RT-MSG-03 — INSERT na conversa ativa → dispara load()
+it('RT-MSG-03: evento INSERT da conversa ativa → dispara fetch canônico (load)', async () => {
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1])    // fetch inicial
+    .mockResolvedValueOnce([MSG_A1, MSG_A2])  // fetch após Realtime
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+
+  // Simular INSERT via Realtime
+  await act(async () => {
+    mockRt.last()?.simulateInsert({ id: 'msg-rt-001', conversation_id: CONV_A })
+    await Promise.resolve()
+  })
+
+  // load() deve ter sido disparado pelo sinal de invalidação
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+  expect(mockGetMessages).toHaveBeenNthCalledWith(2, COMPANY_A, CONV_A)
+})
+
+// RT-MSG-04 — conversationId null → nenhum channel criado
+it('RT-MSG-04: conversationId null → nenhum channel Realtime criado', () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, null))
+
+  expect(mockRt.channels).toHaveLength(0)
+})
+
+// RT-MSG-05 — companyId ausente → nenhum channel criado
+it('RT-MSG-05: companyId undefined → nenhum channel Realtime criado', () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  renderHook(() => useMetaChatMessages(undefined, CONV_A))
+
+  expect(mockRt.channels).toHaveLength(0)
+})
+
+// RT-MSG-06 — troca A→B → channel A limpo, channel B criado
+it('RT-MSG-06: troca A→B → channel A unsubscribe + channel B criado', async () => {
+  mockGetMessages.mockResolvedValue([])
+
+  const { rerender } = renderHook(
+    ({ convId }) => useMetaChatMessages(COMPANY_A, convId),
+    { initialProps: { convId: CONV_A as string | null } }
+  )
+  await act(async () => { await Promise.resolve() })
+
+  // Channel A criado
+  expect(mockRt.channels).toHaveLength(1)
+  const channelA = mockRt.get(0)!
+  expect(channelA.channelName).toBe(`meta_messages_${COMPANY_A}_${CONV_A}`)
+
+  // Trocar para conversa B
+  rerender({ convId: CONV_B })
+  await act(async () => { await Promise.resolve() })
+
+  // Channel A deve ter sido unsubscribed
+  expect(channelA.unsubscribeFn).toHaveBeenCalledTimes(1)
+
+  // Channel B deve ter sido criado
+  expect(mockRt.channels).toHaveLength(2)
+  const channelB = mockRt.get(1)!
+  expect(channelB.channelName).toBe(`meta_messages_${COMPANY_A}_${CONV_B}`)
+})
+
+// RT-MSG-07 — evento tardio do channel A após troca para B → NÃO dispara load de B
+it('RT-MSG-07: callback tardio do channel A após troca B → NÃO dispara load', async () => {
+  mockGetMessages.mockResolvedValue([])
+
+  const { rerender } = renderHook(
+    ({ convId }) => useMetaChatMessages(COMPANY_A, convId),
+    { initialProps: { convId: CONV_A as string | null } }
+  )
+  await act(async () => { await Promise.resolve() })
+
+  // Capturar channel A antes da troca
+  const channelA = mockRt.get(0)!
+
+  // Trocar para B
+  rerender({ convId: CONV_B })
+  await act(async () => { await Promise.resolve() })
+
+  // Contar chamadas até aqui (initial A + initial B = 2)
+  const callsBeforeLateEvent = mockGetMessages.mock.calls.length
+
+  // Disparar evento tardio do channel A (simula evento chegando depois do switch)
+  await act(async () => {
+    channelA.simulateInsert({ id: 'msg-stale-001', conversation_id: CONV_A })
+    await Promise.resolve()
+  })
+
+  // Nenhum fetch adicional deve ter sido disparado
+  expect(mockGetMessages.mock.calls.length).toBe(callsBeforeLateEvent)
+})
+
+// RT-MSG-08 — unmount → channel.unsubscribe() chamado
+it('RT-MSG-08: unmount → channel.unsubscribe() chamado', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  const { unmount } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const ch = mockRt.last()!
+  expect(ch.unsubscribeFn).not.toHaveBeenCalled()
+
+  unmount()
+
+  expect(ch.unsubscribeFn).toHaveBeenCalledTimes(1)
+})
+
+// RT-MSG-09 — evento após unmount → nenhum setState / load útil
+it('RT-MSG-09: evento Realtime após unmount → nenhum setState / load disparado', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  const { unmount } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const ch = mockRt.last()!
+  const callsBefore = mockGetMessages.mock.calls.length
+
+  unmount()
+
+  // Disparar evento após unmount
+  await act(async () => {
+    ch.simulateInsert({ id: 'msg-post-unmount' })
+    await Promise.resolve()
+  })
+
+  // mountedRef impede setState; fetchCountRef já foi invalidado.
+  // Nenhum fetch adicional deve ter sido realizado.
+  expect(mockGetMessages.mock.calls.length).toBe(callsBefore)
+})
+
+// RT-MSG-10 — dois eventos rápidos → estado final vem do fetch mais recente (sem duplicata)
+it('RT-MSG-10: dois eventos Realtime rápidos → estado final é do fetch mais recente', async () => {
+  let resolveFirst!:  (v: MetaChatMessage[]) => void
+  const pendingFirst = new Promise<MetaChatMessage[]>(res => { resolveFirst = res })
+  const MSG_SECOND: MetaChatMessage = { ...MSG_A1, id: 'msg-second-001' }
+
+  mockGetMessages
+    .mockResolvedValueOnce([])        // fetch inicial
+    .mockReturnValueOnce(pendingFirst)  // fetch do 1º evento RT — fica pendente
+    .mockResolvedValueOnce([MSG_SECOND]) // fetch do 2º evento RT — resolve rápido
+
+  const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const ch = mockRt.last()!
+
+  // 1º evento
+  act(() => { ch.simulateInsert({}) })
+
+  // 2º evento antes do 1º completar
+  await act(async () => {
+    ch.simulateInsert({})
+    await Promise.resolve()
+  })
+
+  // Resolver 1º agora (stale)
+  await act(async () => {
+    resolveFirst([MSG_A1])
+    await Promise.resolve()
+  })
+
+  // Estado final deve ser do fetch mais recente (2º evento)
+  expect(result.current.messages).toHaveLength(1)
+  expect(result.current.messages[0].id).toBe('msg-second-001')
+})
+
+// RT-MSG-11 — payload Realtime NÃO é usado para popular messages diretamente
+it('RT-MSG-11: payload Realtime não é inserido diretamente no array de messages', async () => {
+  // Fetch inicial retorna vazio e NÃO retorna mais nada após o evento RT
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1])  // fetch inicial
+    .mockResolvedValueOnce([MSG_A1])  // fetch após RT (sem novas mensagens ainda)
+
+  const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const payloadFake: object = {
+    id: 'msg-injected-payload',
+    conversation_id: CONV_A,
+    body: 'mensagem via payload — NÃO deve aparecer',
+  }
+
+  await act(async () => {
+    mockRt.last()?.simulateInsert(payloadFake)
+    await Promise.resolve()
+  })
+
+  // messages devem conter somente o que o GET retornou — não o payload
+  expect(result.current.messages.every(m => m.id !== 'msg-injected-payload')).toBe(true)
+  // O GET deve ter sido chamado novamente (invalidação)
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+})
+
+// RT-MSG-12 — nenhum dado sensível (service_role, token, wa_id, meta_message_id) no handler
+it('RT-MSG-12: subscription não usa service_role / token / wa_id / meta_message_id para autorização', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  const ch = mockRt.last()!
+
+  // Verificar que o nome do channel contém apenas companyId e conversationId
+  // (sem tokens, sem meta_message_id, sem wa_id)
+  expect(ch.channelName).toBe(`meta_messages_${COMPANY_A}_${CONV_A}`)
+  expect(ch.channelName).not.toMatch(/service_role|token|wa_id|meta_message_id/)
+
+  // Verificar que o filtro usa apenas conversation_id (sem campos sensíveis)
+  expect(ch.filter).toBe(`conversation_id=eq.${CONV_A}`)
+  expect(ch.filter).not.toMatch(/service_role|token|wa_id/)
+
+  // Verificar que o handler dispara somente load() — nenhuma lógica de autorização
+  // baseada em payload. Simular evento com campos "sensíveis" no payload:
+  // load() deve ser chamado normalmente (payload é ignorado).
+  mockGetMessages.mockResolvedValueOnce([])
+  await act(async () => {
+    ch.simulateInsert({ wa_id: 'fake-wa', meta_message_id: 'fake-meta', token: 'fake-token' })
+    await Promise.resolve()
+  })
+
+  // Apenas o fetch GET foi chamado — nenhum dado do payload foi usado
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+  expect(mockGetMessages).toHaveBeenNthCalledWith(2, COMPANY_A, CONV_A)
 })

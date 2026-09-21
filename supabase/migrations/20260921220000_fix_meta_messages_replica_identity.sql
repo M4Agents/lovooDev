@@ -1,0 +1,29 @@
+-- =============================================================================
+-- Corrigir REPLICA IDENTITY de meta_messages para FULL
+-- =============================================================================
+-- Arquivo: 20260921220000_fix_meta_messages_replica_identity.sql
+--
+-- Contexto:
+--   meta_messages participa da publicação supabase_realtime e o frontend
+--   (useMetaChatMessages — MVP3E B1) assina eventos postgres_changes com
+--   filtro conversation_id=eq.<conversationId>.
+--
+--   O filtro opera em uma coluna não-PK. O Supabase Realtime exige
+--   REPLICA IDENTITY FULL para que filtros em colunas não-PK sejam aplicados
+--   corretamente — sem FULL, os eventos são descartados antes de chegar ao
+--   WebSocket do browser e nenhum evento é entregue ao subscriber.
+--
+-- Padrão do projeto:
+--   Todas as tabelas de mensagens com Realtime ativo já usam FULL:
+--     - chat_messages      → FULL (20260817130000)
+--     - instagram_messages → FULL (20260524100000)
+--   Esta migration alinha meta_messages ao mesmo padrão.
+--
+-- Risco: Baixo
+--   • Sem impacto em queries, RPCs, RLS, schema ou writes
+--   • Sem alteração de publication, policies ou grants
+--   • Apenas aumenta o volume do WAL para meta_messages (efeito já aceito
+--     nas demais tabelas equivalentes do projeto)
+-- =============================================================================
+
+ALTER TABLE public.meta_messages REPLICA IDENTITY FULL;
