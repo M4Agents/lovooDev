@@ -274,4 +274,54 @@ describe('ConversationSidebar — MVP3C.3 modo Meta', () => {
     expect(screen.queryByText('sidebar.filters.assigned')).toBeNull()
     expect(screen.queryByText('sidebar.filters.unassigned')).toBeNull()
   })
+
+  // ── CS-16..CS-19: Avatar por iniciais (MVP3F N2) ──────────────────────────
+  // Confirmam que o avatar Meta exibe iniciais derivadas do contato,
+  // sem carregar imagem externa.
+  // Selector: [data-testid="meta-avatar"] isola as iniciais do resto do DOM.
+
+  it('CS-16: contact_name simples → avatar exibe as 2 primeiras letras do nome', () => {
+    const MARCIO_CONV = {
+      ...META_CONV_WITH_NAME,
+      id:           'meta-conv-cs16',
+      contact_name: 'Marcio',
+      wa_id:        '5511000000016',
+    }
+    renderMetaSidebar({ conversations: [MARCIO_CONV] })
+    // "MA" aparece no avatar; o nome "Marcio" aparece no <h4> de displayName.
+    // Ambos devem estar presentes sem ambiguidade.
+    const avatarSpans = document.querySelectorAll('.select-none')
+    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
+    expect(avatarTexts).toContain('MA')
+  })
+
+  it('CS-17: contact_name composto → avatar exibe primeira letra da primeira + última palavra', () => {
+    const MARCIO_SILVA_CONV = {
+      ...META_CONV_WITH_NAME,
+      id:           'meta-conv-cs17',
+      contact_name: 'Marcio Silva',
+      wa_id:        '5511000000017',
+    }
+    renderMetaSidebar({ conversations: [MARCIO_SILVA_CONV] })
+    const avatarSpans = document.querySelectorAll('.select-none')
+    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
+    expect(avatarTexts).toContain('MS')
+  })
+
+  it('CS-18: contact_name null → avatar usa fallback wa_id (primeiros 2 chars)', () => {
+    // META_CONV_NO_NAME tem contact_name: null, wa_id: '5511999990001'
+    renderMetaSidebar({ conversations: [META_CONV_NO_NAME] })
+    const avatarSpans = document.querySelectorAll('.select-none')
+    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
+    expect(avatarTexts).toContain('55')
+  })
+
+  it('CS-19: lista Meta não introduz <img> para avatar dos contatos', () => {
+    renderMetaSidebar()
+    // Nenhum elemento <img> deve existir dentro da lista Meta.
+    // A sidebar Uazapi usa <img> para foto (resolvePhotoUrl mockado para null),
+    // mas a lista Meta deve usar somente texto (iniciais).
+    const imgs = document.querySelectorAll('img')
+    expect(imgs).toHaveLength(0)
+  })
 })
