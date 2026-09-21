@@ -2,7 +2,7 @@
 // GET|POST /api/whatsapp/meta/webhook
 //
 // GET  → Verificação do challenge Meta (setup do webhook no App Dashboard)
-// POST → Recebimento de eventos de status outbound (MVP2 2C.4)
+// POST → Recebimento de eventos: statuses[] outbound (MVP2) + messages[] inbound TEXT (MVP3A)
 //
 // Segurança:
 //   - GET: timing-safe comparison do verify token (nunca logar)
@@ -13,13 +13,18 @@
 //   - phone_number_id é o único identificador externo aceito para tenant resolution
 //
 // Idempotência:
-//   - State machine explícita (TRANSITION_MATRIX) com NOOP para regressão/duplicata
-//   - SELECT antes do UPDATE (read-before-update) para detectar unknown wamid
-//   - Retry Meta em 5xx é seguro: NOOPs garantem idempotência do batch
+//   - statuses[]: state machine explícita (TRANSITION_MATRIX) com NOOP
+//   - messages[]: RPC process_meta_inbound_message — UNIQUE (instance_id, wamid)
+//   - Retry Meta em 5xx é seguro: ambos os ramos são idempotentes
 //
-// MVP2 escopo (fase 2C.4):
-//   - Somente statuses[] outbound processados (sent/delivered/read/failed)
-//   - messages[] inbound ignorados nesta fase
+// Ramos INDEPENDENTES por value:
+//   - statuses[] e messages[] processados em paralelo (sem else/continue entre eles)
+//   - Um mesmo value pode conter ambos — ambos são processados
+//   - Tenant resolution compartilhada (uma query por value)
+//
+// MVP3A escopo (messages[]):
+//   - Somente type='text' persistido
+//   - Grupos (message.group_id presente) ignorados silenciosamente
 //   - played ignorado silenciosamente
 //
 // Decisão UNKNOWN_WAMID (B1):
@@ -197,12 +202,13 @@ async function handlePost(req, res) {
       if (change.field !== 'messages') continue;
 
       const value    = change.value ?? {};
-      const statuses = value.statuses;
+      const statuses = Array.isArray(value.statuses) ? value.statuses : [];
+      const messages = Array.isArray(value.messages) ? value.messages : [];
 
-      // Ignorar changes sem statuses (inbound messages[], contacts[], etc.)
-      if (!Array.isArray(statuses) || statuses.length === 0) continue;
+      // Nada a processar neste change — pular sem DB access
+      if (statuses.length === 0 && messages.length === 0) continue;
 
-      // ── 8. Tenant resolution ─────────────────────────────────────────────
+      // ── 8. Tenant resolution (compartilhada entre statuses[] e messages[]) ──
       // phone_number_id é o único identificador externo aceito
       // company_id/instance_id NUNCA extraídos do payload
       const phoneNumberId = value.metadata?.phone_number_id;
@@ -223,11 +229,11 @@ async function handlePost(req, res) {
 
       if (!instance) {
         // phone_number_id desconhecido — instância removida/inexistente
-        console.log('[meta/webhook] event_type=status instance_resolved=false');
+        console.log('[meta/webhook] event_type=instance instance_resolved=false');
         continue;
       }
 
-      // ── 9. Processar statuses ────────────────────────────────────────────
+      // ── 9. Ramo A — statuses[] outbound (MVP2 — comportamento intacto) ────
       for (const statusItem of statuses) {
         const wamid     = statusItem.id;
         const newStatus = statusItem.status;
@@ -282,6 +288,83 @@ async function handlePost(req, res) {
         }
 
         console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
+      }
+
+      // ── 13. Ramo B — messages[] inbound TEXT (MVP3A) ──────────────────────
+      // INDEPENDENTE do ramo A: executado sempre que messages.length > 0,
+      // independentemente de statuses[] estar presente ou não.
+      // Contacts extraídos uma vez por value para lookup eficiente por wa_id.
+      const contacts = Array.isArray(value.contacts) ? value.contacts : [];
+
+      for (const message of messages) {
+
+        // B.1 Grupos — ignorar silenciosamente (MVP3A não suporta grupos)
+        if (message.group_id != null) {
+          console.log('[meta/webhook] event_type=inbound_message group_skipped=true');
+          continue;
+        }
+
+        // B.2 Campos mínimos obrigatórios
+        if (typeof message.id !== 'string' || message.id.length === 0) {
+          console.log('[meta/webhook] event_type=inbound_message missing_field=message_id');
+          continue;
+        }
+        if (typeof message.from !== 'string' || message.from.length === 0) {
+          console.log('[meta/webhook] event_type=inbound_message missing_field=from');
+          continue;
+        }
+
+        // B.3 Tipo — MVP3A persiste somente text
+        // Qualquer outro tipo: ignorar sem criar conversa ou incrementar unread
+        if (message.type !== 'text') {
+          console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
+          continue;
+        }
+
+        // B.4 Body — obrigatório para type=text (contrato Meta Cloud API)
+        const body = message.text?.body;
+        if (typeof body !== 'string' || body.trim().length === 0) {
+          console.log('[meta/webhook] event_type=inbound_message invalid_body=true');
+          continue;
+        }
+
+        // B.5 Contact name — lookup por wa_id, nunca por contacts[0]
+        // contacts[] é opcional no payload Meta; contact_name = null é válido
+        // Nunca logar: message.from, wa_id, contact_name, body
+        const matchedContact = contacts.find(c => c.wa_id === message.from);
+        const contactName =
+          typeof matchedContact?.profile?.name === 'string' &&
+          matchedContact.profile.name.trim().length > 0
+            ? matchedContact.profile.name
+            : null;
+
+        // B.6 Timestamp — Unix epoch string → ISO 8601 (reutiliza parseMetaTimestamp)
+        // null se ausente/inválido — a RPC possui regra operacional para timestamp null
+        const providerTimestamp = parseMetaTimestamp(message.timestamp);
+
+        // B.7 RPC de persistência atômica — idempotente por (instance_id, wamid)
+        const { data: rpcData, error: rpcErr } = await svc.rpc(
+          'process_meta_inbound_message',
+          {
+            p_company_id:         instance.company_id,
+            p_instance_id:        instance.id,
+            p_wa_id:              message.from,
+            p_meta_message_id:    message.id,
+            p_body:               body,
+            p_contact_name:       contactName,
+            p_provider_timestamp: providerTimestamp,
+          },
+        );
+
+        if (rpcErr) {
+          // Erro real de DB/RPC — retornar 500 para retry Meta
+          // Duplicata (created=false) NÃO é erro — tratada abaixo
+          console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+          return res.status(500).json({ error: 'Internal error' });
+        }
+
+        const created = rpcData?.created === true;
+        console.log('[meta/webhook] event_type=inbound_message created=%s', created);
       }
     }
   }

@@ -37,7 +37,7 @@ vi.mock('../../../lib/meta-whatsapp/config.js', () => ({
   getMetaWebhookConfig: (...args) => mockGetMetaWebhookConfig(...args),
 }));
 
-const mockSvc = { from: vi.fn() };
+const mockSvc = { from: vi.fn(), rpc: vi.fn() };
 vi.mock('../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
 }));
@@ -48,14 +48,21 @@ import handler from '../webhook.js';
 // Fixtures — todos fictícios, nunca reais
 // =============================================================================
 
-const FAKE_VERIFY_TOKEN = 'meta_webhook_verify_token_fake_for_tests_only_xxxxxx';
-const FAKE_APP_SECRET   = 'meta_app_secret_fake_for_tests_only_not_real_xxxxxxx';
-const FAKE_PHONE_NUM_ID = '106540352242922';
-const FAKE_INSTANCE_ID  = 'aaaa0000-0000-0000-0000-000000000001';
-const FAKE_COMPANY_ID   = 'bbbb0000-0000-0000-0000-000000000002';
-const FAKE_MSG_ID       = 'cccc0000-0000-0000-0000-000000000003';
-const FAKE_WAMID        = 'wamid.HBgLNTU1MTk4NzY1NDMyMQIVAgARGBI4NzY1NDMyMQ==';
-const FAKE_TIMESTAMP    = '1739321024'; // Unix epoch string
+const FAKE_VERIFY_TOKEN  = 'meta_webhook_verify_token_fake_for_tests_only_xxxxxx';
+const FAKE_APP_SECRET    = 'meta_app_secret_fake_for_tests_only_not_real_xxxxxxx';
+const FAKE_PHONE_NUM_ID  = '106540352242922';
+const FAKE_INSTANCE_ID   = 'aaaa0000-0000-0000-0000-000000000001';
+const FAKE_COMPANY_ID    = 'bbbb0000-0000-0000-0000-000000000002';
+const FAKE_MSG_ID        = 'cccc0000-0000-0000-0000-000000000003';
+const FAKE_WAMID         = 'wamid.HBgLNTU1MTk4NzY1NDMyMQIVAgARGBI4NzY1NDMyMQ==';
+const FAKE_TIMESTAMP     = '1739321024'; // Unix epoch string
+
+// Fixtures inbound (MVP3A)
+const FAKE_CONV_ID       = 'dddd0000-0000-0000-0000-000000000004';
+const FAKE_INBOUND_WAMID = 'wamid.INBOUND_FAKE_FOR_TESTS_ONLY_xxxxxxxxxxxxxxxx';
+const FAKE_WA_ID         = '5511987654321'; // E.164 sem +, fictício
+const FAKE_CONTACT_NAME  = 'Contato Teste Ficticio';
+const FAKE_BODY          = 'Oi teste mensagem inbound ficticia';
 
 const FAKE_INSTANCE = { id: FAKE_INSTANCE_ID, company_id: FAKE_COMPANY_ID };
 const FAKE_RAW_BODY = Buffer.from('{"object":"whatsapp_business_account","entry":[]}');
@@ -114,6 +121,77 @@ function makeUpdateChain(error = null) {
   };
 }
 
+// =============================================================================
+// Factories — inbound messages (MVP3A)
+// =============================================================================
+
+/**
+ * Constrói uma mensagem inbound Meta fictícia.
+ * body=undefined  → omite text.text (para testar body ausente).
+ * timestamp=null  → omite o campo timestamp do objeto message (ausente no payload).
+ */
+function makeInboundMessage({
+  id        = FAKE_INBOUND_WAMID,
+  from      = FAKE_WA_ID,
+  type      = 'text',
+  body      = FAKE_BODY,
+  timestamp = FAKE_TIMESTAMP,
+  group_id  = undefined,
+} = {}) {
+  const msg = { id, from, type };
+  // null = campo ausente no payload (timestamp omitido pela Meta)
+  if (timestamp !== null) msg.timestamp = timestamp;
+  if (type === 'text' && body !== undefined) msg.text = { body };
+  if (group_id !== undefined) msg.group_id = group_id;
+  return msg;
+}
+
+/**
+ * Constrói um payload Meta com messages[] inbound.
+ * contacts=null  → omite o campo contacts[] completamente do payload.
+ * statuses=null  → omite o campo statuses[] completamente do payload.
+ * (undefined ativa o default do parâmetro — use null para omissão explícita)
+ */
+function makeInboundPayload({
+  messages  = [makeInboundMessage()],
+  contacts  = [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+  statuses  = null,
+  phoneId   = FAKE_PHONE_NUM_ID,
+} = {}) {
+  const value = {
+    messaging_product: 'whatsapp',
+    metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+    messages,
+  };
+  // null = omitir campo do payload (ausente, não array vazio)
+  if (contacts !== null) value.contacts = contacts;
+  if (statuses !== null) value.statuses = statuses;
+  return {
+    object: 'whatsapp_business_account',
+    entry: [{ id: 'entry-inbound-1', changes: [{ field: 'messages', value }] }],
+  };
+}
+
+/** Resultado padrão da RPC process_meta_inbound_message. */
+function makeRpcResult({ created = true, error = null } = {}) {
+  return {
+    data: error
+      ? null
+      : { created, conversation_id: FAKE_CONV_ID, message_id: created ? FAKE_MSG_ID : null },
+    error,
+  };
+}
+
+/** Configura DB para happy path inbound: instance lookup + RPC. */
+function setupInboundDb({
+  instance  = FAKE_INSTANCE,
+  instErr   = null,
+  rpcResult = makeRpcResult(),
+} = {}) {
+  mockSvc.from.mockReturnValueOnce(makeInstChain(instance, instErr));
+  mockSvc.rpc.mockResolvedValueOnce(rpcResult);
+}
+
 /** Request GET para verificação de challenge. */
 function makeGetReq({
   mode      = 'subscribe',
@@ -169,6 +247,8 @@ beforeEach(() => {
   mockGetMetaWebhookConfig.mockReturnValue({ verifyToken: FAKE_VERIFY_TOKEN });
   mockReadRawBody.mockResolvedValue(FAKE_RAW_BODY);
   mockVerifyMetaWebhookSignature.mockReturnValue(true);
+  // Default RPC: sucesso com created=true
+  mockSvc.rpc.mockResolvedValue(makeRpcResult());
 });
 
 /** Configura DB para happy path com 1 status. */
@@ -410,7 +490,9 @@ describe('POST /api/whatsapp/meta/webhook — iteração', () => {
     expect(mockSvc.from).not.toHaveBeenCalled();
   });
 
-  it('ITER-05: change com messages[] mas sem statuses[] → ignorado', async () => {
+  it('ITER-05: messages[] com mensagem inválida (from ausente) → instance lookup + 200 + zero RPC', async () => {
+    // Comportamento corrigido (MVP3A): messages[] NÃO é ignorado pela ausência de statuses[].
+    // Instance lookup ocorre; mensagem é pulada por missing field 'from'.
     const payload = {
       object: 'whatsapp_business_account',
       entry: [{
@@ -419,17 +501,21 @@ describe('POST /api/whatsapp/meta/webhook — iteração', () => {
           field: 'messages',
           value: {
             metadata: { phone_number_id: FAKE_PHONE_NUM_ID },
-            messages: [{ id: 'msg1', type: 'text' }], // inbound — sem statuses
+            messages: [{ id: 'msg1', type: 'text', text: { body: 'oi' } }], // from ausente
           },
         }],
       }],
     };
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    // Instance lookup deve ser feito (messages.length > 0)
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
     const req = makePostReq();
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
-    expect(mockSvc.from).not.toHaveBeenCalled();
+    // 1 DB call (instance lookup); RPC não chamada (from ausente)
+    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
   });
 
   it('ITER-06: status "played" → ignorado silenciosamente', async () => {
@@ -827,5 +913,394 @@ describe('POST /api/whatsapp/meta/webhook — segurança de resposta', () => {
     await handler(req, res);
     expect(res._status).toBe(401);
     expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// POST — messages[] inbound TEXT (MVP3A)
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-01: happy path — RPC chamada com argumentos corretos
+  // ---------------------------------------------------------------------------
+  it('INBOUND-01: text válida → RPC chamada com p_company_id/p_instance_id/p_wa_id/p_meta_message_id/p_body/p_contact_name/p_provider_timestamp corretos', async () => {
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledWith('process_meta_inbound_message', {
+      p_company_id:         FAKE_COMPANY_ID,
+      p_instance_id:        FAKE_INSTANCE_ID,
+      p_wa_id:              FAKE_WA_ID,
+      p_meta_message_id:    FAKE_INBOUND_WAMID,
+      p_body:               FAKE_BODY,
+      p_contact_name:       FAKE_CONTACT_NAME,
+      p_provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-02: contacts ausente → contact_name null
+  // ---------------------------------------------------------------------------
+  it('INBOUND-02: contacts[] ausente no payload → p_contact_name=null enviado à RPC', async () => {
+    // null = campo contacts omitido do payload (não envia contacts[] à Meta)
+    const payload = makeInboundPayload({ contacts: null });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const rpcArgs = mockSvc.rpc.mock.calls[0][1];
+    expect(rpcArgs.p_contact_name).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-03: contact correto encontrado por wa_id, não por contacts[0]
+  // ---------------------------------------------------------------------------
+  it('INBOUND-03: contacts[0].wa_id !== message.from → usa contacts[1] (lookup por wa_id, não por index)', async () => {
+    const OTHER_WA_ID   = '5599000000001';
+    const OTHER_NAME    = 'Outro Contato';
+    const contacts = [
+      { wa_id: OTHER_WA_ID, profile: { name: OTHER_NAME } },        // contacts[0] — wa_id diferente
+      { wa_id: FAKE_WA_ID,  profile: { name: FAKE_CONTACT_NAME } }, // contacts[1] — correto
+    ];
+    const payload = makeInboundPayload({ contacts });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const rpcArgs = mockSvc.rpc.mock.calls[0][1];
+    // Deve usar o contato correto (wa_id bate), não contacts[0]
+    expect(rpcArgs.p_contact_name).toBe(FAKE_CONTACT_NAME);
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-04: timestamp válido convertido para ISO
+  // ---------------------------------------------------------------------------
+  it('INBOUND-04: message.timestamp string epoch válida → p_provider_timestamp ISO 8601 correto', async () => {
+    const payload = makeInboundPayload({
+      messages: [makeInboundMessage({ timestamp: '1739321024' })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const rpcArgs = mockSvc.rpc.mock.calls[0][1];
+    expect(rpcArgs.p_provider_timestamp).toBe(new Date(1739321024 * 1000).toISOString());
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-05: timestamp inválido → null
+  // ---------------------------------------------------------------------------
+  it.each([
+    // null = campo timestamp ausente no payload (makeInboundMessage trata null como "omitir")
+    ['ausente',       null],
+    ['string vazia',  ''],
+    ['com letras',    '123abc'],
+    ['zero',          '0'],
+    ['negativo',      '-1739321024'],
+    ['não-string',    1739321024],
+  ])('INBOUND-05: timestamp %s → p_provider_timestamp=null', async (_label, ts) => {
+    const msg = makeInboundMessage({ timestamp: ts });
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const rpcArgs = mockSvc.rpc.mock.calls[0][1];
+    expect(rpcArgs.p_provider_timestamp).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-06: duplicata (created=false) → HTTP 200
+  // ---------------------------------------------------------------------------
+  it('INBOUND-06: RPC retorna created=false (duplicata/idempotente) → HTTP 200', async () => {
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb({ rpcResult: makeRpcResult({ created: false }) });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-07: RPC failure → HTTP 500
+  // ---------------------------------------------------------------------------
+  it('INBOUND-07: RPC retorna erro real (DB/constraint) em text válida → HTTP 500', async () => {
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb({ rpcResult: makeRpcResult({ error: { message: 'db constraint error' } }) });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toMatchObject({ error: 'Internal error' });
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-08: type image → ignorado, RPC não chamada
+  // ---------------------------------------------------------------------------
+  it('INBOUND-08: message.type=image → ignorado + HTTP 200 + RPC não chamada', async () => {
+    const msg = makeInboundMessage({ type: 'image', body: undefined });
+    delete msg.text; // imagem não tem text
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-09: group_id presente → ignorado, RPC não chamada
+  // ---------------------------------------------------------------------------
+  it('INBOUND-09: message.group_id presente → ignorado + HTTP 200 + RPC não chamada', async () => {
+    const msg = makeInboundMessage({ group_id: 'fake-group-id-12345@g.us' });
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-10: message.id ausente → ignorado
+  // ---------------------------------------------------------------------------
+  it('INBOUND-10: message.id ausente → ignorado + HTTP 200 + RPC não chamada', async () => {
+    const msg = makeInboundMessage();
+    delete msg.id;
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-11: message.from ausente → ignorado
+  // ---------------------------------------------------------------------------
+  it('INBOUND-11: message.from ausente → ignorado + HTTP 200 + RPC não chamada', async () => {
+    const msg = makeInboundMessage();
+    delete msg.from;
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-12: text.body vazio/inválido → ignorado
+  // ---------------------------------------------------------------------------
+  it.each([
+    ['body vazio ""',       ''],
+    ['body somente espaços', '   '],
+  ])('INBOUND-12: %s → ignorado + HTTP 200 + RPC não chamada', async (_label, body) => {
+    const msg = makeInboundMessage({ body });
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-13: phone_number_id desconhecido no ramo messages → 200, zero RPC
+  // ---------------------------------------------------------------------------
+  it('INBOUND-13: phone_number_id desconhecido (ramo messages[]) → HTTP 200, zero RPC', async () => {
+    const payload = makeInboundPayload({ phoneId: 'unknown-phone-id-99999' });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(null)); // instance not found
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-14: payload somente statuses[] continua funcionando (regressão MVP2)
+  // ---------------------------------------------------------------------------
+  it('INBOUND-14: payload com statuses[] apenas → ramo MVP2 funciona intacto, RPC NÃO chamada', async () => {
+    const payload = makePayload({
+      statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    // DB setup: instance + select + update (MVP2 flow)
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'accepted' }))
+      .mockReturnValueOnce(makeUpdateChain());
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // RPC de inbound NÃO deve ser chamada
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    // Update MVP2 deve ter sido chamado
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-15: payload somente messages[] → funciona
+  // ---------------------------------------------------------------------------
+  it('INBOUND-15: payload com messages[] apenas (sem statuses[]) → HTTP 200 + RPC chamada', async () => {
+    const payload = makeInboundPayload(); // sem statuses
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-16: mesmo value com statuses[] + messages[] → AMBOS processados
+  // ---------------------------------------------------------------------------
+  it('INBOUND-16: value com statuses[] + messages[] → ramo A e ramo B processados independentemente', async () => {
+    const payload = makeInboundPayload({
+      statuses: [{ id: FAKE_WAMID, status: 'delivered', timestamp: FAKE_TIMESTAMP }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    // DB: instance (compartilhada), select outbound, update outbound, RPC inbound
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' }))
+      .mockReturnValueOnce(makeUpdateChain());
+    mockSvc.rpc.mockResolvedValueOnce(makeRpcResult());
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // Ramo A: update chamado
+    expect(mockSvc.from).toHaveBeenCalledTimes(3); // instance + select + update
+    // Ramo B: RPC chamada
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-17: múltiplas messages[] → todas iteradas
+  // ---------------------------------------------------------------------------
+  it('INBOUND-17: múltiplas messages[] válidas → RPC chamada para cada uma', async () => {
+    const msg1 = makeInboundMessage({ id: 'wamid.MSG1_FAKE', from: '5511000000001' });
+    const msg2 = makeInboundMessage({ id: 'wamid.MSG2_FAKE', from: '5511000000002' });
+    const contacts = [
+      { wa_id: '5511000000001', profile: { name: 'Usuario Um' } },
+      { wa_id: '5511000000002', profile: { name: 'Usuario Dois' } },
+    ];
+    const payload = makeInboundPayload({ messages: [msg1, msg2], contacts });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc
+      .mockResolvedValueOnce(makeRpcResult())
+      .mockResolvedValueOnce(makeRpcResult());
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    // Primeira mensagem usa contato correto por wa_id
+    expect(mockSvc.rpc.mock.calls[0][1].p_contact_name).toBe('Usuario Um');
+    expect(mockSvc.rpc.mock.calls[1][1].p_contact_name).toBe('Usuario Dois');
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-18: logs não incluem PII (body, wa_id, contact_name, from)
+  // ---------------------------------------------------------------------------
+  it('INBOUND-18: log de sucesso NÃO contém body, wa_id, contact_name nem from', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const allLogs = consoleSpy.mock.calls.map(c => c.join(' ')).join('\n');
+    expect(allLogs).not.toContain(FAKE_BODY);
+    expect(allLogs).not.toContain(FAKE_WA_ID);
+    expect(allLogs).not.toContain(FAKE_CONTACT_NAME);
+    consoleSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // INBOUND-19: assinatura inválida → 401, zero DB, zero RPC (regressão)
+  // ---------------------------------------------------------------------------
+  it('INBOUND-19: HMAC inválido → 401, zero DB, zero RPC', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
   });
 });
