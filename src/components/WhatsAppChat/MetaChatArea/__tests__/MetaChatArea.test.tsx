@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // =============================================================================
-// MetaChatArea.test.tsx — MVP3C.4
+// MetaChatArea.test.tsx — MVP3D
 //
-// Testa o componente MetaChatArea mockando useMetaChatMessages.
+// Testa o componente MetaChatArea mockando useMetaChatMessages e metaWhatsAppApi.
 // NÃO repete lógica interna do hook (já coberta em useMetaChatMessages.test.ts).
+// NÃO repete cobertura de contrato do service (já coberta em metaWhatsAppApiConversations.test.ts).
 //
 // MA-01  chama useMetaChatMessages com companyId e conversationId corretos
 // MA-02  header: contact_name presente → exibe nome
@@ -20,9 +21,41 @@
 // MA-13  provider_timestamp null → usa created_at; sem crash
 // MA-14  timestamp inválido → componente não quebra
 // MA-15  ordem: mensagens na mesma ordem do hook
-// MA-16  read-only: zero input/textarea/contentEditable/botão de envio
+// MA-16  composer presente: textarea + botão Enviar existem [atualizado MVP3D]
 // MA-17  conversation undefined → sem crash
 // MA-18  mudança de messages → scroll executado sem erro
+//
+// MVP3D — Composer:
+// MA-19  conversation undefined: textarea disabled
+// MA-20  texto vazio: botão disabled
+// MA-21  whitespace: não chama sendMessage
+// MA-22  texto válido: chama sendMessage com args corretos
+// MA-23  payload nunca contém wa_id/to
+// MA-24  sucesso: limpa textarea
+// MA-25  sucesso: chama refresh exatamente uma vez
+// MA-26  erro comum: preserva texto
+// MA-27  erro comum: NÃO chama refresh
+// MA-28  erro comum: exibe mensagem segura
+// MA-29  send_persistence_failed: exibe aviso especial
+// MA-30  send_persistence_failed: preserva texto
+// MA-31  send_persistence_failed: NÃO chama refresh
+// MA-32  provider_error: mensagem menciona janela/template
+// MA-33  instance_not_connected: mensagem correta
+// MA-34  Enter envia
+// MA-35  Shift+Enter NÃO envia
+// MA-36  double click: somente 1 request
+// MA-37  Enter + click enquanto pendente: somente 1 request
+// MA-38  textarea/botão disabled durante envio
+// MA-39  após erro: controles liberados
+// MA-40  após sucesso: controles liberados
+// MA-41  troca A→B durante envio A: resolução não limpa texto de B
+// MA-42  troca A→B durante envio A: erro de A não aparece em B
+// MA-43  troca A→B durante envio A: sucesso não chama refresh de B
+// MA-44  unmount durante envio: sem setState indevido/warning
+// MA-45  erro de envio não substitui lista de mensagens
+// MA-46  erro de leitura independente do sendError
+// MA-47  nenhum optimistic message criado
+// MA-48  erro de envio desaparece ao tentar novo envio bem-sucedido
 //
 // formatTime testado diretamente (helper exportado):
 // FT-01  ISO válido → string HH:mm
@@ -33,7 +66,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup }               from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { MetaChatArea, formatTime }                          from '../MetaChatArea'
 import type { MetaChatConversation, MetaChatMessage }        from '../../../../types/meta-whatsapp'
 
@@ -43,14 +76,24 @@ vi.mock('../../../../hooks/chat/useMetaChatMessages', () => ({
   useMetaChatMessages: vi.fn(),
 }))
 
-import { useMetaChatMessages } from '../../../../hooks/chat/useMetaChatMessages'
+vi.mock('../../../../services/metaWhatsAppApi', () => ({
+  metaWhatsAppApi: {
+    sendMessage: vi.fn(),
+  },
+}))
+
+import { useMetaChatMessages }    from '../../../../hooks/chat/useMetaChatMessages'
+import { metaWhatsAppApi }        from '../../../../services/metaWhatsAppApi'
 
 const mockUseMetaChatMessages = useMetaChatMessages as ReturnType<typeof vi.fn>
+const mockSendMessage         = metaWhatsAppApi.sendMessage as ReturnType<typeof vi.fn>
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const COMPANY_ID  = 'company-test-001'
 const CONV_ID     = 'conv-test-001'
+const CONV_ID_B   = 'conv-test-002'
+const FAKE_WAMID  = 'wamid.TEST_FIXTURE_NOT_REAL'
 
 const CONV_FULL: MetaChatConversation = {
   id:                   CONV_ID,
@@ -63,6 +106,13 @@ const CONV_FULL: MetaChatConversation = {
   last_message_preview: 'Olá',
   created_at:           '2026-09-21T10:00:00.000Z',
   updated_at:           '2026-09-21T15:00:00.000Z',
+}
+
+const CONV_FULL_B: MetaChatConversation = {
+  ...CONV_FULL,
+  id:          CONV_ID_B,
+  wa_id:       '5511999990002',
+  contact_name: 'Maria Lima',
 }
 
 const CONV_NO_NAME: MetaChatConversation = {
@@ -112,6 +162,7 @@ function mockIdle(overrides: Partial<{
 beforeEach(() => {
   vi.clearAllMocks()
   mockIdle()
+  mockSendMessage.mockResolvedValue({ ok: true, message_id: FAKE_WAMID })
 })
 
 afterEach(() => {
@@ -127,7 +178,6 @@ describe('formatTime — helper puro', () => {
     const result = formatTime('2026-09-21T15:30:00.000Z')
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
-    // Formato esperado: dois blocos separados por ':' (ex: "12:30")
     expect(result).toMatch(/^\d{1,2}:\d{2}$/)
   })
 
@@ -153,7 +203,7 @@ describe('formatTime — helper puro', () => {
 // Testes do componente MetaChatArea
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('MetaChatArea — MVP3C.4', () => {
+describe('MetaChatArea — MVP3D', () => {
 
   // MA-01 — chama hook com os IDs corretos
   it('MA-01: chama useMetaChatMessages com companyId e conversationId corretos', () => {
@@ -180,7 +230,6 @@ describe('MetaChatArea — MVP3C.4', () => {
     render(
       <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_NO_NAME} />
     )
-    // wa_id deve aparecer como displayName
     expect(screen.getAllByText('5511999990001').length).toBeGreaterThan(0)
     expect(screen.queryByText('João Silva')).toBeNull()
   })
@@ -190,7 +239,6 @@ describe('MetaChatArea — MVP3C.4', () => {
     render(
       <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
     )
-    // Badge de status 'active' deve estar visível
     expect(screen.getByText('active')).toBeTruthy()
   })
 
@@ -266,7 +314,6 @@ describe('MetaChatArea — MVP3C.4', () => {
       <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
     )
     expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
-    // Body (URL) não deve aparecer renderizado como link ou texto
     expect(screen.queryByText('https://exemplo.com/foto.jpg')).toBeNull()
   })
 
@@ -274,7 +321,6 @@ describe('MetaChatArea — MVP3C.4', () => {
   it('MA-12: provider_timestamp presente → componente renderiza e exibe timestamp', () => {
     const msg = makeMsg('msg-ts-001', 'inbound', 'text', 'Com timestamp', '2026-09-21T15:30:00.000Z')
     mockIdle({ messages: [msg] })
-    // Deve renderizar sem crash; alguma string de tempo deve aparecer
     expect(() =>
       render(
         <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
@@ -294,11 +340,10 @@ describe('MetaChatArea — MVP3C.4', () => {
         <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
       )
     ).not.toThrow()
-    // Texto da mensagem deve aparecer
     expect(screen.getByText('Sem provider_ts')).toBeTruthy()
   })
 
-  // MA-14 — timestamp inválido → sem crash; formatTime retorna ''
+  // MA-14 — timestamp inválido → sem crash
   it('MA-14: timestamp inválido → componente não quebra (formatTime retorna string vazia)', () => {
     const msg: MetaChatMessage = {
       ...makeMsg('msg-bads-001', 'inbound', 'text', 'Timestamp ruim', 'nao-e-data'),
@@ -324,36 +369,23 @@ describe('MetaChatArea — MVP3C.4', () => {
     render(
       <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
     )
-    // Verificar presença de todas
     expect(screen.getByText('Primeira mensagem')).toBeTruthy()
     expect(screen.getByText('Segunda mensagem')).toBeTruthy()
     expect(screen.getByText('Terceira mensagem')).toBeTruthy()
 
-    // Verificar ordem via posição no DOM
     const allBubbles = document.querySelectorAll('[data-direction]')
     expect(allBubbles[0].getAttribute('data-direction')).toBe('inbound')
     expect(allBubbles[1].getAttribute('data-direction')).toBe('outbound')
     expect(allBubbles[2].getAttribute('data-direction')).toBe('inbound')
   })
 
-  // MA-16 — read-only: zero input/textarea/contentEditable/botão envio
-  it('MA-16: componente é read-only — sem input, textarea, contentEditable ou botão de envio', () => {
-    const msgs = [makeMsg('msg-ro-001')]
-    mockIdle({ messages: msgs })
+  // MA-16 — composer presente [atualizado MVP3D: componente tem textarea e botão Enviar]
+  it('MA-16: composer presente — textarea e botão Enviar existem', () => {
     render(
       <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
     )
-    // Nenhum campo de entrada
-    expect(document.querySelector('input')).toBeNull()
-    expect(document.querySelector('textarea')).toBeNull()
-    expect(document.querySelector('[contenteditable]')).toBeNull()
-
-    // Nenhum botão de envio (o único button presente é o de retry, ausente neste estado)
-    const buttons = document.querySelectorAll('button')
-    const sendButtons = Array.from(buttons).filter(btn =>
-      /enviar|send|submit/i.test(btn.textContent || '')
-    )
-    expect(sendButtons).toHaveLength(0)
+    expect(document.querySelector('textarea')).not.toBeNull()
+    expect(screen.getByRole('button', { name: /enviar/i })).toBeTruthy()
   })
 
   // MA-17 — conversation undefined → sem crash
@@ -371,7 +403,6 @@ describe('MetaChatArea — MVP3C.4', () => {
 
   // MA-18 — scroll: mudança de messages não produz erro
   it('MA-18: mudança de messages executa scroll sem lançar erro', () => {
-    // Simula scrollHeight/scrollTop (jsdom retorna 0, mas não deve lançar)
     const msgs1 = [makeMsg('msg-sc-001')]
     mockIdle({ messages: msgs1 })
 
@@ -387,5 +418,540 @@ describe('MetaChatArea — MVP3C.4', () => {
         <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
       )
     ).not.toThrow()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MVP3D — Testes do Composer
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // MA-19 — conversation undefined: textarea disabled
+  it('MA-19: conversation undefined → textarea disabled (sem instance_id)', () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={undefined} />
+    )
+    const textarea = document.querySelector('textarea')
+    expect(textarea).not.toBeNull()
+    expect(textarea!.disabled).toBe(true)
+  })
+
+  // MA-20 — texto vazio: botão disabled
+  it('MA-20: texto vazio → botão Enviar disabled', () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const btn = screen.getByRole('button', { name: /enviar/i })
+    expect(btn).toHaveProperty('disabled', true)
+  })
+
+  // MA-21 — whitespace: não chama sendMessage
+  it('MA-21: texto somente espaços → NÃO chama sendMessage', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  // MA-22 — texto válido: args corretos
+  it('MA-22: texto válido → chama sendMessage com args corretos', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Olá teste' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      COMPANY_ID,
+      CONV_FULL.instance_id,   // inst-001 — da conversation, nunca do body
+      CONV_ID,
+      'Olá teste',
+    )
+  })
+
+  // MA-23 — payload nunca contém wa_id/to
+  it('MA-23: sendMessage nunca recebe wa_id nem `to`', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto seguro' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    // sendMessage recebe exatamente 4 args posicionais: companyId, instanceId, conversationId, body
+    // wa_id (CONV_FULL.wa_id = '5511999990001') nunca deve aparecer em nenhum dos args
+    const callArgs = mockSendMessage.mock.calls[0] as string[]
+    expect(callArgs).toHaveLength(4)
+    // wa_id não deve estar em nenhum argumento
+    expect(callArgs).not.toContain(CONV_FULL.wa_id)
+    // Todos os args devem ser os valores esperados (sem wa_id nem campo `to` extra)
+    expect(callArgs[0]).toBe(COMPANY_ID)
+    expect(callArgs[1]).toBe(CONV_FULL.instance_id)
+    expect(callArgs[2]).toBe(CONV_ID)
+    expect(callArgs[3]).toBe('Texto seguro')
+  })
+
+  // MA-24 — sucesso: limpa textarea
+  it('MA-24: sucesso → textarea fica vazia', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Mensagem enviada' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(textarea.value).toBe(''))
+  })
+
+  // MA-25 — sucesso: chama refresh exatamente uma vez
+  it('MA-25: sucesso → chama refresh exatamente 1 vez', async () => {
+    const refresh = mockIdle()
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Mensagem refresh' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+  })
+
+  // MA-26 — erro comum: preserva texto
+  it('MA-26: erro comum → preserva texto no textarea', async () => {
+    mockSendMessage.mockRejectedValue(new Error('internal_error'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto preservado' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(textarea.value).toBe('Texto preservado'))
+  })
+
+  // MA-27 — erro comum: NÃO chama refresh
+  it('MA-27: erro comum → NÃO chama refresh', async () => {
+    mockSendMessage.mockRejectedValue(new Error('provider_error'))
+    const refresh = mockIdle()
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalled())
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  // MA-28 — erro comum: exibe mensagem segura (não expõe código bruto)
+  it('MA-28: erro comum → exibe mensagem de erro segura e visível', async () => {
+    mockSendMessage.mockRejectedValue(new Error('instance_not_found'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy()
+      expect(screen.getByRole('alert').textContent).toContain('Instância não encontrada')
+    })
+  })
+
+  // MA-29 — send_persistence_failed: aviso especial
+  it('MA-29: send_persistence_failed → exibe aviso de envio possivelmente realizado', async () => {
+    mockSendMessage.mockRejectedValue(new Error('send_persistence_failed'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).toContain('possivelmente enviada')
+    })
+  })
+
+  // MA-30 — send_persistence_failed: preserva texto
+  it('MA-30: send_persistence_failed → preserva texto (não limpar, não reenviar cegamente)', async () => {
+    mockSendMessage.mockRejectedValue(new Error('send_persistence_failed'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto importante' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(textarea.value).toBe('Texto importante')
+  })
+
+  // MA-31 — send_persistence_failed: NÃO chama refresh
+  it('MA-31: send_persistence_failed → NÃO chama refresh', async () => {
+    mockSendMessage.mockRejectedValue(new Error('send_persistence_failed'))
+    const refresh = mockIdle()
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  // MA-32 — provider_error: mensagem menciona janela/template
+  it('MA-32: provider_error → mensagem menciona prazo/template', async () => {
+    mockSendMessage.mockRejectedValue(new Error('provider_error'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).toContain('template')
+    })
+  })
+
+  // MA-33 — instance_not_connected: mensagem correta
+  it('MA-33: instance_not_connected → mensagem correta', async () => {
+    mockSendMessage.mockRejectedValue(new Error('instance_not_connected'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('instância não está conectada')
+    })
+  })
+
+  // MA-34 — Enter envia
+  it('MA-34: Enter (sem Shift) → chama sendMessage', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto Enter' } })
+    await act(async () => {
+      fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
+    })
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalledTimes(1))
+  })
+
+  // MA-35 — Shift+Enter NÃO envia
+  it('MA-35: Shift+Enter → NÃO chama sendMessage', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto Shift+Enter' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  // MA-36 — double click: somente 1 request
+  it('MA-36: double click em Enviar → somente 1 sendMessage enquanto pendente', async () => {
+    // Promise que não resolve imediatamente — simula envio em andamento
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    const btn      = screen.getByRole('button', { name: /enviar/i })
+
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    fireEvent.click(btn)
+    fireEvent.click(btn) // segundo clique enquanto pendente
+
+    // Resolver para completar o envio
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  // MA-37 — Enter + click enquanto pendente: somente 1 request
+  it('MA-37: Enter + click enquanto pendente → somente 1 sendMessage', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1)
+  })
+
+  // MA-38 — disabled durante envio
+  it('MA-38: durante envio → textarea e botão ficam disabled', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Verificar disabled enquanto em andamento
+    await waitFor(() => expect(textarea.disabled).toBe(true))
+    expect(screen.getByRole('button', { name: /enviar/i })).toHaveProperty('disabled', true)
+
+    // Liberar
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+  })
+
+  // MA-39 — após erro: controles liberados
+  it('MA-39: após erro → textarea e botão são liberados', async () => {
+    mockSendMessage.mockRejectedValue(new Error('internal_error'))
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(textarea.disabled).toBe(false))
+    expect(screen.getByRole('button', { name: /enviar/i })).toHaveProperty('disabled', false)
+  })
+
+  // MA-40 — após sucesso: controles liberados
+  it('MA-40: após sucesso → textarea liberada (texto vazio, não disabled)', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => {
+      expect(textarea.value).toBe('')
+      expect(textarea.disabled).toBe(false)
+    })
+  })
+
+  // MA-41 — troca A→B durante envio A: resolução não limpa texto de B
+  it('MA-41: troca A→B durante envio A → resolução de A não limpa texto de B', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+
+    // Iniciar envio para conv A
+    const textareaA = document.querySelector('textarea')!
+    fireEvent.change(textareaA, { target: { value: 'Texto de A' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Trocar para conv B
+    await act(async () => {
+      rerender(
+        <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID_B} conversation={CONV_FULL_B} />
+      )
+    })
+
+    // Digitar texto para conv B (após o effect limpar o texto)
+    const textareaB = document.querySelector('textarea')!
+    fireEvent.change(textareaB, { target: { value: 'Texto de B' } })
+    expect(textareaB.value).toBe('Texto de B')
+
+    // Resolver envio de A (stale)
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+
+    // Texto de B deve estar intacto
+    expect(textareaB.value).toBe('Texto de B')
+  })
+
+  // MA-42 — troca A→B durante envio A: erro de A não aparece em B
+  it('MA-42: troca A→B durante envio A → erro de A não aparece em B', async () => {
+    let rejectSend!: (e: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise((_, rej) => { rejectSend = rej }))
+
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto de A' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Trocar para conv B
+    await act(async () => {
+      rerender(
+        <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID_B} conversation={CONV_FULL_B} />
+      )
+    })
+
+    // Rejeitar envio de A (stale)
+    await act(async () => { rejectSend(new Error('internal_error')) })
+
+    // Nenhum alerta de erro deve aparecer em B
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  // MA-43 — troca A→B durante envio A: sucesso não chama refresh de B
+  it('MA-43: troca A→B durante envio A → sucesso de A não chama refresh de B', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    const refreshA = mockIdle()
+
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto de A' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Trocar para conv B com novo refresh
+    const refreshB = mockIdle()
+    await act(async () => {
+      rerender(
+        <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID_B} conversation={CONV_FULL_B} />
+      )
+    })
+
+    // Resolver envio de A (stale)
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+
+    // refreshB não deve ter sido chamado por causa do envio de A
+    expect(refreshB).not.toHaveBeenCalled()
+    // (refreshA pode ou não ter sido chamado dependendo da implementação)
+    void refreshA
+  })
+
+  // MA-44 — unmount durante envio: sem setState indevido
+  it('MA-44: unmount durante envio → sem setState após unmount / sem warning', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    const { unmount } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+
+    const textarea = document.querySelector('textarea')!
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Desmontar enquanto envio em andamento
+    unmount()
+
+    // Resolver após unmount — não deve lançar / emitir warning
+    await expect(act(async () => {
+      resolveSend({ ok: true, message_id: FAKE_WAMID })
+    })).resolves.toBeUndefined()
+  })
+
+  // MA-45 — erro de envio não substitui lista de mensagens
+  it('MA-45: erro de envio não substitui área de mensagens', async () => {
+    mockSendMessage.mockRejectedValue(new Error('internal_error'))
+    const msgs = [makeMsg('msg-visible-001', 'inbound', 'text', 'Mensagem visível')]
+    mockIdle({ messages: msgs })
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    fireEvent.change(document.querySelector('textarea')!, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    // Mensagem original ainda visível na lista
+    expect(screen.getByText('Mensagem visível')).toBeTruthy()
+  })
+
+  // MA-46 — erro de leitura independente do sendError
+  it('MA-46: erro de leitura do hook e erro de envio são independentes', async () => {
+    // Erro de leitura vem do hook
+    mockIdle({ error: 'Falha ao carregar mensagens' })
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    // Erro de leitura aparece na área de mensagens (não como role="alert")
+    expect(screen.getByText('Falha ao carregar mensagens')).toBeTruthy()
+    // Nenhum sendError presente ainda
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  // MA-47 — nenhum optimistic message criado
+  it('MA-47: envio NÃO cria mensagem otimista na lista', async () => {
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+    const textoUnico = 'TEXTO_UNICO_SEM_OPTIMISTIC_2026'
+    fireEvent.change(textarea, { target: { value: textoUnico } })
+
+    // Verificar que o texto do textarea não aparece como message bubble
+    const bubbles = document.querySelectorAll('[data-direction]')
+    expect(bubbles).toHaveLength(0)
+
+    // Nem após clicar (antes de resolver)
+    let resolveSend!: (v: unknown) => void
+    mockSendMessage.mockImplementation(() => new Promise(res => { resolveSend = res }))
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    expect(document.querySelectorAll('[data-direction]')).toHaveLength(0)
+
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+    // Ainda 0 — refresh() é chamado mas hook mock retorna [] (não recria bubbles)
+    expect(document.querySelectorAll('[data-direction]')).toHaveLength(0)
+  })
+
+  // MA-48 — erro de envio desaparece ao tentar novo envio bem-sucedido
+  it('MA-48: após erro de envio → novo envio bem-sucedido remove o sendError', async () => {
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('internal_error'))
+      .mockResolvedValueOnce({ ok: true, message_id: FAKE_WAMID })
+
+    render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+    const textarea = document.querySelector('textarea')!
+
+    // Primeiro envio (falha)
+    fireEvent.change(textarea, { target: { value: 'Texto' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+
+    // Segundo envio (sucesso) — reescrever texto pois o primeiro não limpou
+    fireEvent.change(textarea, { target: { value: 'Texto novamente' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    })
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })
 })

@@ -5,18 +5,28 @@
 //   GET  /api/whatsapp/meta/instances?company_id=<uuid>
 //   POST /api/whatsapp/meta/onboarding/start
 //   POST /api/whatsapp/meta/onboarding/complete
+//   POST /api/whatsapp/meta/messages/send            ← MVP3D
 //
 // Autenticação: Bearer JWT via supabase.auth.getSession().
 //
 // Segurança:
 //   - Nenhum service_role, META_APP_SECRET ou META_TOKEN_ENC_KEY no frontend
 //   - Nenhuma variável VITE_META_* — App ID/Config ID vêm da resposta do start
-//   - company_id enviado somente em getInstances e startOnboarding
+//   - company_id enviado somente em getInstances, startOnboarding e sendMessage
 //   - completeOnboarding NÃO envia company_id (backend usa JWT/guard)
+//   - sendMessage NUNCA envia `to`, wa_id, phone_number_id ou token de acesso
+//   - Destinatário (wa_id) resolvido exclusivamente no backend via conversation_id
 //   - Nenhum acesso direto às tabelas Supabase Meta
 //   - Nenhum import Uazapi
 //   - Nenhum window.FB / Facebook SDK
 //   - Token nunca logado nem exposto no erro ao caller
+//
+// Modelo de erro (todos os métodos):
+//   Erros lançam Error onde err.message == código/mensagem do backend.
+//   Etapa 3 diferencia erros verificando err.message diretamente.
+//   Erros especiais:
+//     send_persistence_failed → Graph pode já ter enviado; NÃO reenviar.
+//   Sem framework customizado de erro — padrão existente do service.
 // =============================================================================
 
 import { supabase } from '../lib/supabase'
@@ -27,6 +37,7 @@ import type {
   GetMetaMessagesResponse,
   MetaChatConversation,
   MetaChatMessage,
+  MetaSendMessageResponse,
   MetaWabaSelectionOption,
   MetaWhatsAppInstance,
   OnboardingCompleteInstance,
@@ -301,5 +312,78 @@ export const metaWhatsAppApi = {
     }
 
     return Array.isArray(data.messages) ? data.messages : []
+  },
+
+  /**
+   * Envia uma mensagem de texto Meta WhatsApp vinculada a uma conversa existente.
+   *
+   * POST /api/whatsapp/meta/messages/send
+   * body: { company_id, instance_id, conversation_id, message: { type, text: { body } } }
+   *
+   * O destinatário (wa_id) é resolvido exclusivamente no backend a partir de
+   * conversation_id — nunca enviado pelo frontend.
+   *
+   * Validação defensiva local (pré-request):
+   *   - companyId, instanceId, conversationId obrigatórios (string não vazia)
+   *   - body.trim() não vazio (verificação rápida; backend valida também)
+   *
+   * Decisão de trim:
+   *   A validação usa body.trim() para rejeitar strings de só espaços.
+   *   O conteúdo enviado ao backend é body intacto (sem trim).
+   *   O backend aplica trim antes de persistir em meta_messages.
+   *   Isso preserva o texto digitado na wire sem alterar o que é armazenado.
+   *
+   * Erros propagados via err.message (verificar em Etapa 3):
+   *   invalid_request, invalid_message, instance_not_found,
+   *   conversation_not_found, instance_not_connected, credential_unavailable,
+   *   provider_error, provider_unavailable, internal_error
+   *
+   * ⚠  send_persistence_failed:
+   *   A Graph API pode já ter aceito e entregado a mensagem.
+   *   NÃO reenviar automaticamente. Exibir aviso adequado ao usuário.
+   */
+  async sendMessage(
+    companyId:      string,
+    instanceId:     string,
+    conversationId: string,
+    body:           string,
+  ): Promise<MetaSendMessageResponse> {
+    // Validação defensiva — rejeitar localmente sem request ao backend.
+    // Segurança real (RBAC, tenant, conversa) continua sendo responsabilidade backend.
+    if (!companyId)      throw new Error('company_id é obrigatório')
+    if (!instanceId)     throw new Error('instance_id é obrigatório')
+    if (!conversationId) throw new Error('conversation_id é obrigatório')
+    if (!body.trim())    throw new Error('Mensagem não pode estar vazia')
+
+    const headers = await getAuthHeaders()
+
+    const res = await fetch('/api/whatsapp/meta/messages/send', {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({
+        company_id:      companyId,
+        instance_id:     instanceId,
+        conversation_id: conversationId,
+        // `to` e wa_id: NUNCA enviados pelo frontend
+        message: {
+          type: 'text',
+          text: { body },
+        },
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as MetaSendMessageResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao enviar mensagem Meta WhatsApp')
+    }
+
+    // Fail-closed: resposta malformada não deve ser tratada como sucesso.
+    // ok deve ser explicitamente true e message_id uma string não vazia.
+    if (data.ok !== true || typeof data.message_id !== 'string' || !data.message_id) {
+      throw new Error('Resposta inválida do servidor')
+    }
+
+    return { ok: true, message_id: data.message_id }
   },
 }

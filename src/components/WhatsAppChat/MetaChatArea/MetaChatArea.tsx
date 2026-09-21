@@ -1,7 +1,7 @@
 // =============================================================================
-// MetaChatArea — MVP3C.4
+// MetaChatArea — MVP3D
 //
-// Área de leitura de mensagens Meta WhatsApp. READ-ONLY.
+// Área de mensagens Meta WhatsApp com composer de texto.
 //
 // Responsabilidade:
 //   - Exibir header da conversa (contact_name / wa_id / status)
@@ -9,21 +9,30 @@
 //   - Distinguir inbound / outbound via estilo + data-direction
 //   - Estados: loading, error (+ retry), empty, mensagens
 //   - Scroll para o final ao carregar mensagens
+//   - Composer de texto: envio por botão ou Enter
 //
 // Fora do escopo:
-//   - Envio de mensagens (MVP3D)
 //   - Realtime (MVP3E)
 //   - LeadPanel, templates, sugestões de IA
 //   - Paginação histórica
+//   - Mídia, áudio, documentos
 //
-// Isolamento:
+// Isolamento (invariantes de segurança):
+//   - Zero wa_id/to usado para envio — destinatário resolvido pelo backend
 //   - Zero imports Uazapi
 //   - Zero acesso Supabase
-//   - Zero composer/input/textarea
+//   - Zero optimistic append
+//   - Zero console.log / secrets
+//
+// Anti-stale (mutation):
+//   - sendGenRef: incrementado ao trocar conversationId
+//   - Resultado de envio antigo não contamina conversa nova
+//   - mountedRef: evita setState após unmount
 // =============================================================================
 
-import { useRef, useEffect }                   from 'react'
-import { useMetaChatMessages }                  from '../../../hooks/chat/useMetaChatMessages'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useMetaChatMessages }                        from '../../../hooks/chat/useMetaChatMessages'
+import { metaWhatsAppApi }                            from '../../../services/metaWhatsAppApi'
 import type { MetaChatConversation, MetaChatMessage } from '../../../types/meta-whatsapp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,6 +63,42 @@ function getInitials(name: string | null | undefined, fallback: string): string 
   }
   return src.substring(0, 2).toUpperCase()
 }
+
+/**
+ * Mapeia erros do backend para mensagens seguras ao usuário.
+ * Nunca expõe token, wa_id, stack ou payload bruto.
+ */
+function getSendErrorMessage(error: unknown): string {
+  const code = error instanceof Error ? error.message : ''
+  switch (code) {
+    case 'conversation_not_found':
+      return 'Conversa não encontrada. Atualize a lista e tente novamente.'
+    case 'instance_not_found':
+      return 'Instância não encontrada.'
+    case 'instance_not_connected':
+      return 'A instância não está conectada.'
+    case 'invalid_request':
+      return 'Mensagem inválida. Verifique o conteúdo.'
+    case 'invalid_message':
+      return 'Mensagem não aceita pelo provedor.'
+    case 'provider_unavailable':
+      return 'Serviço temporariamente indisponível. Tente novamente.'
+    case 'provider_error':
+      return 'Não foi possível enviar a mensagem. Se a conversa estiver fora do prazo de 24h, é necessário usar um template aprovado.'
+    case 'credential_unavailable':
+      return 'Erro de configuração da instância. Contate o suporte.'
+    case 'internal_error':
+      return 'Erro interno ao enviar a mensagem.'
+    default:
+      return 'Não foi possível enviar a mensagem.'
+  }
+}
+
+// ⚠ Mensagem especial: Graph pode já ter entregue a mensagem.
+// Não limpar texto. Não chamar refresh. Não fazer retry automático.
+const SEND_PERSISTENCE_FAILED_MSG =
+  'Mensagem possivelmente enviada, mas houve falha ao registrar o envio. ' +
+  'Verifique a conversa antes de tentar novamente.'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -157,14 +202,112 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
 export function MetaChatArea({ companyId, conversationId, conversation }: MetaChatAreaProps) {
   const { messages, loading, error, refresh } = useMetaChatMessages(companyId, conversationId)
 
-  // Scroll para o final quando as mensagens carregam ou mudam.
-  // scrollTop = scrollHeight: comportamento simples e síncrono, sem smooth, sem timeout.
+  // ── Composer state ──────────────────────────────────────────────────────────
+  const [text, setText]           = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+
+  // ── Composer refs ───────────────────────────────────────────────────────────
+  // sendingRef: guarda síncrona contra duplo envio (antes do rerender de isSending)
+  const sendingRef = useRef(false)
+  // mountedRef: evita setState após unmount
+  const mountedRef = useRef(true)
+  // sendGenRef: contador de geração — incrementado ao trocar conversationId.
+  //             Impede que o resultado de um envio antigo contamine a nova conversa.
+  const sendGenRef = useRef(0)
+
+  // ── Mount / unmount ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  // ── Scroll ao carregar/atualizar mensagens ──────────────────────────────────
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
   }, [messages])
+
+  // ── Resetar composer ao trocar de conversa ──────────────────────────────────
+  // Limpa texto e erro de envio ao mudar conversationId.
+  // Incrementa sendGenRef para invalidar quaisquer envios em andamento da
+  // conversa anterior — evita que o resultado de A contamine B.
+  // NÃO cancela a requisição Graph em andamento (impossível retroativamente).
+  useEffect(() => {
+    setText('')
+    setSendError(null)
+    sendGenRef.current += 1
+  }, [conversationId])
+
+  // ── handleSend ──────────────────────────────────────────────────────────────
+  const handleSend = useCallback(async () => {
+    // Guarda síncrona: impede duplo envio antes do rerender atualizar isSending
+    if (sendingRef.current || !conversation?.instance_id || !text.trim()) return
+
+    const textToSend = text                  // capturar antes do await
+    const genAtSend  = sendGenRef.current    // capturar geração para stale check
+
+    sendingRef.current = true
+    setIsSending(true)
+    setSendError(null)
+
+    let success      = false
+    let caughtError: unknown = undefined
+
+    try {
+      // Destinatário resolvido pelo backend via conversation_id.
+      // wa_id / to NUNCA enviados pelo frontend.
+      await metaWhatsAppApi.sendMessage(
+        companyId,
+        conversation.instance_id,   // instance_id da conversa validada
+        conversationId,
+        textToSend,
+      )
+      success = true
+    } catch (err) {
+      caughtError = err
+    } finally {
+      // Liberar lock sempre, independente de geração ou mount
+      sendingRef.current = false
+      if (mountedRef.current) setIsSending(false)
+    }
+
+    // Anti-stale: ignorar se a conversa mudou ou o componente foi desmontado
+    if (!mountedRef.current || sendGenRef.current !== genAtSend) return
+
+    if (success) {
+      // Sucesso: limpar texto e atualizar lista (outbound já persistida no banco)
+      setText('')
+      refresh()
+    } else if (
+      caughtError instanceof Error &&
+      caughtError.message === 'send_persistence_failed'
+    ) {
+      // ⚠ send_persistence_failed: Graph pode já ter aceito a mensagem.
+      // NÃO limpar texto. NÃO chamar refresh. NÃO fazer retry.
+      // Usuário decide verificar manualmente antes de reenviar.
+      setSendError(SEND_PERSISTENCE_FAILED_MSG)
+    } else {
+      // Erro comum: preservar texto para o usuário editar/reenviar
+      setSendError(getSendErrorMessage(caughtError))
+    }
+  }, [companyId, conversation, conversationId, text, refresh])
+
+  // ── handleKeyDown (Enter envia; Shift+Enter quebra linha) ───────────────────
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        handleSend()
+      }
+    },
+    [handleSend],
+  )
+
+  // ── canSend — condições para habilitar o botão ──────────────────────────────
+  const canSend = !isSending && !!conversation?.instance_id && !!text.trim()
 
   return (
     <div className="flex flex-col h-full bg-white/60 backdrop-blur-sm">
@@ -185,7 +328,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
             </div>
           </div>
         ) : error ? (
-          /* Estado: erro */
+          /* Estado: erro de leitura — independente do sendError do composer */
           <div className="flex items-center justify-center h-full">
             <div className="text-center p-6 max-w-xs">
               <p className="text-sm text-red-600 mb-4 leading-relaxed">{error}</p>
@@ -211,10 +354,41 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
         )}
       </div>
 
-      {/*
-        READ-ONLY — sem composer, sem input, sem textarea, sem contentEditable.
-        Envio de mensagens: escopo MVP3D.
-      */}
+      {/* Composer — MVP3D
+          flex-shrink-0: não comprime quando a lista de mensagens é longa.
+          Erro de envio (sendError) é exibido aqui, isolado do erro de leitura da lista. */}
+      <div className="flex-shrink-0 border-t border-slate-200/60 bg-white px-4 py-3">
+        {sendError && (
+          <p
+            role="alert"
+            className="text-xs text-red-600 mb-2 leading-relaxed"
+          >
+            {sendError}
+          </p>
+        )}
+
+        <div className="flex items-end gap-2">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!conversation?.instance_id || isSending}
+            placeholder="Digite uma mensagem..."
+            rows={1}
+            aria-label="Mensagem"
+            className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!canSend}
+            aria-label="Enviar"
+            className="flex-shrink-0 rounded-xl bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Enviar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

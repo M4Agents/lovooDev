@@ -198,3 +198,35 @@ export interface GetMetaConversationsResponse {
 export interface GetMetaMessagesResponse {
   messages: MetaChatMessage[]
 }
+
+// ── POST /api/whatsapp/meta/messages/send ─────────────────────────────────────
+// Resposta de envio bem-sucedido de mensagem de texto Meta WhatsApp (MVP3D).
+//
+// ok:         sempre true em respostas 200 (garante fail-closed no service).
+// message_id: wamid retornado pela Graph API (identificador opaco Meta).
+//
+// Contrato do payload de ENVIO (side frontend → backend):
+//   company_id:      UUID da empresa — extraído via JWT/guard pelo backend
+//   instance_id:     UUID da instância Meta
+//   conversation_id: UUID da conversa — o backend resolve o destinatário (wa_id)
+//                    server-side a partir deste campo. `to` nunca vai no payload.
+//   message.type:    'text'
+//   message.text.body: conteúdo da mensagem
+//
+// Erros distintos retornados pelo backend (propagados como err.message):
+//   invalid_request         → campos inválidos/ausentes
+//   invalid_message         → rejeitado pela Graph API (ex: 131047 window expirada)
+//   instance_not_found      → instância inexistente ou outro tenant
+//   conversation_not_found  → conversa inexistente, outro tenant ou outra instance
+//   instance_not_connected  → instância sem status 'connected'
+//   credential_unavailable  → token ausente ou decrypt falhou
+//   send_persistence_failed → Graph aceitou, mas falhou ao salvar localmente
+//                             ⚠ NÃO reenviar — mensagem pode já ter sido entregue
+//   provider_error          → Graph rejeitou (502)
+//   provider_unavailable    → timeout/rede com Graph (503)
+//   internal_error          → erro interno inesperado
+
+export interface MetaSendMessageResponse {
+  ok:         true
+  message_id: string
+}
