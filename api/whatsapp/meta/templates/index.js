@@ -48,12 +48,17 @@
 //   parameter_format, components, parameters, supported, unsupported_reason.
 //   'parameters' é lista normalizada derivada server-side (picker-ready).
 //   'supported' / 'unsupported_reason' indicam capacidade do MVP primeiro incremento.
+//
+// Parsing de placeholders:
+//   Delegado ao templateEngine (analyzeTemplate). Fonte canônica: component.text.
+//   component.example é somente hint para example no DTO — nunca determina aridade.
 // =============================================================================
 
 import { getSupabaseAdmin }                   from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { decryptMetaToken }                   from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { listMessageTemplates }               from '../../../lib/meta-whatsapp/graphClient.js';
+import { analyzeTemplate }                    from '../../../lib/meta-whatsapp/templateEngine.js';
 
 // UUID v4 básico — mesma regex de outros endpoints Meta.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -63,170 +68,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // 1024 chars é margem confortável sem risco de buffer injection.
 const AFTER_MAX_LEN = 1024;
 
-// =============================================================================
-// Helpers de extração de parâmetros
-// =============================================================================
-
-/**
- * Extrai parâmetros normalizados de um componente HEADER TEXT.
- * Retorna lista vazia se HEADER não for TEXT ou não tiver parâmetros.
- *
- * @param {object} component
- * @param {'NAMED'|'POSITIONAL'} parameterFormat
- * @returns {Array<{component:'HEADER', key:string, position:number|null, example:string|null}>}
- * @private
- */
-function extractHeaderParams(component, parameterFormat) {
-  // Somente HEADER TEXT tem parâmetros variáveis
-  if (component?.format !== 'TEXT') return [];
-
-  const example = component.example;
-
-  if (parameterFormat === 'NAMED') {
-    const named = example?.header_text_named_params;
-    if (!Array.isArray(named)) return [];
-    return named
-      .filter(p => typeof p?.param_name === 'string' && p.param_name.length > 0)
-      .map(p => ({
-        component: 'HEADER',
-        key:       p.param_name,
-        position:  null,
-        example:   typeof p.example === 'string' ? p.example : null,
-      }));
-  }
-
-  // POSITIONAL: header_text é array simples com um único valor de exemplo
-  const headerText = example?.header_text;
-  if (Array.isArray(headerText) && headerText.length > 0) {
-    return [{
-      component: 'HEADER',
-      key:       '1',
-      position:  1,
-      example:   typeof headerText[0] === 'string' ? headerText[0] : null,
-    }];
-  }
-
-  return [];
-}
-
-/**
- * Extrai parâmetros normalizados de um componente BODY.
- * Retorna lista vazia se BODY não tiver parâmetros.
- *
- * @param {object} component
- * @param {'NAMED'|'POSITIONAL'} parameterFormat
- * @returns {Array<{component:'BODY', key:string, position:number|null, example:string|null}>}
- * @private
- */
-function extractBodyParams(component, parameterFormat) {
-  const example = component?.example;
-
-  if (parameterFormat === 'NAMED') {
-    const named = example?.body_text_named_params;
-    if (!Array.isArray(named)) return [];
-    return named
-      .filter(p => typeof p?.param_name === 'string' && p.param_name.length > 0)
-      .map(p => ({
-        component: 'BODY',
-        key:       p.param_name,
-        position:  null,
-        example:   typeof p.example === 'string' ? p.example : null,
-      }));
-  }
-
-  // POSITIONAL: body_text é array bidimensional; usar body_text[0]
-  const bodyText = example?.body_text;
-  if (Array.isArray(bodyText) && Array.isArray(bodyText[0])) {
-    return bodyText[0].map((ex, idx) => ({
-      component: 'BODY',
-      key:       String(idx + 1),
-      position:  idx + 1,
-      example:   typeof ex === 'string' ? ex : null,
-    }));
-  }
-
-  return [];
-}
-
-// =============================================================================
-// Classificação de suporte MVP (primeiro incremento)
-// =============================================================================
-
-/**
- * Determina se um template é suportado pelo primeiro incremento de envio.
- *
- * Primeiro incremento suportado SOMENTE quando:
- *   - BODY TEXT presente e compatível
- *   - HEADER ausente OU HEADER format === 'TEXT'
- *   - FOOTER permitido (sem parâmetros variáveis)
- *   - Nenhum componente adicional (BUTTONS, CAROUSEL, OTP, etc.)
- *   - parameter_format NAMED ou POSITIONAL (não desconhecido)
- *   - category !== 'AUTHENTICATION' (OTP fora do escopo MVP)
- *
- * Não falha silenciosamente: marca supported=false com razão explícita.
- *
- * @param {object} template  Objeto template do Graph (não sanitizado)
- * @returns {{ supported: boolean, unsupported_reason: string|null }}
- * @private
- */
-function classifySupport(template) {
-  const components = template.components;
-  const category   = template.category;
-  const fmt        = template.parameter_format ?? 'POSITIONAL';
-
-  // AUTHENTICATION: fora do escopo MVP (botões OTP, restrições de conteúdo)
-  if (category === 'AUTHENTICATION') {
-    return { supported: false, unsupported_reason: 'AUTHENTICATION templates not supported in this version' };
-  }
-
-  // parameter_format desconhecido (não NAMED, não POSITIONAL)
-  if (fmt !== 'NAMED' && fmt !== 'POSITIONAL') {
-    return { supported: false, unsupported_reason: `Unknown parameter_format: ${fmt}` };
-  }
-
-  // components deve ser array (pode ser ausente para templates sem variáveis)
-  if (components !== undefined && !Array.isArray(components)) {
-    return { supported: false, unsupported_reason: 'Invalid components structure' };
-  }
-
-  const comps = Array.isArray(components) ? components : [];
-
-  let hasBody   = false;
-  let bodyIsText = false;
-
-  for (const comp of comps) {
-    const type = comp?.type?.toUpperCase();
-
-    if (type === 'BODY') {
-      hasBody = true;
-      // BODY sem format é TEXT por contrato Graph — aceito
-      bodyIsText = true;
-      continue;
-    }
-
-    if (type === 'HEADER') {
-      const format = comp?.format?.toUpperCase();
-      if (format === undefined || format === 'TEXT') continue; // OK
-      // IMAGE, VIDEO, DOCUMENT, etc.
-      return { supported: false, unsupported_reason: `HEADER format ${format} not supported` };
-    }
-
-    if (type === 'FOOTER') continue; // sempre aceito (estático)
-
-    // BUTTONS, CAROUSEL, ALBUM, LIMITED_TIME_OFFER, etc. — fora do escopo MVP
-    if (type !== undefined) {
-      return { supported: false, unsupported_reason: `Component type ${type} not supported` };
-    }
-  }
-
-  // Template sem BODY não é enviável por este endpoint.
-  // Inclui explicitamente o caso components: [] ou components ausente.
-  if (!hasBody) {
-    return { supported: false, unsupported_reason: 'Template has no BODY component' };
-  }
-
-  return { supported: true, unsupported_reason: null };
-}
+// (extração de parâmetros e classificação delegadas ao templateEngine.js)
 
 // =============================================================================
 // Sanitizador de template individual
@@ -242,7 +84,7 @@ function classifySupport(template) {
  * @private
  */
 function sanitizeTemplate(raw) {
-  // Campos mínimos obrigatórios
+  // Campos mínimos obrigatórios — excluir do DTO se ausentes/inválidos
   if (typeof raw?.id !== 'string'       || raw.id.length === 0)       return null;
   if (typeof raw?.name !== 'string'     || raw.name.length === 0)     return null;
   if (typeof raw?.language !== 'string' || raw.language.length === 0) return null;
@@ -252,63 +94,28 @@ function sanitizeTemplate(raw) {
   // status deve ser APPROVED (segunda linha de defesa após o filtro Graph)
   if (raw.status !== 'APPROVED') return null;
 
-  // parameter_format: NAMED | POSITIONAL | undefined → default POSITIONAL
-  const fmt = raw.parameter_format ?? 'POSITIONAL';
-
-  // Extrair parâmetros normalizados
-  const components = Array.isArray(raw.components) ? raw.components : [];
-  const parameters = [];
-
-  try {
-    for (const comp of components) {
-      const type = comp?.type?.toUpperCase();
-      if (type === 'HEADER') {
-        parameters.push(...extractHeaderParams(comp, fmt));
-      } else if (type === 'BODY') {
-        parameters.push(...extractBodyParams(comp, fmt));
-      }
-      // FOOTER e outros sem parâmetros variáveis: ignorados
-    }
-  } catch {
-    // Parâmetros inconsistentes → tratar como unsupported mas não excluir
-    // safeComponents: remove `example` top-level de cada componente — dado redundante
-    // (já normalizado em `parameters`) e desnecessário para preview/picker.
-    // Não muta o objeto Graph original.
-    const safeComponents = components.map(({ example: _ex, ...rest }) => rest);
-    return {
-      id:               raw.id,
-      name:             raw.name,
-      language:         raw.language,
-      status:           'APPROVED',
-      category:         raw.category,
-      parameter_format: fmt,
-      components:       safeComponents,
-      parameters:       [],
-      supported:        false,
-      unsupported_reason: 'Failed to extract parameters',
-    };
-  }
-
-  const { supported, unsupported_reason } = classifySupport(raw);
+  // Delegar análise completa ao engine.
+  // Fonte canônica: component.text — component.example é somente hint de exemplo.
+  const analysis = analyzeTemplate(raw);
 
   // safeComponents: remove `example` top-level de cada componente.
-  // Justificativa: `example` é redundante (já normalizado em `parameters`)
+  // Justificativa: `example` é redundante (já normalizado em analysis.parameters)
   // e expõe referências internas Meta (header_handle) desnecessariamente.
-  // O frontend recebe type/format/text/buttons — tudo que precisa para preview.
   // Não muta o objeto Graph original (spread cria novo objeto por componente).
+  const components    = Array.isArray(raw.components) ? raw.components : [];
   const safeComponents = components.map(({ example: _ex, ...rest }) => rest);
 
   return {
-    id:               raw.id,
-    name:             raw.name,
-    language:         raw.language,
-    status:           'APPROVED',
-    category:         raw.category,
-    parameter_format: fmt,
-    components:       safeComponents,
-    parameters,
-    supported,
-    unsupported_reason,
+    id:                 raw.id,
+    name:               raw.name,
+    language:           raw.language,
+    status:             'APPROVED',
+    category:           raw.category,
+    parameter_format:   analysis.parameter_format,
+    components:         safeComponents,
+    parameters:         analysis.parameters,
+    supported:          analysis.supported,
+    unsupported_reason: analysis.unsupported_reason,
   };
 }
 

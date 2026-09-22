@@ -1558,3 +1558,243 @@ describe('Segurança adicional', () => {
     expect(mockListMessageTemplates).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// FIX F-05 — component.text é a fonte canônica de parâmetros
+//
+// Antes: parameters[] derivados exclusivamente de component.example.
+// Depois: parameters[] derivados de component.text (engine); example = hint.
+// =============================================================================
+
+describe('FIX F-05 — component.text canônico (não example)', () => {
+
+  it('F-05-1: POSITIONAL BODY — text com 2 params, example com 1 valor → 2 parâmetros; segundo example=null', async () => {
+    const tpl = {
+      id: 'f05-pos-1', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{
+        type: 'BODY',
+        text: 'Olá {{1}}, pedido {{2}}',
+        example: { body_text: [['OnlyOneValue']] }, // 1 valor para 2 placeholders
+      }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const params = res._body.templates[0].parameters;
+    expect(params).toHaveLength(2);                    // texto define 2 params
+    expect(params[0]).toMatchObject({ key: '1', example: 'OnlyOneValue' });
+    expect(params[1]).toMatchObject({ key: '2', example: null }); // sem exemplo para o 2°
+  });
+
+  it('F-05-2: POSITIONAL BODY — text com 1 param, example com 3 valores → 1 parâmetro; extras ignorados', async () => {
+    const tpl = {
+      id: 'f05-pos-2', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{
+        type: 'BODY',
+        text: 'Valor: {{1}}',
+        example: { body_text: [['V1', 'V2', 'V3']] }, // 3 valores para 1 placeholder
+      }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const params = res._body.templates[0].parameters;
+    expect(params).toHaveLength(1);             // texto define somente 1 param
+    expect(params[0].example).toBe('V1');       // primeiro valor usado como hint
+  });
+
+  it('F-05-3: HEADER + BODY — índices independentes por componente', async () => {
+    // HEADER com {{1}} e BODY com {{1}} e {{2}} — numeração independente
+    const tpl = {
+      id: 'f05-hdr-body', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Empresa {{1}}' },
+        { type: 'BODY',   text: 'Olá {{1}}, pedido {{2}}' },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const params  = res._body.templates[0].parameters;
+    const header  = params.filter(p => p.component === 'HEADER');
+    const body    = params.filter(p => p.component === 'BODY');
+    expect(header).toHaveLength(1);            // HEADER tem 1 param
+    expect(header[0].key).toBe('1');
+    expect(body).toHaveLength(2);              // BODY tem 2 params independentes
+    expect(body.map(p => p.key)).toEqual(['1', '2']);
+  });
+
+  it('F-05-4: NAMED BODY — text com 2 params, example com somente first_name → 2 params; order_id example=null', async () => {
+    const tpl = {
+      id: 'f05-named-1', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'NAMED',
+      components: [{
+        type: 'BODY',
+        text: 'Olá {{first_name}}, pedido {{order_id}}',
+        example: {
+          body_text_named_params: [
+            { param_name: 'first_name', example: 'Ana' }, // somente first_name
+            // order_id ausente do example
+          ],
+        },
+      }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const params = res._body.templates[0].parameters;
+    expect(params).toHaveLength(2);
+    expect(params.find(p => p.key === 'first_name').example).toBe('Ana');
+    expect(params.find(p => p.key === 'order_id').example).toBeNull();
+  });
+
+  it('F-05-5: NAMED — example com param extra não existente no texto → extra ignorado', async () => {
+    const tpl = {
+      id: 'f05-named-2', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'NAMED',
+      components: [{
+        type: 'BODY',
+        text: 'Olá {{first_name}}',
+        example: {
+          body_text_named_params: [
+            { param_name: 'first_name', example: 'Ana' },
+            { param_name: 'extra_invented', example: 'Ignorado' }, // não está no texto
+          ],
+        },
+      }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const params = res._body.templates[0].parameters;
+    expect(params).toHaveLength(1);                    // somente o que está no texto
+    expect(params[0].key).toBe('first_name');
+    expect(params.find(p => p.key === 'extra_invented')).toBeUndefined();
+  });
+
+  it('F-05-6: BODY text=null → supported=false (body_text_missing), não trava a listagem', async () => {
+    const tpl = {
+      id: 'f05-body-null', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: null }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl, FAKE_TEMPLATE_SIMPLE]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.templates).toHaveLength(2);
+    const broken = res._body.templates.find(t => t.id === 'f05-body-null');
+    expect(broken.supported).toBe(false);
+    expect(typeof broken.unsupported_reason).toBe('string');
+    // Template válido ao lado não é afetado
+    const valid = res._body.templates.find(t => t.id === 'tpl-001');
+    expect(valid.supported).toBe(true);
+  });
+
+  it('F-05-7: POSITIONAL — placeholder malformado {{ }} → supported=false', async () => {
+    const tpl = {
+      id: 'f05-malformed', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Olá {{ }}!' }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBe('malformed_placeholder');
+  });
+
+  it('F-05-8: POSITIONAL — {{0}} → supported=false (invalid_placeholder_index)', async () => {
+    const tpl = {
+      id: 'f05-zero', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Código {{0}}' }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBe('invalid_placeholder_index');
+  });
+
+  it('F-05-9: POSITIONAL — gap {{1}} + {{3}} sem {{2}} → supported=false (placeholder_gap)', async () => {
+    const tpl = {
+      id: 'f05-gap', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'A {{1}} e B {{3}}' }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBe('placeholder_gap');
+  });
+
+  it('F-05-10: NAMED syntax em template POSITIONAL → supported=false (malformed_placeholder)', async () => {
+    const tpl = {
+      id: 'f05-named-in-pos', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Olá {{first_name}}' }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBe('malformed_placeholder');
+  });
+
+  it('F-05-11: POSITIONAL syntax em template NAMED → supported=false (malformed_placeholder)', async () => {
+    const tpl = {
+      id: 'f05-pos-in-named', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'NAMED',
+      components: [{ type: 'BODY', text: 'Olá {{1}}' }],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBe('malformed_placeholder');
+  });
+
+  it('F-05-12: POSITIONAL — delimitador incompleto "{{1" é texto literal, template estático suportado', async () => {
+    const tpl = {
+      id: 'f05-incomplete', name: 'test_f05', language: 'pt_BR',
+      status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Veja {{1 para mais detalhes' }], // incompleto = literal
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const tplResult = res._body.templates[0];
+    expect(tplResult.supported).toBe(true);       // template estático (sem placeholder)
+    expect(tplResult.parameters).toHaveLength(0);
+  });
+
+});
