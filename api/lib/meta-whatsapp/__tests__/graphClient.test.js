@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber, setTwoStepVerificationPin } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber, setTwoStepVerificationPin, listMessageTemplates, sendTemplateMessage } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -1793,5 +1793,662 @@ describe('setTwoStepVerificationPin', () => {
     await setTwoStepVerificationPin(FAKE_TOKEN_SP, FAKE_PHONE_ID_SP, FAKE_PIN_SP);
     expect(consoleSpy).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+});
+
+// =============================================================================
+// listMessageTemplates
+// =============================================================================
+
+describe('listMessageTemplates', () => {
+  // ── Fixtures locais ──────────────────────────────────────────────────────────
+  const FAKE_CURSOR_TPL  = 'CURSOR_TEMPLATES_ABC123XYZ';
+  const EVIL_TPL_URL     = 'https://evil.example/steal-templates';
+
+  const FAKE_TEMPLATE_1 = {
+    id:               'tpl_001',
+    name:             'order_confirmation',
+    language:         'pt_BR',
+    status:           'APPROVED',
+    category:         'UTILITY',
+    parameter_format: 'NAMED',
+    components:       [],
+  };
+  const FAKE_TEMPLATE_2 = {
+    id:               'tpl_002',
+    name:             'promo_summer',
+    language:         'pt_BR',
+    status:           'APPROVED',
+    category:         'MARKETING',
+    parameter_format: 'POSITIONAL',
+    components:       [],
+  };
+
+  /** Monta resposta Graph com data[], paging opcional */
+  function makeTemplateListResponse(templates, pagingNext, cursorAfter) {
+    const paging = {};
+    if (cursorAfter !== undefined) {
+      paging.cursors = { before: 'BEFORE_CUR', after: cursorAfter };
+    }
+    if (pagingNext !== undefined) {
+      paging.next = pagingNext;
+    }
+    return makeOkResponse({ data: templates, paging });
+  }
+
+  // ── LIST-01: happy path ──────────────────────────────────────────────────────
+
+  it('LIST-01: happy path — retorna templates array e nextCursor null (sem paginação)', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.templates).toHaveLength(1);
+    expect(result.templates[0]).toEqual(FAKE_TEMPLATE_1);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('LIST-01b: múltiplos templates retornados corretamente', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1, FAKE_TEMPLATE_2]));
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.templates).toHaveLength(2);
+    expect(result).toHaveProperty('nextCursor');
+  });
+
+  it('LIST-01c: data vazio retorna templates=[] e nextCursor=null', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([]));
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.templates).toEqual([]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  // ── LIST-02: URL usa GRAPH_VERSION ───────────────────────────────────────────
+
+  it('LIST-02: URL usa GRAPH_VERSION vindo de getMetaServerConfig', async () => {
+    getMetaServerConfig.mockReturnValue({ ...FAKE_CONFIG, graphVersion: 'v99.0' });
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('/v99.0/');
+  });
+
+  // ── LIST-03: fields corretos ─────────────────────────────────────────────────
+
+  it('LIST-03: fields incluem id,name,language,status,category,parameter_format,components', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('fields')).toBe(
+      'id,name,language,status,category,parameter_format,components',
+    );
+  });
+
+  // ── LIST-04: status=APPROVED ─────────────────────────────────────────────────
+
+  it('LIST-04: status=APPROVED enviado por padrão na query', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('status')).toBe('APPROVED');
+  });
+
+  it('LIST-04b: status customizado (ex: PENDING) é enviado quando fornecido', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA, { status: 'PENDING' });
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('status')).toBe('PENDING');
+  });
+
+  // ── LIST-05: filtro name corretamente encoded ─────────────────────────────────
+
+  it('LIST-05: filtro name enviado como query param corretamente codificado', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA, { name: 'order_confirmation' });
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('name')).toBe('order_confirmation');
+  });
+
+  it('LIST-05b: sem name → parâmetro name não enviado na URL', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.has('name')).toBe(false);
+  });
+
+  // ── LIST-06: limit ───────────────────────────────────────────────────────────
+
+  it('LIST-06: limit padrão é 100', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('limit')).toBe('100');
+  });
+
+  it('LIST-06b: limit customizado é usado na URL', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA, { limit: 25 });
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('limit')).toBe('25');
+  });
+
+  // ── LIST-07: after cursor ────────────────────────────────────────────────────
+
+  it('LIST-07: after cursor enviado na URL quando fornecido', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA, { after: FAKE_CURSOR_TPL });
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.get('after')).toBe(FAKE_CURSOR_TPL);
+  });
+
+  it('LIST-07b: sem after → parâmetro after não enviado na URL', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.has('after')).toBe(false);
+  });
+
+  // ── LIST-08: nextCursor extraído de paging.cursors.after ─────────────────────
+
+  it('LIST-08: nextCursor extraído de paging.cursors.after quando paging.next presente', async () => {
+    fetch.mockResolvedValue(
+      makeTemplateListResponse([FAKE_TEMPLATE_1], 'https://graph.facebook.com/...', FAKE_CURSOR_TPL),
+    );
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.nextCursor).toBe(FAKE_CURSOR_TPL);
+  });
+
+  it('LIST-08b: nextCursor é string opaca — não interpretada', async () => {
+    const opaqueOpaqueCursor = 'eyJhZnRlciI6Im9wYXF1ZV9jdXJzb3IifQ==';
+    fetch.mockResolvedValue(
+      makeTemplateListResponse([FAKE_TEMPLATE_1], 'https://graph.facebook.com/...', opaqueOpaqueCursor),
+    );
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.nextCursor).toBe(opaqueOpaqueCursor);
+  });
+
+  // ── LIST-09: ausência de paging → nextCursor null ────────────────────────────
+
+  it('LIST-09: paging ausente inteiramente → nextCursor null', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: [FAKE_TEMPLATE_1] })); // sem campo paging
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('LIST-09b: paging.next ausente (mas cursors.after presente) → nextCursor null', async () => {
+    // cursors.after presente mas paging.next ausente → último página → null
+    fetch.mockResolvedValue(makeOkResponse({
+      data:   [FAKE_TEMPLATE_1],
+      paging: { cursors: { before: 'B', after: FAKE_CURSOR_TPL } }, // sem paging.next
+    }));
+    const result = await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  // ── LIST-10: resposta data inválida → fail-closed ────────────────────────────
+
+  it('LIST-10a: data null → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: null }));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('LIST-10b: data objeto (não array) → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ data: {} }));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('LIST-10c: JSON inválido → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse());
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('LIST-10d: paging.next presente mas cursors.after ausente → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({
+      data:   [FAKE_TEMPLATE_1],
+      paging: { next: 'https://graph.facebook.com/...', cursors: { before: 'B' } }, // sem after
+    }));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  it('LIST-10e: paging.next presente mas cursors.after vazio → graph_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({
+      data:   [FAKE_TEMPLATE_1],
+      paging: { next: 'https://graph.facebook.com/...', cursors: { after: '' } },
+    }));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_invalid_response' });
+  });
+
+  // ── LIST-11: Graph non-2xx ───────────────────────────────────────────────────
+
+  it('LIST-11a: HTTP 400 → graph_templates_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_templates_failed' });
+  });
+
+  it('LIST-11b: HTTP 401 → graph_templates_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(401));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_templates_failed' });
+  });
+
+  it('LIST-11c: HTTP 500 → graph_templates_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_templates_failed' });
+  });
+
+  it('LIST-11d: AbortError → graph_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_timeout' });
+  });
+
+  it('LIST-11e: TypeError de rede → graph_network_error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_network_error' });
+  });
+
+  // ── LIST-12: token/wabaId inválidos ─────────────────────────────────────────
+
+  it('LIST-12a: token vazio → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates('', FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('LIST-12b: token null → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates(null, FAKE_WABA))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('LIST-12c: wabaId vazio → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates(FAKE_TOKEN, ''))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('LIST-12d: wabaId com letras → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates(FAKE_TOKEN, 'not-numeric'))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('LIST-12e: wabaId com URL completa → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates(FAKE_TOKEN, 'https://evil.example'))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('LIST-12f: wabaId número (não string) → graph_templates_invalid_input sem fetch', async () => {
+    await expect(listMessageTemplates(FAKE_TOKEN, 102290129340398))
+      .rejects.toMatchObject({ code: 'graph_templates_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── LIST-13: nunca segue paging.next arbitrário ───────────────────────────────
+
+  it('LIST-13 (anti-SSRF): paging.next malicioso nunca é destino de fetch', async () => {
+    fetch.mockResolvedValue(
+      makeTemplateListResponse([FAKE_TEMPLATE_1], EVIL_TPL_URL, FAKE_CURSOR_TPL),
+    );
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+
+    // Somente 1 fetch — e exclusivamente para graph.facebook.com
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('graph.facebook.com');
+    expect(callUrl.toString()).not.toContain('evil.example');
+  });
+
+  // ── Segurança / URL ──────────────────────────────────────────────────────────
+
+  it('LIST-SEC-01: token vai no header Authorization: Bearer, não na URL', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl, options] = fetch.mock.calls[0];
+    expect(options.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+    expect(callUrl.toString()).not.toContain(FAKE_TOKEN);
+  });
+
+  it('LIST-SEC-02: URL contém wabaId e "message_templates"', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain(FAKE_WABA);
+    expect(callUrl.toString()).toContain('message_templates');
+  });
+
+  it('LIST-SEC-03: erro HTTP não contém accessToken', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(403));
+    await expect(listMessageTemplates(FAKE_TOKEN, FAKE_WABA))
+      .rejects.toSatisfy((err) => !err.message.includes(FAKE_TOKEN));
+  });
+
+  it('LIST-SEC-04: método é GET', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([FAKE_TEMPLATE_1]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
+    const [, options] = fetch.mock.calls[0];
+    expect(options.method).toBe('GET');
+  });
+});
+
+// =============================================================================
+// sendTemplateMessage
+// =============================================================================
+
+describe('sendTemplateMessage', () => {
+  // ── Fixtures locais ──────────────────────────────────────────────────────────
+  const FAKE_PHONE_ID_TPL = '108765432109876'; // fictício — diferente de FAKE_PHONE_NUMBER_ID
+  const FAKE_WAMID_TPL    = 'wamid.HBgLNTU1MTk4NzY1NDMyMQIVAgARGBITPL_FAKE_123==';
+
+  // Template com components (NAMED)
+  const FAKE_TEMPLATE_SEND = {
+    name:       'order_confirmation',
+    language:   { code: 'pt_BR' },
+    components: [
+      {
+        type:       'body',
+        parameters: [
+          { type: 'text', parameter_name: 'first_name',   text: 'João' },
+          { type: 'text', parameter_name: 'order_number', text: 'ORD-123' },
+        ],
+      },
+    ],
+  };
+
+  // Template sem components (estático — sem parâmetros)
+  const FAKE_TEMPLATE_STATIC = {
+    name:     'static_notification',
+    language: { code: 'en_US' },
+    // components ausente
+  };
+
+  function makeSendTemplateOkResponse(wamid = FAKE_WAMID_TPL) {
+    return makeOkResponse({
+      messaging_product: 'whatsapp',
+      contacts: [{ input: FAKE_TO, wa_id: FAKE_TO }],
+      messages: [{ id: wamid }],
+    });
+  }
+
+  // ── SENDTPL-01: payload correto ──────────────────────────────────────────────
+
+  it('SENDTPL-01: payload enviado contém messaging_product, recipient_type, to, type, template', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.messaging_product).toBe('whatsapp');
+    expect(body.recipient_type).toBe('individual');
+    expect(body.to).toBe(FAKE_TO);
+    expect(body.type).toBe('template');
+    expect(body.template).toBeDefined();
+  });
+
+  it('SENDTPL-01b: método é POST', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.method).toBe('POST');
+  });
+
+  it('SENDTPL-01c: Content-Type é application/json', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.headers['Content-Type']).toBe('application/json');
+  });
+
+  // ── SENDTPL-02: endpoint usa phoneNumberId ───────────────────────────────────
+
+  it('SENDTPL-02: URL usa phoneNumberId correto no path', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain(`/${FAKE_PHONE_ID_TPL}/messages`);
+  });
+
+  it('SENDTPL-02b: URL usa GRAPH_VERSION de getMetaServerConfig', async () => {
+    getMetaServerConfig.mockReturnValue({ ...FAKE_CONFIG, graphVersion: 'v99.0' });
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('/v99.0/');
+  });
+
+  // ── SENDTPL-03: Bearer token ─────────────────────────────────────────────────
+
+  it('SENDTPL-03: Authorization header é "Bearer <token>"', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+  });
+
+  // ── SENDTPL-04: recipient_type individual ────────────────────────────────────
+
+  it('SENDTPL-04: recipient_type é "individual" no payload', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.recipient_type).toBe('individual');
+  });
+
+  // ── SENDTPL-05: name/language/components preservados ─────────────────────────
+
+  it('SENDTPL-05a: template.name preservado no payload Graph', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.template.name).toBe(FAKE_TEMPLATE_SEND.name);
+  });
+
+  it('SENDTPL-05b: template.language.code preservado no payload Graph', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.template.language.code).toBe(FAKE_TEMPLATE_SEND.language.code);
+  });
+
+  it('SENDTPL-05c: template.components preservado no payload Graph quando fornecido', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.template.components).toEqual(FAKE_TEMPLATE_SEND.components);
+  });
+
+  it('SENDTPL-05d: quando components undefined, não incluído no payload Graph', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_STATIC);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.template).not.toHaveProperty('components');
+  });
+
+  it('SENDTPL-05e: components array vazio incluído quando fornecido', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    const tplEmptyComponents = { ...FAKE_TEMPLATE_STATIC, components: [] };
+    await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, tplEmptyComponents);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.template.components).toEqual([]);
+  });
+
+  // ── SENDTPL-06: resposta wamid válida ────────────────────────────────────────
+
+  it('SENDTPL-06: sucesso → { messageId: wamid }', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    const result = await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    expect(result).toEqual({ messageId: FAKE_WAMID_TPL });
+  });
+
+  it('SENDTPL-06b: retorna somente { messageId } — sem token, to ou payload bruto', async () => {
+    fetch.mockResolvedValue(makeSendTemplateOkResponse());
+    const result = await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND);
+    expect(Object.keys(result)).toEqual(['messageId']);
+  });
+
+  // ── SENDTPL-07: success sem wamid → fail-closed ──────────────────────────────
+
+  it('SENDTPL-07a: HTTP 200 sem messages → send_template_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp' }));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_response' });
+  });
+
+  it('SENDTPL-07b: HTTP 200 com messages array vazio → send_template_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp', messages: [] }));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_response' });
+  });
+
+  it('SENDTPL-07c: HTTP 200 com message id vazio → send_template_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp', messages: [{ id: '' }] }));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_response' });
+  });
+
+  it('SENDTPL-07d: JSON inválido na resposta 200 → send_template_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse());
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_response' });
+  });
+
+  // ── SENDTPL-08: Graph non-2xx ────────────────────────────────────────────────
+
+  it('SENDTPL-08a: HTTP 400 → send_template_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_failed' });
+  });
+
+  it('SENDTPL-08b: HTTP 500 → send_template_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_failed' });
+  });
+
+  it('SENDTPL-08c: AbortError → send_template_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_timeout' });
+  });
+
+  it('SENDTPL-08d: TypeError de rede → send_template_network_error', async () => {
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_network_error' });
+  });
+
+  it('SENDTPL-08e: erro send_template_failed não contém accessToken', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toSatisfy((err) => !err.message.includes(FAKE_TOKEN));
+  });
+
+  it('SENDTPL-08f: erro send_template_failed não contém to', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toSatisfy((err) => !err.message.includes(FAKE_TO));
+  });
+
+  // ── SENDTPL-09: argumentos inválidos (fail-fast sem fetch) ───────────────────
+
+  it('SENDTPL-09a: token vazio → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage('', FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09b: token null → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(null, FAKE_PHONE_ID_TPL, FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09c: phoneNumberId não numérico → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, 'not-numeric', FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09d: phoneNumberId vazio → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, '', FAKE_TO, FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09e: to com "+" → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, '+5511987654321', FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09f: to vazio → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, '', FAKE_TEMPLATE_SEND))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09g: template.name vazio → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, {
+      ...FAKE_TEMPLATE_SEND, name: '',
+    }))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09h: template.language.code vazio → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, {
+      ...FAKE_TEMPLATE_SEND, language: { code: '' },
+    }))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09i: template.components não-array (string) → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, {
+      ...FAKE_TEMPLATE_SEND, components: 'not-an-array',
+    }))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09j: template null → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, null))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SENDTPL-09k: template undefined → send_template_invalid_input sem fetch', async () => {
+    await expect(sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_ID_TPL, FAKE_TO, undefined))
+      .rejects.toMatchObject({ code: 'send_template_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── SENDTPL-10: sendTextMessage continua inalterado (regressão) ──────────────
+
+  it('SENDTPL-10 (regressão): sendTextMessage funciona inalterado', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const result = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    expect(result).toEqual({ messageId: FAKE_WAMID });
+  });
+
+  it('SENDTPL-10b (regressão): sendTextMessage payload não contém "template"', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT);
+    const [, callOpts] = fetch.mock.calls[0];
+    const body = JSON.parse(callOpts.body);
+    expect(body.type).toBe('text');
+    expect(body).not.toHaveProperty('template');
   });
 });

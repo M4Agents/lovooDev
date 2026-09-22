@@ -5,9 +5,11 @@
 // Módulo funcional — sem estado, sem retry, sem persistência, sem crypto.
 //
 // Funções exportadas:
-//   exchangeCodeForToken(code)           → { accessToken }
-//   listWabaPhoneNumbers(token, wabaId)  → [{ id, displayPhoneNumber, verifiedName }]
-//   discoverAuthorizedWabas(token)       → string[]  — WABA IDs via debug_token
+//   exchangeCodeForToken(code)                           → { accessToken }
+//   listWabaPhoneNumbers(token, wabaId)                  → [{ id, displayPhoneNumber, verifiedName }]
+//   discoverAuthorizedWabas(token)                       → string[]  — WABA IDs via debug_token
+//   listMessageTemplates(token, wabaId, options)         → { templates, nextCursor }
+//   sendTemplateMessage(token, phoneNumberId, to, tpl)   → { messageId }
 //
 // SEGURANÇA:
 //   - URL de code exchange NUNCA logada (contém client_secret e code na query)
@@ -100,6 +102,41 @@ function buildPhoneNumbersUrl(graphVersion, wabaId, after) {
   if (after !== null) {
     url.searchParams.set('after', after);
   }
+  return url;
+}
+
+/**
+ * Constrói a URL do endpoint message_templates para uma WABA.
+ * Sempre reconstruída internamente — nunca usa paging.next como destino (anti-SSRF).
+ *
+ * Fields fixos: id, name, language, status, category, parameter_format, components.
+ * Suporta filtros opcionais: status, name, limit, after (cursor).
+ *
+ * @private
+ */
+function buildTemplatesUrl(graphVersion, wabaId, options) {
+  const {
+    status = 'APPROVED',
+    name,
+    limit  = PAGE_LIMIT,
+    after,
+  } = options;
+
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${wabaId}/message_templates`);
+  url.searchParams.set('fields', 'id,name,language,status,category,parameter_format,components');
+  url.searchParams.set('status', String(status));
+  url.searchParams.set('limit',  String(limit));
+
+  // Filtro por nome — somente se fornecido como string não vazia
+  if (typeof name === 'string' && name.length > 0) {
+    url.searchParams.set('name', name);
+  }
+
+  // Cursor de paginação — somente se fornecido como string não vazia
+  if (typeof after === 'string' && after.length > 0) {
+    url.searchParams.set('after', after);
+  }
+
   return url;
 }
 
@@ -437,6 +474,105 @@ export async function discoverAuthorizedWabas(accessToken) {
 }
 
 // =============================================================================
+// listMessageTemplates
+// =============================================================================
+
+/**
+ * Lista message templates de uma WABA via Graph API.
+ * Busca UMA página por chamada — sem auto-follow de paginação.
+ * Paginação cursor-based controlada pelo caller via nextCursor retornado.
+ *
+ * Endpoint: GET /{WABA_ID}/message_templates
+ * Fields:   id, name, language, status, category, parameter_format, components
+ *
+ * SEGURANÇA:
+ *   - paging.next NUNCA usado como URL de fetch (anti-SSRF)
+ *   - nextCursor sempre extraído de paging.cursors.after (reconstrução interna)
+ *   - accessToken vai SOMENTE no header Authorization: Bearer
+ *   - token nunca presente em mensagens de erro ou logs
+ *
+ * @param {string} token              Business token da instância
+ * @param {string} wabaId             WABA ID (numeric string — validado antes do fetch)
+ * @param {object} [options={}]
+ * @param {string} [options.status]   Filtro de status (padrão: 'APPROVED')
+ * @param {string} [options.name]     Filtro por nome exato do template
+ * @param {number} [options.limit]    Itens por página (padrão: 100)
+ * @param {string} [options.after]    Cursor para próxima página
+ * @returns {Promise<{ templates: Array, nextCursor: string|null }>}
+ * @throws {Error} err.code in:
+ *   graph_templates_invalid_input — token ou wabaId inválidos (sem fetch)
+ *   graph_templates_failed        — HTTP não-2xx do Graph
+ *   graph_timeout                 — AbortError / timeout expirado
+ *   graph_network_error           — falha de rede não-timeout
+ *   graph_invalid_response        — JSON inválido, payload malformado, cursor inconsistente
+ */
+export async function listMessageTemplates(token, wabaId, options = {}) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+
+  if (typeof wabaId !== 'string' || !META_ID_RE.test(wabaId)) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL reconstruída internamente — nunca usa valor externo como base de URL
+  const url = buildTemplatesUrl(graphVersion, wabaId, options);
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('graph_timeout', 'Meta Graph request timed out');
+    }
+    throw makeError('graph_network_error', 'Meta Graph network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('graph_templates_failed', 'Meta Graph templates request failed');
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  if (!Array.isArray(payload?.data)) {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  // ── Paginação cursor-based ────────────────────────────────────────────────
+  // paging.next sinaliza existência de próxima página (sinal booleano).
+  // paging.next NUNCA é usado como URL de fetch — somente como sinal (anti-SSRF).
+  // nextCursor é sempre extraído de paging.cursors.after para reconstrução interna.
+  let nextCursor = null;
+  const pagingNext = payload.paging?.next;
+
+  if (typeof pagingNext === 'string' && pagingNext.length > 0) {
+    // paging.next presente e válido → deve haver cursor after para next page
+    const cursor = payload.paging?.cursors?.after;
+    if (typeof cursor !== 'string' || cursor.length === 0) {
+      throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+    }
+    nextCursor = cursor;
+  }
+  // Se paging.next ausente, undefined, null, ou não-string → última página → nextCursor = null
+
+  return {
+    templates:  payload.data,
+    nextCursor,
+  };
+}
+
+// =============================================================================
 // sendTextMessage
 // =============================================================================
 
@@ -766,4 +902,140 @@ export async function setTwoStepVerificationPin(accessToken, phoneNumberId, pin)
   }
 
   return { ok: true };
+}
+
+// =============================================================================
+// sendTemplateMessage
+// =============================================================================
+
+/**
+ * Envia uma mensagem de template aprovado via WhatsApp Cloud API.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}/messages
+ *
+ * Payload construído INTERNAMENTE a partir dos argumentos — não aceita payload
+ * Graph arbitrário do caller. A responsabilidade de validar se o template está
+ * APPROVED e se os components são semanticamente corretos é do endpoint
+ * send-template.js (camada de negócio), não desta primitive.
+ *
+ * Estrutura enviada ao Graph:
+ *   {
+ *     messaging_product: "whatsapp",
+ *     recipient_type: "individual",
+ *     to,
+ *     type: "template",
+ *     template: { name, language: { code }, components? }
+ *   }
+ *
+ * SEGURANÇA:
+ *   - accessToken nunca logado, nunca presente em mensagem de erro
+ *   - to nunca logado
+ *   - URL construída internamente — sem SSRF por valor externo
+ *   - Payload construído internamente — sem injection de campos arbitrários
+ *   - components passados diretamente do caller (já validados/construídos server-side)
+ *
+ * @param {string} token          Business token da instância (nunca logar)
+ * @param {string} phoneNumberId  Phone Number ID da instância (numeric string)
+ * @param {string} to             Número de destino — somente dígitos, sem '+'
+ * @param {object} template       Objeto de template
+ * @param {string} template.name           Nome do template aprovado
+ * @param {object} template.language
+ * @param {string} template.language.code  Código de idioma (ex: 'pt_BR')
+ * @param {Array}  [template.components]   Components de substituição (opcional)
+ * @returns {Promise<{ messageId: string }>}
+ * @throws {Error} err.code in:
+ *   send_template_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   send_template_failed           — HTTP não-2xx do Graph
+ *   send_template_timeout          — AbortError / timeout expirado
+ *   send_template_network_error    — falha de rede não-timeout
+ *   send_template_invalid_response — HTTP 2xx mas response sem message id válido
+ */
+export async function sendTemplateMessage(token, phoneNumberId, to, template) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  if (typeof to !== 'string' || !TO_PHONE_RE.test(to)) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  // template.name: string não-vazia após trim
+  if (typeof template?.name !== 'string' || template.name.trim().length === 0) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  // template.language.code: string não-vazia após trim
+  if (typeof template?.language?.code !== 'string' || template.language.code.trim().length === 0) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  // template.components: se presente, deve ser array
+  if (template.components !== undefined && !Array.isArray(template.components)) {
+    throw makeError('send_template_invalid_input', 'Meta send template: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL construída internamente — nunca usa valor externo como base de URL
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}/messages`);
+
+  // Payload construído internamente.
+  // components incluído somente quando presente (undefined → campo omitido).
+  const templatePayload = {
+    name:     template.name,
+    language: { code: template.language.code },
+  };
+  if (Array.isArray(template.components)) {
+    templatePayload.components = template.components;
+  }
+
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to,
+    type:              'template',
+    template:          templatePayload,
+  });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('send_template_timeout', 'Meta send template request timed out');
+    }
+    throw makeError('send_template_network_error', 'Meta send template network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('send_template_failed', 'Meta send template failed');
+  }
+
+  let responseData;
+  try {
+    responseData = await res.json();
+  } catch {
+    throw makeError('send_template_invalid_response', 'Meta send template invalid response');
+  }
+
+  // Extrair somente o primeiro message id válido da resposta Graph.
+  // Resposta esperada: { messages: [{ id: "wamid.xxx" }], ... }
+  const messageId = responseData?.messages?.[0]?.id;
+  if (typeof messageId !== 'string' || messageId.length === 0) {
+    throw makeError('send_template_invalid_response', 'Meta send template invalid response');
+  }
+
+  return { messageId };
 }
