@@ -82,6 +82,8 @@ const META_INSTANCE = {
   provider:      'meta' as const,
 }
 
+const FAKE_PHOTO_URL = 'https://fake-storage.example/avatars/c/contact.jpg'
+
 const META_CONV_WITH_NAME = {
   id:                   'meta-conv-001',
   instance_id:          'meta-inst-001',
@@ -93,6 +95,7 @@ const META_CONV_WITH_NAME = {
   last_message_preview: 'Olá, tudo bem?',
   created_at:           '2026-09-21T10:00:00.000Z',
   updated_at:           '2026-09-21T15:00:00.000Z',
+  profile_picture_url:  null,
 }
 
 const META_CONV_NO_NAME = {
@@ -100,6 +103,12 @@ const META_CONV_NO_NAME = {
   id:           'meta-conv-002',
   contact_name: null,
   unread_count: 0,
+}
+
+const META_CONV_WITH_PHOTO = {
+  ...META_CONV_WITH_NAME,
+  id:                  'meta-conv-003',
+  profile_picture_url: FAKE_PHOTO_URL,
 }
 
 function makeMetaData(overrides: Partial<MetaSidebarData> = {}): MetaSidebarData {
@@ -275,53 +284,132 @@ describe('ConversationSidebar — MVP3C.3 modo Meta', () => {
     expect(screen.queryByText('sidebar.filters.unassigned')).toBeNull()
   })
 
-  // ── CS-16..CS-19: Avatar por iniciais (MVP3F N2) ──────────────────────────
-  // Confirmam que o avatar Meta exibe iniciais derivadas do contato,
-  // sem carregar imagem externa.
-  // Selector: [data-testid="meta-avatar"] isola as iniciais do resto do DOM.
+  // ── CS-19..CS-23: Avatar por foto real (MVP3F.3) ─────────────────────────
+  // Comportamento final: foto real quando disponível, SVG genérico como fallback.
+  // Nunca iniciais calculadas (MA / MS / 55 / qualquer inicial).
 
-  it('CS-16: contact_name simples → avatar exibe as 2 primeiras letras do nome', () => {
-    const MARCIO_CONV = {
-      ...META_CONV_WITH_NAME,
-      id:           'meta-conv-cs16',
-      contact_name: 'Marcio',
-      wa_id:        '5511000000016',
-    }
-    renderMetaSidebar({ conversations: [MARCIO_CONV] })
-    // "MA" aparece no avatar; o nome "Marcio" aparece no <h4> de displayName.
-    // Ambos devem estar presentes sem ambiguidade.
-    const avatarSpans = document.querySelectorAll('.select-none')
-    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
-    expect(avatarTexts).toContain('MA')
+  it('CS-19: profile_picture_url válida → <img> renderizado com src correto', () => {
+    renderMetaSidebar({ conversations: [META_CONV_WITH_PHOTO] })
+    const imgs = document.querySelectorAll('img')
+    expect(imgs.length).toBeGreaterThan(0)
+    const img = imgs[0] as HTMLImageElement
+    expect(img.src).toContain('fake-storage.example')
   })
 
-  it('CS-17: contact_name composto → avatar exibe primeira letra da primeira + última palavra', () => {
-    const MARCIO_SILVA_CONV = {
-      ...META_CONV_WITH_NAME,
-      id:           'meta-conv-cs17',
-      contact_name: 'Marcio Silva',
-      wa_id:        '5511000000017',
-    }
-    renderMetaSidebar({ conversations: [MARCIO_SILVA_CONV] })
-    const avatarSpans = document.querySelectorAll('.select-none')
-    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
-    expect(avatarTexts).toContain('MS')
-  })
-
-  it('CS-18: contact_name null → avatar usa fallback wa_id (primeiros 2 chars)', () => {
-    // META_CONV_NO_NAME tem contact_name: null, wa_id: '5511999990001'
-    renderMetaSidebar({ conversations: [META_CONV_NO_NAME] })
-    const avatarSpans = document.querySelectorAll('.select-none')
-    const avatarTexts = Array.from(avatarSpans).map(el => el.textContent)
-    expect(avatarTexts).toContain('55')
-  })
-
-  it('CS-19: lista Meta não introduz <img> para avatar dos contatos', () => {
-    renderMetaSidebar()
-    // Nenhum elemento <img> deve existir dentro da lista Meta.
-    // A sidebar Uazapi usa <img> para foto (resolvePhotoUrl mockado para null),
-    // mas a lista Meta deve usar somente texto (iniciais).
+  it('CS-20: profile_picture_url null → nenhum <img>, SVG genérico renderizado', () => {
+    // META_CONV_WITH_NAME tem profile_picture_url: null
+    renderMetaSidebar({ conversations: [META_CONV_WITH_NAME] })
     const imgs = document.querySelectorAll('img')
     expect(imgs).toHaveLength(0)
+    // SVG do ícone genérico de pessoa
+    const svgs = document.querySelectorAll('svg')
+    expect(svgs.length).toBeGreaterThan(0)
+  })
+
+  it('CS-21: fireEvent.error(img) → imagem descartada, SVG aparece', () => {
+    renderMetaSidebar({ conversations: [META_CONV_WITH_PHOTO] })
+    const img = document.querySelector('img')
+    expect(img).toBeTruthy()
+    fireEvent.error(img!)
+    // Após erro, <img> deixa de ser renderizado
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+    // SVG genérico aparece como fallback
+    expect(document.querySelectorAll('svg').length).toBeGreaterThan(0)
+  })
+
+  it('CS-22: nenhuma inicial calculada renderizada (sem MA / MS / 55)', () => {
+    // Testa com foto, sem foto e sem nome — nenhum deve mostrar iniciais calculadas.
+    const { unmount } = render(
+      <div>
+        {/* com foto */}
+        <ConversationSidebarWrapper convs={[META_CONV_WITH_PHOTO]} />
+      </div>
+    )
+    unmount()
+    // Sem nome, sem foto
+    renderMetaSidebar({ conversations: [META_CONV_NO_NAME] })
+    const spans = document.querySelectorAll('span')
+    const texts = Array.from(spans).map(el => el.textContent)
+    // Nenhuma inicial calculada do tipo MA / MS / 55
+    expect(texts).not.toContain('MA')
+    expect(texts).not.toContain('MS')
+    expect(texts).not.toContain('55')
+    expect(texts).not.toContain('JS')
+  })
+
+  it('CS-23: URL A falha → SVG; rerender com URL B → URL B é tentada', () => {
+    const CONV_URL_A = { ...META_CONV_WITH_PHOTO, profile_picture_url: FAKE_PHOTO_URL }
+    const URL_B = 'https://fake-storage.example/avatars/c/contact-new.jpg'
+    const CONV_URL_B = { ...META_CONV_WITH_PHOTO, profile_picture_url: URL_B }
+
+    const { rerender } = render(
+      <ConversationSidebar
+        companyId="company-001"
+        userId="user-001"
+        instances={[META_INSTANCE]}
+        conversations={[]}
+        filter={FILTER}
+        loading={false}
+        onSelectInstance={vi.fn()}
+        onSelectConversation={vi.fn()}
+        onFilterChange={vi.fn()}
+        onRefresh={vi.fn()}
+        selectedChannel="whatsapp"
+        selectedProvider="meta"
+        metaData={makeMetaData({ conversations: [CONV_URL_A] })}
+      />
+    )
+
+    // URL A presente inicialmente
+    const imgA = document.querySelector('img') as HTMLImageElement
+    expect(imgA.src).toContain('fake-storage.example/avatars/c/contact.jpg')
+
+    // Simula falha ao carregar URL A
+    fireEvent.error(imgA)
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+
+    // Realtime/refresh traz URL B → deve ser tentada normalmente
+    rerender(
+      <ConversationSidebar
+        companyId="company-001"
+        userId="user-001"
+        instances={[META_INSTANCE]}
+        conversations={[]}
+        filter={FILTER}
+        loading={false}
+        onSelectInstance={vi.fn()}
+        onSelectConversation={vi.fn()}
+        onFilterChange={vi.fn()}
+        onRefresh={vi.fn()}
+        selectedChannel="whatsapp"
+        selectedProvider="meta"
+        metaData={makeMetaData({ conversations: [CONV_URL_B] })}
+      />
+    )
+
+    const imgB = document.querySelector('img') as HTMLImageElement
+    expect(imgB).toBeTruthy()
+    expect(imgB.src).toContain('contact-new.jpg')
   })
 })
+
+// Helper mínimo para CS-22 (evitar repetição de boilerplate)
+function ConversationSidebarWrapper({ convs }: { convs: typeof META_CONV_WITH_PHOTO[] }) {
+  return (
+    <ConversationSidebar
+      companyId="company-001"
+      userId="user-001"
+      instances={[META_INSTANCE]}
+      conversations={[]}
+      filter={FILTER}
+      loading={false}
+      onSelectInstance={vi.fn()}
+      onSelectConversation={vi.fn()}
+      onFilterChange={vi.fn()}
+      onRefresh={vi.fn()}
+      selectedChannel="whatsapp"
+      selectedProvider="meta"
+      metaData={makeMetaData({ conversations: convs })}
+    />
+  )
+}

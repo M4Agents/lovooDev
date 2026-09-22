@@ -172,8 +172,47 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
+  // ── 9. Enriquecer com foto do contato (best-effort) ───────────────────────
+  // Fonte: chat_contacts.profile_picture_url (mesma company_id, match por telefone).
+  // Estratégia V1: match direto por dígitos puros — wa_id e phone_number ambos em
+  //   formato E.164 sem '+' no ambiente atual.
+  // Graceful degradation: erro na query retorna profile_picture_url: null para todas
+  //   as conversations — não cancela a resposta.
+  // Segurança: company_id vem exclusivamente de auth.companyId. Nunca lookup global.
+  // Zero N+1: uma única query batch via .in().
+  let enriched = conversations ?? [];
+
+  if (enriched.length > 0) {
+    // Deduplica wa_ids antes do .in() — evita parâmetros redundantes.
+    const waIds = [...new Set(enriched.map(c => c.wa_id))];
+
+    const { data: contacts, error: contactsErr } = await svc
+      .from('chat_contacts')
+      .select('phone_number, profile_picture_url')
+      .eq('company_id', auth.companyId)
+      .in('phone_number', waIds);
+
+    if (contactsErr) {
+      // Log sanitizado — sem PII (telefone, URL).
+      console.error('[meta/conversations] contacts_photo_lookup_failed');
+      // Continua: conversations retornam sem foto (profile_picture_url: null).
+    }
+
+    // Mapeia phone_number → URL estável. Ignora entradas sem URL.
+    const photoMap = new Map(
+      (contacts ?? [])
+        .filter(c => c.profile_picture_url)
+        .map(c => [c.phone_number, c.profile_picture_url])
+    );
+
+    enriched = enriched.map(c => ({
+      ...c,
+      profile_picture_url: photoMap.get(c.wa_id) ?? null,
+    }));
+  }
+
   // Lista vazia é estado válido — empresa ativa sem conversas ainda.
-  return res.status(200).json({ conversations: conversations ?? [] });
+  return res.status(200).json({ conversations: enriched });
 
   } catch {
     // Catch defensivo externo — throws inesperados não cobertos acima.

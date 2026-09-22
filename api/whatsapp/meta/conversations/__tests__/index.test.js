@@ -54,10 +54,14 @@ const FAKE_AUTH_OK = {
   accessPath: 'direct',
 };
 
+// wa_id usa placeholder ofuscado — nunca número real.
+const FAKE_WA_ID       = '5511000000001';
+const FAKE_PHOTO_URL   = 'https://fake-storage.example/avatars/company/contact.jpg';
+
 const FAKE_CONV = {
   id:                   FAKE_CONV_ID_A,
   instance_id:          FAKE_INSTANCE_ID,
-  wa_id:                '5511****',
+  wa_id:                FAKE_WA_ID,
   contact_name:         'Teste',
   status:               'active',
   unread_count:         1,
@@ -65,6 +69,17 @@ const FAKE_CONV = {
   last_message_preview: '...',
   created_at:           '2026-09-21T13:40:49.000Z',
   updated_at:           '2026-09-21T13:40:52.000Z',
+};
+
+// FAKE_CONV enriquecido (com foto) — resultado esperado após enrichment.
+const FAKE_CONV_WITH_PHOTO = { ...FAKE_CONV, profile_picture_url: FAKE_PHOTO_URL };
+// FAKE_CONV sem foto — resultado esperado quando chat_contacts não tem match.
+const FAKE_CONV_NO_PHOTO   = { ...FAKE_CONV, profile_picture_url: null };
+
+// Contato correspondente em chat_contacts (mesmo phone_number que wa_id).
+const FAKE_CONTACT = {
+  phone_number:        FAKE_WA_ID,
+  profile_picture_url: FAKE_PHOTO_URL,
 };
 
 // =============================================================================
@@ -123,6 +138,16 @@ function makeConvChain(data, error = null) {
   return chain;
 }
 
+/** Chain para chat_contacts: select().eq().in() */
+function makeContactsChain(data, error = null) {
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq:     vi.fn().mockReturnThis(),
+    in:     vi.fn().mockResolvedValue({ data, error }),
+  };
+  return chain;
+}
+
 // =============================================================================
 // Setup padrão
 // =============================================================================
@@ -137,15 +162,31 @@ beforeEach(() => {
  * Configura mockSvc.from para o caminho feliz:
  * 1ª call = instance lookup (se instance_id presente)
  * 2ª call (ou 1ª sem instance) = conversations query
+ * 3ª call = chat_contacts enrichment (se conversations não vazia)
+ *
+ * contacts: dados retornados por chat_contacts (default: [FAKE_CONTACT]).
+ *           Passar [] para simular sem match.
+ *           Passar null para simular erro (contactsError = true).
  */
-function setupHappyPath({ withInstance = false, conversations = [FAKE_CONV] } = {}) {
+function setupHappyPath({
+  withInstance   = false,
+  conversations  = [FAKE_CONV],
+  contacts       = [FAKE_CONTACT],
+  contactsError  = false,
+} = {}) {
+  const contactsChain = contactsError
+    ? makeContactsChain(null, { message: 'db_error' })
+    : makeContactsChain(contacts);
+
   if (withInstance) {
     mockSvc.from
       .mockReturnValueOnce(makeInstChain({ id: FAKE_INSTANCE_ID }))
-      .mockReturnValueOnce(makeConvChain(conversations));
+      .mockReturnValueOnce(makeConvChain(conversations))
+      .mockReturnValueOnce(contactsChain);
   } else {
     mockSvc.from
-      .mockReturnValueOnce(makeConvChain(conversations));
+      .mockReturnValueOnce(makeConvChain(conversations))
+      .mockReturnValueOnce(contactsChain);
   }
 }
 
@@ -154,18 +195,19 @@ function setupHappyPath({ withInstance = false, conversations = [FAKE_CONV] } = 
 // =============================================================================
 
 describe('GET /api/whatsapp/meta/conversations — happy path', () => {
-  it('CONV-01: retorna lista com 1 conversa → 200', async () => {
+  it('CONV-01: retorna lista com 1 conversa → 200 (com foto enriquecida)', async () => {
     setupHappyPath();
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(res._body).toEqual({ conversations: [FAKE_CONV] });
+    expect(res._body).toEqual({ conversations: [FAKE_CONV_WITH_PHOTO] });
   });
 
   it('CONV-02: lista vazia → 200 com conversations: []', async () => {
-    setupHappyPath({ conversations: [] });
+    // conversations [] → chat_contacts NÃO deve ser consultada.
+    mockSvc.from.mockReturnValueOnce(makeConvChain([]));
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
@@ -385,7 +427,9 @@ describe('GET /api/whatsapp/meta/conversations — erros de DB', () => {
 describe('GET /api/whatsapp/meta/conversations — segurança de resposta e query', () => {
   it('CONV-17: SELECT explícito — contém campos públicos, exclui company_id, sem *', async () => {
     const convChain = makeConvChain([FAKE_CONV]);
-    mockSvc.from.mockReturnValueOnce(convChain);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeContactsChain([FAKE_CONTACT]));
 
     const req = makeReq();
     const res = makeRes();
@@ -426,6 +470,7 @@ describe('GET /api/whatsapp/meta/conversations — segurança de resposta e quer
     });
 
     const convChain = makeConvChain([]);
+    // conversations vazia → chat_contacts NÃO é consultada (sem 3ª call)
     mockSvc.from.mockReturnValueOnce(convChain);
 
     // req.query.company_id aponta para a empresa pai — diferente do auth.companyId
@@ -444,5 +489,111 @@ describe('GET /api/whatsapp/meta/conversations — segurança de resposta e quer
     // Garantir que o companyId da query string NÃO foi usado
     const wrongCall = eqCalls.find(c => c[0] === 'company_id' && c[1] === FAKE_COMPANY_ID);
     expect(wrongCall).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// CONV-19 … CONV-24 — Enriquecimento com foto do contato (MVP3F)
+// =============================================================================
+
+describe('GET /api/whatsapp/meta/conversations — enriquecimento de foto (MVP3F)', () => {
+  it('CONV-19: foto encontrada na mesma company → URL retornada na conversation', async () => {
+    setupHappyPath({ contacts: [FAKE_CONTACT] });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations[0].profile_picture_url).toBe(FAKE_PHOTO_URL);
+  });
+
+  it('CONV-20: sem match em chat_contacts → profile_picture_url null', async () => {
+    setupHappyPath({ contacts: [] });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations[0].profile_picture_url).toBeNull();
+  });
+
+  it('CONV-21: lookup chat_contacts usa auth.companyId — nunca lookup global', async () => {
+    const CHILD_ID = 'c0c00000-0000-0000-0000-000000000099';
+    mockValidateMetaCaller.mockResolvedValue({
+      ok:         true,
+      companyId:  CHILD_ID,
+      userId:     'user-1',
+      role:       'super_admin',
+      accessPath: 'parent',
+    });
+
+    const convChain     = makeConvChain([FAKE_CONV]);
+    const contactsChain = makeContactsChain([FAKE_CONTACT]);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(contactsChain);
+
+    const req = makeReq({ company_id: FAKE_COMPANY_ID });
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // chat_contacts deve ter sido filtrado pelo CHILD_ID (auth.companyId)
+    const eqCalls = contactsChain.eq.mock.calls;
+    const companyCall = eqCalls.find(c => c[0] === 'company_id');
+    expect(companyCall).toBeDefined();
+    expect(companyCall[1]).toBe(CHILD_ID);
+    // Garantir que FAKE_COMPANY_ID (req.query) não foi usado
+    expect(eqCalls.find(c => c[0] === 'company_id' && c[1] === FAKE_COMPANY_ID)).toBeUndefined();
+  });
+
+  it('CONV-22: conversations [] → chat_contacts NÃO consultada', async () => {
+    // Apenas 1 call mockada — se handler tentar 2ª call, mockReturnValueOnce seguinte é undefined.
+    mockSvc.from.mockReturnValueOnce(makeConvChain([]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ conversations: [] });
+    // from() só deve ter sido chamado 1 vez (meta_conversations), nunca chat_contacts.
+    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+  });
+
+  it('CONV-23: erro em chat_contacts → HTTP 200, conversations preservadas, profile_picture_url null', async () => {
+    setupHappyPath({ contactsError: true });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations).toHaveLength(1);
+    expect(res._body.conversations[0].profile_picture_url).toBeNull();
+    // Campos originais da conversation preservados.
+    expect(res._body.conversations[0].wa_id).toBe(FAKE_WA_ID);
+  });
+
+  it('CONV-24: múltiplas conversations → UMA única query chat_contacts com batch deduplicado', async () => {
+    const FAKE_CONV_B = { ...FAKE_CONV, id: FAKE_CONV_ID_B, wa_id: FAKE_WA_ID };
+    // FAKE_CONV e FAKE_CONV_B têm o MESMO wa_id — deduplicação deve ocorrer.
+    const convChain     = makeConvChain([FAKE_CONV, FAKE_CONV_B]);
+    const contactsChain = makeContactsChain([FAKE_CONTACT]);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(contactsChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // chat_contacts foi chamada exatamente UMA vez (batch, não N+1).
+    const contactsCalls = mockSvc.from.mock.calls.filter(c => c[0] === 'chat_contacts');
+    expect(contactsCalls).toHaveLength(1);
+    // .in() recebe array deduplicado — [FAKE_WA_ID] (não duplicado).
+    const inArgs = contactsChain.in.mock.calls[0][1];
+    expect(inArgs).toEqual([FAKE_WA_ID]);
+    expect(inArgs).toHaveLength(1);
   });
 });

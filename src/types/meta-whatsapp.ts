@@ -168,6 +168,9 @@ export interface MetaChatConversation {
   last_message_preview: string | null
   created_at:           string
   updated_at:           string
+  // Foto do contato — enriquecida pelo backend via chat_contacts (MVP3F).
+  // null quando não há correspondência por telefone na mesma company.
+  profile_picture_url:  string | null
 }
 
 // ── META CHAT — Message ───────────────────────────────────────────────────────

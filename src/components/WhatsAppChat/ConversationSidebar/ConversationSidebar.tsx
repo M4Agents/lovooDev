@@ -484,20 +484,6 @@ interface MetaConversationItemProps {
   onClick:      () => void
 }
 
-/** Gera iniciais para avatar Meta — sem fetch de imagem.
- *  Mesmo comportamento do helper de MetaChatArea.tsx.
- *  name || fallback → trim → vazio → "?" → split whitespace
- *  2+ partes: primeira letra da primeira + primeira letra da última.
- *  1 parte: primeiros 2 caracteres. Sempre uppercase.
- */
-function getMetaContactInitials(name: string | null | undefined, fallback: string): string {
-  const src = (name || fallback).trim()
-  if (!src) return '?'
-  const parts = src.split(/\s+/)
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  return src.substring(0, 2).toUpperCase()
-}
-
 /** Formata timestamp ISO-8601 para exibição relativa */
 const formatMetaTime = (iso?: string | null): string => {
   if (!iso) return ''
@@ -521,7 +507,13 @@ const MetaConversationItem: React.FC<MetaConversationItemProps> = ({
   onClick,
 }) => {
   const displayName = conversation.contact_name || conversation.wa_id
-  const initials    = getMetaContactInitials(conversation.contact_name, conversation.wa_id)
+
+  // failedPhotoUrl rastreia QUAL URL falhou — não um bool genérico.
+  // Se o Realtime/refresh trouxer uma URL diferente, ela é tentada normalmente.
+  // Nunca resetado via useEffect — sem loop de retry da mesma URL.
+  const [failedPhotoUrl, setFailedPhotoUrl] = React.useState<string | null>(null)
+  const photoUrl  = conversation.profile_picture_url
+  const showPhoto = Boolean(photoUrl) && failedPhotoUrl !== photoUrl
 
   return (
     <button
@@ -535,11 +527,22 @@ const MetaConversationItem: React.FC<MetaConversationItemProps> = ({
       }`}
     >
       <div className="flex items-start space-x-3">
-        {/* Avatar por iniciais — Meta Cloud API não fornece foto de contato */}
+        {/* Avatar — foto real se disponível, SVG original como fallback */}
         <div className="flex-shrink-0">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-300 to-blue-500 rounded-xl flex items-center justify-center shadow-sm">
-            <span className="text-white text-sm font-semibold select-none">{initials}</span>
-          </div>
+          {showPhoto ? (
+            <img
+              src={photoUrl!}
+              alt=""
+              className="w-12 h-12 rounded-xl object-cover shadow-sm"
+              onError={() => setFailedPhotoUrl(photoUrl)}
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-300 to-blue-500 rounded-xl flex items-center justify-center shadow-sm">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Conteúdo */}
