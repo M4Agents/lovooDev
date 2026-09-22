@@ -59,7 +59,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { metaWhatsAppApi }                      from '../metaWhatsAppApi'
-import type { MetaChatConversation, MetaChatMessage, MetaSendMessageResponse } from '../../types/meta-whatsapp'
+import type {
+  MetaChatConversation,
+  MetaChatMessage,
+  MetaSendMessageResponse,
+  MetaWhatsAppTemplate,
+  GetMetaTemplatesResponse,
+  MetaSendTemplateResponse,
+} from '../../types/meta-whatsapp'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -554,5 +561,495 @@ describe('metaWhatsAppApi.sendMessage', () => {
     mockFetch(SUCCESS_RESPONSE)
     const result = await metaWhatsAppApi.sendMessage(COMPANY_ID, INSTANCE_ID, CONV_ID, '  texto  ')
     expect(result.ok).toBe(true)
+  })
+})
+
+// =============================================================================
+// listTemplates — MVP4A
+//
+// Cobertura:
+//   LT-01  URL correta
+//   LT-02  company_id incluído
+//   LT-03  instance_id incluído
+//   LT-04  after ausente quando não fornecido
+//   LT-05  after URL-encoded quando presente
+//   LT-06  auth header Bearer correto
+//   LT-07  resposta válida POSITIONAL returned
+//   LT-08  resposta válida NAMED returned
+//   LT-09  next_cursor null preserved
+//   LT-10  next_cursor string preserved
+//   LT-11  supported=true preserved
+//   LT-12  supported=false preserved
+//   LT-13  resposta 2xx malformada (templates não array) → throw fail-closed
+//   LT-14  template malformado (id ausente) → throw fail-closed
+//   LT-15  parameter malformado (component inválido) → throw fail-closed
+//   LT-16  next_cursor inválido → throw fail-closed
+//   LT-17  HTTP 401 → erro propagado
+//   LT-18  companyId vazio → throw sem fetch
+//   LT-19  instanceId vazio → throw sem fetch
+//   LT-20  nenhum campo proibido enviado (waba_id, phone_number_id, token, limit, status)
+// =============================================================================
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+const FAKE_TEMPLATE_POSITIONAL: MetaWhatsAppTemplate = {
+  id:                 'tpl-pos-0001',
+  name:               'hello_world',
+  language:           'pt_BR',
+  status:             'APPROVED',
+  category:           'UTILITY',
+  parameter_format:   'POSITIONAL',
+  components:         [{ type: 'BODY', text: 'Olá, {1}!' }],
+  parameters:         [{ component: 'BODY', key: '1', position: 1, example: 'João' }],
+  supported:          true,
+  unsupported_reason: null,
+}
+
+const FAKE_TEMPLATE_NAMED: MetaWhatsAppTemplate = {
+  id:                 'tpl-named-0002',
+  name:               'order_confirmation',
+  language:            'pt_BR',
+  status:             'APPROVED',
+  category:           'UTILITY',
+  parameter_format:   'NAMED',
+  components:         [{ type: 'BODY', text: 'Pedido {{order_id}} confirmado.' }],
+  parameters:         [{ component: 'BODY', key: 'order_id', position: null, example: '12345' }],
+  supported:          true,
+  unsupported_reason: null,
+}
+
+const FAKE_TEMPLATE_UNSUPPORTED: MetaWhatsAppTemplate = {
+  id:                 'tpl-unsup-0003',
+  name:               'promo_image',
+  language:           'pt_BR',
+  status:             'APPROVED',
+  category:           'MARKETING',
+  parameter_format:   'NAMED',
+  components:         [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Promoção!' }],
+  parameters:         [],
+  supported:          false,
+  unsupported_reason: 'header_media_not_supported',
+}
+
+const LIST_RESPONSE_POSITIONAL: GetMetaTemplatesResponse = {
+  templates:   [FAKE_TEMPLATE_POSITIONAL],
+  next_cursor: null,
+}
+
+const LIST_RESPONSE_PAGED: GetMetaTemplatesResponse = {
+  templates:   [FAKE_TEMPLATE_NAMED],
+  next_cursor: 'cursor-abc-xyz',
+}
+
+describe('metaWhatsAppApi.listTemplates', () => {
+
+  // LT-01 — URL correta
+  it('LT-01: URL correta — /api/whatsapp/meta/templates', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const url = calledUrl(spy)
+    expect(url.pathname).toBe('/api/whatsapp/meta/templates')
+  })
+
+  // LT-02 — company_id incluído
+  it('LT-02: company_id correto na query string', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const url = calledUrl(spy)
+    expect(url.searchParams.get('company_id')).toBe(COMPANY_ID)
+  })
+
+  // LT-03 — instance_id incluído
+  it('LT-03: instance_id correto na query string', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const url = calledUrl(spy)
+    expect(url.searchParams.get('instance_id')).toBe(INSTANCE_ID)
+  })
+
+  // LT-04 — after ausente quando não fornecido
+  it('LT-04: after ausente quando options não fornecido', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const url = calledUrl(spy)
+    expect(url.searchParams.has('after')).toBe(false)
+  })
+
+  // LT-05 — after URL-encoded quando presente
+  it('LT-05: after correto e URL-encoded na query string', async () => {
+    const spy = mockFetch(LIST_RESPONSE_PAGED)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID, { after: 'cursor-abc-xyz==' })
+    const url = calledUrl(spy)
+    expect(url.searchParams.get('after')).toBe('cursor-abc-xyz==')
+  })
+
+  // LT-06 — auth header
+  it('LT-06: Authorization header Bearer correto', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const auth = calledAuthHeader(spy)
+    expect(auth).toBe('Bearer fake-access-token-conv')
+  })
+
+  // LT-07 — resposta POSITIONAL
+  it('LT-07: resposta válida POSITIONAL — retorna template com parameter_format=POSITIONAL', async () => {
+    mockFetch(LIST_RESPONSE_POSITIONAL)
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates).toHaveLength(1)
+    expect(result.templates[0].parameter_format).toBe('POSITIONAL')
+    expect(result.templates[0].name).toBe('hello_world')
+  })
+
+  // LT-08 — resposta NAMED
+  it('LT-08: resposta válida NAMED — retorna template com parameter_format=NAMED', async () => {
+    mockFetch(LIST_RESPONSE_PAGED)
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].parameter_format).toBe('NAMED')
+  })
+
+  // LT-09 — next_cursor null
+  it('LT-09: next_cursor null preservado', async () => {
+    mockFetch(LIST_RESPONSE_POSITIONAL)
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.next_cursor).toBeNull()
+  })
+
+  // LT-10 — next_cursor string
+  it('LT-10: next_cursor string preservada', async () => {
+    mockFetch(LIST_RESPONSE_PAGED)
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.next_cursor).toBe('cursor-abc-xyz')
+  })
+
+  // LT-11 — supported true
+  it('LT-11: supported=true preservado', async () => {
+    mockFetch(LIST_RESPONSE_POSITIONAL)
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].supported).toBe(true)
+    expect(result.templates[0].unsupported_reason).toBeNull()
+  })
+
+  // LT-12 — supported false
+  it('LT-12: supported=false preservado com unsupported_reason', async () => {
+    mockFetch({ templates: [FAKE_TEMPLATE_UNSUPPORTED], next_cursor: null })
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].supported).toBe(false)
+    expect(result.templates[0].unsupported_reason).toBe('header_media_not_supported')
+  })
+
+  // LT-13 — resposta 2xx malformada (templates não array) → throw
+  it('LT-13: resposta 2xx com templates não-array → throw fail-closed', async () => {
+    mockFetch({ templates: 'invalid', next_cursor: null })
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // LT-14 — template malformado (id ausente)
+  it('LT-14: template com id ausente → throw fail-closed', async () => {
+    const bad = { ...FAKE_TEMPLATE_POSITIONAL, id: '' }
+    mockFetch({ templates: [bad], next_cursor: null })
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // LT-15 — parameter malformado (component inválido)
+  it('LT-15: parameter com component inválido → throw fail-closed', async () => {
+    const badParam = { component: 'FOOTER', key: 'name', position: null, example: null }
+    const badTemplate = { ...FAKE_TEMPLATE_POSITIONAL, parameters: [badParam] }
+    mockFetch({ templates: [badTemplate], next_cursor: null })
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // LT-16 — next_cursor inválido
+  it('LT-16: next_cursor inválido (number) → throw fail-closed', async () => {
+    mockFetch({ templates: [], next_cursor: 42 })
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // LT-17 — HTTP 401
+  it('LT-17: HTTP 401 → erro propagado sem throw genérico', async () => {
+    mockFetch({ error: 'unauthorized' }, 401)
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('unauthorized')
+  })
+
+  // LT-18 — companyId vazio
+  it('LT-18: companyId vazio → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.listTemplates('', INSTANCE_ID))
+      .rejects.toThrow('company_id é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // LT-19 — instanceId vazio
+  it('LT-19: instanceId vazio → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, ''))
+      .rejects.toThrow('instance_id é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // LT-20 — nenhum campo proibido
+  it('LT-20: nenhum campo proibido na URL (waba_id, phone_number_id, token, limit, status, name)', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    const url = calledUrl(spy)
+    expect(url.searchParams.has('waba_id')).toBe(false)
+    expect(url.searchParams.has('phone_number_id')).toBe(false)
+    expect(url.searchParams.has('token')).toBe(false)
+    expect(url.searchParams.has('limit')).toBe(false)
+    expect(url.searchParams.has('status')).toBe(false)
+    expect(url.searchParams.has('name')).toBe(false)
+  })
+})
+
+// =============================================================================
+// sendTemplate — MVP4A
+//
+// Cobertura:
+//   ST-01  endpoint correto
+//   ST-02  método POST
+//   ST-03  auth header Bearer correto
+//   ST-04  payload exato com body params
+//   ST-05  payload com header + body params
+//   ST-06  templateName preservado no payload
+//   ST-07  templateLanguage preservado no payload
+//   ST-08  campos proibidos ausentes do payload
+//   ST-09  companyId vazio → throw sem fetch
+//   ST-10  instanceId vazio → throw sem fetch
+//   ST-11  conversationId vazio → throw sem fetch
+//   ST-12  templateName vazio/whitespace → throw sem fetch
+//   ST-13  templateLanguage vazio/whitespace → throw sem fetch
+//   ST-14  parameterValues null → throw sem fetch
+//   ST-15  parameterValues array → throw sem fetch
+//   ST-16  parameterValues.body null → throw sem fetch
+//   ST-17  parameterValues.body array → throw sem fetch
+//   ST-18  parameterValues.header array → throw sem fetch
+//   ST-19  resposta válida retornada
+//   ST-20  ok != true em resposta 2xx → throw fail-closed
+//   ST-21  message_id ausente em resposta 2xx → throw fail-closed
+//   ST-22  message_id vazia em resposta 2xx → throw fail-closed
+//   ST-23  HTTP 400 com error code → propagado (template_not_found)
+//   ST-24  HTTP 422 com error code → propagado (template_params_mismatch)
+//   ST-25  HTTP 503 com error code → propagado (provider_unavailable)
+// =============================================================================
+
+const TMPL_NAME     = 'hello_world'
+const TMPL_LANG     = 'pt_BR'
+const TMPL_PARAMS_BODY_ONLY = { body: { '1': 'João' } }
+const TMPL_PARAMS_HEADER_BODY = { header: { '1': 'Banner' }, body: { '1': 'João' } }
+const SEND_TMPL_SUCCESS: MetaSendTemplateResponse = { ok: true, message_id: 'wamid.TMPL001' }
+
+describe('metaWhatsAppApi.sendTemplate', () => {
+
+  // ST-01 — endpoint correto
+  it('ST-01: endpoint correto — /api/whatsapp/meta/messages/send-template', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    const url = calledUrl(spy)
+    expect(url.pathname).toBe('/api/whatsapp/meta/messages/send-template')
+  })
+
+  // ST-02 — método POST
+  it('ST-02: método HTTP é POST', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    const init = spy.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe('POST')
+  })
+
+  // ST-03 — auth header
+  it('ST-03: Authorization header Bearer correto', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    expect(calledAuthHeader(spy)).toBe('Bearer fake-access-token-conv')
+  })
+
+  // ST-04 — payload exato com body params
+  it('ST-04: payload contém campos exatos com body params', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    const body = calledParsedBody(spy)
+    expect(body.company_id).toBe(COMPANY_ID)
+    expect(body.instance_id).toBe(INSTANCE_ID)
+    expect(body.conversation_id).toBe(CONV_ID)
+    expect(body.template_name).toBe(TMPL_NAME)
+    expect(body.template_language).toBe(TMPL_LANG)
+    expect(body.parameter_values).toEqual(TMPL_PARAMS_BODY_ONLY)
+  })
+
+  // ST-05 — payload com header + body
+  it('ST-05: payload parameter_values com header + body', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_HEADER_BODY)
+    const body = calledParsedBody(spy)
+    expect(body.parameter_values).toEqual(TMPL_PARAMS_HEADER_BODY)
+  })
+
+  // ST-06 — templateName preservado
+  it('ST-06: templateName preservado no payload', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, 'my_template', TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    const body = calledParsedBody(spy)
+    expect(body.template_name).toBe('my_template')
+  })
+
+  // ST-07 — templateLanguage preservado
+  it('ST-07: templateLanguage preservado no payload', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, 'en_US', TMPL_PARAMS_BODY_ONLY)
+    const body = calledParsedBody(spy)
+    expect(body.template_language).toBe('en_US')
+  })
+
+  // ST-08 — campos proibidos ausentes
+  it('ST-08: campos proibidos ausentes do payload', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    const body = calledParsedBody(spy)
+    expect(body).not.toHaveProperty('to')
+    expect(body).not.toHaveProperty('wa_id')
+    expect(body).not.toHaveProperty('waba_id')
+    expect(body).not.toHaveProperty('phone_number_id')
+    expect(body).not.toHaveProperty('token')
+    expect(body).not.toHaveProperty('access_token')
+    expect(body).not.toHaveProperty('components')
+    expect(body).not.toHaveProperty('status')
+    expect(body).not.toHaveProperty('category')
+    expect(body).not.toHaveProperty('parameter_format')
+  })
+
+  // ST-09 — companyId vazio
+  it('ST-09: companyId vazio → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate('', INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('company_id é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-10 — instanceId vazio
+  it('ST-10: instanceId vazio → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, '', CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('instance_id é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-11 — conversationId vazio
+  it('ST-11: conversationId vazio → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, '', TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('conversation_id é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-12 — templateName whitespace
+  it('ST-12: templateName somente espaços → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, '   ', TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('template_name é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-13 — templateLanguage whitespace
+  it('ST-13: templateLanguage somente espaços → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, '  ', TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('template_language é obrigatório')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-14 — parameterValues null
+  it('ST-14: parameterValues null → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, null as never))
+      .rejects.toThrow('parameter_values inválido')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-15 — parameterValues array
+  it('ST-15: parameterValues array → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, [] as never))
+      .rejects.toThrow('parameter_values inválido')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-16 — body null
+  it('ST-16: parameterValues.body null → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, { body: null as never }))
+      .rejects.toThrow('parameter_values.body inválido')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-17 — body array
+  it('ST-17: parameterValues.body array → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, { body: [] as never }))
+      .rejects.toThrow('parameter_values.body inválido')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-18 — header array
+  it('ST-18: parameterValues.header array → throw sem fetch', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(
+      COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG,
+      { header: [] as never, body: { '1': 'value' } }
+    )).rejects.toThrow('parameter_values.header inválido')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // ST-19 — resposta válida
+  it('ST-19: resposta válida retornada como MetaSendTemplateResponse', async () => {
+    mockFetch(SEND_TMPL_SUCCESS)
+    const result = await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    expect(result.ok).toBe(true)
+    expect(result.message_id).toBe('wamid.TMPL001')
+  })
+
+  // ST-20 — ok != true em resposta 2xx
+  it('ST-20: resposta 2xx com ok=false → throw fail-closed', async () => {
+    mockFetch({ ok: false, message_id: 'wamid.TMPL001' })
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // ST-21 — message_id ausente
+  it('ST-21: resposta 2xx sem message_id → throw fail-closed', async () => {
+    mockFetch({ ok: true })
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // ST-22 — message_id vazia
+  it('ST-22: resposta 2xx com message_id vazio → throw fail-closed', async () => {
+    mockFetch({ ok: true, message_id: '' })
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  // ST-23 — template_not_found propagado
+  it('ST-23: HTTP 400 com error=template_not_found → propagado', async () => {
+    mockFetch({ error: 'template_not_found' }, 400)
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('template_not_found')
+  })
+
+  // ST-24 — template_params_mismatch propagado
+  it('ST-24: HTTP 422 com error=template_params_mismatch → propagado', async () => {
+    mockFetch({ error: 'template_params_mismatch' }, 422)
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('template_params_mismatch')
+  })
+
+  // ST-25 — provider_unavailable propagado
+  it('ST-25: HTTP 503 com error=provider_unavailable → propagado', async () => {
+    mockFetch({ error: 'provider_unavailable' }, 503)
+    await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
+      .rejects.toThrow('provider_unavailable')
   })
 })

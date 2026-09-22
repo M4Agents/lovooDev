@@ -57,6 +57,8 @@ const CONV_FIELDS = 'id, instance_id';
 
 // Campos públicos retornados ao frontend.
 // Nunca incluir: company_id, meta_message_id (wamid), updated_at.
+// template_name e template_language: presentes nas colunas desde MVP4A.4.
+// Retornados como null em mensagens de texto — nunca ausentes do shape.
 const MSG_FIELDS = [
   'id',
   'conversation_id',
@@ -66,6 +68,8 @@ const MSG_FIELDS = [
   'body',
   'provider_timestamp',
   'created_at',
+  'template_name',
+  'template_language',
 ].join(', ');
 
 export default async function handler(req, res) {

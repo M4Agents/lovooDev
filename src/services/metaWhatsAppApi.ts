@@ -35,11 +35,16 @@ import type {
   GetMetaConversationsResponse,
   GetMetaInstancesResponse,
   GetMetaMessagesResponse,
+  GetMetaTemplatesResponse,
   MetaChatConversation,
   MetaChatMessage,
   MetaSendMessageResponse,
+  MetaSendTemplateResponse,
+  MetaTemplateParameter,
+  MetaTemplateParameterValues,
   MetaWabaSelectionOption,
   MetaWhatsAppInstance,
+  MetaWhatsAppTemplate,
   OnboardingCompleteInstance,
   OnboardingCompletePayload,
   OnboardingCompleteResponse,
@@ -380,6 +385,231 @@ export const metaWhatsAppApi = {
 
     // Fail-closed: resposta malformada não deve ser tratada como sucesso.
     // ok deve ser explicitamente true e message_id uma string não vazia.
+    if (data.ok !== true || typeof data.message_id !== 'string' || !data.message_id) {
+      throw new Error('Resposta inválida do servidor')
+    }
+
+    return { ok: true, message_id: data.message_id }
+  },
+
+  // ===========================================================================
+  // MVP4A — TEMPLATES
+  // ===========================================================================
+
+  /**
+   * Lista os templates de mensagem Meta WhatsApp aprovados da instância.
+   *
+   * GET /api/whatsapp/meta/templates
+   *   ?company_id=<uuid>
+   *   &instance_id=<uuid>
+   *   [&after=<cursor>]
+   *
+   * NUNCA enviar: waba_id, phone_number_id, token, status, name, limit.
+   * A paginação é controlada exclusivamente pelo backend via cursor opaco.
+   *
+   * Validação fail-closed no response:
+   *   - response deve ser objeto com templates (array) e next_cursor (string|null).
+   *   - Cada template e cada parâmetro são validados estruturalmente.
+   *   - Qualquer malformação → throw; sem inventar defaults.
+   */
+  async listTemplates(
+    companyId:  string,
+    instanceId: string,
+    options?: { after?: string },
+  ): Promise<GetMetaTemplatesResponse> {
+    if (!companyId)  throw new Error('company_id é obrigatório')
+    if (!instanceId) throw new Error('instance_id é obrigatório')
+
+    const headers = await getAuthHeaders()
+
+    const params = new URLSearchParams({ company_id: companyId, instance_id: instanceId })
+    if (options?.after != null) params.set('after', options.after)
+
+    const res = await fetch(`/api/whatsapp/meta/templates?${params.toString()}`, {
+      method:  'GET',
+      headers: { Authorization: (headers as Record<string, string>)['Authorization'] },
+    })
+
+    const raw = await res.json().catch(() => ({}) as Record<string, unknown>) as Record<string, unknown> & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(raw.error ?? 'Erro ao listar templates Meta WhatsApp')
+    }
+
+    // ── Validação estrutural fail-closed ─────────────────────────────────────
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('Resposta inválida do servidor: corpo não é objeto')
+    }
+
+    if (!Array.isArray(raw.templates)) {
+      throw new Error('Resposta inválida do servidor: templates não é array')
+    }
+
+    if (raw.next_cursor !== null && typeof raw.next_cursor !== 'string') {
+      throw new Error('Resposta inválida do servidor: next_cursor inválido')
+    }
+
+    const templates: MetaWhatsAppTemplate[] = []
+
+    for (const t of raw.templates as unknown[]) {
+      if (t === null || typeof t !== 'object' || Array.isArray(t)) {
+        throw new Error('Resposta inválida do servidor: template não é objeto')
+      }
+
+      const tmpl = t as Record<string, unknown>
+
+      if (typeof tmpl.id         !== 'string' || !tmpl.id)         throw new Error('Resposta inválida do servidor: template.id inválido')
+      if (typeof tmpl.name       !== 'string' || !tmpl.name)       throw new Error('Resposta inválida do servidor: template.name inválido')
+      if (typeof tmpl.language   !== 'string' || !tmpl.language)   throw new Error('Resposta inválida do servidor: template.language inválido')
+      if (tmpl.status            !== 'APPROVED')                   throw new Error('Resposta inválida do servidor: template.status não é APPROVED')
+      if (typeof tmpl.category   !== 'string' || !tmpl.category)   throw new Error('Resposta inválida do servidor: template.category inválido')
+      if (tmpl.parameter_format  !== 'POSITIONAL' && tmpl.parameter_format !== 'NAMED') {
+        throw new Error('Resposta inválida do servidor: template.parameter_format inválido')
+      }
+      if (!Array.isArray(tmpl.components)) throw new Error('Resposta inválida do servidor: template.components não é array')
+      if (!Array.isArray(tmpl.parameters)) throw new Error('Resposta inválida do servidor: template.parameters não é array')
+      if (typeof tmpl.supported  !== 'boolean')                    throw new Error('Resposta inválida do servidor: template.supported inválido')
+      if (tmpl.unsupported_reason !== null && typeof tmpl.unsupported_reason !== 'string') {
+        throw new Error('Resposta inválida do servidor: template.unsupported_reason inválido')
+      }
+
+      const parameters: MetaTemplateParameter[] = []
+
+      for (const p of tmpl.parameters as unknown[]) {
+        if (p === null || typeof p !== 'object' || Array.isArray(p)) {
+          throw new Error('Resposta inválida do servidor: parameter não é objeto')
+        }
+
+        const param = p as Record<string, unknown>
+
+        if (param.component !== 'HEADER' && param.component !== 'BODY') {
+          throw new Error('Resposta inválida do servidor: parameter.component inválido')
+        }
+        if (typeof param.key !== 'string' || !param.key) {
+          throw new Error('Resposta inválida do servidor: parameter.key inválido')
+        }
+        if (param.position !== null && (!Number.isInteger(param.position) || (param.position as number) < 1)) {
+          throw new Error('Resposta inválida do servidor: parameter.position inválido')
+        }
+        if (param.example !== null && typeof param.example !== 'string') {
+          throw new Error('Resposta inválida do servidor: parameter.example inválido')
+        }
+
+        parameters.push({
+          component: param.component as 'HEADER' | 'BODY',
+          key:       param.key as string,
+          position:  param.position as number | null,
+          example:   param.example as string | null,
+        })
+      }
+
+      templates.push({
+        id:                 tmpl.id               as string,
+        name:               tmpl.name             as string,
+        language:           tmpl.language         as string,
+        status:             'APPROVED',
+        category:           tmpl.category         as string,
+        parameter_format:   tmpl.parameter_format as 'POSITIONAL' | 'NAMED',
+        components:         tmpl.components       as MetaWhatsAppTemplate['components'],
+        parameters,
+        supported:          tmpl.supported        as boolean,
+        unsupported_reason: tmpl.unsupported_reason as string | null,
+      })
+    }
+
+    return {
+      templates,
+      next_cursor: raw.next_cursor as string | null,
+    }
+  },
+
+  /**
+   * Envia um template de mensagem Meta WhatsApp vinculado a uma conversa.
+   *
+   * POST /api/whatsapp/meta/messages/send-template
+   * body: {
+   *   company_id, instance_id, conversation_id,
+   *   template_name, template_language, parameter_values
+   * }
+   *
+   * NUNCA incluir no body: to, wa_id, waba_id, phone_number_id, token,
+   *   access_token, components, status, category, parameter_format.
+   *
+   * O destinatário (wa_id) é resolvido exclusivamente no backend.
+   * O backend é autoridade para validação semântica de parâmetros.
+   *
+   * Erros propagados via err.message:
+   *   template_not_found, template_language_not_found, template_unsupported,
+   *   template_params_mismatch, provider_unavailable, provider_error,
+   *   send_persistence_failed (⚠ NÃO reenviar)
+   */
+  async sendTemplate(
+    companyId:       string,
+    instanceId:      string,
+    conversationId:  string,
+    templateName:    string,
+    templateLanguage: string,
+    parameterValues: MetaTemplateParameterValues,
+  ): Promise<MetaSendTemplateResponse> {
+    // ── Validação defensiva pré-request ──────────────────────────────────────
+    if (!companyId)              throw new Error('company_id é obrigatório')
+    if (!instanceId)             throw new Error('instance_id é obrigatório')
+    if (!conversationId)         throw new Error('conversation_id é obrigatório')
+    if (!templateName?.trim())   throw new Error('template_name é obrigatório')
+    if (!templateLanguage?.trim()) throw new Error('template_language é obrigatório')
+
+    // parameterValues: deve ser objeto não-null, não-array, com body como objeto não-null, não-array.
+    if (
+      parameterValues === null ||
+      typeof parameterValues !== 'object' ||
+      Array.isArray(parameterValues)
+    ) {
+      throw new Error('parameter_values inválido')
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(parameterValues, 'body') ||
+      parameterValues.body === null ||
+      typeof parameterValues.body !== 'object' ||
+      Array.isArray(parameterValues.body)
+    ) {
+      throw new Error('parameter_values.body inválido')
+    }
+
+    if (parameterValues.header !== undefined) {
+      if (
+        parameterValues.header === null ||
+        typeof parameterValues.header !== 'object' ||
+        Array.isArray(parameterValues.header)
+      ) {
+        throw new Error('parameter_values.header inválido')
+      }
+    }
+
+    const headers = await getAuthHeaders()
+
+    const res = await fetch('/api/whatsapp/meta/messages/send-template', {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({
+        company_id:       companyId,
+        instance_id:      instanceId,
+        conversation_id:  conversationId,
+        template_name:    templateName,
+        template_language: templateLanguage,
+        parameter_values: parameterValues,
+        // NUNCA incluir: to, wa_id, waba_id, phone_number_id,
+        //   token, access_token, components, status, category, parameter_format
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as MetaSendTemplateResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao enviar template Meta WhatsApp')
+    }
+
+    // Fail-closed: resposta 2xx malformada não deve ser tratada como sucesso.
     if (data.ok !== true || typeof data.message_id !== 'string' || !data.message_id) {
       throw new Error('Resposta inválida do servidor')
     }

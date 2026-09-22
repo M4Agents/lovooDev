@@ -440,9 +440,10 @@ describe('GET messages — SELECT público', () => {
     expect(msgChain.select).toHaveBeenCalledTimes(1);
     const selectArg = msgChain.select.mock.calls[0][0];
 
-    // Campos públicos esperados
+    // Campos públicos esperados (inclui template metadata — MVP4A.4)
     const EXPECTED = ['id', 'conversation_id', 'instance_id', 'direction',
-                      'message_type', 'body', 'provider_timestamp', 'created_at'];
+                      'message_type', 'body', 'provider_timestamp', 'created_at',
+                      'template_name', 'template_language'];
     for (const field of EXPECTED) {
       expect(selectArg).toContain(field);
     }
@@ -610,5 +611,110 @@ describe('GET messages — reverse', () => {
     // Confirmar timestamps crescentes
     expect(msgs[0].provider_timestamp < msgs[1].provider_timestamp).toBe(true);
     expect(msgs[1].provider_timestamp < msgs[2].provider_timestamp).toBe(true);
+  });
+});
+
+// =============================================================================
+// MSG-22 — Template metadata: template_name e template_language no SELECT
+// =============================================================================
+
+describe('GET messages — template metadata (MVP4A.4)', () => {
+  /** Mensagem de texto: template_name/language são null — campo presente no shape. */
+  const FAKE_MSG_TEXT = {
+    id:                 'msg-text-0001-0000-0000-000000000001',
+    conversation_id:    FAKE_CONV_ID,
+    instance_id:        FAKE_INSTANCE_ID,
+    direction:          'inbound',
+    message_type:       'text',
+    body:               'Olá, mundo',
+    provider_timestamp: '2026-09-22T10:00:00.000Z',
+    created_at:         '2026-09-22T10:00:00.000Z',
+    template_name:      null,
+    template_language:  null,
+  };
+
+  /** Mensagem de template: ambos os campos preenchidos. */
+  const FAKE_MSG_TEMPLATE = {
+    id:                 'msg-tmpl-0001-0000-0000-000000000002',
+    conversation_id:    FAKE_CONV_ID,
+    instance_id:        FAKE_INSTANCE_ID,
+    direction:          'outbound',
+    message_type:       'template',
+    body:               'Olá, João! Seu código é 12345.',
+    provider_timestamp: '2026-09-22T10:01:00.000Z',
+    created_at:         '2026-09-22T10:01:00.000Z',
+    template_name:      'hello_world',
+    template_language:  'pt_BR',
+  };
+
+  it('MSG-22a: SELECT inclui template_name e template_language na query de messages', async () => {
+    const msgChain = makeMsgChain([FAKE_MSG_TEXT]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(msgChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+
+    const selectArg = msgChain.select.mock.calls[0][0];
+    expect(selectArg).toContain('template_name');
+    expect(selectArg).toContain('template_language');
+  });
+
+  it('MSG-22b: mensagem de texto — template_name e template_language preservados como null', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([FAKE_MSG_TEXT]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const msg = res._body.messages[0];
+    expect(msg.message_type).toBe('text');
+    expect(msg.template_name).toBeNull();
+    expect(msg.template_language).toBeNull();
+  });
+
+  it('MSG-22c: mensagem template — retorna message_type=template, body, template_name e template_language preenchidos', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([FAKE_MSG_TEMPLATE]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const msgs = res._body.messages;
+    expect(msgs).toHaveLength(1);
+
+    const msg = msgs[0];
+    expect(msg.message_type).toBe('template');
+    expect(msg.body).toBe('Olá, João! Seu código é 12345.');
+    expect(msg.template_name).toBe('hello_world');
+    expect(msg.template_language).toBe('pt_BR');
+  });
+
+  it('MSG-22d: template message NÃO expõe company_id mesmo com campos de template presentes', async () => {
+    const msgChain = makeMsgChain([FAKE_MSG_TEMPLATE]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(msgChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const selectArg = msgChain.select.mock.calls[0][0];
+    // template_name/language presentes, mas company_id continua ausente do SELECT
+    expect(selectArg).toContain('template_name');
+    expect(selectArg).not.toContain('company_id');
+    expect(selectArg).not.toContain('meta_message_id');
   });
 });

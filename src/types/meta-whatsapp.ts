@@ -186,10 +186,13 @@ export interface MetaChatMessage {
   conversation_id:    string
   instance_id:        string
   direction:          'inbound' | 'outbound'
-  message_type:       string          // 'text' no MVP3A; expansível sem breaking change
+  message_type:       string          // 'text' no MVP3A; 'template' no MVP4A; expansível sem breaking change
   body:               string
   provider_timestamp: string | null   // ISO-8601 | null
   created_at:         string
+  // MVP4A — template metadata (nulos em mensagens de texto, presentes em template)
+  template_name?:     string | null
+  template_language?: string | null
 }
 
 // ── Response shapes ───────────────────────────────────────────────────────────
@@ -230,6 +233,92 @@ export interface GetMetaMessagesResponse {
 //   internal_error          → erro interno inesperado
 
 export interface MetaSendMessageResponse {
+  ok:         true
+  message_id: string
+}
+
+// =============================================================================
+// MVP4A — MESSAGE TEMPLATES
+//
+// Tipos para o contrato de templates textuais retornados por:
+//   GET  /api/whatsapp/meta/templates
+//   POST /api/whatsapp/meta/messages/send-template
+//
+// Apenas templates aprovados (status=APPROVED) são retornados pela API.
+// Media, buttons, carousel e authentication templates não são modelados aqui.
+// =============================================================================
+
+// ── Formato dos parâmetros do template ───────────────────────────────────────
+// POSITIONAL: parâmetros por posição ({1}, {2}, ...) — legado Meta
+// NAMED:      parâmetros por nome ({{name}}, {{code}}, ...) — padrão atual
+
+export type MetaTemplateParameterFormat = 'POSITIONAL' | 'NAMED'
+
+// ── Parâmetro de preenchimento do template ────────────────────────────────────
+// Extraído pelo templateEngine.js — espelha a tabela meta_template_parameters.
+
+export interface MetaTemplateParameter {
+  component: 'HEADER' | 'BODY'
+  key:       string        // nome do parâmetro (ex: 'name', '1')
+  position:  number | null // 1-indexed para POSITIONAL, null para NAMED
+  example:   string | null // exemplo de valor (pode ser null)
+}
+
+// ── Componente do template (Graph API raw) ────────────────────────────────────
+// Os campos type e text cobrem HEADER e BODY textuais.
+// Campos adicionais são preservados via index signature sem modelagem profunda.
+
+export interface MetaTemplateComponent {
+  type:     string
+  format?:  string
+  text?:    string
+  [key: string]: unknown
+}
+
+// ── Template de mensagem completo ─────────────────────────────────────────────
+// Retornado pelo endpoint GET /templates após análise do templateEngine.
+
+export interface MetaWhatsAppTemplate {
+  id:                 string
+  name:               string
+  language:           string
+  status:             'APPROVED'
+  category:           string
+  parameter_format:   MetaTemplateParameterFormat
+  components:         MetaTemplateComponent[]
+  parameters:         MetaTemplateParameter[]
+  supported:          boolean
+  unsupported_reason: string | null
+}
+
+// ── Resposta de listagem de templates ────────────────────────────────────────
+
+export interface GetMetaTemplatesResponse {
+  templates:   MetaWhatsAppTemplate[]
+  next_cursor: string | null
+}
+
+// ── Valores dos parâmetros fornecidos pelo agente no picker ──────────────────
+// Espelha a estrutura aceita pelo backend send-template.js.
+// header é opcional (templates sem componente HEADER não o enviam).
+
+export interface MetaTemplateParameterValues {
+  header?: Record<string, string>
+  body:    Record<string, string>
+}
+
+// ── Resposta de envio de template ────────────────────────────────────────────
+// Erros distintos retornados pelo backend (propagados como err.message):
+//   template_not_found          → template inexistente na Graph API
+//   template_language_not_found → idioma inválido para o template
+//   template_unsupported        → template não suportado (ex: media, buttons)
+//   template_params_mismatch    → parâmetros enviados não batem com o template
+//   provider_unavailable        → timeout/rede com Graph
+//   provider_error              → Graph rejeitou com erro
+//   send_persistence_failed     → Graph aceitou, falhou ao salvar localmente
+//                                 ⚠ NÃO reenviar
+
+export interface MetaSendTemplateResponse {
   ok:         true
   message_id: string
 }
