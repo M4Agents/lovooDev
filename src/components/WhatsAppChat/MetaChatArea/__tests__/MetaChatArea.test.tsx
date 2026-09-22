@@ -78,7 +78,48 @@ vi.mock('../../../../hooks/chat/useMetaChatMessages', () => ({
 
 vi.mock('../../../../services/metaWhatsAppApi', () => ({
   metaWhatsAppApi: {
-    sendMessage: vi.fn(),
+    sendMessage:   vi.fn(),
+    sendTemplate:  vi.fn(),
+  },
+}))
+
+// Moca MetaTemplatePicker com stub controlável por testes.
+// O stub expõe botões que simulam as ações do picker sem renderizar
+// a lógica interna (já coberta em MetaTemplatePicker.test.tsx).
+vi.mock('../MetaTemplatePicker', () => ({
+  MetaTemplatePicker: ({
+    open,
+    onClose,
+    onSend,
+    sending,
+  }: {
+    open:    boolean
+    onClose: () => void
+    onSend:  (t: unknown, p: unknown) => Promise<void>
+    sending: boolean
+  }) => {
+    if (!open) return null
+    return (
+      <div data-testid="template-picker-mock">
+        <button type="button" onClick={onClose}>Fechar picker</button>
+        <button
+          type="button"
+          disabled={sending}
+          onClick={() =>
+            onSend(
+              {
+                id: 'tpl-mock-001', name: 'hello_world', language: 'pt_BR',
+                status: 'APPROVED', category: 'UTILITY', parameter_format: 'POSITIONAL',
+                components: [], parameters: [], supported: true, unsupported_reason: null,
+              },
+              { body: { '1': 'João' } },
+            )
+          }
+        >
+          Enviar template mock
+        </button>
+      </div>
+    )
   },
 }))
 
@@ -86,7 +127,8 @@ import { useMetaChatMessages }    from '../../../../hooks/chat/useMetaChatMessag
 import { metaWhatsAppApi }        from '../../../../services/metaWhatsAppApi'
 
 const mockUseMetaChatMessages = useMetaChatMessages as ReturnType<typeof vi.fn>
-const mockSendMessage         = metaWhatsAppApi.sendMessage as ReturnType<typeof vi.fn>
+const mockSendMessage         = metaWhatsAppApi.sendMessage  as ReturnType<typeof vi.fn>
+const mockSendTemplate        = metaWhatsAppApi.sendTemplate as ReturnType<typeof vi.fn>
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -163,6 +205,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockIdle()
   mockSendMessage.mockResolvedValue({ ok: true, message_id: FAKE_WAMID })
+  mockSendTemplate.mockResolvedValue({ ok: true, message_id: FAKE_WAMID })
 })
 
 afterEach(() => {
@@ -953,5 +996,201 @@ describe('MetaChatArea — MVP3D', () => {
       fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
     })
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+})
+
+// =============================================================================
+// MetaChatArea — MVP4A — Templates
+// MA-49…MA-67
+// =============================================================================
+
+describe('MetaChatArea — MVP4A Templates', () => {
+
+  // MA-49 — botão Template existe
+  it('MA-49: botão Template existe no composer Meta', () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByRole('button', { name: /template/i })).toBeTruthy()
+  })
+
+  // MA-50 — botão abre picker
+  it('MA-50: clicar botão Template abre picker', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.queryByTestId('template-picker-mock')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    expect(screen.getByTestId('template-picker-mock')).toBeTruthy()
+  })
+
+  // MA-51…MA-56 — sendTemplate recebe argumentos corretos
+  it('MA-51: sendTemplate recebe companyId correto', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][0]).toBe(COMPANY_ID)
+  })
+
+  it('MA-52: sendTemplate recebe instanceId correto (conversation.instance_id)', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][1]).toBe(CONV_FULL.instance_id)
+  })
+
+  it('MA-53: sendTemplate recebe conversationId correto', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][2]).toBe(CONV_ID)
+  })
+
+  it('MA-54: sendTemplate recebe template.name correto', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][3]).toBe('hello_world')
+  })
+
+  it('MA-55: sendTemplate recebe template.language correto', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][4]).toBe('pt_BR')
+  })
+
+  it('MA-56: sendTemplate recebe parameterValues correto', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    expect(mockSendTemplate.mock.calls[0][5]).toEqual({ body: { '1': 'João' } })
+  })
+
+  // MA-57 — payload nunca contém to/recipient
+  it('MA-57: sendTemplate NÃO recebe recipient/to/wa_id', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    const callArgs = mockSendTemplate.mock.calls[0] as unknown[]
+    // sendTemplate recebe somente: companyId, instanceId, conversationId, name, language, paramValues
+    expect(callArgs).toHaveLength(6)
+    // Garantir que nenhum dos 6 args é 'wa_id' ou 'to'
+    const strArgs = callArgs.filter(a => typeof a === 'string') as string[]
+    expect(strArgs).not.toContain(CONV_FULL.wa_id)
+  })
+
+  // MA-58 — sucesso: sem optimistic message
+  it('MA-58: sucesso de template NÃO cria optimistic message', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() => expect(mockSendTemplate).toHaveBeenCalled())
+    expect(document.querySelectorAll('[data-direction]')).toHaveLength(0)
+  })
+
+  // MA-59 — sucesso: picker fechado
+  it('MA-59: sucesso de template fecha o picker', async () => {
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    expect(screen.getByTestId('template-picker-mock')).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() => expect(screen.queryByTestId('template-picker-mock')).toBeNull())
+  })
+
+  // MA-60 — double click: somente 1 request
+  it('MA-60: duplo clique em Enviar template → somente 1 request sendTemplate', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendTemplate.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    fireEvent.click(screen.getByText('Enviar template mock'))
+    fireEvent.click(screen.getByText('Enviar template mock'))
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+    expect(mockSendTemplate).toHaveBeenCalledTimes(1)
+  })
+
+  // MA-61…MA-64 — erros de template
+  it('MA-61: erro template_not_found → mensagem de erro correta', async () => {
+    mockSendTemplate.mockRejectedValue(new Error('template_not_found'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Template não encontrado')
+    )
+  })
+
+  it('MA-62: erro template_language_not_found → mensagem de erro correta', async () => {
+    mockSendTemplate.mockRejectedValue(new Error('template_language_not_found'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Idioma do template')
+    )
+  })
+
+  it('MA-63: erro template_unsupported → mensagem de erro correta', async () => {
+    mockSendTemplate.mockRejectedValue(new Error('template_unsupported'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('formatos não suportados')
+    )
+  })
+
+  it('MA-64: erro template_params_mismatch → mensagem de erro correta', async () => {
+    mockSendTemplate.mockRejectedValue(new Error('template_params_mismatch'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('parâmetros fornecidos')
+    )
+  })
+
+  // MA-65 — message_type='template' renderiza body
+  it('MA-65: message_type="template" renderiza body (não "Mensagem não suportada")', () => {
+    const tmplMsg = makeMsg('msg-tpl-001', 'outbound', 'template', 'Olá, João! Código: 12345.')
+    mockIdle({ messages: [tmplMsg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Olá, João! Código: 12345.')).toBeTruthy()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  // MA-66 — outros message_type continuam "Mensagem não suportada"
+  it('MA-66: message_type="audio" permanece "Mensagem não suportada"', () => {
+    const audioMsg = makeMsg('msg-audio-001', 'inbound', 'audio', '')
+    mockIdle({ messages: [audioMsg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+  })
+
+  // MA-67 — race A→B para sendTemplate
+  it('MA-67: troca A→B durante sendTemplate A → resultado de A não contamina B', async () => {
+    let resolveSend!: (v: unknown) => void
+    mockSendTemplate.mockImplementation(() => new Promise(res => { resolveSend = res }))
+
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />
+    )
+
+    // Abrir picker e iniciar envio de A
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    fireEvent.click(screen.getByText('Enviar template mock'))
+
+    // Trocar para conversa B antes de A resolver
+    await act(async () => {
+      rerender(
+        <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID_B} conversation={CONV_FULL_B} />
+      )
+    })
+
+    // Resolver o envio de A (stale)
+    await act(async () => { resolveSend({ ok: true, message_id: FAKE_WAMID }) })
+
+    // Nenhum alerta de erro em B
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Picker não deve estar aberto em B (foi fechado pelo useEffect de conversationId)
+    expect(screen.queryByTestId('template-picker-mock')).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 // =============================================================================
-// MetaChatArea — MVP3D
+// MetaChatArea — MVP3D + MVP4A
 //
-// Área de mensagens Meta WhatsApp com composer de texto.
+// Área de mensagens Meta WhatsApp com composer de texto e templates.
 //
 // Responsabilidade:
 //   - Exibir header da conversa (contact_name / wa_id / status)
@@ -10,10 +10,10 @@
 //   - Estados: loading, error (+ retry), empty, mensagens
 //   - Scroll para o final ao carregar mensagens
 //   - Composer de texto: envio por botão ou Enter
+//   - Botão Template → abre MetaTemplatePicker → envia template textual
 //
 // Fora do escopo:
-//   - Realtime (MVP3E)
-//   - LeadPanel, templates, sugestões de IA
+//   - LeadPanel, sugestões de IA
 //   - Paginação histórica
 //   - Mídia, áudio, documentos
 //
@@ -31,9 +31,15 @@
 // =============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useMetaChatMessages }                        from '../../../hooks/chat/useMetaChatMessages'
-import { metaWhatsAppApi }                            from '../../../services/metaWhatsAppApi'
-import type { MetaChatConversation, MetaChatMessage } from '../../../types/meta-whatsapp'
+import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
+import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
+import { MetaTemplatePicker }   from './MetaTemplatePicker'
+import type {
+  MetaChatConversation,
+  MetaChatMessage,
+  MetaWhatsAppTemplate,
+  MetaTemplateParameterValues,
+} from '../../../types/meta-whatsapp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,9 +64,7 @@ function getInitials(name: string | null | undefined, fallback: string): string 
   const src = (name || fallback).trim()
   if (!src) return '?'
   const parts = src.split(/\s+/)
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   return src.substring(0, 2).toUpperCase()
 }
 
@@ -71,6 +75,7 @@ function getInitials(name: string | null | undefined, fallback: string): string 
 function getSendErrorMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : ''
   switch (code) {
+    // ── Texto ──────────────────────────────────────────────────────────────────
     case 'conversation_not_found':
       return 'Conversa não encontrada. Atualize a lista e tente novamente.'
     case 'instance_not_found':
@@ -81,14 +86,24 @@ function getSendErrorMessage(error: unknown): string {
       return 'Mensagem inválida. Verifique o conteúdo.'
     case 'invalid_message':
       return 'Mensagem não aceita pelo provedor.'
-    case 'provider_unavailable':
-      return 'Serviço temporariamente indisponível. Tente novamente.'
-    case 'provider_error':
-      return 'Não foi possível enviar a mensagem. Se a conversa estiver fora do prazo de 24h, é necessário usar um template aprovado.'
     case 'credential_unavailable':
       return 'Erro de configuração da instância. Contate o suporte.'
     case 'internal_error':
       return 'Erro interno ao enviar a mensagem.'
+    // ── Template (MVP4A) ───────────────────────────────────────────────────────
+    case 'template_not_found':
+      return 'Template não encontrado. Verifique se o template foi aprovado no Meta.'
+    case 'template_language_not_found':
+      return 'Idioma do template não disponível. Verifique as configurações do template.'
+    case 'template_unsupported':
+      return 'Este template contém formatos não suportados (mídia, botões, etc.).'
+    case 'template_params_mismatch':
+      return 'Os parâmetros fornecidos não correspondem ao template. Verifique os campos.'
+    // ── Compartilhados ─────────────────────────────────────────────────────────
+    case 'provider_unavailable':
+      return 'Serviço temporariamente indisponível. Tente novamente.'
+    case 'provider_error':
+      return 'Não foi possível enviar a mensagem. Se a conversa estiver fora do prazo de 24h, é necessário usar um template aprovado.'
     default:
       return 'Não foi possível enviar a mensagem.'
   }
@@ -122,26 +137,20 @@ function MetaChatHeader({ conversation }: MetaChatHeaderProps) {
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200/60 shadow-sm flex-shrink-0">
-      {/* Avatar por iniciais — sem requisição externa */}
       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
         <span className="text-white text-sm font-semibold select-none">{initials}</span>
       </div>
-
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-slate-800 truncate leading-tight">{displayName}</p>
-        {/* wa_id como identificador secundário — omitido quando igual ao displayName */}
         {waId && waId !== displayName && (
           <p className="text-xs text-slate-500 truncate">{waId}</p>
         )}
       </div>
-
       {status && (
         <span
           data-status={status}
           className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-            status === 'active'
-              ? 'bg-green-100 text-green-700'
-              : 'bg-slate-100 text-slate-600'
+            status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
           }`}
         >
           {status}
@@ -160,6 +169,9 @@ interface MetaMessageBubbleProps {
 function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   const isInbound = message.direction === 'inbound'
   const time      = formatTime(message.provider_timestamp ?? message.created_at)
+  // message_type='template': renderiza body persistido — sem reinterpolação.
+  // Outros tipos (image, audio, etc.) continuam "Mensagem não suportada".
+  const isRenderable = message.message_type === 'text' || message.message_type === 'template'
 
   return (
     <div
@@ -173,7 +185,7 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
             : 'bg-blue-500 text-white rounded-tr-sm'
         }`}
       >
-        {message.message_type === 'text' ? (
+        {isRenderable ? (
           <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
             {message.body}
           </p>
@@ -182,13 +194,10 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
             Mensagem não suportada
           </p>
         )}
-
         {time && (
-          <p
-            className={`text-[10px] mt-1 text-right leading-none ${
-              isInbound ? 'text-slate-400' : 'text-blue-100'
-            }`}
-          >
+          <p className={`text-[10px] mt-1 text-right leading-none ${
+            isInbound ? 'text-slate-400' : 'text-blue-100'
+          }`}>
             {time}
           </p>
         )}
@@ -203,9 +212,10 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
   const { messages, loading, error, refresh } = useMetaChatMessages(companyId, conversationId)
 
   // ── Composer state ──────────────────────────────────────────────────────────
-  const [text, setText]           = useState('')
-  const [isSending, setIsSending] = useState(false)
-  const [sendError, setSendError] = useState<string | null>(null)
+  const [text, setText]               = useState('')
+  const [isSending, setIsSending]     = useState(false)
+  const [sendError, setSendError]     = useState<string | null>(null)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
 
   // ── Composer refs ───────────────────────────────────────────────────────────
   // sendingRef: guarda síncrona contra duplo envio (antes do rerender de isSending)
@@ -213,7 +223,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
   // mountedRef: evita setState após unmount
   const mountedRef = useRef(true)
   // sendGenRef: contador de geração — incrementado ao trocar conversationId.
-  //             Impede que o resultado de um envio antigo contamine a nova conversa.
+  //             Impede que resultado de envio antigo contamine a nova conversa.
   const sendGenRef = useRef(0)
 
   // ── Mount / unmount ─────────────────────────────────────────────────────────
@@ -225,29 +235,69 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
   // ── Scroll ao carregar/atualizar mensagens ──────────────────────────────────
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
-    }
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
   }, [messages])
 
   // ── Resetar composer ao trocar de conversa ──────────────────────────────────
-  // Limpa texto e erro de envio ao mudar conversationId.
-  // Incrementa sendGenRef para invalidar quaisquer envios em andamento da
+  // Fecha picker e incrementa sendGenRef para invalidar envios em andamento da
   // conversa anterior — evita que o resultado de A contamine B.
-  // NÃO cancela a requisição Graph em andamento (impossível retroativamente).
   useEffect(() => {
     setText('')
     setSendError(null)
+    setIsPickerOpen(false)
     sendGenRef.current += 1
   }, [conversationId])
 
-  // ── handleSend ──────────────────────────────────────────────────────────────
+  // ── handleSend (texto) ──────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
-    // Guarda síncrona: impede duplo envio antes do rerender atualizar isSending
     if (sendingRef.current || !conversation?.instance_id || !text.trim()) return
 
-    const textToSend = text                  // capturar antes do await
-    const genAtSend  = sendGenRef.current    // capturar geração para stale check
+    const textToSend = text
+    const genAtSend  = sendGenRef.current
+
+    sendingRef.current = true
+    setIsSending(true)
+    setSendError(null)
+
+    let success      = false
+    let caughtError: unknown = undefined
+
+    try {
+      await metaWhatsAppApi.sendMessage(
+        companyId,
+        conversation.instance_id,
+        conversationId,
+        textToSend,
+      )
+      success = true
+    } catch (err) {
+      caughtError = err
+    } finally {
+      sendingRef.current = false
+      if (mountedRef.current) setIsSending(false)
+    }
+
+    if (!mountedRef.current || sendGenRef.current !== genAtSend) return
+
+    if (success) {
+      setText('')
+      refresh()
+    } else if (caughtError instanceof Error && caughtError.message === 'send_persistence_failed') {
+      setSendError(SEND_PERSISTENCE_FAILED_MSG)
+    } else {
+      setSendError(getSendErrorMessage(caughtError))
+    }
+  }, [companyId, conversation, conversationId, text, refresh])
+
+  // ── handleSendTemplate (MVP4A) ─────────────────────────────────────────────
+  // Reutiliza os mesmos guards anti-stale do handleSend (sendingRef, sendGenRef, mountedRef).
+  const handleSendTemplate = useCallback(async (
+    template:        MetaWhatsAppTemplate,
+    parameterValues: MetaTemplateParameterValues,
+  ) => {
+    if (sendingRef.current || !conversation?.instance_id) return
+
+    const genAtSend = sendGenRef.current
 
     sendingRef.current = true
     setIsSending(true)
@@ -258,42 +308,34 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
 
     try {
       // Destinatário resolvido pelo backend via conversation_id.
-      // wa_id / to NUNCA enviados pelo frontend.
-      await metaWhatsAppApi.sendMessage(
+      // to/wa_id/waba_id/phone_number_id NUNCA enviados pelo frontend.
+      await metaWhatsAppApi.sendTemplate(
         companyId,
-        conversation.instance_id,   // instance_id da conversa validada
+        conversation.instance_id,
         conversationId,
-        textToSend,
+        template.name,
+        template.language,
+        parameterValues,
       )
       success = true
     } catch (err) {
       caughtError = err
     } finally {
-      // Liberar lock sempre, independente de geração ou mount
       sendingRef.current = false
       if (mountedRef.current) setIsSending(false)
     }
 
-    // Anti-stale: ignorar se a conversa mudou ou o componente foi desmontado
     if (!mountedRef.current || sendGenRef.current !== genAtSend) return
 
     if (success) {
-      // Sucesso: limpar texto e atualizar lista (outbound já persistida no banco)
-      setText('')
+      setIsPickerOpen(false)
       refresh()
-    } else if (
-      caughtError instanceof Error &&
-      caughtError.message === 'send_persistence_failed'
-    ) {
-      // ⚠ send_persistence_failed: Graph pode já ter aceito a mensagem.
-      // NÃO limpar texto. NÃO chamar refresh. NÃO fazer retry.
-      // Usuário decide verificar manualmente antes de reenviar.
+    } else if (caughtError instanceof Error && caughtError.message === 'send_persistence_failed') {
       setSendError(SEND_PERSISTENCE_FAILED_MSG)
     } else {
-      // Erro comum: preservar texto para o usuário editar/reenviar
       setSendError(getSendErrorMessage(caughtError))
     }
-  }, [companyId, conversation, conversationId, text, refresh])
+  }, [companyId, conversation, conversationId, refresh])
 
   // ── handleKeyDown (Enter envia; Shift+Enter quebra linha) ───────────────────
   const handleKeyDown = useCallback(
@@ -306,8 +348,8 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     [handleSend],
   )
 
-  // ── canSend — condições para habilitar o botão ──────────────────────────────
-  const canSend = !isSending && !!conversation?.instance_id && !!text.trim()
+  const canSend        = !isSending && !!conversation?.instance_id && !!text.trim()
+  const canOpenPicker  = !isSending && !!conversation?.instance_id
 
   return (
     <div className="flex flex-col h-full bg-white/60 backdrop-blur-sm">
@@ -320,7 +362,6 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
         className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-slate-50/40 to-white/40"
       >
         {loading ? (
-          /* Estado: carregando */
           <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-3">
               <div className="animate-spin h-8 w-8 rounded-full border-2 border-blue-500 border-t-transparent" />
@@ -328,46 +369,43 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
             </div>
           </div>
         ) : error ? (
-          /* Estado: erro de leitura — independente do sendError do composer */
           <div className="flex items-center justify-center h-full">
             <div className="text-center p-6 max-w-xs">
               <p className="text-sm text-red-600 mb-4 leading-relaxed">{error}</p>
-              <button
-                type="button"
-                onClick={refresh}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-              >
+              <button type="button" onClick={refresh}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
                 Tentar novamente
               </button>
             </div>
           </div>
         ) : messages.length === 0 ? (
-          /* Estado: sem mensagens */
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-slate-500">Nenhuma mensagem nesta conversa</p>
           </div>
         ) : (
-          /* Estado: lista de mensagens — ordem cronológica conforme recebida do hook */
-          messages.map(msg => (
-            <MetaMessageBubble key={msg.id} message={msg} />
-          ))
+          messages.map(msg => <MetaMessageBubble key={msg.id} message={msg} />)
         )}
       </div>
 
-      {/* Composer — MVP3D
-          flex-shrink-0: não comprime quando a lista de mensagens é longa.
-          Erro de envio (sendError) é exibido aqui, isolado do erro de leitura da lista. */}
+      {/* Composer — MVP3D + MVP4A */}
       <div className="flex-shrink-0 border-t border-slate-200/60 bg-white px-4 py-3">
         {sendError && (
-          <p
-            role="alert"
-            className="text-xs text-red-600 mb-2 leading-relaxed"
-          >
+          <p role="alert" className="text-xs text-red-600 mb-2 leading-relaxed">
             {sendError}
           </p>
         )}
-
         <div className="flex items-end gap-2">
+          {/* Botão Template — MVP4A */}
+          <button
+            type="button"
+            onClick={() => setIsPickerOpen(true)}
+            disabled={!canOpenPicker}
+            aria-label="Template"
+            className="flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Template
+          </button>
+
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
@@ -389,6 +427,18 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
           </button>
         </div>
       </div>
+
+      {/* Template picker overlay — MVP4A */}
+      {conversation?.instance_id && (
+        <MetaTemplatePicker
+          companyId={companyId}
+          instanceId={conversation.instance_id}
+          open={isPickerOpen}
+          sending={isSending}
+          onClose={() => setIsPickerOpen(false)}
+          onSend={handleSendTemplate}
+        />
+      )}
     </div>
   )
 }
