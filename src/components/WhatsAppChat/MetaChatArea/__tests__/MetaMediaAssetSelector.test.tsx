@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 // =============================================================================
-// MetaMediaAssetSelector.test.tsx — MVP4B
+// MetaMediaAssetSelector.test.tsx — MVP4B.4D.2C
 //
-// Testa o seletor de media assets em isolamento.
+// Seletor unificado CML + LMU. Testa o componente em isolamento.
 // NÃO acessa Supabase real, endpoint real ou storage real.
 //
-// MAS-01  IMAGE → getCompanyFiles fileType=image
-// MAS-02  VIDEO → fileType=video
-// MAS-03  DOCUMENT → fileType=document
+// MAS-01  IMAGE → getMediaPicker com mediaType=IMAGE
+// MAS-02  VIDEO → mediaType=VIDEO
+// MAS-03  DOCUMENT → mediaType=DOCUMENT
 //
-// MAS-04  IMAGE mostra somente JPEG/PNG (filtra mime incompatível)
-// MAS-05  VIDEO mostra somente MP4/3GPP
-// MAS-06  DOCUMENT mostra somente PDF
+// MAS-04  IMAGE mostra somente JPEG/PNG selecionáveis; GIF desabilitado
+// MAS-05  VIDEO mostra somente MP4/3GPP; AVI desabilitado
+// MAS-06  DOCUMENT mostra somente PDF; DOCX desabilitado
 //
-// MAS-07  asset compatível selecionável → onSelect com id correto
+// MAS-07  asset compatível selecionável → onSelect com picker_id correto
 // MAS-08  asset acima do limite → desabilitado; onSelect não chamado
 // MAS-09  mostra filename e tamanho formatado
 // MAS-10  DOCUMENT sem preview_url usa ícone fallback
@@ -25,14 +25,10 @@
 // MAS-15  error state com mensagem
 // MAS-16  retry reinicia carregamento
 //
-// MAS-17  paginação append — arquivos anteriores preservados
-// MAS-18  "Carregar mais" solicita próxima página
-//
-// MAS-19  search debounce — não dispara antes do debounce
-// MAS-20  search reseta page e items
+// MAS-17  truncated=true exibe aviso "100 assets mais recentes"
+// MAS-18  search client-side filtra por filename sem chamar API novamente
 //
 // MAS-21  stale mediaFormat — resposta antiga descartada
-// MAS-22  stale search — resposta antiga descartada
 // MAS-23  unmount durante carregamento — nenhum setState tardio
 // =============================================================================
 
@@ -44,69 +40,45 @@ import { MetaMediaAssetSelector } from '../MetaMediaAssetSelector'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../../../../lib/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(),
-    },
+vi.mock('../../../../services/metaWhatsAppApi', () => ({
+  metaWhatsAppApi: {
+    getMediaPicker: vi.fn(),
   },
 }))
 
-vi.mock('../../../../services/mediaLibraryApi', () => ({
-  mediaLibraryApi: {
-    getCompanyFiles: vi.fn(),
-  },
-}))
+import { metaWhatsAppApi } from '../../../../services/metaWhatsAppApi'
 
-import { supabase }        from '../../../../lib/supabase'
-import { mediaLibraryApi } from '../../../../services/mediaLibraryApi'
-
-const mockGetSession     = supabase.auth.getSession     as ReturnType<typeof vi.fn>
-const mockGetCompanyFiles = mediaLibraryApi.getCompanyFiles as ReturnType<typeof vi.fn>
+const mockGetMediaPicker = metaWhatsAppApi.getMediaPicker as ReturnType<typeof vi.fn>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const COMPANY  = 'co-001'
-const TOKEN    = 'fake-session-token'
+const COMPANY = 'co-001'
 
-function sessionOk() {
-  mockGetSession.mockResolvedValue({ data: { session: { access_token: TOKEN } } })
-}
+type MediaType = 'IMAGE' | 'VIDEO' | 'DOCUMENT'
 
-function makeFile(overrides: Partial<{
-  id:                string
-  original_filename: string
-  file_type:         string
-  mime_type:         string
-  file_size:         number
-  preview_url:       string | null
+function makeItem(overrides: Partial<{
+  picker_id:   string
+  source:      string
+  filename:    string
+  media_type:  MediaType
+  mime_type:   string
+  file_size:   number
+  preview_url: string | null
 }> = {}) {
+  const pid = overrides.picker_id ?? 'cml:file-001-0000-0000-0000-000000000000'
   return {
-    id:                overrides.id                ?? 'file-001',
-    original_filename: overrides.original_filename ?? 'foto.jpg',
-    file_type:         overrides.file_type         ?? 'image',
-    mime_type:         overrides.mime_type         ?? 'image/jpeg',
-    file_size:         overrides.file_size         ?? 1_000_000,
-    preview_url:       overrides.preview_url       ?? 'https://cdn.example.com/foto.jpg',
-    s3_key:            'biblioteca/companies/co-001/foto.jpg',
-    received_at:       '2026-09-01T10:00:00.000Z',
-    created_at:        '2026-09-01T10:00:00.000Z',
+    picker_id:   pid,
+    source:      overrides.source      ?? 'company_media_library',
+    filename:    overrides.filename    ?? 'foto.jpg',
+    media_type:  overrides.media_type  ?? 'IMAGE' as MediaType,
+    mime_type:   overrides.mime_type   ?? 'image/jpeg',
+    file_size:   overrides.file_size   ?? 1_000_000,
+    preview_url: overrides.preview_url ?? 'https://cdn.example.com/foto.jpg',
   }
 }
 
-function makePaginatedResult(files: ReturnType<typeof makeFile>[], hasNextPage = false, totalCount?: number) {
-  const tc = totalCount ?? files.length
-  return {
-    files,
-    pagination: {
-      page: 1, limit: 50, total: tc, totalCount: tc,
-      totalPages: Math.ceil(tc / 50),
-      hasNextPage,
-      hasPrevPage: false,
-    },
-    filters: { leadId: '', file_type: 'all', search: '' },
-    lastUpdated: new Date().toISOString(),
-  }
+function makePickerResult(items: ReturnType<typeof makeItem>[], truncated = false) {
+  return { items, truncated }
 }
 
 const defaultOnSelect = vi.fn()
@@ -118,7 +90,7 @@ function renderSelector(props: Partial<PickerProps> = {}) {
     <MetaMediaAssetSelector
       companyId={props.companyId ?? COMPANY}
       mediaFormat={props.mediaFormat ?? 'IMAGE'}
-      selectedAssetId={props.selectedAssetId}
+      selectedPickerId={props.selectedPickerId}
       onSelect={props.onSelect ?? defaultOnSelect}
       disabled={props.disabled}
     />
@@ -127,7 +99,6 @@ function renderSelector(props: Partial<PickerProps> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  sessionOk()
 })
 
 afterEach(() => {
@@ -135,29 +106,29 @@ afterEach(() => {
 })
 
 // =============================================================================
-// MAS-01..03 — Mapeamento de mediaFormat → fileType
+// MAS-01..03 — Mapeamento de mediaFormat → mediaType
 // =============================================================================
 
-describe('MetaMediaAssetSelector — mapeamento fileType', () => {
-  it('MAS-01: IMAGE → getCompanyFiles com fileType=image', async () => {
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([]))
+describe('MetaMediaAssetSelector — mapeamento mediaType', () => {
+  it('MAS-01: IMAGE → getMediaPicker com mediaType=IMAGE', async () => {
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([]))
     renderSelector({ mediaFormat: 'IMAGE' })
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalled())
-    expect(mockGetCompanyFiles.mock.calls[0][2]).toMatchObject({ fileType: 'image' })
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalled())
+    expect(mockGetMediaPicker.mock.calls[0][1]).toBe('IMAGE')
   })
 
-  it('MAS-02: VIDEO → getCompanyFiles com fileType=video', async () => {
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([]))
+  it('MAS-02: VIDEO → getMediaPicker com mediaType=VIDEO', async () => {
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([]))
     renderSelector({ mediaFormat: 'VIDEO' })
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalled())
-    expect(mockGetCompanyFiles.mock.calls[0][2]).toMatchObject({ fileType: 'video' })
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalled())
+    expect(mockGetMediaPicker.mock.calls[0][1]).toBe('VIDEO')
   })
 
-  it('MAS-03: DOCUMENT → getCompanyFiles com fileType=document', async () => {
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([]))
+  it('MAS-03: DOCUMENT → getMediaPicker com mediaType=DOCUMENT', async () => {
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([]))
     renderSelector({ mediaFormat: 'DOCUMENT' })
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalled())
-    expect(mockGetCompanyFiles.mock.calls[0][2]).toMatchObject({ fileType: 'document' })
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalled())
+    expect(mockGetMediaPicker.mock.calls[0][1]).toBe('DOCUMENT')
   })
 })
 
@@ -167,133 +138,137 @@ describe('MetaMediaAssetSelector — mapeamento fileType', () => {
 
 describe('MetaMediaAssetSelector — filtro MIME visual', () => {
   it('MAS-04: IMAGE mostra JPEG/PNG selecionáveis; GIF desabilitado', async () => {
-    const jpeg = makeFile({ id: 'f-jpeg', mime_type: 'image/jpeg', file_type: 'image' })
-    const png  = makeFile({ id: 'f-png',  mime_type: 'image/png',  file_type: 'image', original_filename: 'img.png' })
-    const gif  = makeFile({ id: 'f-gif',  mime_type: 'image/gif',  file_type: 'image', original_filename: 'img.gif' })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([jpeg, png, gif]))
+    const jpeg = makeItem({ picker_id: 'cml:f-jpeg-0000-0000-0000-000000000000', mime_type: 'image/jpeg', filename: 'foto.jpg' })
+    const png  = makeItem({ picker_id: 'cml:f-png0-0000-0000-0000-000000000000', mime_type: 'image/png',  filename: 'img.png'  })
+    const gif  = makeItem({ picker_id: 'cml:f-gif0-0000-0000-0000-000000000000', mime_type: 'image/gif',  filename: 'img.gif'  })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([jpeg, png, gif]))
 
     renderSelector({ mediaFormat: 'IMAGE' })
-    await waitFor(() => screen.getByTestId('mas-asset-f-jpeg'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${jpeg.picker_id}`))
 
-    const jpegBtn = screen.getByTestId('mas-asset-f-jpeg') as HTMLButtonElement
-    const pngBtn  = screen.getByTestId('mas-asset-f-png')  as HTMLButtonElement
-    const gifBtn  = screen.getByTestId('mas-asset-f-gif')  as HTMLButtonElement
+    const jpegBtn = screen.getByTestId(`mas-asset-${jpeg.picker_id}`) as HTMLButtonElement
+    const pngBtn  = screen.getByTestId(`mas-asset-${png.picker_id}`)  as HTMLButtonElement
+    const gifBtn  = screen.getByTestId(`mas-asset-${gif.picker_id}`)  as HTMLButtonElement
 
     expect(jpegBtn.disabled).toBe(false)
     expect(pngBtn.disabled).toBe(false)
-    expect(gifBtn.disabled).toBe(true)   // GIF não está na whitelist
+    expect(gifBtn.disabled).toBe(true)   // GIF não está na whitelist IMAGE
   })
 
   it('MAS-05: VIDEO mostra MP4/3GPP selecionáveis; AVI desabilitado', async () => {
-    const mp4  = makeFile({ id: 'v-mp4',  mime_type: 'video/mp4',  file_type: 'video', original_filename: 'vid.mp4' })
-    const gpp  = makeFile({ id: 'v-3gpp', mime_type: 'video/3gpp', file_type: 'video', original_filename: 'vid.3gp' })
-    const avi  = makeFile({ id: 'v-avi',  mime_type: 'video/avi',  file_type: 'video', original_filename: 'vid.avi' })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([mp4, gpp, avi]))
+    const mp4  = makeItem({ picker_id: 'cml:v-mp40-0000-0000-0000-000000000000', media_type: 'VIDEO', mime_type: 'video/mp4',  filename: 'vid.mp4' })
+    const gpp  = makeItem({ picker_id: 'cml:v-3gpp-0000-0000-0000-000000000000', media_type: 'VIDEO', mime_type: 'video/3gpp', filename: 'vid.3gp' })
+    const avi  = makeItem({ picker_id: 'cml:v-avi0-0000-0000-0000-000000000000', media_type: 'VIDEO', mime_type: 'video/avi',  filename: 'vid.avi' })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([mp4, gpp, avi]))
 
     renderSelector({ mediaFormat: 'VIDEO' })
-    await waitFor(() => screen.getByTestId('mas-asset-v-mp4'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${mp4.picker_id}`))
 
-    expect((screen.getByTestId('mas-asset-v-mp4')  as HTMLButtonElement).disabled).toBe(false)
-    expect((screen.getByTestId('mas-asset-v-3gpp') as HTMLButtonElement).disabled).toBe(false)
-    expect((screen.getByTestId('mas-asset-v-avi')  as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId(`mas-asset-${mp4.picker_id}`) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByTestId(`mas-asset-${gpp.picker_id}`) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByTestId(`mas-asset-${avi.picker_id}`) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('MAS-06: DOCUMENT mostra PDF selecionável; DOCX desabilitado', async () => {
-    const pdf  = makeFile({ id: 'd-pdf',  mime_type: 'application/pdf',   file_type: 'document', original_filename: 'doc.pdf' })
-    const docx = makeFile({ id: 'd-docx', mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', file_type: 'document', original_filename: 'doc.docx' })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([pdf, docx]))
+    const pdf  = makeItem({ picker_id: 'cml:d-pdf0-0000-0000-0000-000000000000', media_type: 'DOCUMENT', mime_type: 'application/pdf', filename: 'doc.pdf' })
+    const docx = makeItem({ picker_id: 'cml:d-docx-0000-0000-0000-000000000000', media_type: 'DOCUMENT', mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', filename: 'doc.docx' })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([pdf, docx]))
 
     renderSelector({ mediaFormat: 'DOCUMENT' })
-    await waitFor(() => screen.getByTestId('mas-asset-d-pdf'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${pdf.picker_id}`))
 
-    expect((screen.getByTestId('mas-asset-d-pdf')  as HTMLButtonElement).disabled).toBe(false)
-    expect((screen.getByTestId('mas-asset-d-docx') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId(`mas-asset-${pdf.picker_id}`)  as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByTestId(`mas-asset-${docx.picker_id}`) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
 // =============================================================================
-// MAS-07..09 — Seleção e informações
+// MAS-07..12 — Seleção e display
 // =============================================================================
 
 describe('MetaMediaAssetSelector — seleção e display', () => {
-  it('MAS-07: clicar asset compatível → onSelect com id correto', async () => {
-    const file = makeFile({ id: 'f-sel-001', mime_type: 'image/jpeg' })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([file]))
+  it('MAS-07: clicar asset compatível → onSelect com picker_id correto', async () => {
+    const item = makeItem({ picker_id: 'cml:f-sel-0000-0000-0000-000000000000', mime_type: 'image/jpeg', filename: 'foto.jpg' })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([item]))
 
     const onSelect = vi.fn()
     renderSelector({ mediaFormat: 'IMAGE', onSelect })
-    await waitFor(() => screen.getByTestId('mas-asset-f-sel-001'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${item.picker_id}`))
 
-    fireEvent.click(screen.getByTestId('mas-asset-f-sel-001'))
-    expect(onSelect).toHaveBeenCalledWith({ id: 'f-sel-001' })
-    // Somente id — nenhum campo proibido
+    fireEvent.click(screen.getByTestId(`mas-asset-${item.picker_id}`))
+    expect(onSelect).toHaveBeenCalledWith({ picker_id: item.picker_id })
+    // Somente picker_id — nenhum campo interno exposto
     expect(onSelect.mock.calls[0][0]).not.toHaveProperty('s3_key')
-    expect(onSelect.mock.calls[0][0]).not.toHaveProperty('mime_type')
-    expect(onSelect.mock.calls[0][0]).not.toHaveProperty('preview_url')
-    expect(onSelect.mock.calls[0][0]).not.toHaveProperty('file_size')
+    expect(onSelect.mock.calls[0][0]).not.toHaveProperty('source_ref')
+    expect(onSelect.mock.calls[0][0]).not.toHaveProperty('id')
   })
 
   it('MAS-08: asset acima do limite → desabilitado; onSelect NÃO chamado', async () => {
     // IMAGE limite = 5 MB; arquivo = 6 MB
-    const big = makeFile({ id: 'f-big-001', mime_type: 'image/jpeg', file_size: 6_000_000 })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([big]))
+    const big = makeItem({ picker_id: 'cml:f-big0-0000-0000-0000-000000000000', mime_type: 'image/jpeg', file_size: 6_000_000 })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([big]))
 
     const onSelect = vi.fn()
     renderSelector({ mediaFormat: 'IMAGE', onSelect })
-    await waitFor(() => screen.getByTestId('mas-asset-f-big-001'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${big.picker_id}`))
 
-    const btn = screen.getByTestId('mas-asset-f-big-001') as HTMLButtonElement
+    const btn = screen.getByTestId(`mas-asset-${big.picker_id}`) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
     fireEvent.click(btn)
     expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('MAS-09: filename e tamanho formatado visíveis', async () => {
-    const file = makeFile({ id: 'f-info-001', original_filename: 'relatorio.jpg', file_size: 2_500_000 })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([file]))
+    const item = makeItem({ picker_id: 'cml:f-info-0000-0000-0000-000000000000', filename: 'relatorio.jpg', file_size: 2_500_000 })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([item]))
 
     renderSelector({ mediaFormat: 'IMAGE' })
     await waitFor(() => screen.getByText('relatorio.jpg'))
-    // Tamanho: 2.5 MB (ou 2500000 / 1024 / 1024 ≈ 2.4 MB — aceitar qualquer número + MB)
-    const sizeEl = screen.getByTestId('mas-asset-f-info-001')
-    expect(sizeEl.textContent).toMatch(/MB/)
+
+    const assetEl = screen.getByTestId(`mas-asset-${item.picker_id}`)
+    expect(assetEl.textContent).toMatch(/MB/)
   })
 
   it('MAS-10: DOCUMENT sem preview_url usa ícone fallback (📄)', async () => {
-    const doc = makeFile({
-      id: 'd-icon-001', file_type: 'document', mime_type: 'application/pdf',
-      original_filename: 'arquivo.pdf', preview_url: null,
+    const doc = makeItem({
+      picker_id:   'cml:d-icon-0000-0000-0000-000000000000',
+      media_type:  'DOCUMENT',
+      mime_type:   'application/pdf',
+      filename:    'arquivo.pdf',
+      preview_url: null,
     })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([doc]))
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([doc]))
 
     renderSelector({ mediaFormat: 'DOCUMENT' })
-    await waitFor(() => screen.getByTestId('mas-asset-d-icon-001'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${doc.picker_id}`))
     expect(screen.getByTestId('mas-doc-icon')).toBeTruthy()
   })
 
   it('MAS-11: IMAGE com preview_url quebrada → img oculta via onError (sem crash)', async () => {
-    const file = makeFile({ id: 'f-broken-001', preview_url: 'https://broken.example.com/404.jpg' })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([file]))
+    const item = makeItem({ picker_id: 'cml:f-brkn-0000-0000-0000-000000000000', preview_url: 'https://broken.example.com/404.jpg' })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([item]))
 
     renderSelector({ mediaFormat: 'IMAGE' })
-    await waitFor(() => screen.getByTestId('mas-asset-f-broken-001'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${item.picker_id}`))
 
     const img = screen.getByTestId('mas-image-preview') as HTMLImageElement
     expect(img).toBeTruthy()
-    // Simular erro de carregamento da imagem
     fireEvent.error(img)
     expect(img.style.display).toBe('none')
   })
 
   it('MAS-12: VIDEO usa preload=metadata e NÃO tem autoplay', async () => {
-    const vid = makeFile({
-      id: 'v-noauto-001', file_type: 'video', mime_type: 'video/mp4',
-      original_filename: 'video.mp4', preview_url: 'https://cdn.example.com/video.mp4',
+    const vid = makeItem({
+      picker_id:   'cml:v-meta-0000-0000-0000-000000000000',
+      media_type:  'VIDEO',
+      mime_type:   'video/mp4',
+      filename:    'video.mp4',
+      preview_url: 'https://cdn.example.com/video.mp4',
     })
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([vid]))
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([vid]))
 
     renderSelector({ mediaFormat: 'VIDEO' })
-    await waitFor(() => screen.getByTestId('mas-asset-v-noauto-001'))
+    await waitFor(() => screen.getByTestId(`mas-asset-${vid.picker_id}`))
 
     const videoEl = screen.getByTestId('mas-video-preview') as HTMLVideoElement
     expect(videoEl.preload).toBe('metadata')
@@ -308,24 +283,21 @@ describe('MetaMediaAssetSelector — seleção e display', () => {
 
 describe('MetaMediaAssetSelector — loading / empty / error / retry', () => {
   it('MAS-13: loading exibido durante carga inicial', async () => {
-    // O componente chama getSession() antes de getCompanyFiles (async boundary).
-    // Portanto, o loading já está visível assim que o componente monta.
     let resolve!: (v: unknown) => void
-    mockGetCompanyFiles.mockImplementation(() => new Promise(r => { resolve = r }))
+    mockGetMediaPicker.mockImplementation(() => new Promise(r => { resolve = r }))
 
     renderSelector()
-    // Spinner visível imediatamente após mount (antes mesmo de getCompanyFiles ser chamado)
+    // Spinner visível imediatamente após mount
     expect(screen.getByTestId('mas-loading')).toBeTruthy()
 
-    // Aguardar getCompanyFiles ser chamado (após getSession resolver como microtask)
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalled())
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalled())
 
-    // Resolver para não deixar promise pendente e evitar warning de act()
-    await act(async () => { resolve(makePaginatedResult([])) })
+    // Resolver para não deixar promise pendente
+    await act(async () => { resolve(makePickerResult([])) })
   })
 
   it('MAS-14: empty state quando lista retorna vazia', async () => {
-    mockGetCompanyFiles.mockResolvedValueOnce(makePaginatedResult([]))
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([]))
 
     renderSelector()
     await waitFor(() => screen.getByTestId('mas-empty'))
@@ -333,7 +305,7 @@ describe('MetaMediaAssetSelector — loading / empty / error / retry', () => {
   })
 
   it('MAS-15: error state com mensagem amigável', async () => {
-    mockGetCompanyFiles.mockRejectedValueOnce(new Error('network_error'))
+    mockGetMediaPicker.mockRejectedValueOnce(new Error('network_error'))
 
     renderSelector()
     await waitFor(() => screen.getByTestId('mas-error'))
@@ -341,127 +313,74 @@ describe('MetaMediaAssetSelector — loading / empty / error / retry', () => {
   })
 
   it('MAS-16: clicar Tentar novamente reinicia carregamento', async () => {
-    mockGetCompanyFiles
+    const item = makeItem({ picker_id: 'cml:f-rtry-0000-0000-0000-000000000000' })
+    mockGetMediaPicker
       .mockRejectedValueOnce(new Error('network_error'))
-      .mockResolvedValueOnce(makePaginatedResult([makeFile({ id: 'f-retry-001' })]))
+      .mockResolvedValueOnce(makePickerResult([item]))
 
     renderSelector()
     await waitFor(() => screen.getByTestId('mas-error'))
     fireEvent.click(screen.getByText(/Tentar novamente/i))
-    await waitFor(() => screen.getByTestId('mas-asset-f-retry-001'))
-    expect(mockGetCompanyFiles).toHaveBeenCalledTimes(2)
+    await waitFor(() => screen.getByTestId(`mas-asset-${item.picker_id}`))
+    expect(mockGetMediaPicker).toHaveBeenCalledTimes(2)
   })
 })
 
 // =============================================================================
-// MAS-17..18 — Paginação
+// MAS-17..18 — Truncagem e search client-side
 // =============================================================================
 
-describe('MetaMediaAssetSelector — paginação', () => {
-  it('MAS-17: "Carregar mais" faz append dos novos itens preservando os anteriores', async () => {
-    const page1 = [makeFile({ id: 'pg1-001', original_filename: 'pg1.jpg' })]
-    const page2 = [makeFile({ id: 'pg2-001', original_filename: 'pg2.jpg', mime_type: 'image/jpeg' })]
-
-    mockGetCompanyFiles
-      .mockResolvedValueOnce(makePaginatedResult(page1, true, 2))
-      .mockResolvedValueOnce(makePaginatedResult(page2, false, 2))
+describe('MetaMediaAssetSelector — truncagem e search client-side', () => {
+  it('MAS-17: truncated=true exibe aviso sobre 100 assets mais recentes', async () => {
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([], true))
 
     renderSelector()
-    await waitFor(() => screen.getByTestId('mas-asset-pg1-001'))
-
-    // Botão "Carregar mais" visível
-    const loadMoreBtn = screen.getByTestId('mas-load-more')
-    expect(loadMoreBtn).toBeTruthy()
-
-    await act(async () => { fireEvent.click(loadMoreBtn) })
-    await waitFor(() => screen.getByTestId('mas-asset-pg2-001'))
-
-    // Ambos os itens visíveis
-    expect(screen.getByTestId('mas-asset-pg1-001')).toBeTruthy()
-    expect(screen.getByTestId('mas-asset-pg2-001')).toBeTruthy()
+    await waitFor(() => screen.getByTestId('mas-truncated-notice'))
+    expect(screen.getByTestId('mas-truncated-notice').textContent).toMatch(/100/)
   })
 
-  it('MAS-18: "Carregar mais" solicita página seguinte com page correto', async () => {
-    const page1 = [makeFile({ id: 'pg1-002', original_filename: 'pg1.jpg' })]
+  it('MAS-18: search client-side filtra por filename sem chamar API novamente', async () => {
+    const matches = makeItem({ picker_id: 'cml:f-abc0-0000-0000-0000-000000000000', filename: 'relatorio-abc.jpg' })
+    const other   = makeItem({ picker_id: 'cml:f-xyz0-0000-0000-0000-000000000000', filename: 'documento-xyz.jpg' })
+    mockGetMediaPicker.mockResolvedValueOnce(makePickerResult([matches, other]))
 
-    mockGetCompanyFiles
-      .mockResolvedValueOnce(makePaginatedResult(page1, true, 2))
-      .mockResolvedValueOnce(makePaginatedResult([], false, 2))
+    renderSelector({ mediaFormat: 'IMAGE' })
+    await waitFor(() => screen.getByTestId(`mas-asset-${matches.picker_id}`))
 
-    renderSelector()
-    await waitFor(() => screen.getByTestId('mas-load-more'))
+    // Ambos visíveis antes do filtro
+    expect(screen.getByTestId(`mas-asset-${matches.picker_id}`)).toBeTruthy()
+    expect(screen.getByTestId(`mas-asset-${other.picker_id}`)).toBeTruthy()
 
-    await act(async () => { fireEvent.click(screen.getByTestId('mas-load-more')) })
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(2))
+    // Filtrar por 'relatorio' — sem dispatch para API
+    fireEvent.change(screen.getByLabelText('Buscar mídia'), { target: { value: 'relatorio' } })
 
-    // Segunda chamada deve usar page=2
-    expect(mockGetCompanyFiles.mock.calls[1][2]).toMatchObject({ page: 2 })
+    // Apenas o item que bate com a busca permanece visível
+    expect(screen.getByTestId(`mas-asset-${matches.picker_id}`)).toBeTruthy()
+    expect(screen.queryByTestId(`mas-asset-${other.picker_id}`)).toBeNull()
+
+    // getMediaPicker chamado somente uma vez (carga inicial)
+    expect(mockGetMediaPicker).toHaveBeenCalledTimes(1)
   })
 })
 
 // =============================================================================
-// MAS-19..20 — Search com debounce
-// =============================================================================
-
-describe('MetaMediaAssetSelector — search', () => {
-  it('MAS-19: search não dispara request imediato antes do debounce', async () => {
-    mockGetCompanyFiles.mockResolvedValue(makePaginatedResult([]))
-
-    renderSelector()
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(1))
-
-    // Digitar sem avançar o timer
-    fireEvent.change(screen.getByLabelText('Buscar mídia'), { target: { value: 'abc' } })
-
-    // Ainda apenas 1 chamada (a inicial)
-    expect(mockGetCompanyFiles).toHaveBeenCalledTimes(1)
-  })
-
-  it('MAS-20: após debounce, search reseta page e items e carrega com query correta', async () => {
-    // Usar timers reais para evitar interação problemática entre vi.useFakeTimers e waitFor/act.
-    // O debounce é 350ms; aguardamos 500ms com timer real para garantir disparo.
-    const searchFile = makeFile({ id: 'search-001', original_filename: 'resultado.jpg' })
-
-    mockGetCompanyFiles
-      .mockResolvedValueOnce(makePaginatedResult([]))            // carga inicial
-      .mockResolvedValueOnce(makePaginatedResult([searchFile])) // após debounce
-
-    renderSelector()
-    // Aguardar carga inicial
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(1))
-
-    // Digitar no input de busca
-    fireEvent.change(screen.getByLabelText('Buscar mídia'), { target: { value: 'resultado' } })
-
-    // Aguardar disparo do debounce (> 350ms) e segunda chamada
-    await waitFor(
-      () => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(2),
-      { timeout: 2000 },
-    )
-
-    // Chamada com search correto e page=1
-    expect(mockGetCompanyFiles.mock.calls[1][2]).toMatchObject({ search: 'resultado', page: 1 })
-  }, 8000)
-})
-
-// =============================================================================
-// MAS-21..23 — Proteção stale
+// MAS-21 / MAS-23 — Proteção stale / unmount
 // =============================================================================
 
 describe('MetaMediaAssetSelector — stale guards', () => {
   it('MAS-21: stale response de mediaFormat anterior descartada ao trocar formato', async () => {
     let resolveImage!: (v: unknown) => void
-    const imageResult = makePaginatedResult([makeFile({ id: 'img-stale-001', original_filename: 'foto.jpg' })])
-    const docResult   = makePaginatedResult([makeFile({ id: 'doc-001', mime_type: 'application/pdf', file_type: 'document', original_filename: 'doc.pdf' })])
+    const imageResult = makePickerResult([makeItem({ picker_id: 'cml:img0-stl0-0000-0000-000000000000', filename: 'foto.jpg' })])
+    const docResult   = makePickerResult([makeItem({ picker_id: 'cml:doc0-ok00-0000-0000-000000000000', media_type: 'DOCUMENT', mime_type: 'application/pdf', filename: 'doc.pdf' })])
 
-    mockGetCompanyFiles
+    mockGetMediaPicker
       .mockImplementationOnce(() => new Promise(r => { resolveImage = r })) // IMAGE — pendente
       .mockResolvedValueOnce(docResult)                                       // DOCUMENT — resolve imediato
 
     const { rerender } = renderSelector({ mediaFormat: 'IMAGE' })
 
-    // Aguardar IMAGE iniciar carregamento (getSession → getCompanyFiles)
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(1))
+    // Aguardar IMAGE iniciar carregamento
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalledTimes(1))
 
     // Trocar para DOCUMENT antes de IMAGE resolver
     await act(async () => {
@@ -474,74 +393,30 @@ describe('MetaMediaAssetSelector — stale guards', () => {
       )
     })
 
-    await waitFor(() => screen.getByTestId('mas-asset-doc-001'))
+    await waitFor(() => screen.getByTestId('cml:doc0-ok00-0000-0000-000000000000'.replace(/:/g, '') === '' ? '' : `mas-asset-cml:doc0-ok00-0000-0000-000000000000`))
 
-    // Resolver IMAGE com resultado stale (após DOCUMENT já estar renderizado)
+    // Resolver IMAGE (stale) após DOCUMENT já renderizado
     await act(async () => { resolveImage(imageResult) })
 
-    // img-stale-001 NÃO deve aparecer (resposta IMAGE descartada pelo stale guard)
-    expect(screen.queryByTestId('mas-asset-img-stale-001')).toBeNull()
-    // doc-001 continua visível
-    expect(screen.getByTestId('mas-asset-doc-001')).toBeTruthy()
+    // Stale item não aparece
+    expect(screen.queryByTestId(`mas-asset-cml:img0-stl0-0000-0000-000000000000`)).toBeNull()
   })
-
-  it('MAS-22: stale search response descartada quando nova busca inicia antes de resolver', async () => {
-    // Usa timers reais para evitar conflito com waitFor.
-    let resolveAbc!: (v: unknown) => void
-    const abcResult = makePaginatedResult([makeFile({ id: 'abc-001', original_filename: 'abc.jpg' })])
-    const xyzResult = makePaginatedResult([makeFile({ id: 'xyz-001', original_filename: 'xyz.jpg', mime_type: 'image/jpeg' })])
-
-    mockGetCompanyFiles
-      .mockResolvedValueOnce(makePaginatedResult([]))              // carga inicial
-      .mockImplementationOnce(() => new Promise(r => { resolveAbc = r })) // "abc" — pendente
-      .mockResolvedValueOnce(xyzResult)                            // "xyz" — resolve imediato
-
-    renderSelector()
-    // Aguardar carga inicial
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(1))
-
-    // Digitar "abc" — dispara após debounce (≥350ms)
-    fireEvent.change(screen.getByLabelText('Buscar mídia'), { target: { value: 'abc' } })
-    // Aguardar chamada de "abc"
-    await waitFor(
-      () => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(2),
-      { timeout: 2000 },
-    )
-
-    // Digitar "xyz" antes de "abc" resolver
-    fireEvent.change(screen.getByLabelText('Buscar mídia'), { target: { value: 'xyz' } })
-    // Aguardar chamada de "xyz"
-    await waitFor(
-      () => expect(mockGetCompanyFiles).toHaveBeenCalledTimes(3),
-      { timeout: 2000 },
-    )
-
-    await waitFor(() => screen.getByTestId('mas-asset-xyz-001'))
-
-    // Resolver "abc" (stale) — resultado deve ser descartado
-    await act(async () => { resolveAbc(abcResult) })
-
-    // abc-001 NÃO deve aparecer (stale guard descartou)
-    expect(screen.queryByTestId('mas-asset-abc-001')).toBeNull()
-    // xyz-001 continua visível
-    expect(screen.getByTestId('mas-asset-xyz-001')).toBeTruthy()
-  }, 15000)
 
   it('MAS-23: unmount durante carregamento → nenhum setState tardio / sem warning', async () => {
     let resolve!: (v: unknown) => void
-    mockGetCompanyFiles.mockImplementation(() => new Promise(r => { resolve = r }))
+    mockGetMediaPicker.mockImplementation(() => new Promise(r => { resolve = r }))
 
     const { unmount } = renderSelector()
 
-    // Aguardar getCompanyFiles ser chamado (após getSession como microtask)
-    await waitFor(() => expect(mockGetCompanyFiles).toHaveBeenCalled())
+    // Aguardar getMediaPicker ser chamado
+    await waitFor(() => expect(mockGetMediaPicker).toHaveBeenCalled())
 
-    // Desmontar enquanto promise ainda pendente
+    // Desmontar enquanto promise pendente
     unmount()
 
-    // Resolver após unmount — stale guard (mountedRef / cancelled) deve impedir setState
+    // Resolver após unmount — stale guard deve impedir setState
     await expect(act(async () => {
-      resolve(makePaginatedResult([makeFile()]))
+      resolve(makePickerResult([makeItem()]))
     })).resolves.toBeUndefined()
   })
 })

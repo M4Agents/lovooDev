@@ -36,8 +36,10 @@ import type {
   GetMetaInstancesResponse,
   GetMetaMessagesResponse,
   GetMetaTemplatesResponse,
+  GetMetaMediaPickerResponse,
   MetaChatConversation,
   MetaChatMessage,
+  MetaMediaType,
   MetaSendMessageResponse,
   MetaSendTemplateResponse,
   MetaTemplateParameter,
@@ -629,5 +631,64 @@ export const metaWhatsAppApi = {
     }
 
     return { ok: true, message_id: data.message_id }
+  },
+
+  // ── MVP4B.4D.2C — Picker unificado CML + LMU ─────────────────────────────
+
+  /**
+   * Lista assets elegíveis para HEADER de template Meta.
+   * Retorna items de company_media_library (cml:*) e lead_media_unified (lmu:*).
+   *
+   * GET /api/whatsapp/meta/media/picker?company_id=<uuid>&media_type=IMAGE|VIDEO|DOCUMENT
+   */
+  async getMediaPicker(
+    companyId: string,
+    mediaType: MetaMediaType,
+  ): Promise<GetMetaMediaPickerResponse> {
+    const headers = await getAuthHeaders()
+    const url = `/api/whatsapp/meta/media/picker?company_id=${encodeURIComponent(companyId)}&media_type=${encodeURIComponent(mediaType)}`
+    const res = await fetch(url, { method: 'GET', headers })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as GetMetaMediaPickerResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? `HTTP ${res.status}`)
+    }
+
+    return {
+      items:     Array.isArray(data.items) ? data.items : [],
+      truncated: Boolean(data.truncated),
+    }
+  },
+
+  /**
+   * Importa idempotentemente um asset de lead_media_unified para company_media_library.
+   * Retorna o id do asset resultante em company_media_library.
+   *
+   * POST /api/whatsapp/meta/media/import
+   * Body: { company_id, source_id }
+   */
+  async importMedia(
+    companyId: string,
+    sourceId:  string,
+  ): Promise<{ id: string }> {
+    const headers = await getAuthHeaders()
+    const res = await fetch('/api/whatsapp/meta/media/import', {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({ company_id: companyId, source_id: sourceId }),
+    })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as { id?: string; error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? `HTTP ${res.status}`)
+    }
+
+    if (!data.id || typeof data.id !== 'string') {
+      throw new Error('internal_error')
+    }
+
+    return { id: data.id }
   },
 }

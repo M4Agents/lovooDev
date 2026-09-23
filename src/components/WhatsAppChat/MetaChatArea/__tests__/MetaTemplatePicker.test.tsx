@@ -55,22 +55,22 @@ vi.mock('../../../../services/metaWhatsAppApi', () => ({
 vi.mock('../MetaMediaAssetSelector', () => ({
   MetaMediaAssetSelector: ({
     mediaFormat,
-    selectedAssetId,
+    selectedPickerId,
     onSelect,
     disabled,
   }: {
-    mediaFormat:       string
-    selectedAssetId?:  string | null
-    onSelect:          (a: { id: string }) => void
-    disabled?:         boolean
+    mediaFormat:        string
+    selectedPickerId?:  string | null
+    onSelect:           (a: { picker_id: string }) => void
+    disabled?:          boolean
   }) => (
     <div data-testid={`mas-mock-${mediaFormat.toLowerCase()}`}>
-      <span data-testid="mas-selected-value">{selectedAssetId ?? ''}</span>
+      <span data-testid="mas-selected-value">{selectedPickerId ?? ''}</span>
       <button
         type="button"
         data-testid="mas-select-btn"
         disabled={!!disabled}
-        onClick={() => onSelect({ id: `mock-asset-id-${mediaFormat.toLowerCase()}` })}
+        onClick={() => onSelect({ picker_id: `cml:mock-${mediaFormat.toLowerCase()}-asset-00000000-0000-0000-0000-000000000000` })}
       >
         Selecionar mídia
       </button>
@@ -680,7 +680,7 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     })
     expect(onSend).toHaveBeenCalledTimes(1)
     const args = onSend.mock.calls[0] as unknown[]
-    expect(args[2]).toBe('mock-asset-id-image')
+    expect(args[2]).toBe('cml:mock-image-asset-00000000-0000-0000-0000-000000000000')
     // Garantir que 3º arg seja apenas string (id), sem campos extras
     expect(typeof args[2]).toBe('string')
   })
@@ -703,7 +703,7 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
     })
-    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-video')
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('cml:mock-video-asset-00000000-0000-0000-0000-000000000000')
   })
 
   it('MTP-09: template DOCUMENT → MetaMediaAssetSelector com mediaFormat=DOCUMENT', async () => {
@@ -718,7 +718,7 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
     })
-    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-document')
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('cml:mock-document-asset-00000000-0000-0000-0000-000000000000')
   })
 
   it('MTP-10: trocar de template IMAGE→NO_PARAMS → asset limpo; sem seletor', async () => {
@@ -731,7 +731,7 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     fireEvent.click(screen.getByTestId('mas-select-btn'))
 
     // Asset selecionado visível no mock
-    expect(screen.getByTestId('mas-selected-value').textContent).toBe('mock-asset-id-image')
+    expect(screen.getByTestId('mas-selected-value').textContent).toBe('cml:mock-image-asset-00000000-0000-0000-0000-000000000000')
 
     // Trocar para template textual
     fireEvent.click(screen.getByText('simple_template'))
@@ -753,7 +753,7 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     fireEvent.click(screen.getByText('promo_with_doc'))
 
     expect(screen.getByTestId('mas-mock-document')).toBeTruthy()
-    // selectedAssetId no mock deve ser '' (limpo)
+    // selectedPickerId no mock deve ser '' (limpo)
     expect(screen.getByTestId('mas-selected-value').textContent).toBe('')
   })
 
@@ -779,8 +779,8 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     })
 
     // 3º arg deve ser id de DOCUMENT, NÃO de IMAGE
-    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-document')
-    expect((onSend.mock.calls[0] as unknown[])[2]).not.toBe('mock-asset-id-image')
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('cml:mock-document-asset-00000000-0000-0000-0000-000000000000')
+    expect((onSend.mock.calls[0] as unknown[])[2]).not.toBe('cml:mock-image-asset-00000000-0000-0000-0000-000000000000')
   })
 
   it('MTP-13: Cancelar não chama onSend', async () => {

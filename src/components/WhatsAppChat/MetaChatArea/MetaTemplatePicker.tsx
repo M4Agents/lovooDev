@@ -38,9 +38,9 @@ export interface MetaTemplatePickerProps {
   sending:    boolean
   onClose:    () => void
   onSend:     (
-    template:             MetaWhatsAppTemplate,
-    parameterValues:      MetaTemplateParameterValues,
-    headerMediaAssetId?:  string,
+    template:        MetaWhatsAppTemplate,
+    parameterValues: MetaTemplateParameterValues,
+    headerPickerId?: string,
   ) => Promise<void>
 }
 
@@ -115,9 +115,9 @@ export function MetaTemplatePicker({
   const [selected, setSelected]       = useState<MetaWhatsAppTemplate | null>(null)
   const [paramValues, setParamValues] = useState<MetaTemplateParameterValues>({ body: {} })
   const [loadTrigger, setLoadTrigger] = useState(0)   // incrementar → retry
-  // MVP4B: asset selecionado para templates com HEADER media.
+  // MVP4B.4D.2C: picker_id do asset selecionado ('cml:<uuid>' ou 'lmu:<uuid>').
   // Limpo a cada troca de template — nunca persiste entre seleções diferentes.
-  const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null)
+  const [selectedPickerId, setSelectedPickerId] = useState<string | null>(null)
 
   // loadGenRef: invalidar loads stale ao reabrir ou ao retomar
   const loadGenRef = useRef(0)
@@ -182,8 +182,8 @@ export function MetaTemplatePicker({
   const handleSelect = useCallback((tmpl: MetaWhatsAppTemplate) => {
     setSelected(tmpl)
     setParamValues(initParamValues(tmpl))
-    // MVP4B: resetar asset ao trocar de template — seleção anterior é incompatível.
-    setSelectedMediaAssetId(null)
+    // MVP4B: resetar picker ao trocar de template — seleção anterior é incompatível.
+    setSelectedPickerId(null)
   }, [])
 
   const handleParamChange = useCallback((component: 'HEADER' | 'BODY', key: string, value: string) => {
@@ -200,18 +200,18 @@ export function MetaTemplatePicker({
 
   const handleSend = useCallback(async () => {
     if (!selected || sending || !paramsComplete(selected, paramValues)) return
-    if (hasMediaHeader && !selectedMediaAssetId) return
+    if (hasMediaHeader && !selectedPickerId) return
     await onSend(
       selected,
       paramValues,
-      hasMediaHeader ? (selectedMediaAssetId ?? undefined) : undefined,
+      hasMediaHeader ? (selectedPickerId ?? undefined) : undefined,
     )
-  }, [selected, sending, paramValues, hasMediaHeader, selectedMediaAssetId, onSend])
+  }, [selected, sending, paramValues, hasMediaHeader, selectedPickerId, onSend])
 
   if (!open) return null
 
   const textComplete = !!selected && paramsComplete(selected, paramValues)
-  const mediaComplete = !hasMediaHeader || Boolean(selectedMediaAssetId)
+  const mediaComplete = !hasMediaHeader || Boolean(selectedPickerId)
   const canSend      = textComplete && mediaComplete && !sending
   const preview      = selected ? buildPreview(selected.components, selected.parameters, paramValues) : null
   const headerParams = selected?.parameters.filter(p => p.component === 'HEADER') ?? []
@@ -318,8 +318,8 @@ export function MetaTemplatePicker({
                 <MetaMediaAssetSelector
                   companyId={companyId}
                   mediaFormat={selected.header_media_format as MediaAssetFormat}
-                  selectedAssetId={selectedMediaAssetId}
-                  onSelect={asset => setSelectedMediaAssetId(asset.id)}
+                  selectedPickerId={selectedPickerId}
+                  onSelect={asset => setSelectedPickerId(asset.picker_id)}
                   disabled={sending}
                 />
               )}

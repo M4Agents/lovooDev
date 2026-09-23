@@ -353,3 +353,36 @@ export interface MetaSendTemplateResponse {
   ok:         true
   message_id: string
 }
+
+// =============================================================================
+// MVP4B.4D.2C — Meta Media Picker unificado (CML + LMU)
+// =============================================================================
+
+/** Tipo de media aceito como HEADER de template Meta. */
+export type MetaMediaType = 'IMAGE' | 'VIDEO' | 'DOCUMENT'
+
+/** Tabela de origem do asset no picker unificado. */
+export type MetaMediaPickerSource = 'company_media_library' | 'lead_media_unified'
+
+/**
+ * Item retornado pelo picker unificado (GET /api/whatsapp/meta/media/picker).
+ *
+ * picker_id opaco: 'cml:<uuid>' (já em company_media_library) ou
+ *                  'lmu:<uuid>' (em lead_media_unified — exige import antes do send).
+ *
+ * NUNCA contém: s3_key, source_ref, bucket, credentials, lead_id.
+ */
+export interface MetaMediaPickerItem {
+  picker_id:   `cml:${string}` | `lmu:${string}`
+  source:      MetaMediaPickerSource
+  filename:    string
+  media_type:  MetaMediaType
+  mime_type:   string
+  file_size:   number
+  preview_url: string | null
+}
+
+export interface GetMetaMediaPickerResponse {
+  items:     MetaMediaPickerItem[]
+  truncated: boolean
+}

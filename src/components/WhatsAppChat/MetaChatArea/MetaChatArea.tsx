@@ -82,6 +82,22 @@ function getInitials(name: string | null | undefined, fallback: string): string 
  * Mapeia erros do backend para mensagens seguras ao usuário.
  * Nunca expõe token, wa_id, stack ou payload bruto.
  */
+// =============================================================================
+// MVP4B.4D.2C — parsePickerId
+// Valida e parseia picker_id opaco ('cml:<uuid>' | 'lmu:<uuid>').
+// Fail-closed: retorna null para qualquer formato inválido.
+// =============================================================================
+
+const PICKER_ID_RE = /^(cml|lmu):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+function parsePickerId(pickerId: string): { source: 'cml' | 'lmu'; uuid: string } | null {
+  const m = PICKER_ID_RE.exec(pickerId)
+  if (!m) return null
+  return { source: m[1].toLowerCase() as 'cml' | 'lmu', uuid: m[2].toLowerCase() }
+}
+
+// =============================================================================
+
 function getSendErrorMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : ''
   switch (code) {
@@ -126,6 +142,23 @@ function getSendErrorMessage(error: unknown): string {
       return 'O arquivo selecionado não corresponde ao tipo de mídia do template.'
     case 'media_provider_unavailable':
       return 'Serviço de mídia temporariamente indisponível. Tente novamente.'
+    // ── Import LMU→CML (MVP4B.4D.2C) ──────────────────────────────────────────
+    case 'source_not_found':
+      return 'Mídia não encontrada. Pode ter sido removida da conversa de origem.'
+    case 'source_file_not_found':
+      return 'Arquivo de origem indisponível no momento.'
+    case 'media_too_large':
+      return 'O arquivo excede o limite de tamanho permitido.'
+    case 'media_type_unknown':
+      return 'Não foi possível identificar o formato do arquivo.'
+    case 'media_type_unsupported':
+      return 'Formato de arquivo não suportado para envio.'
+    case 'media_type_mismatch':
+      return 'O tipo do arquivo é incompatível com o template selecionado.'
+    case 'source_unavailable':
+      return 'Arquivo temporariamente indisponível. Tente novamente.'
+    case 'conflict_error':
+      return 'Erro de sincronização. Tente novamente em instantes.'
     // ── Compartilhados ─────────────────────────────────────────────────────────
     case 'provider_unavailable':
       return 'Serviço temporariamente indisponível. Tente novamente.'
@@ -366,20 +399,30 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     }
   }, [companyId, conversation, conversationId, text, refresh])
 
-  // ── handleSendTemplate (MVP4A + MVP4B) ────────────────────────────────────
+  // ── handleSendTemplate (MVP4A + MVP4B + MVP4B.4D.2C) ─────────────────────
   // Reutiliza os mesmos guards anti-stale do handleSend (sendingRef, sendGenRef, mountedRef).
-  // MVP4B: headerMediaAssetId — UUID do asset validado server-side.
-  //   TEXT: undefined (ausente no payload).
-  //   MEDIA: string (header_media_asset_id no payload).
+  //
+  // MVP4B.4D.2C: headerPickerId — picker_id opaco ('cml:<uuid>' ou 'lmu:<uuid>').
+  //   TEXT template:  undefined (sem asset no payload).
+  //   MEDIA template: string — parseado via parsePickerId().
+  //     cml: → headerMediaAssetId = uuid (já em CML; import desnecessário).
+  //     lmu: → importMedia() → recebe CML uuid → usa como headerMediaAssetId.
+  //
+  // Stale protection: snapshot de picker_id capturado ANTES do primeiro await.
+  // Double-click protection: sendingRef.current = true ANTES de setIsSending.
   const handleSendTemplate = useCallback(async (
-    template:            MetaWhatsAppTemplate,
-    parameterValues:     MetaTemplateParameterValues,
-    headerMediaAssetId?: string,
+    template:        MetaWhatsAppTemplate,
+    parameterValues: MetaTemplateParameterValues,
+    headerPickerId?: string,
   ) => {
     if (sendingRef.current || !conversation?.instance_id) return
 
+    // Snapshot antes do primeiro await — protege contra stale state.
+    const pickerIdSnapshot = headerPickerId
+
     const genAtSend = sendGenRef.current
 
+    // sendingRef ANTES de setIsSending para que re-render já encontre o guard.
     sendingRef.current = true
     setIsSending(true)
     setSendError(null)
@@ -388,9 +431,27 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     let caughtError: unknown = undefined
 
     try {
+      let headerMediaAssetId: string | undefined = undefined
+
+      if (pickerIdSnapshot) {
+        const parsed = parsePickerId(pickerIdSnapshot)
+        if (!parsed) {
+          // picker_id malformado — fail-closed, sem envio
+          throw new Error('invalid_request')
+        }
+
+        if (parsed.source === 'cml') {
+          // Asset já está em company_media_library — uuid direto
+          headerMediaAssetId = parsed.uuid
+        } else {
+          // LMU → importar idempotentemente → obter CML uuid
+          const { id: cmlId } = await metaWhatsAppApi.importMedia(companyId, parsed.uuid)
+          headerMediaAssetId = cmlId
+        }
+      }
+
       // Destinatário resolvido pelo backend via conversation_id.
       // to/wa_id/waba_id/phone_number_id NUNCA enviados pelo frontend.
-      // header_media_asset_id: somente para templates com HEADER media.
       await metaWhatsAppApi.sendTemplate(
         companyId,
         conversation.instance_id,

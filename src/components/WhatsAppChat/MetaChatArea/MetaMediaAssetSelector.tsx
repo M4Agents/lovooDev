@@ -1,45 +1,44 @@
 // =============================================================================
-// MetaMediaAssetSelector — MVP4B
+// MetaMediaAssetSelector — MVP4B.4D.2C
 //
-// Seletor de asset da company_media_library para templates Meta com HEADER media.
+// Seletor unificado de assets para HEADER de template Meta (CML + LMU).
 //
 // Responsabilidades:
-//   - Listar assets via mediaLibraryApi.getCompanyFiles() (Bearer auth)
-//   - Filtrar por file_type compatível com mediaFormat
+//   - Carregar assets via metaWhatsAppApi.getMediaPicker() (CML + LMU unificado)
 //   - Filtrar visualmente por MIME e tamanho (UX — não é security boundary)
-//   - Selecionar exatamente 1 asset; retornar { id }
-//   - Search com debounce ~350ms
-//   - Paginação "Carregar mais" (limit=50)
+//   - Pesquisa client-side por filename (dados já carregados)
+//   - Selecionar exatamente 1 asset; retornar { picker_id }
+//   - Indicador visual de truncagem (>100 assets)
 //   - Proteção stale (generation ref + cancelled flag — mesmo padrão do MetaTemplatePicker)
 //
 // Isolamento:
 //   - Zero conhecimento de Graph API, mediaId, phone_number_id, WABA ou token Meta
-//   - NÃO retorna s3_key, mime_type, filename nem preview_url como payload de envio
-//   - preview_url usada somente para display interno (thumbnail)
-//   - Backend validateMediaAsset continua autoridade final de MIME, tamanho e tenant
+//   - NÃO retorna s3_key, source, source_id nem qualquer internal ao caller
+//   - preview_url usada somente para display (com fallback onError)
+//   - Backend valida MIME, tamanho e tenant — filtro frontend é UX only
+//   - Diferença CML vs LMU é transparente ao usuário (sem label técnico exposto)
 // =============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { supabase }        from '../../../lib/supabase'
-import { mediaLibraryApi } from '../../../services/mediaLibraryApi'
-import type { MediaFile }  from '../../../services/mediaLibraryApi'
+import { metaWhatsAppApi }        from '../../../services/metaWhatsAppApi'
+import type { MetaMediaPickerItem } from '../../../types/meta-whatsapp'
 
-// ── Tipos públicos ─────────────────────────────────────────────────────────────
+// ── Tipos públicos ──────────────────────────────────────────────────────────────
 
 export type MediaAssetFormat = 'IMAGE' | 'VIDEO' | 'DOCUMENT'
 
 export interface MetaMediaAssetSelectorProps {
   companyId:        string
   mediaFormat:      MediaAssetFormat
-  selectedAssetId?: string | null
-  onSelect:         (asset: { id: string }) => void
+  selectedPickerId?: string | null
+  onSelect:         (asset: { picker_id: string }) => void
   disabled?:        boolean
 }
 
-// ── Tipos locais ──────────────────────────────────────────────────────────────
+// ── Tipos locais ────────────────────────────────────────────────────────────────
 
 interface AssetItem {
-  id:                string
+  picker_id:         string
   original_filename: string
   mime_type:         string
   file_size:         number
@@ -48,35 +47,26 @@ interface AssetItem {
 
 type LoadState = 'idle' | 'loading' | 'error'
 
-// ── Constantes ────────────────────────────────────────────────────────────────
+// ── Constantes ──────────────────────────────────────────────────────────────────
 
-const FORMAT_TO_FILE_TYPE: Record<MediaAssetFormat, 'image' | 'video' | 'document'> = {
-  IMAGE:    'image',
-  VIDEO:    'video',
-  DOCUMENT: 'document',
-}
-
-// Filtro MIME — UX apenas; backend é autoridade final.
+// Filtro MIME — UX apenas; backend é autoridade final de MIME e tamanho.
 const FORMAT_MIME_WHITELIST: Record<MediaAssetFormat, string[]> = {
   IMAGE:    ['image/jpeg', 'image/png'],
   VIDEO:    ['video/mp4',  'video/3gpp'],
   DOCUMENT: ['application/pdf'],
 }
 
-// Limites de tamanho — UX apenas; backend é autoridade final.
 const FORMAT_SIZE_LIMIT: Record<MediaAssetFormat, number> = {
   IMAGE:    5  * 1024 * 1024,  //  5 MB
   VIDEO:    16 * 1024 * 1024,  // 16 MB
   DOCUMENT: 30 * 1024 * 1024,  // 30 MB
 }
 
-const LIMIT         = 50
-const DEBOUNCE_MS   = 350
 const FORMAT_LABEL: Record<MediaAssetFormat, string> = {
   IMAGE: 'Imagem', VIDEO: 'Vídeo', DOCUMENT: 'Documento',
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────────
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -86,191 +76,98 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-function mapFile(f: MediaFile): AssetItem {
+function mapItem(i: MetaMediaPickerItem): AssetItem {
   return {
-    id:                f.id,
-    original_filename: f.original_filename,
-    mime_type:         f.mime_type,
-    file_size:         f.file_size,
-    preview_url:       f.preview_url ?? null,
+    picker_id:         i.picker_id,
+    original_filename: i.filename,
+    mime_type:         i.mime_type,
+    file_size:         i.file_size,
+    preview_url:       i.preview_url,
   }
 }
 
-// ── Componente ────────────────────────────────────────────────────────────────
+// ── Componente ───────────────────────────────────────────────────────────────────
 
 export function MetaMediaAssetSelector({
   companyId,
   mediaFormat,
-  selectedAssetId,
+  selectedPickerId,
   onSelect,
   disabled = false,
 }: MetaMediaAssetSelectorProps) {
-  const [files,       setFiles]       = useState<AssetItem[]>([])
-  const [loadState,   setLoadState]   = useState<LoadState>('idle')
-  const [loadError,   setLoadError]   = useState<string | null>(null)
-  const [page,        setPage]        = useState(1)
-  const [hasNextPage, setHasNextPage] = useState(false)
-  const [totalCount,  setTotalCount]  = useState(0)
-  const [search,      setSearch]      = useState('')
+  const [allItems,   setAllItems]   = useState<AssetItem[]>([])
+  const [truncated,  setTruncated]  = useState(false)
+  const [loadState,  setLoadState]  = useState<LoadState>('idle')
+  const [loadError,  setLoadError]  = useState<string | null>(null)
+  const [search,     setSearch]     = useState('')
 
-  const loadGenRef      = useRef(0)
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadGenRef = useRef(0)
 
-  // ── Carga inicial e ao trocar companyId / mediaFormat ─────────────────────
-  // Mesmo padrão do MetaTemplatePicker: generation ref + cancelled flag.
-
+  // ── Carga inicial e ao trocar companyId / mediaFormat ───────────────────────
   useEffect(() => {
     loadGenRef.current += 1
-    const gen = loadGenRef.current
-    let cancelled = false
+    const gen       = loadGenRef.current
+    let cancelled   = false
 
-    setFiles([])
-    setPage(1)
-    setHasNextPage(false)
-    setTotalCount(0)
+    setAllItems([])
+    setTruncated(false)
     setSearch('')
     setLoadError(null)
     setLoadState('loading')
 
     async function doLoad() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (cancelled || loadGenRef.current !== gen) return
-        if (!session?.access_token) throw new Error('Sessão expirada')
-
-        const result = await mediaLibraryApi.getCompanyFiles(
-          companyId,
-          session.access_token,
-          { fileType: FORMAT_TO_FILE_TYPE[mediaFormat], page: 1, limit: LIMIT, search: '' },
-        )
+        const result = await metaWhatsAppApi.getMediaPicker(companyId, mediaFormat)
         if (cancelled || loadGenRef.current !== gen) return
 
-        setFiles(result.files.map(mapFile))
-        setHasNextPage(result.pagination.hasNextPage)
-        setTotalCount(result.pagination.totalCount)
+        setAllItems(result.items.map(mapItem))
+        setTruncated(result.truncated)
         setLoadState('idle')
       } catch (err: unknown) {
         if (cancelled || loadGenRef.current !== gen) return
-        setLoadError(err instanceof Error ? err.message : 'Erro ao carregar arquivos')
+        setLoadError(err instanceof Error ? err.message : 'Erro ao carregar mídias')
         setLoadState('error')
       }
     }
 
     doLoad()
     return () => { cancelled = true }
-  }, [companyId, mediaFormat]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Limpar debounce ao desmontar
-  useEffect(() => {
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    }
-  }, [])
-
-  // ── Search com debounce ───────────────────────────────────────────────────
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value)
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-    searchDebounceRef.current = setTimeout(async () => {
-      loadGenRef.current += 1
-      const gen = loadGenRef.current
-      setFiles([])
-      setPage(1)
-      setHasNextPage(false)
-      setLoadError(null)
-      setLoadState('loading')
-
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (loadGenRef.current !== gen) return
-        if (!session?.access_token) throw new Error('Sessão expirada')
-
-        const result = await mediaLibraryApi.getCompanyFiles(
-          companyId,
-          session.access_token,
-          { fileType: FORMAT_TO_FILE_TYPE[mediaFormat], page: 1, limit: LIMIT, search: value },
-        )
-        if (loadGenRef.current !== gen) return
-
-        setFiles(result.files.map(mapFile))
-        setHasNextPage(result.pagination.hasNextPage)
-        setTotalCount(result.pagination.totalCount)
-        setLoadState('idle')
-      } catch (err: unknown) {
-        if (loadGenRef.current !== gen) return
-        setLoadError(err instanceof Error ? err.message : 'Erro ao carregar arquivos')
-        setLoadState('error')
-      }
-    }, DEBOUNCE_MS)
   }, [companyId, mediaFormat])
 
-  // ── Carregar mais ─────────────────────────────────────────────────────────
-
-  const handleLoadMore = useCallback(async () => {
-    const nextPage = page + 1
-    const gen      = loadGenRef.current
-    setPage(nextPage)
-    setLoadState('loading')
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (loadGenRef.current !== gen) return
-      if (!session?.access_token) throw new Error('Sessão expirada')
-
-      const result = await mediaLibraryApi.getCompanyFiles(
-        companyId,
-        session.access_token,
-        { fileType: FORMAT_TO_FILE_TYPE[mediaFormat], page: nextPage, limit: LIMIT, search },
-      )
-      if (loadGenRef.current !== gen) return
-
-      setFiles(prev => [...prev, ...result.files.map(mapFile)])
-      setHasNextPage(result.pagination.hasNextPage)
-      setTotalCount(result.pagination.totalCount)
-      setLoadState('idle')
-    } catch (err: unknown) {
-      if (loadGenRef.current !== gen) return
-      setLoadError(err instanceof Error ? err.message : 'Erro ao carregar arquivos')
-      setLoadState('error')
-    }
-  }, [companyId, mediaFormat, page, search])
-
-  // ── Retry ─────────────────────────────────────────────────────────────────
-
+  // ── Retry ───────────────────────────────────────────────────────────────────
   const handleRetry = useCallback(async () => {
     loadGenRef.current += 1
-    const gen = loadGenRef.current
-    setFiles([])
-    setPage(1)
-    setHasNextPage(false)
+    const gen     = loadGenRef.current
+    let cancelled = false
+
+    setAllItems([])
+    setTruncated(false)
     setLoadError(null)
     setLoadState('loading')
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (loadGenRef.current !== gen) return
-      if (!session?.access_token) throw new Error('Sessão expirada')
-
-      const result = await mediaLibraryApi.getCompanyFiles(
-        companyId,
-        session.access_token,
-        { fileType: FORMAT_TO_FILE_TYPE[mediaFormat], page: 1, limit: LIMIT, search },
-      )
-      if (loadGenRef.current !== gen) return
-
-      setFiles(result.files.map(mapFile))
-      setHasNextPage(result.pagination.hasNextPage)
-      setTotalCount(result.pagination.totalCount)
+      const result = await metaWhatsAppApi.getMediaPicker(companyId, mediaFormat)
+      if (cancelled || loadGenRef.current !== gen) return
+      setAllItems(result.items.map(mapItem))
+      setTruncated(result.truncated)
       setLoadState('idle')
     } catch (err: unknown) {
-      if (loadGenRef.current !== gen) return
-      setLoadError(err instanceof Error ? err.message : 'Erro ao carregar arquivos')
+      if (cancelled || loadGenRef.current !== gen) return
+      setLoadError(err instanceof Error ? err.message : 'Erro ao carregar mídias')
       setLoadState('error')
     }
-  }, [companyId, mediaFormat, search])
+    return () => { cancelled = true }
+  }, [companyId, mediaFormat])
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Pesquisa client-side ─────────────────────────────────────────────────────
+  // Sem debounce — dados já em memória, filtro é instantâneo.
+  const displayItems = search.trim()
+    ? allItems.filter(f =>
+        f.original_filename.toLowerCase().includes(search.toLowerCase()),
+      )
+    : allItems
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   const label = FORMAT_LABEL[mediaFormat]
 
@@ -285,14 +182,14 @@ export function MetaMediaAssetSelector({
         type="text"
         placeholder={`Buscar ${label.toLowerCase()}...`}
         value={search}
-        onChange={e => handleSearchChange(e.target.value)}
+        onChange={e => setSearch(e.target.value)}
         disabled={disabled}
         aria-label="Buscar mídia"
         className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50"
       />
 
-      {/* Loading (primeiro carregamento) */}
-      {loadState === 'loading' && files.length === 0 && (
+      {/* Loading */}
+      {loadState === 'loading' && (
         <div className="flex items-center justify-center py-4">
           <div
             className="animate-spin h-5 w-5 rounded-full border-2 border-blue-500 border-t-transparent"
@@ -319,28 +216,28 @@ export function MetaMediaAssetSelector({
       )}
 
       {/* Empty */}
-      {loadState === 'idle' && files.length === 0 && (
+      {loadState === 'idle' && displayItems.length === 0 && (
         <p className="text-xs text-slate-500 text-center py-3" data-testid="mas-empty">
           Nenhuma mídia compatível encontrada.
         </p>
       )}
 
       {/* Lista de assets */}
-      {files.length > 0 && (
+      {displayItems.length > 0 && (
         <div className="space-y-1.5 max-h-52 overflow-y-auto" data-testid="mas-list">
-          {files.map(file => {
+          {displayItems.map(file => {
             const mimeOk      = FORMAT_MIME_WHITELIST[mediaFormat].includes(file.mime_type)
             const tooBig      = file.file_size > FORMAT_SIZE_LIMIT[mediaFormat]
             const isSelectable = mimeOk && !tooBig && !disabled
-            const isSelected   = selectedAssetId === file.id
+            const isSelected   = selectedPickerId === file.picker_id
 
             return (
               <button
-                key={file.id}
+                key={file.picker_id}
                 type="button"
-                onClick={() => { if (isSelectable) onSelect({ id: file.id }) }}
+                onClick={() => { if (isSelectable) onSelect({ picker_id: file.picker_id }) }}
                 disabled={!isSelectable}
-                data-testid={`mas-asset-${file.id}`}
+                data-testid={`mas-asset-${file.picker_id}`}
                 aria-pressed={isSelected}
                 title={
                   tooBig
@@ -412,20 +309,14 @@ export function MetaMediaAssetSelector({
         </div>
       )}
 
-      {/* Carregar mais */}
-      {hasNextPage && (
-        <button
-          type="button"
-          onClick={handleLoadMore}
-          disabled={loadState === 'loading' || disabled}
-          className="w-full mt-2 text-xs text-slate-500 hover:text-slate-700 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors"
-          data-testid="mas-load-more"
+      {/* Aviso de truncagem */}
+      {truncated && loadState === 'idle' && (
+        <p
+          className="text-xs text-slate-400 text-center pt-2"
+          data-testid="mas-truncated-notice"
         >
-          {loadState === 'loading'
-            ? 'Carregando...'
-            : `Carregar mais (${totalCount - files.length} restantes)`
-          }
-        </button>
+          Exibindo os 100 assets mais recentes.
+        </p>
       )}
     </div>
   )
