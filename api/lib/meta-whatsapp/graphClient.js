@@ -5,11 +5,12 @@
 // Módulo funcional — sem estado, sem retry, sem persistência, sem crypto.
 //
 // Funções exportadas:
-//   exchangeCodeForToken(code)                           → { accessToken }
-//   listWabaPhoneNumbers(token, wabaId)                  → [{ id, displayPhoneNumber, verifiedName }]
-//   discoverAuthorizedWabas(token)                       → string[]  — WABA IDs via debug_token
-//   listMessageTemplates(token, wabaId, options)         → { templates, nextCursor }
-//   sendTemplateMessage(token, phoneNumberId, to, tpl)   → { messageId }
+//   exchangeCodeForToken(code)                                              → { accessToken }
+//   listWabaPhoneNumbers(token, wabaId)                                     → [{ id, displayPhoneNumber, verifiedName }]
+//   discoverAuthorizedWabas(token)                                           → string[]  — WABA IDs via debug_token
+//   listMessageTemplates(token, wabaId, options)                             → { templates, nextCursor }
+//   sendTemplateMessage(token, phoneNumberId, to, tpl)                       → { messageId }
+//   uploadMedia(token, phoneNumberId, bytes, mimeType, filename?)            → { mediaId }  (MVP4B.4A)
 //
 // SEGURANÇA:
 //   - URL de code exchange NUNCA logada (contém client_secret e code na query)
@@ -35,7 +36,16 @@ import { getMetaServerConfig } from './config.js';
 // =============================================================================
 
 const GRAPH_BASE_URL   = 'https://graph.facebook.com';
-const GRAPH_TIMEOUT_MS = 10_000; // 10 s — padrão do projeto para Graph calls simples
+const GRAPH_TIMEOUT_MS = 10_000; // 10 s — padrão para Graph calls simples (JSON responses)
+
+// Timeout dedicado para upload de mídia.
+// Arquivos de template Meta podem ter até 100 MB (DOCUMENT per Meta limits).
+// 10 s é insuficiente para VIDEO (16 MB) e DOCUMENT (100 MB) em qualquer conexão real.
+// 60 s cobre IMAGE (5 MB) e VIDEO (16 MB) em conexões server-to-server razoáveis.
+// Nota de risco (4B.3.1 D-VT): Vercel Hobby limita functions a 10 s — risco externo
+// ao código, não resolvido aqui (plano Vercel é decisão operacional, não de código).
+const GRAPH_MEDIA_UPLOAD_TIMEOUT_MS = 60_000; // 60 s — upload de bytes de mídia (MVP4B.4A)
+
 const PAGE_LIMIT       = 100;    // máximo por request de paginação
 const MAX_PAGES        = 10;     // limite defensivo puro — não vinculado ao cap comercial
 
@@ -77,11 +87,16 @@ function makeError(code, message) {
  * Executa fetch com timeout via AbortController + setTimeout.
  * clearTimeout no finally garante que o timer não vaza após a resposta.
  *
+ * @param {URL|string} url
+ * @param {RequestInit} options
+ * @param {number} [timeoutMs=GRAPH_TIMEOUT_MS]  Duração do timeout em ms.
+ *   Padrão: GRAPH_TIMEOUT_MS (10 s) — adequado para chamadas JSON simples.
+ *   Para upload de mídia usar GRAPH_MEDIA_UPLOAD_TIMEOUT_MS (60 s).
  * @private
  */
-async function fetchWithTimeout(url, options) {
+async function fetchWithTimeout(url, options, timeoutMs = GRAPH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GRAPH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -1038,4 +1053,124 @@ export async function sendTemplateMessage(token, phoneNumberId, to, template) {
   }
 
   return { messageId };
+}
+
+// =============================================================================
+// uploadMedia  (MVP4B.4A)
+// =============================================================================
+
+/**
+ * Faz upload de bytes de mídia para o endpoint /media da Meta Cloud API.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}/media
+ *
+ * Responsabilidade única: transporte de bytes → mediaId.
+ * NÃO valida tipo de mídia (IMAGE/VIDEO/DOCUMENT), tamanho de negócio
+ * nem MIME whitelist — essas validações pertencem às camadas superiores.
+ *
+ * Multipart construído com FormData nativa do runtime + Blob.
+ * O Content-Type multipart com boundary é gerado automaticamente pelo fetch/FormData.
+ * NUNCA definir Content-Type manualmente (boundary incorreto causaria erro 400 no Graph).
+ *
+ * Exatamente UMA tentativa HTTP por chamada — sem retry automático.
+ * Timeout: GRAPH_MEDIA_UPLOAD_TIMEOUT_MS (60 s) — maior que o padrão de 10 s
+ * porque payloads de mídia podem chegar a 100 MB (DOCUMENT per Meta limits).
+ *
+ * SEGURANÇA:
+ *   - token nunca logado, nunca presente em mensagem de erro
+ *   - bytes nunca logados, nunca presentes em mensagem de erro
+ *   - filename usado somente como hint multipart — não determina MIME, não constrói path
+ *   - URL construída internamente — sem SSRF por valor externo
+ *
+ * @param {string}                              token         Business token da instância (nunca logar)
+ * @param {string}                              phoneNumberId Phone Number ID da instância (numeric string)
+ * @param {Buffer|Uint8Array|ArrayBuffer|Blob}  bytes         Conteúdo binário do arquivo
+ * @param {string}                              mimeType      MIME type detectado server-side (ex: 'image/jpeg')
+ * @param {string}                              [filename]    Hint de nome de arquivo para multipart (opcional)
+ * @returns {Promise<{ mediaId: string }>}
+ * @throws {Error} err.code in:
+ *   upload_media_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   upload_media_failed           — HTTP não-2xx do Graph
+ *   upload_media_timeout          — AbortError / timeout de 60 s expirado
+ *   upload_media_network_error    — falha de rede não-timeout
+ *   upload_media_invalid_response — HTTP 2xx mas id ausente, vazio ou não-string
+ */
+export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filename) {
+  // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
+
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  // bytes: qualquer tipo compatível com Blob constructor (Buffer, Uint8Array,
+  // ArrayBuffer, Blob) — rejeitar somente null/undefined antes de tentar construir.
+  if (bytes == null) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  if (typeof mimeType !== 'string' || mimeType.trim().length === 0) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  // Envolver bytes em Blob com mimeType — aceita Buffer, ArrayBuffer, Uint8Array, Blob.
+  // Blob vazio → bytes inválidos (arquivo vazio não é enviável ao Graph).
+  const fileBlob = new Blob([bytes], { type: mimeType });
+  if (fileBlob.size === 0) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  // URL construída internamente — nunca usa valor externo como base de URL
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}/media`);
+
+  // Multipart via FormData nativa.
+  // NUNCA definir Content-Type no headers — o fetch gera o boundary automaticamente.
+  // Content-Type definido manualmente quebraria o boundary e causaria erro 400 no Graph.
+  const form = new FormData();
+  form.set('messaging_product', 'whatsapp');
+  form.set('type', mimeType);                           // MIME explícito como campo separado
+  form.append('file', fileBlob, filename ?? 'upload');  // binary com mimeType como Content-Type da part
+
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      url,
+      {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` }, // sem Content-Type manual
+        body:    form,
+      },
+      GRAPH_MEDIA_UPLOAD_TIMEOUT_MS, // 60 s — distinto do padrão 10 s de outros calls
+    );
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('upload_media_timeout', 'Meta upload media request timed out');
+    }
+    throw makeError('upload_media_network_error', 'Meta upload media network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('upload_media_failed', 'Meta upload media failed');
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('upload_media_invalid_response', 'Meta upload media invalid response');
+  }
+
+  // Normalizar: somente mediaId.
+  // Nunca retornar payload bruto — exporia dados desnecessários ao caller.
+  const mediaId = payload?.id;
+  if (typeof mediaId !== 'string' || mediaId.length === 0) {
+    throw makeError('upload_media_invalid_response', 'Meta upload media invalid response');
+  }
+
+  return { mediaId };
 }

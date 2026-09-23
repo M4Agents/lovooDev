@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 }));
 
 import { getMetaServerConfig } from '../config.js';
-import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber, setTwoStepVerificationPin, listMessageTemplates, sendTemplateMessage } from '../graphClient.js';
+import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas, sendTextMessage, registerPhoneNumber, setTwoStepVerificationPin, listMessageTemplates, sendTemplateMessage, uploadMedia } from '../graphClient.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -2450,5 +2450,333 @@ describe('sendTemplateMessage', () => {
     const body = JSON.parse(callOpts.body);
     expect(body.type).toBe('text');
     expect(body).not.toHaveProperty('template');
+  });
+});
+
+// =============================================================================
+// uploadMedia  (MVP4B.4A)
+// =============================================================================
+
+describe('uploadMedia', () => {
+  // ── Fixtures locais ──────────────────────────────────────────────────────────
+
+  const FAKE_PHONE_ID_MEDIA = '109876543210987'; // fictício — diferente dos outros
+  const FAKE_MEDIA_ID       = 'media.HBgLNTU1MTk4NzY1NDMyMQIVAgARGBITPL_MEDIA_FAKE_456==';
+
+  // Bytes fictícios representando assinaturas de magic bytes dos tipos suportados.
+  // Estes valores são usados SOMENTE para criar Buffers de tamanho não-zero.
+  // Não testam MIME sniffing real — essa validação pertence ao endpoint 4B.X.
+  const FAKE_IMAGE_BYTES    = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]); // JPEG header
+  const FAKE_VIDEO_BYTES    = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]); // MP4 ftyp
+  const FAKE_DOC_BYTES      = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31]); // PDF header
+
+  function makeMediaOkResponse(mediaId = FAKE_MEDIA_ID) {
+    return makeOkResponse({ id: mediaId });
+  }
+
+  // ── GM-01: IMAGE bytes — contrato de transporte ──────────────────────────────
+
+  it('GM-01: IMAGE bytes → POST /PHONE_NUMBER_ID/media, Authorization correto, messaging_product=whatsapp, file presente', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg');
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const [callUrl, callOpts] = fetch.mock.calls[0];
+
+    // URL: endpoint correto
+    expect(callUrl.toString()).toContain(`/${FAKE_VERSION}/`);
+    expect(callUrl.toString()).toContain(`/${FAKE_PHONE_ID_MEDIA}/media`);
+
+    // Method
+    expect(callOpts.method).toBe('POST');
+
+    // Authorization — token no header, nunca no body
+    expect(callOpts.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+
+    // Body: FormData (não JSON)
+    expect(callOpts.body).toBeInstanceOf(FormData);
+    expect(callOpts.body.get('messaging_product')).toBe('whatsapp');
+
+    // File presente
+    const file = callOpts.body.get('file');
+    expect(file).toBeInstanceOf(Blob);
+    expect(file.size).toBeGreaterThan(0);
+  });
+
+  it('GM-01b: Content-Type NÃO definido manualmente — gerado pelo FormData/fetch (boundary automático)', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    const [, callOpts] = fetch.mock.calls[0];
+    // Content-Type deve ser AUSENTE dos headers manuais — fetch adiciona com boundary automaticamente
+    expect(callOpts.headers).not.toHaveProperty('Content-Type');
+  });
+
+  // ── GM-02: VIDEO bytes — mesmo contrato ─────────────────────────────────────
+
+  it('GM-02: VIDEO bytes → mesmo contrato de transporte que IMAGE', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_VIDEO_BYTES, 'video/mp4', 'clip.mp4');
+
+    const [callUrl, callOpts] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain(`/${FAKE_PHONE_ID_MEDIA}/media`);
+    expect(callOpts.method).toBe('POST');
+    expect(callOpts.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+    expect(callOpts.body).toBeInstanceOf(FormData);
+    expect(callOpts.body.get('messaging_product')).toBe('whatsapp');
+    expect(callOpts.body.get('file')).toBeInstanceOf(Blob);
+  });
+
+  // ── GM-03: DOCUMENT bytes — mesmo contrato ───────────────────────────────────
+
+  it('GM-03: DOCUMENT bytes → mesmo contrato de transporte que IMAGE/VIDEO', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_DOC_BYTES, 'application/pdf', 'contrato.pdf');
+
+    const [callUrl, callOpts] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain(`/${FAKE_PHONE_ID_MEDIA}/media`);
+    expect(callOpts.method).toBe('POST');
+    expect(callOpts.headers['Authorization']).toBe(`Bearer ${FAKE_TOKEN}`);
+    expect(callOpts.body).toBeInstanceOf(FormData);
+    expect(callOpts.body.get('messaging_product')).toBe('whatsapp');
+  });
+
+  // ── GM-04: MIME propagado corretamente ──────────────────────────────────────
+
+  it('GM-04: mimeType propagado ao campo type e ao Content-Type do Blob (field file)', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg');
+
+    const [, callOpts] = fetch.mock.calls[0];
+    // Campo type explícito no FormData
+    expect(callOpts.body.get('type')).toBe('image/jpeg');
+    // Content-Type do Blob/File na part multipart
+    const file = callOpts.body.get('file');
+    expect(file.type).toBe('image/jpeg');
+  });
+
+  it('GM-04b: mimeType video/mp4 propagado corretamente', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_VIDEO_BYTES, 'video/mp4', 'clip.mp4');
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.body.get('type')).toBe('video/mp4');
+    expect(callOpts.body.get('file').type).toBe('video/mp4');
+  });
+
+  // ── GM-05: mediaId retornado e normalizado ───────────────────────────────────
+
+  it('GM-05: Graph retorna { id } → { mediaId } normalizado', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse(FAKE_MEDIA_ID));
+    const result = await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    expect(result).toEqual({ mediaId: FAKE_MEDIA_ID });
+  });
+
+  it('GM-05b: retorna somente { mediaId } — sem payload bruto, sem token, sem bytes', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const result = await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    expect(Object.keys(result)).toEqual(['mediaId']);
+  });
+
+  it('GM-05c: graphVersion vindo de getMetaServerConfig é usado na URL', async () => {
+    getMetaServerConfig.mockReturnValue({ ...FAKE_CONFIG, graphVersion: 'v99.0' });
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.toString()).toContain('/v99.0/');
+  });
+
+  // ── GM-06: HTTP provider error normalizado ───────────────────────────────────
+
+  it('GM-06: HTTP 4xx → upload_media_failed', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(400));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_failed' });
+  });
+
+  it('GM-06b: HTTP 401 → upload_media_failed (token inválido)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(401));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_failed' });
+  });
+
+  it('GM-06c: HTTP 413 → upload_media_failed (arquivo muito grande)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(413));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_failed' });
+  });
+
+  // ── GM-07: HTTP 2xx sem id → fail-closed ────────────────────────────────────
+
+  it('GM-07: HTTP 200 sem campo id → upload_media_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ messaging_product: 'whatsapp' }));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_response' });
+  });
+
+  it('GM-07b: HTTP 200 com body JSON inválido → upload_media_invalid_response', async () => {
+    fetch.mockResolvedValue(makeJsonErrorResponse());
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_response' });
+  });
+
+  // ── GM-08: id vazio ou inválido → fail-closed ────────────────────────────────
+
+  it('GM-08a: id vazio ("") → upload_media_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ id: '' }));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_response' });
+  });
+
+  it('GM-08b: id null → upload_media_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ id: null }));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_response' });
+  });
+
+  it('GM-08c: id numérico (não-string) → upload_media_invalid_response', async () => {
+    fetch.mockResolvedValue(makeOkResponse({ id: 12345 }));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_response' });
+  });
+
+  // ── GM-09: timeout/abort — consistente com graphClient ───────────────────────
+
+  it('GM-09a: AbortError → upload_media_timeout', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_timeout' });
+  });
+
+  it('GM-09b: erro de rede genérico → upload_media_network_error', async () => {
+    fetch.mockRejectedValue(new Error('network failure'));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_network_error' });
+  });
+
+  // ── GM-10: exatamente 1 fetch por chamada (sem retry) ────────────────────────
+
+  it('GM-10: sucesso → exatamente 1 chamada fetch (sem retry)', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('GM-10b: falha → exatamente 1 chamada fetch (sem retry em erro)', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_failed' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  // ── GM-11: token não aparece em erro sanitizado ──────────────────────────────
+
+  it('GM-11: token ausente → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia('', FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-11b: erro HTTP não expõe token na mensagem', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(401));
+    let caught;
+    try {
+      await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeDefined();
+    expect(caught.message).not.toContain(FAKE_TOKEN);
+  });
+
+  it('GM-11c: token null → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(null, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // ── GM-12: bytes não aparecem em erro/log ────────────────────────────────────
+
+  it('GM-12: bytes ausentes (null) → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, null, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-12b: bytes undefined → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, undefined, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-12c: bytes vazios (Buffer vazio) → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, Buffer.alloc(0), 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-12d: mensagem de erro em caso de HTTP error não contém representação dos bytes', async () => {
+    fetch.mockResolvedValue(makeErrorResponse(500));
+    let caught;
+    try {
+      await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeDefined();
+    // Bytes binários não aparecem (serialização não acontece na mensagem de erro)
+    expect(typeof caught.message).toBe('string');
+    expect(caught.message).not.toContain('255'); // byte 0xFF não serializado
+  });
+
+  // ── Validação de input adicional ─────────────────────────────────────────────
+
+  it('GM-I01: phoneNumberId vazio → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, '', FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-I02: phoneNumberId com letras → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, 'not-numeric', FAKE_IMAGE_BYTES, 'image/jpeg'))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-I03: mimeType ausente (empty) → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, ''))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-I04: mimeType null → upload_media_invalid_input sem fetch', async () => {
+    await expect(uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, null))
+      .rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-I05: filename ausente → aceito sem erro (parâmetro opcional)', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const result = await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    // filename omitido → usa fallback 'upload' internamente
+    expect(result).toEqual({ mediaId: FAKE_MEDIA_ID });
+  });
+
+  it('GM-I06: bytes como Blob → aceito e tamanho preservado', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const blobBytes = new Blob([FAKE_IMAGE_BYTES], { type: 'image/jpeg' });
+    const result = await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, blobBytes, 'image/jpeg');
+    expect(result).toEqual({ mediaId: FAKE_MEDIA_ID });
+    const [, callOpts] = fetch.mock.calls[0];
+    const file = callOpts.body.get('file');
+    expect(file.size).toBeGreaterThan(0);
+  });
+
+  // ── Regressão: sendTemplateMessage e sendTextMessage continuam inalterados ───
+
+  it('GM-R01 (regressão): sendTemplateMessage continua funcionando após 4B.4A', async () => {
+    const REGRESS_WAMID = 'wamid.REGRESSION_4B4A_TEST_FAKE==';
+    const tpl = { name: 'test', language: { code: 'pt_BR' } };
+    fetch.mockResolvedValue(makeOkResponse({ messages: [{ id: REGRESS_WAMID }] }));
+    const result = await sendTemplateMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, tpl);
+    expect(result).toEqual({ messageId: REGRESS_WAMID });
   });
 });
