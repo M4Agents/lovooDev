@@ -472,6 +472,15 @@ export const metaWhatsAppApi = {
       if (tmpl.unsupported_reason !== null && typeof tmpl.unsupported_reason !== 'string') {
         throw new Error('Resposta inválida do servidor: template.unsupported_reason inválido')
       }
+      // MVP4B.3 — header_media_format: null | 'IMAGE' | 'VIDEO' | 'DOCUMENT'
+      if (
+        tmpl.header_media_format !== null &&
+        tmpl.header_media_format !== 'IMAGE' &&
+        tmpl.header_media_format !== 'VIDEO' &&
+        tmpl.header_media_format !== 'DOCUMENT'
+      ) {
+        throw new Error('Resposta inválida do servidor: template.header_media_format inválido')
+      }
 
       const parameters: MetaTemplateParameter[] = []
 
@@ -504,16 +513,17 @@ export const metaWhatsAppApi = {
       }
 
       templates.push({
-        id:                 tmpl.id               as string,
-        name:               tmpl.name             as string,
-        language:           tmpl.language         as string,
-        status:             'APPROVED',
-        category:           tmpl.category         as string,
-        parameter_format:   tmpl.parameter_format as 'POSITIONAL' | 'NAMED',
-        components:         tmpl.components       as MetaWhatsAppTemplate['components'],
+        id:                  tmpl.id               as string,
+        name:                tmpl.name             as string,
+        language:            tmpl.language         as string,
+        status:              'APPROVED',
+        category:            tmpl.category         as string,
+        parameter_format:    tmpl.parameter_format as 'POSITIONAL' | 'NAMED',
+        components:          tmpl.components       as MetaWhatsAppTemplate['components'],
         parameters,
-        supported:          tmpl.supported        as boolean,
-        unsupported_reason: tmpl.unsupported_reason as string | null,
+        supported:           tmpl.supported        as boolean,
+        unsupported_reason:  tmpl.unsupported_reason as string | null,
+        header_media_format: tmpl.header_media_format as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null, // MVP4B.3
       })
     }
 

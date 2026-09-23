@@ -45,9 +45,12 @@
 //
 // DTO:
 //   Cada template retorna: id, name, language, status, category,
-//   parameter_format, components, parameters, supported, unsupported_reason.
+//   parameter_format, components, parameters, supported, unsupported_reason,
+//   header_media_format.
 //   'parameters' é lista normalizada derivada server-side (picker-ready).
-//   'supported' / 'unsupported_reason' indicam capacidade do MVP primeiro incremento.
+//   'supported' / 'unsupported_reason' indicam capacidade do MVP atual.
+//   'header_media_format' classifica o tipo de mídia do HEADER: null | 'IMAGE' | 'VIDEO' | 'DOCUMENT'.
+//   MVP4B.2: IMAGE/VIDEO/DOCUMENT → supported=true. O envio real de mídia pertence à 4B.4.
 //
 // Parsing de placeholders:
 //   Delegado ao templateEngine (analyzeTemplate). Fonte canônica: component.text.
@@ -106,16 +109,17 @@ function sanitizeTemplate(raw) {
   const safeComponents = components.map(({ example: _ex, ...rest }) => rest);
 
   return {
-    id:                 raw.id,
-    name:               raw.name,
-    language:           raw.language,
-    status:             'APPROVED',
-    category:           raw.category,
-    parameter_format:   analysis.parameter_format,
-    components:         safeComponents,
-    parameters:         analysis.parameters,
-    supported:          analysis.supported,
-    unsupported_reason: analysis.unsupported_reason,
+    id:                  raw.id,
+    name:                raw.name,
+    language:            raw.language,
+    status:              'APPROVED',
+    category:            raw.category,
+    parameter_format:    analysis.parameter_format,
+    components:          safeComponents,
+    parameters:          analysis.parameters,
+    supported:           analysis.supported,
+    unsupported_reason:  analysis.unsupported_reason,
+    header_media_format: analysis.headerMediaFormat, // null | 'IMAGE' | 'VIDEO' | 'DOCUMENT' (MVP4B.3)
   };
 }
 

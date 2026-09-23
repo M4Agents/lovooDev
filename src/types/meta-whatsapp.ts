@@ -277,18 +277,25 @@ export interface MetaTemplateComponent {
 
 // ── Template de mensagem completo ─────────────────────────────────────────────
 // Retornado pelo endpoint GET /templates após análise do templateEngine.
+// MVP4B.3: header_media_format classifica o tipo de mídia do HEADER.
+//   null            → sem HEADER de mídia (TEXT ou ausente)
+//   'IMAGE'         → HEADER IMAGE (suportado desde MVP4B.2)
+//   'VIDEO'         → HEADER VIDEO (suportado desde MVP4B.2)
+//   'DOCUMENT'      → HEADER DOCUMENT (suportado desde MVP4B.2)
+// O envio real de mídia e o campo asset_id pertencem à etapa 4B.4.
 
 export interface MetaWhatsAppTemplate {
-  id:                 string
-  name:               string
-  language:           string
-  status:             'APPROVED'
-  category:           string
-  parameter_format:   MetaTemplateParameterFormat
-  components:         MetaTemplateComponent[]
-  parameters:         MetaTemplateParameter[]
-  supported:          boolean
-  unsupported_reason: string | null
+  id:                  string
+  name:                string
+  language:            string
+  status:              'APPROVED'
+  category:            string
+  parameter_format:    MetaTemplateParameterFormat
+  components:          MetaTemplateComponent[]
+  parameters:          MetaTemplateParameter[]
+  supported:           boolean
+  unsupported_reason:  string | null
+  header_media_format: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null  // MVP4B.3
 }
 
 // ── Resposta de listagem de templates ────────────────────────────────────────

@@ -37,9 +37,9 @@
 //   TPL-29  BODY TEXT → supported=true
 //   TPL-30  HEADER TEXT → supported=true
 //   TPL-31  FOOTER → supported=true
-//   TPL-32  HEADER IMAGE → supported=false
-//   TPL-33  HEADER VIDEO → supported=false
-//   TPL-34  HEADER DOCUMENT → supported=false
+//   TPL-32  HEADER IMAGE → supported=true + header_media_format=IMAGE  (MVP4B.3)
+//   TPL-33  HEADER VIDEO → supported=true + header_media_format=VIDEO  (MVP4B.3)
+//   TPL-34  HEADER DOCUMENT → supported=true + header_media_format=DOCUMENT  (MVP4B.3)
 //   TPL-35  BUTTONS → supported=false
 //   TPL-36  CAROUSEL → supported=false
 //   TPL-37  AUTHENTICATION → supported=false
@@ -985,27 +985,28 @@ describe('TPL-31 FOOTER supported', () => {
 });
 
 // =============================================================================
-// TPL-32  HEADER IMAGE → supported=false
+// TPL-32  HEADER IMAGE → supported=true + header_media_format=IMAGE  (MVP4B.3)
 // =============================================================================
 
-describe('TPL-32 HEADER IMAGE unsupported', () => {
-  it('HEADER format=IMAGE → supported=false', async () => {
+describe('TPL-32 HEADER IMAGE supported', () => {
+  it('HEADER format=IMAGE → supported=true, header_media_format=IMAGE, unsupported_reason=null', async () => {
     mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_IMAGE_HEADER]));
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
     const tpl = res._body.templates[0];
-    expect(tpl.supported).toBe(false);
-    expect(tpl.unsupported_reason).toContain('IMAGE');
+    expect(tpl.supported).toBe(true);
+    expect(tpl.header_media_format).toBe('IMAGE');
+    expect(tpl.unsupported_reason).toBeNull();
   });
 });
 
 // =============================================================================
-// TPL-33  HEADER VIDEO → supported=false
+// TPL-33  HEADER VIDEO → supported=true + header_media_format=VIDEO  (MVP4B.3)
 // =============================================================================
 
-describe('TPL-33 HEADER VIDEO unsupported', () => {
-  it('HEADER format=VIDEO → supported=false', async () => {
+describe('TPL-33 HEADER VIDEO supported', () => {
+  it('HEADER format=VIDEO → supported=true, header_media_format=VIDEO, unsupported_reason=null', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-vid',
@@ -1018,17 +1019,18 @@ describe('TPL-33 HEADER VIDEO unsupported', () => {
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
-    expect(res._body.templates[0].supported).toBe(false);
-    expect(res._body.templates[0].unsupported_reason).toContain('VIDEO');
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].header_media_format).toBe('VIDEO');
+    expect(res._body.templates[0].unsupported_reason).toBeNull();
   });
 });
 
 // =============================================================================
-// TPL-34  HEADER DOCUMENT → supported=false
+// TPL-34  HEADER DOCUMENT → supported=true + header_media_format=DOCUMENT  (MVP4B.3)
 // =============================================================================
 
-describe('TPL-34 HEADER DOCUMENT unsupported', () => {
-  it('HEADER format=DOCUMENT → supported=false', async () => {
+describe('TPL-34 HEADER DOCUMENT supported', () => {
+  it('HEADER format=DOCUMENT → supported=true, header_media_format=DOCUMENT, unsupported_reason=null', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-doc',
@@ -1041,8 +1043,9 @@ describe('TPL-34 HEADER DOCUMENT unsupported', () => {
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
-    expect(res._body.templates[0].supported).toBe(false);
-    expect(res._body.templates[0].unsupported_reason).toContain('DOCUMENT');
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].header_media_format).toBe('DOCUMENT');
+    expect(res._body.templates[0].unsupported_reason).toBeNull();
   });
 });
 
@@ -1406,15 +1409,16 @@ describe('FIX F-01 component.example não exposto no DTO', () => {
     });
   });
 
-  it('HEADER IMAGE (unsupported): components[*] também não possui example; header_handle não aparece', async () => {
-    // FAKE_TEMPLATE_IMAGE_HEADER tem HEADER com example.header_handle (internal FB URL)
+  it('HEADER IMAGE (supported MVP4B.3): components[*] não possui example; header_handle não aparece', async () => {
+    // FAKE_TEMPLATE_IMAGE_HEADER tem HEADER com example.header_handle (internal FB URL).
+    // MVP4B.3: IMAGE agora supported=true — strip de example continua obrigatório.
     mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_IMAGE_HEADER]));
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
 
     const tpl = res._body.templates[0];
-    expect(tpl.supported).toBe(false);  // continua unsupported
+    expect(tpl.supported).toBe(true);  // MVP4B.3: IMAGE é suportado estruturalmente
     tpl.components.forEach(comp => {
       expect(comp).not.toHaveProperty('example');
     });
@@ -1494,11 +1498,12 @@ describe('FIX F-01 component.example não exposto no DTO', () => {
 
 describe('Classificação supported — conjunto misto', () => {
   it('lista mista: suportados e não suportados retornam juntos com flag correta', async () => {
+    // MVP4B.3: FAKE_TEMPLATE_IMAGE_HEADER agora é supported=true (IMAGE reconhecido).
     const mixed = [
-      FAKE_TEMPLATE_SIMPLE,       // supported
-      FAKE_TEMPLATE_AUTH,         // unsupported (AUTHENTICATION)
-      FAKE_TEMPLATE_IMAGE_HEADER, // unsupported (HEADER IMAGE)
-      FAKE_TEMPLATE_WITH_HEADER,  // supported
+      FAKE_TEMPLATE_SIMPLE,       // supported — header_media_format=null
+      FAKE_TEMPLATE_AUTH,         // unsupported (AUTHENTICATION + BUTTONS)
+      FAKE_TEMPLATE_IMAGE_HEADER, // supported (HEADER IMAGE — MVP4B.3)
+      FAKE_TEMPLATE_WITH_HEADER,  // supported — header_media_format=null (TEXT)
     ];
     mockListMessageTemplates.mockResolvedValue(makeListResult(mixed));
     const req = makeReq();
@@ -1510,13 +1515,19 @@ describe('Classificação supported — conjunto misto', () => {
 
     const supported   = results.filter(t => t.supported);
     const unsupported = results.filter(t => !t.supported);
-    expect(supported).toHaveLength(2);
-    expect(unsupported).toHaveLength(2);
+    expect(supported).toHaveLength(3);   // SIMPLE + IMAGE + WITH_HEADER
+    expect(unsupported).toHaveLength(1); // somente AUTH
 
     unsupported.forEach(t => {
       expect(typeof t.unsupported_reason).toBe('string');
       expect(t.unsupported_reason.length).toBeGreaterThan(0);
     });
+
+    // Verificar header_media_format na lista
+    const imgResult = results.find(t => t.id === 'tpl-img');
+    expect(imgResult?.header_media_format).toBe('IMAGE');
+    const textResult = results.find(t => t.id === 'tpl-001');
+    expect(textResult?.header_media_format).toBeNull();
   });
 });
 
@@ -1797,4 +1808,236 @@ describe('FIX F-05 — component.text canônico (não example)', () => {
     expect(tplResult.parameters).toHaveLength(0);
   });
 
+});
+
+// =============================================================================
+// GET-M — MVP4B.3 — Classificação header_media_format no DTO do GET templates
+// =============================================================================
+
+describe('GET-M01 HEADER IMAGE — supported=true + header_media_format=IMAGE', () => {
+  it('DTO reflete supported=true, header_media_format=IMAGE; example e header_handle não expostos', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_IMAGE_HEADER]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const tpl = res._body.templates[0];
+    expect(tpl.supported).toBe(true);
+    expect(tpl.header_media_format).toBe('IMAGE');
+    expect(tpl.unsupported_reason).toBeNull();
+    tpl.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
+    expect(JSON.stringify(res._body)).not.toContain('header_handle');
+  });
+});
+
+describe('GET-M02 HEADER VIDEO — supported=true + header_media_format=VIDEO', () => {
+  it('DTO reflete supported=true, header_media_format=VIDEO', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m02-vid',
+      components: [
+        { type: 'HEADER', format: 'VIDEO', example: { header_handle: ['https://fb-cdn.example/v.mp4'] } },
+        { type: 'BODY',   text: 'Vídeo!', example: { body_text: [[]] } },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(true);
+    expect(result.header_media_format).toBe('VIDEO');
+    expect(result.unsupported_reason).toBeNull();
+    result.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
+  });
+});
+
+describe('GET-M03 HEADER DOCUMENT — supported=true + header_media_format=DOCUMENT', () => {
+  it('DTO reflete supported=true, header_media_format=DOCUMENT', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m03-doc',
+      components: [
+        { type: 'HEADER', format: 'DOCUMENT', example: { header_handle: ['https://fb-cdn.example/d.pdf'] } },
+        { type: 'BODY',   text: 'Documento!', example: { body_text: [[]] } },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(true);
+    expect(result.header_media_format).toBe('DOCUMENT');
+    expect(result.unsupported_reason).toBeNull();
+    result.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
+  });
+});
+
+describe('GET-M04 HEADER TEXT — header_media_format=null', () => {
+  it('HEADER TEXT → supported=true, header_media_format=null', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_WITH_HEADER]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const tpl = res._body.templates[0];
+    expect(tpl.supported).toBe(true);
+    expect(tpl.header_media_format).toBeNull();
+  });
+});
+
+describe('GET-M05 sem HEADER — header_media_format=null', () => {
+  it('template sem componente HEADER → header_media_format=null', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_SIMPLE]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates[0].header_media_format).toBeNull();
+  });
+});
+
+describe('GET-M06 HEADER IMAGE + BUTTONS — fail-closed', () => {
+  it('IMAGE + BUTTONS → supported=false (BUTTONS não suportado)', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m06-img-btn',
+      components: [
+        { type: 'HEADER',  format: 'IMAGE', example: {} },
+        { type: 'BODY',    text: 'Clique!', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(false);
+    expect(result.unsupported_reason).toBeTruthy();
+    // Aceitar HEADER IMAGE não libera BUTTONS
+  });
+});
+
+describe('GET-M07 HEADER formato desconhecido — fail-closed', () => {
+  it('HEADER format=GIF → supported=false', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m07-gif',
+      components: [
+        { type: 'HEADER', format: 'GIF' },
+        { type: 'BODY',   text: 'Animação!', example: { body_text: [[]] } },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(false);
+  });
+
+  it('HEADER format=LOCATION → supported=false', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m07-loc',
+      components: [
+        { type: 'HEADER', format: 'LOCATION' },
+        { type: 'BODY',   text: 'Local!', example: { body_text: [[]] } },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(false);
+  });
+
+  it('HEADER format=STICKER → supported=false', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'get-m07-sticker',
+      components: [
+        { type: 'HEADER', format: 'STICKER' },
+        { type: 'BODY',   text: 'Sticker!', example: { body_text: [[]] } },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(false);
+  });
+});
+
+describe('GET-M08 AUTHENTICATION — fail-closed', () => {
+  it('category=AUTHENTICATION + BUTTONS → supported=false, header_media_format=null', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_AUTH]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const tpl = res._body.templates[0];
+    expect(tpl.supported).toBe(false);
+    expect(tpl.header_media_format).toBeNull();
+    expect(tpl.unsupported_reason).toContain('AUTHENTICATION');
+  });
+});
+
+describe('GET-M09 lista mista — text + mídia suportados + unsupported', () => {
+  it('SIMPLE(text) + IMAGE(mídia) + NAMED(text) supported; AUTH unsupported', async () => {
+    const imgTpl = { ...FAKE_TEMPLATE_IMAGE_HEADER, id: 'get-m09-img' };
+    const mixed  = [
+      FAKE_TEMPLATE_SIMPLE,  // supported, header_media_format=null
+      imgTpl,                // supported, header_media_format=IMAGE
+      FAKE_TEMPLATE_NAMED,   // supported, header_media_format=null
+      FAKE_TEMPLATE_AUTH,    // unsupported
+    ];
+    mockListMessageTemplates.mockResolvedValue(makeListResult(mixed));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const results = res._body.templates;
+    expect(results).toHaveLength(4);
+
+    const supported   = results.filter(t => t.supported);
+    const unsupported = results.filter(t => !t.supported);
+    expect(supported).toHaveLength(3);
+    expect(unsupported).toHaveLength(1);
+
+    // header_media_format correto por template
+    expect(results.find(t => t.id === 'get-m09-img')?.header_media_format).toBe('IMAGE');
+    expect(results.find(t => t.id === 'tpl-001')?.header_media_format).toBeNull();
+    expect(results.find(t => t.id === 'tpl-003')?.header_media_format).toBeNull();
+
+    // unsupported continua unsupported
+    const auth = results.find(t => t.id === 'tpl-otp');
+    expect(auth?.supported).toBe(false);
+    expect(auth?.header_media_format).toBeNull();
+  });
+});
+
+describe('GET-M10 F-01 — raw examples de mídia não expostos mesmo com supported=true', () => {
+  it('HEADER IMAGE supported: example strip preservado; header_handle não vaza; header_media_format presente', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_IMAGE_HEADER]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const tpl = res._body.templates[0];
+    // Agora supported (MVP4B.3) — mas sanitização continua intacta
+    expect(tpl.supported).toBe(true);
+    expect(tpl.header_media_format).toBe('IMAGE');
+
+    // Strip: nenhum componente expõe example
+    tpl.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
+
+    // header_handle (referência interna Meta CDN) não vaza em lugar algum
+    const bodyStr = JSON.stringify(res._body);
+    expect(bodyStr).not.toContain('header_handle');
+  });
 });
