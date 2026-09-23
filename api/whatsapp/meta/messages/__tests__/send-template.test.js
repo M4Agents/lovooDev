@@ -10,6 +10,63 @@
 //     HTTP-01  não-POST → 405 + Allow: POST
 //     HTTP-02  método inválido não chama guard
 //
+//   MEDIA REQUEST (MVP4B):
+//     MBOD-01  header_media_asset_id UUID inválido → 400 invalid_request
+//     MBOD-02  header_media_asset_id string vazia → 400 invalid_request
+//
+//   MEDIA CROSS-CHECK (MVP4B):
+//     MCHK-01  template textual + asset presente → 400 media_header_unexpected; upload 0; send 0
+//     MCHK-02  template IMAGE + asset ausente → 400 media_header_required; upload 0; send 0
+//     MCHK-03  template VIDEO + asset ausente → 400 media_header_required
+//     MCHK-04  template DOCUMENT + asset ausente → 400 media_header_required
+//     MCHK-05  template IMAGE + asset válido → prosseguir (validateMediaAsset chamado)
+//
+//   VALIDATE MEDIA ASSET (MVP4B):
+//     MAST-01  media_asset_not_found → 404 media_asset_not_found; upload 0; send 0
+//     MAST-02  media_asset_invalid → 400 invalid_request; upload 0; send 0
+//     MAST-03  media_asset_download_failed → 503 media_provider_unavailable; upload 0; send 0
+//     MAST-04  media_asset_too_large → 422 media_asset_too_large; upload 0; send 0
+//     MAST-05  media_asset_type_unknown → 422 media_asset_type_unknown; upload 0; send 0
+//     MAST-06  media_asset_type_unsupported → 422 media_asset_type_unsupported; upload 0; send 0
+//     MAST-07  media_asset_type_mismatch → 422 media_asset_type_mismatch; upload 0; send 0
+//     MAST-08  companyId para validateMediaAsset = auth.companyId (não body.company_id)
+//
+//   UPLOAD MEDIA — WRITE 1 (MVP4B):
+//     UMRT-01  upload_media_timeout → 503 provider_unavailable; send 0
+//     UMRT-02  upload_media_network_error → 503 provider_unavailable; send 0
+//     UMRT-03  upload_media_failed → 502 provider_error; send 0
+//     UMRT-04  upload_media_invalid_response → 502 provider_error; send 0
+//     UMRT-05  token e phone_number_id para uploadMedia vêm do banco
+//
+//   BUILD + SEND (MVP4B):
+//     GBLD-01  IMAGE — header.parameters[0].image.id = mediaId
+//     GBLD-02  VIDEO — header.parameters[0].video.id = mediaId
+//     GBLD-03  DOCUMENT — header.parameters[0].document.id = mediaId + filename
+//     GBLD-04  buildGraphComponents lança após WRITE 1 → 500 internal_error; send 0
+//
+//   WRITE BUDGET (MVP4B):
+//     WBGT-01  template textual → upload 0, send 1
+//     WBGT-02  media IMAGE sucesso → upload 1, send 1
+//     WBGT-03  validateMediaAsset falha → upload 0, send 0
+//     WBGT-04  uploadMedia falha → upload 1, send 0
+//     WBGT-05  send falha após upload → upload 1, send 1 (send tentado)
+//     WBGT-06  build falha após upload → upload 1, send 0
+//
+//   PERSISTÊNCIA MEDIA (MVP4B):
+//     PMED-01  IMAGE → meta_messages.media_asset_id = assetId
+//     PMED-02  VIDEO → meta_messages.media_asset_id = assetId
+//     PMED-03  DOCUMENT → meta_messages.media_asset_id = assetId
+//     PMED-04  textual → meta_messages.media_asset_id = null
+//     PMED-05  body persistido = renderedBody (nunca mediaId/filename/URL)
+//     PMED-06  tracking (meta_whatsapp_messages) inalterado para media
+//     PMED-07  tracking failure pós-media-send → send_persistence_failed; Graph não repetido
+//     PMED-08  meta_messages failure → send_persistence_failed; Graph não repetido
+//
+//   SEGURANÇA MEDIA (MVP4B):
+//     MSEC-01  body malicioso com media_id, mime, filename, url ignorados
+//     MSEC-02  recipient continua de conversation.wa_id (não body)
+//     MSEC-03  phone_number_id para uploadMedia = instance.phone_number_id (banco)
+//
 //   AUTH:
 //     AUTH-01  sem Authorization → 401
 //     AUTH-02  JWT inválido → 401
@@ -143,9 +200,16 @@ vi.mock('../../../../lib/meta-whatsapp/tokenCrypto.js', () => ({
 
 const mockListMessageTemplates = vi.fn();
 const mockSendTemplateMessage  = vi.fn();
+const mockUploadMedia          = vi.fn();
 vi.mock('../../../../lib/meta-whatsapp/graphClient.js', () => ({
   listMessageTemplates: (...args) => mockListMessageTemplates(...args),
   sendTemplateMessage:  (...args) => mockSendTemplateMessage(...args),
+  uploadMedia:          (...args) => mockUploadMedia(...args),
+}));
+
+const mockValidateMediaAsset = vi.fn();
+vi.mock('../../../../lib/meta-whatsapp/mediaAsset.js', () => ({
+  validateMediaAsset: (...args) => mockValidateMediaAsset(...args),
 }));
 
 // Engine mockado para isolamento completo (testado separadamente em templateEngine.test.js)
@@ -220,6 +284,7 @@ const FAKE_ANALYSIS_POSITIONAL = {
   parameter_format:   'POSITIONAL',
   parameters:         [{ component: 'BODY', key: '1', position: 1, example: null }],
   bodyText:           'Olá {{1}}, seu pedido foi confirmado.',
+  headerMediaFormat:  null,  // MVP4B: textual → sem media header
 };
 
 const FAKE_ANALYSIS_NAMED = {
@@ -228,6 +293,7 @@ const FAKE_ANALYSIS_NAMED = {
   parameter_format:   'NAMED',
   parameters:         [{ component: 'BODY', key: 'first_name', position: null, example: null }],
   bodyText:           'Olá {{first_name}}, seu pedido foi confirmado.',
+  headerMediaFormat:  null,  // MVP4B: textual → sem media header
 };
 
 const FAKE_COMPONENTS_BUILT = [
@@ -243,6 +309,79 @@ const HAPPY_BODY = {
   template_language: FAKE_TEMPLATE_LANG,
   parameter_values:  { body: { '1': 'João' } },
 };
+
+// ── Fixtures MVP4B — media ──────────────────────────────────────────────────
+
+const FAKE_ASSET_ID   = 'eeee0000-0000-0000-0000-000000000005';
+const FAKE_MEDIA_ID   = '987654321012345';   // mediaId retornado pelo Graph /media
+const FAKE_BLOB       = new Blob([new Uint8Array(100)], { type: 'application/octet-stream' });
+const FAKE_FILENAME   = 'relatorio-2026.pdf';
+
+// Templates raw com HEADER media
+const FAKE_RAW_TEMPLATE_IMAGE = {
+  id: 'tpl-img', name: FAKE_TEMPLATE_NAME, language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY',   text: 'Confira a imagem.' },
+  ],
+};
+
+const FAKE_RAW_TEMPLATE_VIDEO = {
+  id: 'tpl-vid', name: FAKE_TEMPLATE_NAME, language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'HEADER', format: 'VIDEO' },
+    { type: 'BODY',   text: 'Confira o vídeo.' },
+  ],
+};
+
+const FAKE_RAW_TEMPLATE_DOCUMENT = {
+  id: 'tpl-doc', name: FAKE_TEMPLATE_NAME, language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'HEADER', format: 'DOCUMENT' },
+    { type: 'BODY',   text: 'Segue o documento.' },
+  ],
+};
+
+// Análises simuladas para templates media
+const FAKE_ANALYSIS_IMAGE = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Confira a imagem.', headerMediaFormat: 'IMAGE',
+};
+const FAKE_ANALYSIS_VIDEO = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Confira o vídeo.', headerMediaFormat: 'VIDEO',
+};
+const FAKE_ANALYSIS_DOCUMENT = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Segue o documento.', headerMediaFormat: 'DOCUMENT',
+};
+
+// validateMediaAsset results por tipo
+const FAKE_ASSET_RESULT_IMAGE = {
+  assetId: FAKE_ASSET_ID, blob: FAKE_BLOB, mimeType: 'image/jpeg',
+  size: 100, mediaType: 'IMAGE', filename: undefined,
+};
+const FAKE_ASSET_RESULT_VIDEO = {
+  assetId: FAKE_ASSET_ID, blob: FAKE_BLOB, mimeType: 'video/mp4',
+  size: 100, mediaType: 'VIDEO', filename: undefined,
+};
+const FAKE_ASSET_RESULT_DOCUMENT = {
+  assetId: FAKE_ASSET_ID, blob: FAKE_BLOB, mimeType: 'application/pdf',
+  size: 100, mediaType: 'DOCUMENT', filename: FAKE_FILENAME,
+};
+
+// components construídos para cada tipo (retorno do engine mockado)
+const FAKE_COMPONENTS_IMAGE    = [{ type: 'header', parameters: [{ type: 'image',    image:    { id: FAKE_MEDIA_ID } }] }];
+const FAKE_COMPONENTS_VIDEO    = [{ type: 'header', parameters: [{ type: 'video',    video:    { id: FAKE_MEDIA_ID } }] }];
+const FAKE_COMPONENTS_DOCUMENT = [{ type: 'header', parameters: [{ type: 'document', document: { id: FAKE_MEDIA_ID, filename: FAKE_FILENAME } }] }];
+
+// Body media (happy path IMAGE)
+const HAPPY_BODY_IMAGE = { ...HAPPY_BODY, parameter_values: { body: {} }, header_media_asset_id: FAKE_ASSET_ID };
+const HAPPY_BODY_VIDEO = { ...HAPPY_BODY, parameter_values: { body: {} }, header_media_asset_id: FAKE_ASSET_ID };
+const HAPPY_BODY_DOCUMENT = { ...HAPPY_BODY, parameter_values: { body: {} }, header_media_asset_id: FAKE_ASSET_ID };
 
 // =============================================================================
 // Factories de mock chain
@@ -346,6 +485,38 @@ function setupHappyPath() {
   mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
   mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
   setupEngineOk();
+  mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+}
+
+/**
+ * Configura happy path para template media (IMAGE/VIDEO/DOCUMENT).
+ * analysis, assetResult e mediaComponents são injetados pelo teste para flexibilidade.
+ */
+function setupHappyMediaPath({
+  rawTemplate  = FAKE_RAW_TEMPLATE_IMAGE,
+  analysis     = FAKE_ANALYSIS_IMAGE,
+  assetResult  = FAKE_ASSET_RESULT_IMAGE,
+  components   = FAKE_COMPONENTS_IMAGE,
+} = {}) {
+  setupGuardOk();
+
+  mockSvc.from = vi.fn()
+    .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+    .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+    .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+    .mockReturnValueOnce(makeInsertChain())   // meta_whatsapp_messages
+    .mockReturnValueOnce(makeInsertChain());  // meta_messages
+
+  mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+  mockListMessageTemplates.mockResolvedValue(makeListResult([rawTemplate]));
+
+  mockAnalyzeTemplate.mockReturnValue(analysis);
+  mockValidateParameterValues.mockReturnValue({ valid: true });
+  mockBuildGraphComponents.mockReturnValue(components);
+  mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+  mockValidateMediaAsset.mockResolvedValue(assetResult);
+  mockUploadMedia.mockResolvedValue({ mediaId: FAKE_MEDIA_ID });
   mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
 }
 
@@ -1523,6 +1694,7 @@ describe('GWRT-11 template estático (sem variáveis) — components omitido do 
     const staticAnalysis = {
       supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
       parameters: [], bodyText: 'Olá! Aqui está sua confirmação.',
+      headerMediaFormat: null,  // MVP4B: template textual
     };
 
     mockSvc.from = vi.fn()
@@ -1816,5 +1988,773 @@ describe('SEC-09 Graph WRITE não chamado em falha de validação', () => {
     await handler(makeReq({ body: { ...HAPPY_BODY, template_name: '' } }), res);
     expect(res._status).toBe(400);
     expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// MVP4B — MEDIA TEMPLATE
+// =============================================================================
+
+// ── MBOD — Validação de header_media_asset_id ─────────────────────────────
+
+describe('MBOD-01 header_media_asset_id UUID inválido → 400 invalid_request', () => {
+  it('string não-UUID → 400', async () => {
+    setupGuardOk();
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, header_media_asset_id: 'not-a-uuid' } }), res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('invalid_request');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MBOD-02 header_media_asset_id string vazia → 400 invalid_request', () => {
+  it('string vazia → 400', async () => {
+    setupGuardOk();
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, header_media_asset_id: '' } }), res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('invalid_request');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ── MCHK — Cross-check text/media ────────────────────────────────────────
+
+describe('MCHK-01 template textual + asset presente → 400 media_header_unexpected', () => {
+  it('textual + header_media_asset_id → rejeita; upload 0; send 0', async () => {
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
+    // analyzeTemplate retorna template textual (headerMediaFormat = null)
+    mockAnalyzeTemplate.mockReturnValue({ ...FAKE_ANALYSIS_POSITIONAL, headerMediaFormat: null });
+    mockValidateParameterValues.mockReturnValue({ valid: true });
+    mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, header_media_asset_id: FAKE_ASSET_ID } }), res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('media_header_unexpected');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MCHK-02 template IMAGE + asset ausente → 400 media_header_required', () => {
+  it('IMAGE sem header_media_asset_id → rejeita; upload 0; send 0', async () => {
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_IMAGE]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_IMAGE);
+    mockValidateParameterValues.mockReturnValue({ valid: true });
+    mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('media_header_required');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MCHK-03 template VIDEO + asset ausente → 400 media_header_required', () => {
+  it('VIDEO sem header_media_asset_id → 400', async () => {
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_VIDEO]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_VIDEO);
+    mockValidateParameterValues.mockReturnValue({ valid: true });
+    mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_VIDEO }), res);
+    // HAPPY_BODY_VIDEO já tem asset — usar sem ele
+    const bodyNoAsset = { ...HAPPY_BODY, parameter_values: { body: {} } };
+    const res2 = makeRes();
+    vi.clearAllMocks();
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_VIDEO]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_VIDEO);
+    mockValidateParameterValues.mockReturnValue({ valid: true });
+    mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+    await handler(makeReq({ body: bodyNoAsset }), res2);
+    expect(res2._status).toBe(400);
+    expect(res2._body.error).toBe('media_header_required');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('MCHK-04 template DOCUMENT + asset ausente → 400 media_header_required', () => {
+  it('DOCUMENT sem header_media_asset_id → 400', async () => {
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_DOCUMENT]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_DOCUMENT);
+    mockValidateParameterValues.mockReturnValue({ valid: true });
+    mockInterpolateBody.mockReturnValue(FAKE_RENDERED_BODY);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('media_header_required');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MCHK-05 template IMAGE + asset válido → prosseguir', () => {
+  it('validateMediaAsset chamado quando cross-check passa', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    expect(mockValidateMediaAsset).toHaveBeenCalledOnce();
+  });
+});
+
+// ── MAST — validateMediaAsset error mapping ───────────────────────────────
+
+function makeAssetError(code) {
+  return Object.assign(new Error(code), { code });
+}
+
+describe('MAST-01 media_asset_not_found → 404 media_asset_not_found', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_not_found'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(404);
+    expect(res._body.error).toBe('media_asset_not_found');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-02 media_asset_invalid → 400 invalid_request', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_invalid'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('invalid_request');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-03 media_asset_download_failed → 503 media_provider_unavailable', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_download_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(503);
+    expect(res._body.error).toBe('media_provider_unavailable');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-04 media_asset_too_large → 422 media_asset_too_large', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_too_large'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('media_asset_too_large');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-05 media_asset_type_unknown → 422 media_asset_type_unknown', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_type_unknown'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('media_asset_type_unknown');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-06 media_asset_type_unsupported → 422 media_asset_type_unsupported', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_type_unsupported'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('media_asset_type_unsupported');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-07 media_asset_type_mismatch → 422 media_asset_type_mismatch', () => {
+  it('upload 0; send 0', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_type_mismatch'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('media_asset_type_mismatch');
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('MAST-08 companyId para validateMediaAsset = auth.companyId (não body)', () => {
+  it('validateMediaAsset recebe auth.companyId, não body.company_id', async () => {
+    const AUTH_COMPANY = 'f1f1f1f1-0000-0000-0000-f1f1f1f1f1f1';
+    const BODY_COMPANY = 'b2b2b2b2-0000-0000-0000-b2b2b2b2b2b2'; // diferente!
+
+    setupHappyMediaPath();
+    // Override: auth.companyId = AUTH_COMPANY (diferente do body)
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true, userId: FAKE_USER_ID, companyId: AUTH_COMPANY, role: 'admin', accessPath: 'direct',
+    });
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY_IMAGE, company_id: BODY_COMPANY } }), res);
+
+    // validateMediaAsset deve receber companyId = AUTH_COMPANY, nunca BODY_COMPANY
+    expect(mockValidateMediaAsset).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: AUTH_COMPANY }),
+    );
+    expect(mockValidateMediaAsset).not.toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: BODY_COMPANY }),
+    );
+  });
+});
+
+// ── UMRT — uploadMedia error mapping ─────────────────────────────────────
+
+describe('UMRT-01 upload_media_timeout → 503 provider_unavailable', () => {
+  it('send 0', async () => {
+    setupHappyMediaPath();
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_timeout'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(503);
+    expect(res._body.error).toBe('provider_unavailable');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('UMRT-02 upload_media_network_error → 503 provider_unavailable', () => {
+  it('send 0', async () => {
+    setupHappyMediaPath();
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_network_error'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(503);
+    expect(res._body.error).toBe('provider_unavailable');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('UMRT-03 upload_media_failed → 502 provider_error', () => {
+  it('send 0', async () => {
+    setupHappyMediaPath();
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(502);
+    expect(res._body.error).toBe('provider_error');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('UMRT-04 upload_media_invalid_response → 502 provider_error', () => {
+  it('send 0', async () => {
+    setupHappyMediaPath();
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_invalid_response'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(502);
+    expect(res._body.error).toBe('provider_error');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('UMRT-05 token e phone_number_id para uploadMedia vêm do banco', () => {
+  it('uploadMedia recebe token decryptado e phone_number_id da instância', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    const [token, phoneId] = mockUploadMedia.mock.calls[0];
+    expect(token).toBe(FAKE_PLAIN_TOKEN);         // token decryptado do banco
+    expect(phoneId).toBe(FAKE_PHONE_NUM_ID);      // phone_number_id da instância do banco
+  });
+});
+
+// ── GBLD — Build + components Graph ──────────────────────────────────────
+
+describe('GBLD-01 IMAGE — header.parameters[0].image.id = mediaId', () => {
+  it('buildGraphComponents chamado com headerMedia IMAGE; payload correto', async () => {
+    setupHappyMediaPath();
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_IMAGE);
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+
+    // buildGraphComponents recebeu headerMedia com mediaId e mediaType IMAGE
+    const [, , , opts] = mockBuildGraphComponents.mock.calls[0];
+    expect(opts.headerMedia.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(opts.headerMedia.mediaType).toBe('IMAGE');
+
+    // sendTemplateMessage recebeu components corretos
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_IMAGE);
+  });
+});
+
+describe('GBLD-02 VIDEO — header.parameters[0].video.id = mediaId', () => {
+  it('VIDEO: buildGraphComponents com headerMedia VIDEO; send usa components', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_VIDEO,
+      analysis:    FAKE_ANALYSIS_VIDEO,
+      assetResult: FAKE_ASSET_RESULT_VIDEO,
+      components:  FAKE_COMPONENTS_VIDEO,
+    });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_VIDEO }), res);
+    expect(res._status).toBe(200);
+
+    const [, , , opts] = mockBuildGraphComponents.mock.calls[0];
+    expect(opts.headerMedia.mediaType).toBe('VIDEO');
+
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_VIDEO);
+  });
+});
+
+describe('GBLD-03 DOCUMENT — document.id = mediaId e document.filename', () => {
+  it('DOCUMENT: filename do asset chega ao payload Graph', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_DOCUMENT,
+      analysis:    FAKE_ANALYSIS_DOCUMENT,
+      assetResult: FAKE_ASSET_RESULT_DOCUMENT,
+      components:  FAKE_COMPONENTS_DOCUMENT,
+    });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_DOCUMENT }), res);
+    expect(res._status).toBe(200);
+
+    // buildGraphComponents recebeu filename do asset
+    const [, , , opts] = mockBuildGraphComponents.mock.calls[0];
+    expect(opts.headerMedia.mediaType).toBe('DOCUMENT');
+    expect(opts.headerMedia.filename).toBe(FAKE_FILENAME);
+
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_DOCUMENT);
+  });
+});
+
+describe('GBLD-04 buildGraphComponents lança após WRITE 1 → 500 internal_error; send 0', () => {
+  it('F3: orphan media_id possível; sendTemplateMessage não chamado', async () => {
+    setupHappyMediaPath();
+    mockBuildGraphComponents.mockImplementation(() => { throw new Error('simulated-engine-bug'); });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(500);
+    expect(res._body.error).toBe('internal_error');
+    // uploadMedia FOI chamado (WRITE 1 ocorreu)
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    // sendTemplateMessage NÃO chamado
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ── WBGT — Write budget ───────────────────────────────────────────────────
+
+describe('WBGT-01 template textual → upload 0, send 1', () => {
+  it('sem media: nenhum upload; exatamente 1 send', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('WBGT-02 media IMAGE sucesso → upload 1, send 1', () => {
+  it('exatamente 1 upload e 1 send', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('WBGT-03 validateMediaAsset falha → upload 0, send 0', () => {
+  it('não chama upload nem send', async () => {
+    setupHappyMediaPath();
+    mockValidateMediaAsset.mockRejectedValue(makeAssetError('media_asset_not_found'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('WBGT-04 uploadMedia falha → upload 1, send 0', () => {
+  it('upload tentado exatamente 1 vez; send 0', async () => {
+    setupHappyMediaPath();
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('WBGT-05 send falha após upload → upload 1, send 1 (ambos tentados)', () => {
+  it('upload e send exatamente 1 vez cada', async () => {
+    setupHappyMediaPath();
+    mockSendTemplateMessage.mockRejectedValue(makeAssetError('send_template_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(502);
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('WBGT-06 build falha após upload → upload 1, send 0', () => {
+  it('upload ocorreu; send não chamado (F3)', async () => {
+    setupHappyMediaPath();
+    mockBuildGraphComponents.mockImplementation(() => { throw new Error('bug'); });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ── PMED — Persistência media ─────────────────────────────────────────────
+
+describe('PMED-01 IMAGE → meta_messages.media_asset_id = assetId', () => {
+  it('INSERT de meta_messages inclui media_asset_id correto', async () => {
+    setupHappyMediaPath();
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())          // meta_whatsapp_messages
+      .mockReturnValueOnce({ insert: insertSpy });    // meta_messages
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+
+    const insertArg = insertSpy.mock.calls[0][0];
+    expect(insertArg.media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(insertArg.message_type).toBe('template');
+  });
+});
+
+describe('PMED-02 VIDEO → meta_messages.media_asset_id = assetId', () => {
+  it('INSERT inclui media_asset_id do asset VIDEO', async () => {
+    setupHappyMediaPath({ rawTemplate: FAKE_RAW_TEMPLATE_VIDEO, analysis: FAKE_ANALYSIS_VIDEO, assetResult: FAKE_ASSET_RESULT_VIDEO, components: FAKE_COMPONENTS_VIDEO });
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: insertSpy });
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_VIDEO }), res);
+    expect(res._status).toBe(200);
+    expect(insertSpy.mock.calls[0][0].media_asset_id).toBe(FAKE_ASSET_ID);
+  });
+});
+
+describe('PMED-03 DOCUMENT → meta_messages.media_asset_id = assetId', () => {
+  it('INSERT inclui media_asset_id do asset DOCUMENT', async () => {
+    setupHappyMediaPath({ rawTemplate: FAKE_RAW_TEMPLATE_DOCUMENT, analysis: FAKE_ANALYSIS_DOCUMENT, assetResult: FAKE_ASSET_RESULT_DOCUMENT, components: FAKE_COMPONENTS_DOCUMENT });
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: insertSpy });
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_DOCUMENT }), res);
+    expect(res._status).toBe(200);
+    expect(insertSpy.mock.calls[0][0].media_asset_id).toBe(FAKE_ASSET_ID);
+  });
+});
+
+describe('PMED-04 textual → meta_messages.media_asset_id = null', () => {
+  it('INSERT de meta_messages tem media_asset_id null', async () => {
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: insertSpy });
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
+    setupEngineOk();
+    mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(insertSpy.mock.calls[0][0].media_asset_id).toBeNull();
+  });
+});
+
+describe('PMED-05 body persistido = renderedBody (nunca mediaId/filename/URL)', () => {
+  it('INSERT usa renderedBody, não mediaId nem filename', async () => {
+    setupHappyMediaPath();
+    mockInterpolateBody.mockReturnValue('Corpo interpolado correto.');
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: insertSpy });
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    const row = insertSpy.mock.calls[0][0];
+    expect(row.body).toBe('Corpo interpolado correto.');
+    expect(row.body).not.toContain(FAKE_MEDIA_ID);
+    expect(row.body).not.toContain(FAKE_ASSET_ID);
+  });
+});
+
+describe('PMED-06 tracking (meta_whatsapp_messages) inalterado para media', () => {
+  it('INSERT tracking tem company_id, instance_id, meta_message_id, status', async () => {
+    setupHappyMediaPath();
+    const trackingSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce({ insert: trackingSpy })  // meta_whatsapp_messages
+      .mockReturnValueOnce(makeInsertChain());       // meta_messages
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    const row = trackingSpy.mock.calls[0][0];
+    expect(row.company_id).toBe(FAKE_COMPANY_ID);
+    expect(row.instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(row.meta_message_id).toBe(FAKE_WAMID);
+    expect(row.status).toBe('accepted');
+    // Tracking NÃO inclui media_asset_id
+    expect(Object.prototype.hasOwnProperty.call(row, 'media_asset_id')).toBe(false);
+  });
+});
+
+describe('PMED-07 tracking failure pós-media-send → send_persistence_failed; Graph não repetido', () => {
+  it('500 send_persistence_failed; upload e send exatamente 1 vez cada', async () => {
+    setupHappyMediaPath();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain(new Error('tracking fail')));
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(500);
+    expect(res._body.error).toBe('send_persistence_failed');
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('PMED-08 meta_messages failure → send_persistence_failed; Graph não repetido', () => {
+  it('500 send_persistence_failed; upload e send exatamente 1 vez cada', async () => {
+    setupHappyMediaPath();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())                      // tracking ok
+      .mockReturnValueOnce(makeInsertChain(new Error('chat fail'))); // meta_messages falha
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(500);
+    expect(res._body.error).toBe('send_persistence_failed');
+    expect(mockUploadMedia).toHaveBeenCalledOnce();
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+// ── MSEC — Segurança media ────────────────────────────────────────────────
+
+describe('MSEC-01 body malicioso com media_id, mime, filename, url ignorados', () => {
+  it('campos injetos no body não afetam upload nem components', async () => {
+    setupHappyMediaPath();
+    const maliciousBody = {
+      ...HAPPY_BODY_IMAGE,
+      media_id:        'evil-media-id',
+      mime:            'application/x-evil',
+      mime_type:       'application/x-evil',
+      filename:        '../../../evil',
+      url:             'https://evil.example/steal',
+      preview_url:     'https://evil.example/preview',
+      s3_key:          '../../../secrets',
+      bucket:          'evil-bucket',
+      components:      [{ injected: true }],
+    };
+    const res = makeRes();
+    await handler(makeReq({ body: maliciousBody }), res);
+    expect(res._status).toBe(200);
+
+    // uploadMedia usa somente dados do assetResult (não do body)
+    const [, , blob, mimeType] = mockUploadMedia.mock.calls[0];
+    expect(blob).toBe(FAKE_BLOB);           // do assetResult, nunca do body
+    expect(mimeType).toBe('image/jpeg');    // do assetResult, nunca do body
+
+    // components vêm do engine, nunca do body
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_IMAGE);
+    expect(JSON.stringify(tpl)).not.toContain('injected');
+  });
+});
+
+describe('MSEC-02 recipient continua de conversation.wa_id (não body)', () => {
+  it('body com to= injeto não afeta recipient', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY_IMAGE, to: '5511000000000' } }), res);
+    expect(res._status).toBe(200);
+    const [, , toArg] = mockSendTemplateMessage.mock.calls[0];
+    expect(toArg).toBe(FAKE_WA_ID); // sempre da conversa do banco
+    expect(toArg).not.toBe('5511000000000');
+  });
+});
+
+describe('MSEC-03 phone_number_id para uploadMedia = instance.phone_number_id (banco)', () => {
+  it('body com phone_number_id injetado não afeta uploadMedia', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY_IMAGE, phone_number_id: 'injected-phone' } }), res);
+    expect(res._status).toBe(200);
+    const [, phoneId] = mockUploadMedia.mock.calls[0];
+    expect(phoneId).toBe(FAKE_PHONE_NUM_ID);  // da instância do banco
+    expect(phoneId).not.toBe('injected-phone');
+  });
+});
+
+// ── TEXT-REGRESSÃO — garantir que fluxo textual não regrediu ─────────────
+
+describe('TEXT-01 template textual sem asset continua sucesso', () => {
+  it('fluxo textual completo → 200 ok', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+  });
+});
+
+describe('TEXT-02 uploadMedia = 0 chamadas em template textual', () => {
+  it('upload nunca chamado', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('TEXT-03 sendTemplateMessage = exatamente 1 em template textual', () => {
+  it('exatamente 1 send, nunca 0 ou 2', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(mockSendTemplateMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('TEXT-04 media_asset_id persistido como null para template textual', () => {
+  it('INSERT meta_messages.media_asset_id = null', async () => {
+    const insertSpy = vi.fn().mockResolvedValue({ data: null, error: null });
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: insertSpy });
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
+    setupEngineOk();
+    mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(insertSpy.mock.calls[0][0].media_asset_id).toBeNull();
+  });
+});
+
+describe('TEXT-05 payload Graph textual permanece equivalente ao anterior (sem media fields)', () => {
+  it('sendTemplateMessage recebe template sem image/video/document nos components', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.name).toBe(FAKE_TEMPLATE_NAME);
+    expect(tpl.language.code).toBe(FAKE_TEMPLATE_LANG);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_BUILT);
+    // Garantir que media não foi injetado acidentalmente
+    const tplStr = JSON.stringify(tpl);
+    expect(tplStr).not.toContain('image');
+    expect(tplStr).not.toContain('video');
+    expect(tplStr).not.toContain('document');
   });
 });

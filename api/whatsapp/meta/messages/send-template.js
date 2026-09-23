@@ -1,14 +1,18 @@
 // =============================================================================
 // POST /api/whatsapp/meta/messages/send-template
 //
-// Envia uma mensagem de template textual WhatsApp via Meta Cloud API (MVP4A).
+// Envia uma mensagem de template WhatsApp via Meta Cloud API (MVP4A + MVP4B).
 // Valida, busca, constrói e persiste o template de forma determinística.
 //
-// Contrato (MVP4A):
+// Contrato (MVP4A — textual):
 //   Body: { company_id, instance_id, conversation_id,
 //            template_name, template_language, parameter_values }
+//
+// Contrato adicional (MVP4B — media HEADER):
+//   Body: { ..., header_media_asset_id }   — UUID do asset validado server-side
 //   Campos NÃO aceitos como fonte de verdade: to, waba_id, phone_number_id,
-//     token, components, status, category, parameter_format.
+//     token, components, status, category, parameter_format,
+//     media_id, mime, mime_type, filename, url, preview_url, s3_key, bucket.
 //
 // Fluxo (ordem de segurança obrigatória — não alterar):
 //   1.  Method guard (POST only)
@@ -24,13 +28,16 @@
 //  11.  Decrypt do token
 //  12.  Lookup paginado do template (≤3 páginas, server-side language filter)
 //  13.  Detecção de duplicata / busca incompleta / not found / language not found
-//  14.  analyzeTemplate → supported check
+//  14.  analyzeTemplate → supported check → headerMediaFormat
+//  14.5 Cross-check media: hasMediaHeader vs header_media_asset_id
 //  15.  validateParameterValues → mismatch check
-//  16.  buildGraphComponents (server-side, nunca do frontend)
-//  17.  interpolateBody para persistência
-//  18.  sendTemplateMessage (Graph WRITE — exatamente uma vez)
+//  16.  interpolateBody (antecipado pré-writes — função pura)
+//  17A. validateMediaAsset (pré-write: download + MIME real) [somente media]
+//  17B. uploadMedia → WRITE 1 → mediaId [somente media]
+//  17C. buildGraphComponents (com ou sem headerMedia)
+//  18.  sendTemplateMessage → WRITE 2
 //  19.  Persistência em meta_whatsapp_messages (tracking)
-//  20.  Persistência em meta_messages (chat)
+//  20.  Persistência em meta_messages (chat) — inclui media_asset_id
 //  21.  Resposta sanitizada
 //
 // Segurança:
@@ -41,48 +48,53 @@
 //   - waba_id vem EXCLUSIVAMENTE de instance.waba_id (banco).
 //   - token descriptografado no backend — nunca exposto ao caller.
 //   - components construídos server-side pelo engine — nunca do frontend.
+//   - asset validado server-side (tenant-safe) — blob/MIME nunca do frontend.
+//   - mediaId retornado pelo Graph /media — nunca aceito do frontend.
 //   - Erros internos nunca expõem token, wamid, wa_id, parameter values ou stack.
 //   - Lookup cross-tenant: 404 opaco idêntico a inexistente.
 //   - Duplicata ou busca incompleta: fail-closed antes de Graph WRITE.
 //   - Nenhum retry automático após Graph WRITE.
 //
 // Persistência (etapas 19–20):
-//   Ambos os INSERTs ocorrem somente após Graph success confirmado.
+//   Ambos os INSERTs ocorrem somente após Graph WRITE 2 success confirmado.
 //   Ordem: meta_whatsapp_messages primeiro, depois meta_messages.
 //   Falha em qualquer INSERT → 500 send_persistence_failed.
 //   Nenhum retry de Graph ocorre após falha de persistência.
 //
-// template_not_approved:
-//   Não distinguível sem uma segunda Graph READ (busca usa status=APPROVED).
-//   Templates não-APPROVED simplesmente não aparecem nos resultados.
-//   Se name existe mas não APPROVED: classificado como template_not_found.
-//   [DEBT D-TNA] — documentado, não implementado.
+// Write budget:
+//   Template textual: 0×/media + 1×/messages = 1 Graph WRITE total.
+//   Template media:   1×/media + 1×/messages = 2 Graph WRITEs total.
+//   Nenhum retry automático em nenhum WRITE.
+//
+// Dívidas documentadas:
+//   [DEBT D-TNA]    template_not_approved indistinguível de template_not_found.
+//   [DEBT D-ORPHAN] orphan media_id se WRITE 2 falhar após WRITE 1 — sem rollback automático.
+//   [DEBT D-DUPLI]  mensagem duplicada em retry manual pelo caller.
 // =============================================================================
 
 import { getSupabaseAdmin }                    from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { decryptMetaToken }                    from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { listMessageTemplates,
-         sendTemplateMessage }                 from '../../../lib/meta-whatsapp/graphClient.js';
+         sendTemplateMessage,
+         uploadMedia }                         from '../../../lib/meta-whatsapp/graphClient.js';
 import { analyzeTemplate,
          validateParameterValues,
          buildGraphComponents,
          interpolateBody }                     from '../../../lib/meta-whatsapp/templateEngine.js';
+import { validateMediaAsset }                  from '../../../lib/meta-whatsapp/mediaAsset.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Limites de tamanho para campos de template.
-// Meta API: template names são identificadores alfanuméricos (≤512 chars na prática).
-// Language codes: padrão BCP-47 como "pt_BR" ou "en_US" — 64 chars é margem generosa.
 const TEMPLATE_NAME_MAX_LEN     = 512;
 const TEMPLATE_LANGUAGE_MAX_LEN = 64;
 
 // Limite máximo de páginas de template lookup por request.
-// Cada página consome 1 Graph READ. Valor 3 é defensivo e determinístico.
 const MAX_TEMPLATE_LOOKUP_PAGES = 3;
 
-// Itens por página no lookup de template (menor que listagem geral).
+// Itens por página no lookup de template.
 const TEMPLATE_LOOKUP_LIMIT = 20;
 
 export default async function handler(req, res) {
@@ -94,14 +106,16 @@ export default async function handler(req, res) {
 
   // ── 2. Extrair campos do body ──────────────────────────────────────────────
   // Campos sensíveis (to, waba_id, phone_number_id, token, components, status,
-  // category, parameter_format) são ignorados mesmo que presentes no body.
+  // category, parameter_format, media_id, mime, filename, url, preview_url,
+  // s3_key, bucket) são ignorados mesmo que presentes no body.
   const {
-    company_id:        companyId,
-    instance_id:       instanceId,
-    conversation_id:   conversationId,
-    template_name:     templateName,
-    template_language: templateLanguage,
-    parameter_values:  parameterValues,
+    company_id:            companyId,
+    instance_id:           instanceId,
+    conversation_id:       conversationId,
+    template_name:         templateName,
+    template_language:     templateLanguage,
+    parameter_values:      parameterValues,
+    header_media_asset_id: headerMediaAssetId,
   } = req.body ?? {};
 
   // ── 3. Supabase admin client ───────────────────────────────────────────────
@@ -116,9 +130,6 @@ export default async function handler(req, res) {
   try {
 
   // ── 4. Auth + RBAC + feature flag ─────────────────────────────────────────
-  // validateMetaCaller valida: Bearer → JWT → UUID → membership → role →
-  //   partner assignment → parent/child → feature flag.
-  // META_SEND_ROLES inclui seller — finalidade primária do CRM é envio.
   const auth = await validateMetaCaller(req, svc, companyId, { roles: META_SEND_ROLES });
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
@@ -152,8 +163,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_request' });
   }
 
-  // parameter_values: estrutura mínima obrigatória antes de qualquer lookup Graph.
-  // Validação completa de keys/values ocorre depois do template lookup (etapa 15).
+  // parameter_values: estrutura mínima obrigatória.
   if (
     parameterValues === null ||
     typeof parameterValues !== 'object' ||
@@ -164,8 +174,6 @@ export default async function handler(req, res) {
   if (!Object.prototype.hasOwnProperty.call(parameterValues, 'body')) {
     return res.status(400).json({ error: 'invalid_request' });
   }
-  // parameter_values.body: deve ser plain object (não null, não array). (L-04)
-  // Chaves e valores específicos são validados em etapa 15 (pós-lookup).
   const bodyPreCheck = parameterValues.body;
   if (
     bodyPreCheck === null ||
@@ -175,10 +183,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_request' });
   }
 
+  // header_media_asset_id: se presente, deve ser UUID válido.
+  // Ausente (undefined) é permitido — cross-check vs template ocorre na etapa 14.5.
+  if (headerMediaAssetId !== undefined) {
+    if (typeof headerMediaAssetId !== 'string' || !UUID_RE.test(headerMediaAssetId)) {
+      return res.status(400).json({ error: 'invalid_request' });
+    }
+  }
+
   // ── 6. Lookup de instância ─────────────────────────────────────────────────
-  // Usa EXCLUSIVAMENTE auth.companyId.
-  // waba_id e phone_number_id vêm SOMENTE do banco — nunca do body.
-  // Resposta opaca 404: não distingue inexistente / outra company / deletada.
   const { data: instance, error: instErr } = await svc
     .from('meta_whatsapp_instances')
     .select('id, company_id, phone_number_id, waba_id, status')
@@ -200,9 +213,6 @@ export default async function handler(req, res) {
   }
 
   // ── 8. Lookup de conversa ──────────────────────────────────────────────────
-  // Triple-filter: id + company_id (auth) + instance_id (do banco).
-  // wa_id derivado do registro validado — nunca aceito do body.
-  // Resposta genérica 404: não distingue inexistente / outro tenant / outra instance.
   const { data: conversation, error: convErr } = await svc
     .from('meta_conversations')
     .select('id, wa_id, company_id, instance_id')
@@ -219,9 +229,6 @@ export default async function handler(req, res) {
   }
 
   // ── 9. Normalizar recipient ────────────────────────────────────────────────
-  // wa_id em meta_conversations é armazenado sem '+', mas a normalização garante
-  // robustez contra dados legados ou edge cases de armazenamento.
-  // Recipient inválido no banco = dado corrompido → 500 (não 400: não é culpa do caller).
   const waIdRaw     = conversation.wa_id ?? '';
   const toRecipient = waIdRaw.startsWith('+') ? waIdRaw.slice(1) : waIdRaw;
   if (!/^[0-9]+$/.test(toRecipient) || toRecipient.length === 0) {
@@ -229,7 +236,6 @@ export default async function handler(req, res) {
   }
 
   // ── 10. Lookup de credencial ───────────────────────────────────────────────
-  // Somente após instance válida e connected.
   const { data: credential, error: credErr } = await svc
     .from('meta_whatsapp_credentials')
     .select('access_token_enc')
@@ -249,18 +255,8 @@ export default async function handler(req, res) {
   }
 
   // ── 12. Lookup paginado do template (máximo 3 páginas, server-side language) ──
-  //
-  // Algoritmo determinístico:
-  //   - Busca pelo name via Graph API (filtro backend)
-  //   - Filtro de language aplicado server-side (Graph não suporta filtro de language)
-  //   - Acumula matches (name + language + APPROVED) ao longo das páginas
-  //   - Duplicata detectada imediatamente → fail-closed, sem Graph WRITE
-  //   - Busca incompleta (3 páginas + nextCursor) → fail-closed
-  //   - nameMatchCount rastreia se algum template com o name foi encontrado
-  //     (distingue template_not_found de template_language_not_found)
-  //
-  let matches        = [];   // templates com name + language + APPROVED
-  let nameMatchCount = 0;    // templates APPROVED com o name (qualquer language)
+  let matches        = [];
+  let nameMatchCount = 0;
   let cursor;
   let lookupComplete = false;
 
@@ -286,16 +282,11 @@ export default async function handler(req, res) {
     }
 
     for (const tpl of (listResult.templates ?? [])) {
-      // Ignorar entries malformadas (null, primitivos, não-objeto). (L-02)
-      // Graph API não deve retornar tais entries, mas a defesa em profundidade
-      // garante que TypeError não alcança o outer catch.
       if (tpl === null || typeof tpl !== 'object' || Array.isArray(tpl)) continue;
-      // Somente templates que o Graph deveria ter filtrado (defesa em profundidade)
       if (tpl.name === templateName && tpl.status === 'APPROVED') {
         nameMatchCount++;
         if (tpl.language === templateLanguage) {
           matches.push(tpl);
-          // Duplicata detectada imediatamente — não continua lookup
           if (matches.length > 1) {
             return res.status(422).json({ error: 'template_unsupported' });
           }
@@ -313,69 +304,144 @@ export default async function handler(req, res) {
 
   // ── 13. Decisão pós-lookup ─────────────────────────────────────────────────
   if (!lookupComplete) {
-    // 3 páginas consumidas e nextCursor ainda presente.
-    // Busca não foi provada completa → impossível garantir unicidade.
-    // Fail-closed: usar template_unsupported sem criar novo código público.
-    // Razão interna: template_lookup_incomplete.
     return res.status(422).json({ error: 'template_unsupported' });
   }
 
   if (matches.length === 0) {
     if (nameMatchCount === 0) {
-      // Nenhum template APPROVED com esse name encontrado na busca completa.
-      // Nota: template_not_approved não é distinguível aqui (DEBT D-TNA).
       return res.status(404).json({ error: 'template_not_found' });
     }
-    // Name encontrado mas language ausente
     return res.status(404).json({ error: 'template_language_not_found' });
   }
 
-  // Exatamente 1 match com busca completa — prosseguir
   const rawTemplate = matches[0];
 
   // ── 14. Analisar template ──────────────────────────────────────────────────
-  // Delega classificação e extração de parâmetros ao engine (fonte canônica: component.text).
   const analysis = analyzeTemplate(rawTemplate);
   if (!analysis.supported) {
     return res.status(422).json({ error: 'template_unsupported' });
   }
 
+  // ── 14.5 Cross-check media: hasMediaHeader vs header_media_asset_id ────────
+  // Fail-closed antes de qualquer Graph WRITE.
+  //
+  // A) Template tem HEADER media + asset ausente → rejeitar.
+  // B) Template NÃO tem HEADER media + asset presente → rejeitar.
+  //
+  // analysis.headerMediaFormat: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null.
+  const hasMediaHeader = analysis.headerMediaFormat !== null;
+
+  if (hasMediaHeader && !headerMediaAssetId) {
+    return res.status(400).json({ error: 'media_header_required' });
+  }
+  if (!hasMediaHeader && headerMediaAssetId) {
+    return res.status(400).json({ error: 'media_header_unexpected' });
+  }
+
   // ── 15. Validar parameter_values ──────────────────────────────────────────
-  // Validação completa contra estrutura REAL do template (pós-analyzeTemplate).
-  // invalid_request → mismatch estrutural pré-lookup (já passado, mas engine
-  //   pode detectar estrutura inválida de body) → 400.
-  // template_params_mismatch → chaves faltando, extras ou valores inválidos → 422.
   const pvValidation = validateParameterValues(analysis.parameters, parameterValues);
   if (!pvValidation.valid) {
     const status = pvValidation.error === 'invalid_request' ? 400 : 422;
     return res.status(status).json({ error: pvValidation.error });
   }
 
-  // ── 16. Construir Graph components ────────────────────────────────────────
-  // Construídos server-side pelo engine — nunca aceitos do frontend.
-  const components = buildGraphComponents(
-    rawTemplate.components,
-    analysis.parameter_format,
-    parameterValues,
-  );
-
-  // ── 17. Interpolar body para persistência ─────────────────────────────────
-  // renderedBody é o texto do BODY com valores interpolados.
-  // Whitespace original preservado (não trimado).
-  // HEADER e FOOTER não concatenados.
+  // ── 16. Interpolar body (antecipado pré-writes — função pura) ─────────────
+  // Executado antes de qualquer Graph WRITE para minimizar gap entre WRITE 1 e WRITE 2.
+  // renderedBody persiste como body da mensagem — nunca recebe mediaId, filename ou URL.
   const renderedBody = interpolateBody(
     analysis.bodyText,
     analysis.parameter_format,
     parameterValues.body,
   );
 
-  // ── 18. Envio via Graph API ────────────────────────────────────────────────
-  // phone_number_id vem EXCLUSIVAMENTE de instance.phone_number_id (banco).
-  // toRecipient vem EXCLUSIVAMENTE de conversation.wa_id (banco).
-  // Exatamente UMA chamada Graph WRITE — nenhum retry automático.
-  // Template payload construído server-side.
-  // components: incluído somente se não-vazio (L-05).
-  // Template estático (sem variáveis) → components omitido, conforme contrato Meta API.
+  // ── 17A–17B. Validar asset + WRITE 1 (somente para template media) ─────────
+  // validateMediaAsset: lookup tenant-safe + download + MIME real. NÃO é Graph WRITE.
+  // uploadMedia: WRITE 1 — exatamente 1 fetch, sem retry.
+  let assetId           = null;   // persiste em meta_messages.media_asset_id
+  let uploadedMediaId   = null;   // retornado pelo WRITE 1
+  let uploadedMediaType = null;   // de assetResult.mediaType
+  let uploadedFilename  = undefined; // de assetResult.filename (somente DOCUMENT)
+
+  if (hasMediaHeader) {
+    // ── 17A. Validar asset ─────────────────────────────────────────────────
+    // companyId: auth.companyId — nunca do body.
+    // expectedMediaType: analysis.headerMediaFormat — do banco Graph, nunca do body.
+    let assetResult;
+    try {
+      assetResult = await validateMediaAsset({
+        supabase:          svc,
+        companyId:         auth.companyId,
+        assetId:           headerMediaAssetId,
+        expectedMediaType: analysis.headerMediaFormat,
+      });
+    } catch (err) {
+      const code = err?.code;
+      if (code === 'media_asset_not_found')        return res.status(404).json({ error: 'media_asset_not_found' });
+      if (code === 'media_asset_invalid')          return res.status(400).json({ error: 'invalid_request' });
+      if (code === 'media_asset_download_failed')  return res.status(503).json({ error: 'media_provider_unavailable' });
+      if (code === 'media_asset_too_large')        return res.status(422).json({ error: 'media_asset_too_large' });
+      if (code === 'media_asset_type_unknown')     return res.status(422).json({ error: 'media_asset_type_unknown' });
+      if (code === 'media_asset_type_unsupported') return res.status(422).json({ error: 'media_asset_type_unsupported' });
+      if (code === 'media_asset_type_mismatch')    return res.status(422).json({ error: 'media_asset_type_mismatch' });
+      return res.status(500).json({ error: 'internal_error' });
+    }
+
+    assetId           = assetResult.assetId;
+    uploadedMediaType = assetResult.mediaType;
+    uploadedFilename  = assetResult.filename; // undefined para IMAGE/VIDEO
+
+    // ── 17B. Upload para Graph /media (WRITE 1) ────────────────────────────
+    // token e phone_number_id vêm EXCLUSIVAMENTE do banco — nunca do body.
+    // blob e mimeType vêm EXCLUSIVAMENTE de assetResult (validado server-side).
+    // Exatamente 1 fetch — sem retry.
+    let uploadResult;
+    try {
+      uploadResult = await uploadMedia(
+        plainToken,
+        instance.phone_number_id,
+        assetResult.blob,
+        assetResult.mimeType,
+        uploadedFilename,
+      );
+    } catch (err) {
+      const code = err?.code;
+      if (code === 'upload_media_timeout' || code === 'upload_media_network_error') {
+        return res.status(503).json({ error: 'provider_unavailable' });
+      }
+      if (code === 'upload_media_failed' || code === 'upload_media_invalid_response') {
+        return res.status(502).json({ error: 'provider_error' });
+      }
+      // upload_media_invalid_input ou código inesperado
+      return res.status(500).json({ error: 'internal_error' });
+    }
+
+    uploadedMediaId = uploadResult.mediaId;
+  }
+
+  // ── 17C. Construir Graph components ───────────────────────────────────────
+  // Para template textual: sem headerMedia (comportamento MVP4A inalterado).
+  // Para template media: com headerMedia resolvido server-side.
+  // buildGraphComponents é puro mas pode lançar — proteger explicitamente.
+  // Se lançar após uploadMedia (WRITE 1): orphan media_id — dívida operacional [DEBT D-ORPHAN].
+  let components;
+  try {
+    components = buildGraphComponents(
+      rawTemplate.components,
+      analysis.parameter_format,
+      parameterValues,
+      hasMediaHeader
+        ? { headerMedia: { mediaId: uploadedMediaId, mediaType: uploadedMediaType, filename: uploadedFilename } }
+        : {},
+    );
+  } catch {
+    // NÃO repetir upload. NÃO chamar sendTemplateMessage.
+    return res.status(500).json({ error: 'internal_error' });
+  }
+
+  // ── 18. Envio via Graph API (WRITE 2) ─────────────────────────────────────
+  // phone_number_id e toRecipient vêm EXCLUSIVAMENTE do banco.
+  // components construídos server-side pelo engine.
+  // Exatamente 1 fetch — sem retry.
   const templatePayload = {
     name:     templateName,
     language: { code: templateLanguage },
@@ -398,13 +464,10 @@ export default async function handler(req, res) {
     if (code === 'send_template_failed' || code === 'send_template_invalid_response') {
       return res.status(502).json({ error: 'provider_error' });
     }
-    // send_template_invalid_input ou código inesperado
     return res.status(500).json({ error: 'internal_error' });
   }
 
   // ── 19. Persistir wamid em meta_whatsapp_messages (tracking) ──────────────
-  // Executado SOMENTE após Graph success confirmado.
-  // Falha → sem tentativa de meta_messages (etapa 20 não executa).
   const { error: insertTrackingErr } = await svc
     .from('meta_whatsapp_messages')
     .insert({
@@ -419,9 +482,9 @@ export default async function handler(req, res) {
   }
 
   // ── 20. Persistir mensagem outbound em meta_messages (chat) ───────────────
-  // message_type='template', body=renderedBody (BODY interpolado).
-  // template_name e template_language em colunas próprias.
-  // HEADER e FOOTER não concatenados no body.
+  // media_asset_id: UUID do asset validado (para template media) ou null (para textual).
+  // body: renderedBody — exclusivamente texto interpolado do BODY.
+  // Nunca: mediaId, filename, URL ou s3_key no body.
   const { error: insertChatErr } = await svc
     .from('meta_messages')
     .insert({
@@ -435,6 +498,7 @@ export default async function handler(req, res) {
       template_name:      templateName,
       template_language:  templateLanguage,
       provider_timestamp: new Date().toISOString(),
+      media_asset_id:     assetId,
     });
 
   if (insertChatErr) {
@@ -442,12 +506,11 @@ export default async function handler(req, res) {
   }
 
   // ── 21. Resposta sanitizada ────────────────────────────────────────────────
-  // Somente message_id (wamid) retornado — nunca token, credential, recipient
-  // ou payload Graph.
+  // Somente message_id (wamid) retornado — nunca token, credential, recipient,
+  // payload Graph, mediaId ou asset.
   return res.status(200).json({ ok: true, message_id: result.messageId });
 
   } catch {
-    // Catch defensivo externo — throws inesperados não cobertos acima.
     return res.status(500).json({ error: 'internal_error' });
   }
 }
