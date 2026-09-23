@@ -7,7 +7,7 @@
 // Exports públicos:
 //   analyzeTemplate(rawTemplate)
 //   validateParameterValues(parameters, parameterValues)
-//   buildGraphComponents(templateComponents, parameterFormat, parameterValues)
+//   buildGraphComponents(templateComponents, parameterFormat, parameterValues, options?)
 //   interpolateBody(bodyText, parameterFormat, bodyValues)
 //
 // Fonte canônica de placeholders: component.text
@@ -15,7 +15,8 @@
 //
 // Escopo MVP4A: BODY TEXT obrigatório, HEADER TEXT opcional, FOOTER estático.
 // Escopo MVP4B.2: HEADER IMAGE, VIDEO e DOCUMENT reconhecidos como suportados.
-//   A construção do componente Graph de mídia (link/id) pertence à 4B.4.
+// Escopo MVP4B.4B: buildGraphComponents aceita options.headerMedia para construir
+//   o componente Graph de HEADER media (IMAGE/VIDEO/DOCUMENT) — puro, sem IO, sem Graph.
 //   Media headers NÃO geram parâmetros textuais — parâmetros textuais são
 //   exclusivamente de HEADER TEXT e BODY.
 // BUTTONS / CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
@@ -34,6 +35,15 @@ const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 // =============================================================================
 // Helpers privados
 // =============================================================================
+
+/**
+ * Cria Error com .code — fail-closed, nunca loga dados de entrada.
+ * Usado por buildGraphComponents para sinalizar mismatch/ausência de headerMedia.
+ * @private
+ */
+function makeEngineError(code, message) {
+  return Object.assign(new Error(message), { code });
+}
 
 /** Valida/normaliza parameter_format. Retorna 'POSITIONAL'|'NAMED'|null. */
 function validFmt(raw) {
@@ -454,14 +464,53 @@ export function validateParameterValues(parameters, parameterValues) {
  * FOOTER não é incluído — Graph API não espera entry de FOOTER para envio.
  * Componentes sem parâmetros (estáticos) são omitidos.
  *
+ * MVP4B.4B: aceita options.headerMedia para templates com HEADER de mídia.
+ * headerMedia representa dado INTERNO confiável do backend — nunca payload bruto do frontend.
+ * Somente mediaId, mediaType e filename são consumidos — extras são ignorados (não propagados).
+ *
+ * Fail-closed:
+ *   - template com HEADER media mas headerMedia ausente → lança
+ *   - headerMedia fornecido para template sem HEADER media → lança
+ *   - mediaType não corresponde ao formato do HEADER → lança
+ *   - mediaId vazio ou whitespace-only → lança
+ *
  * @param {Array}  templateComponents  rawTemplate.components (array original)
  * @param {string} parameterFormat     'POSITIONAL' | 'NAMED'
  * @param {object} parameterValues     { header?, body } — já validado
+ * @param {object} [options]           Opções adicionais (backward-compatible — padrão {})
+ * @param {object} [options.headerMedia]           Mídia resolvida server-side (MVP4B.4B)
+ * @param {string}   options.headerMedia.mediaId   Media ID retornado pelo Graph /media upload
+ * @param {string}   options.headerMedia.mediaType 'IMAGE' | 'VIDEO' | 'DOCUMENT'
+ * @param {string}   [options.headerMedia.filename] Hint de nome de arquivo (DOCUMENT)
  * @returns {Array}  components[] prontos para sendTemplateMessage
+ * @throws {Error} err.code in:
+ *   build_media_unexpected      — headerMedia fornecido para template sem HEADER media
+ *   build_media_header_missing  — template tem HEADER media mas headerMedia ausente
+ *   build_media_invalid_input   — mediaId vazio ou whitespace-only
+ *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
  */
-export function buildGraphComponents(templateComponents, parameterFormat, parameterValues) {
-  const comps  = Array.isArray(templateComponents) ? templateComponents : [];
-  const result = [];
+export function buildGraphComponents(templateComponents, parameterFormat, parameterValues, options = {}) {
+  const comps       = Array.isArray(templateComponents) ? templateComponents : [];
+  const result      = [];
+  const headerMedia = options?.headerMedia ?? null;
+
+  // ── Pré-verificação: template tem HEADER de mídia? ─────────────────────────
+
+  const hasMediaHeader = comps.some(c => {
+    if (typeof c?.type !== 'string' || c.type.toUpperCase() !== 'HEADER') return false;
+    const fmt = typeof c?.format === 'string' ? c.format.toUpperCase() : null;
+    return fmt !== null && SUPPORTED_MEDIA_HEADER_FORMATS.has(fmt);
+  });
+
+  // Seção 9: headerMedia fornecido mas template não tem HEADER de mídia → fail-closed
+  if (!hasMediaHeader && headerMedia !== null) {
+    throw makeEngineError(
+      'build_media_unexpected',
+      'buildGraphComponents: headerMedia provided for non-media template',
+    );
+  }
+
+  // ── Loop principal ─────────────────────────────────────────────────────────
 
   for (const comp of comps) {
     const rawType = comp?.type;
@@ -469,8 +518,75 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
     const type = rawType.toUpperCase();
 
     if (type === 'HEADER') {
+      const rawFmt   = comp.format;
+      const headerFmt = typeof rawFmt === 'string' ? rawFmt.toUpperCase() : null;
+
+      // ── HEADER de mídia: IMAGE | VIDEO | DOCUMENT ──────────────────────────
+      if (headerFmt !== null && SUPPORTED_MEDIA_HEADER_FORMATS.has(headerFmt)) {
+
+        // Seção 8: media HEADER presente mas headerMedia ausente → fail-closed
+        if (headerMedia === null) {
+          throw makeEngineError(
+            'build_media_header_missing',
+            'buildGraphComponents: headerMedia required for media template header',
+          );
+        }
+
+        // Seção 10: mediaId — string, trim, não vazio
+        const mediaId = typeof headerMedia.mediaId === 'string'
+          ? headerMedia.mediaId.trim()
+          : null;
+        if (!mediaId) {
+          throw makeEngineError(
+            'build_media_invalid_input',
+            'buildGraphComponents: invalid mediaId in headerMedia',
+          );
+        }
+
+        // Seção 7: mismatch — mediaType deve corresponder ao formato do HEADER
+        const mediaType = typeof headerMedia.mediaType === 'string'
+          ? headerMedia.mediaType.trim().toUpperCase()
+          : null;
+        if (mediaType !== headerFmt) {
+          throw makeEngineError(
+            'build_media_header_mismatch',
+            'buildGraphComponents: headerMedia.mediaType does not match template header format',
+          );
+        }
+
+        // ── Construir componente Graph de mídia ────────────────────────────
+
+        if (headerFmt === 'IMAGE') {
+          result.push({
+            type:       'header',
+            parameters: [{ type: 'image', image: { id: mediaId } }],
+          });
+
+        } else if (headerFmt === 'VIDEO') {
+          result.push({
+            type:       'header',
+            parameters: [{ type: 'video', video: { id: mediaId } }],
+          });
+
+        } else if (headerFmt === 'DOCUMENT') {
+          // filename: hint opcional — auditado no contrato Graph: field recomendado mas não obrigatório.
+          // Engine omite quando ausente; camada de negócio pode exigi-lo antes de chamar buildGraphComponents.
+          const filename = typeof headerMedia.filename === 'string'
+            ? headerMedia.filename.trim()
+            : null;
+          const docParam = filename ? { id: mediaId, filename } : { id: mediaId };
+          result.push({
+            type:       'header',
+            parameters: [{ type: 'document', document: docParam }],
+          });
+        }
+
+        continue;
+      }
+
+      // ── HEADER TEXT: comportamento original MVP4A (intacto) ────────────────
       const headerValues = parameterValues.header ?? {};
-      const parameters = buildTextParameters(comp.text, parameterFormat, headerValues);
+      const parameters   = buildTextParameters(comp.text, parameterFormat, headerValues);
       if (parameters.length > 0) {
         result.push({ type: 'header', parameters });
       }
@@ -486,7 +602,7 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
       continue;
     }
 
-    // FOOTER e outros: omitir
+    // FOOTER e outros: omitir (preservado de MVP4A)
   }
 
   return result;

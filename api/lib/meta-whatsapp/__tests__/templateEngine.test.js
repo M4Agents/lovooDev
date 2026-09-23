@@ -1074,3 +1074,388 @@ describe('analyzeTemplate — MVP4B.2 — media headers', () => {
   });
 
 });
+
+// =============================================================================
+// buildGraphComponents — media headers (MVP4B.4B)
+// =============================================================================
+
+describe('buildGraphComponents — media headers (MVP4B.4B)', () => {
+
+  // ── Fixtures de componentes ───────────────────────────────────────────────
+
+  const imageComps = [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY',   text: 'Corpo {{1}}' },
+  ];
+  const videoComps = [
+    { type: 'HEADER', format: 'VIDEO' },
+    { type: 'BODY',   text: 'Vídeo {{1}}' },
+  ];
+  const docComps = [
+    { type: 'HEADER', format: 'DOCUMENT' },
+    { type: 'BODY',   text: 'Doc {{1}}' },
+  ];
+  const imageNamedComps = [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY',   text: 'Olá {{first_name}}, pedido {{order_id}}' },
+  ];
+  const docNamedComps = [
+    { type: 'HEADER', format: 'DOCUMENT' },
+    { type: 'BODY',   text: 'Contrato {{client_name}}' },
+  ];
+  const pureTextComps = [
+    { type: 'BODY', text: 'Apenas texto {{1}}' },
+  ];
+  const textHeaderComps = [
+    { type: 'HEADER', format: 'TEXT', text: 'Pedido {{1}}' },
+    { type: 'BODY',   text: 'Valor {{1}}' },
+  ];
+
+  // ── Fixtures de headerMedia ───────────────────────────────────────────────
+
+  const imageMedia  = { mediaId: '111222333444555', mediaType: 'IMAGE' };
+  const videoMedia  = { mediaId: '666777888999000', mediaType: 'VIDEO' };
+  const docMedia    = { mediaId: '101112131415161', mediaType: 'DOCUMENT', filename: 'contrato.pdf' };
+  const docNoFile   = { mediaId: '999888777666555', mediaType: 'DOCUMENT' };
+
+  // ── TE-MG01: IMAGE → HEADER image/id correto ─────────────────────────────
+
+  it('TE-MG01: IMAGE válido → HEADER image/id correto', () => {
+    const r = buildGraphComponents(
+      imageComps, 'POSITIONAL', { body: { '1': 'Valor' } },
+      { headerMedia: imageMedia },
+    );
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'image', image: { id: imageMedia.mediaId } }],
+    });
+  });
+
+  // ── TE-MG02: VIDEO → HEADER video/id correto ─────────────────────────────
+
+  it('TE-MG02: VIDEO válido → HEADER video/id correto', () => {
+    const r = buildGraphComponents(
+      videoComps, 'POSITIONAL', { body: { '1': 'Valor' } },
+      { headerMedia: videoMedia },
+    );
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'video', video: { id: videoMedia.mediaId } }],
+    });
+  });
+
+  // ── TE-MG03: DOCUMENT + filename → document/id/filename ──────────────────
+
+  it('TE-MG03: DOCUMENT com filename → document/id/filename correto', () => {
+    const r = buildGraphComponents(
+      docComps, 'POSITIONAL', { body: { '1': 'Valor' } },
+      { headerMedia: docMedia },
+    );
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'document', document: { id: docMedia.mediaId, filename: 'contrato.pdf' } }],
+    });
+  });
+
+  // ── TE-MG04: DOCUMENT sem filename → omitido no payload ──────────────────
+  // Graph API: filename é campo recomendado mas não obrigatório.
+  // Engine omite quando ausente; camada de negócio pode exigi-lo antes de chamar.
+
+  it('TE-MG04: DOCUMENT sem filename → document sem campo filename (não obrigatório no Graph)', () => {
+    const r = buildGraphComponents(
+      docComps, 'POSITIONAL', { body: { '1': 'Valor' } },
+      { headerMedia: docNoFile },
+    );
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'document', document: { id: docNoFile.mediaId } }],
+    });
+    // filename ausente do payload
+    expect(r[0].parameters[0].document).not.toHaveProperty('filename');
+  });
+
+  // ── TE-MG05: media template sem headerMedia → fail-closed ────────────────
+
+  it('TE-MG05: template com HEADER IMAGE sem headerMedia → lança build_media_header_missing', () => {
+    expect(() =>
+      buildGraphComponents(imageComps, 'POSITIONAL', { body: { '1': 'x' } })
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_missing' }));
+  });
+
+  it('TE-MG05b: template com HEADER VIDEO sem headerMedia → lança build_media_header_missing', () => {
+    expect(() =>
+      buildGraphComponents(videoComps, 'POSITIONAL', { body: { '1': 'x' } })
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_missing' }));
+  });
+
+  it('TE-MG05c: template com HEADER DOCUMENT sem headerMedia → lança build_media_header_missing', () => {
+    expect(() =>
+      buildGraphComponents(docComps, 'POSITIONAL', { body: { '1': 'x' } })
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_missing' }));
+  });
+
+  // ── TE-MG06: IMAGE analysis + VIDEO runtime → fail-closed ─────────────────
+
+  it('TE-MG06: HEADER IMAGE no template + mediaType VIDEO → lança build_media_header_mismatch', () => {
+    expect(() =>
+      buildGraphComponents(
+        imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: '111', mediaType: 'VIDEO' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_mismatch' }));
+  });
+
+  // ── TE-MG07: VIDEO analysis + DOCUMENT runtime → fail-closed ──────────────
+
+  it('TE-MG07: HEADER VIDEO no template + mediaType DOCUMENT → lança build_media_header_mismatch', () => {
+    expect(() =>
+      buildGraphComponents(
+        videoComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: '222', mediaType: 'DOCUMENT' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_mismatch' }));
+  });
+
+  // ── TE-MG08: DOCUMENT analysis + IMAGE runtime → fail-closed ──────────────
+
+  it('TE-MG08: HEADER DOCUMENT no template + mediaType IMAGE → lança build_media_header_mismatch', () => {
+    expect(() =>
+      buildGraphComponents(
+        docComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: '333', mediaType: 'IMAGE' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_header_mismatch' }));
+  });
+
+  // ── TE-MG09: mediaId vazio → fail-closed ─────────────────────────────────
+
+  it('TE-MG09: mediaId string vazia → lança build_media_invalid_input', () => {
+    expect(() =>
+      buildGraphComponents(
+        imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: '', mediaType: 'IMAGE' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_invalid_input' }));
+  });
+
+  it('TE-MG09b: mediaId null → lança build_media_invalid_input', () => {
+    expect(() =>
+      buildGraphComponents(
+        imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: null, mediaType: 'IMAGE' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_invalid_input' }));
+  });
+
+  it('TE-MG09c: mediaId ausente → lança build_media_invalid_input', () => {
+    expect(() =>
+      buildGraphComponents(
+        imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaType: 'IMAGE' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_invalid_input' }));
+  });
+
+  // ── TE-MG10: mediaId whitespace → fail-closed ────────────────────────────
+
+  it('TE-MG10: mediaId só whitespace → lança build_media_invalid_input', () => {
+    expect(() =>
+      buildGraphComponents(
+        imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: { mediaId: '   ', mediaType: 'IMAGE' } },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_invalid_input' }));
+  });
+
+  // ── TE-MG11: template textual + headerMedia → fail-closed ─────────────────
+
+  it('TE-MG11: template sem HEADER media + headerMedia fornecido → lança build_media_unexpected', () => {
+    expect(() =>
+      buildGraphComponents(
+        pureTextComps, 'POSITIONAL', { body: { '1': 'x' } },
+        { headerMedia: imageMedia },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_unexpected' }));
+  });
+
+  it('TE-MG11b: HEADER TEXT + headerMedia fornecido → lança build_media_unexpected', () => {
+    // HEADER TEXT não é media header — headerMedia é inválido para esse template
+    expect(() =>
+      buildGraphComponents(
+        textHeaderComps, 'POSITIONAL', { header: { '1': 'Titulo' }, body: { '1': 'Valor' } },
+        { headerMedia: imageMedia },
+      )
+    ).toThrow(expect.objectContaining({ code: 'build_media_unexpected' }));
+  });
+
+  // ── TE-MG12: extras em headerMedia (url, link) não alcançam o payload ─────
+
+  it('TE-MG12: headerMedia com campos extras (url, link, assetId) → extras não aparecem no payload Graph', () => {
+    const headerMediaWithExtras = {
+      mediaId:  '444555666777888',
+      mediaType: 'IMAGE',
+      url:      'https://s3.amazonaws.com/bucket/file.jpg',  // NUNCA deve aparecer no payload
+      link:     'https://cdn.example.com/img.png',           // NUNCA deve aparecer no payload
+      assetId:  'uuid-asset-123',                            // NUNCA deve aparecer no payload
+      mimeType: 'image/jpeg',                                // irrelevante nessa camada
+      bytes:    null,                                        // jamais deve alcançar Graph
+    };
+    const r = buildGraphComponents(
+      imageComps, 'POSITIONAL', { body: { '1': 'Valor' } },
+      { headerMedia: headerMediaWithExtras },
+    );
+    // Apenas image.id — nenhum campo extra
+    expect(r[0].parameters[0]).toEqual({ type: 'image', image: { id: '444555666777888' } });
+    const serialized = JSON.stringify(r);
+    expect(serialized).not.toContain('s3.amazonaws.com');
+    expect(serialized).not.toContain('cdn.example.com');
+    expect(serialized).not.toContain('uuid-asset-123');
+    expect(serialized).not.toContain('image/jpeg');
+  });
+
+  // ── TE-MG13: IMAGE + BODY positional → HEADER media + BODY text corretos ──
+
+  it('TE-MG13: IMAGE + BODY POSITIONAL → HEADER media + BODY text corretos, 2 entries', () => {
+    const r = buildGraphComponents(
+      imageComps, 'POSITIONAL', { body: { '1': 'Pedido PED-001' } },
+      { headerMedia: imageMedia },
+    );
+    expect(r).toHaveLength(2);
+    // HEADER media
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'image', image: { id: imageMedia.mediaId } }],
+    });
+    // BODY text
+    expect(r[1]).toMatchObject({
+      type:       'body',
+      parameters: [{ type: 'text', text: 'Pedido PED-001' }],
+    });
+  });
+
+  it('TE-MG13b: IMAGE + BODY estático (sem params) → somente HEADER media (1 entry)', () => {
+    const comps = [
+      { type: 'HEADER', format: 'IMAGE' },
+      { type: 'BODY',   text: 'Texto fixo sem variáveis' },
+    ];
+    const r = buildGraphComponents(
+      comps, 'POSITIONAL', { body: {} },
+      { headerMedia: imageMedia },
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].type).toBe('header');
+  });
+
+  // ── TE-MG14: DOCUMENT + BODY named → HEADER media + BODY text corretos ────
+
+  it('TE-MG14: DOCUMENT + BODY NAMED → HEADER media + BODY text corretos, 2 entries', () => {
+    const r = buildGraphComponents(
+      docNamedComps, 'NAMED', { body: { client_name: 'Ana Silva' } },
+      { headerMedia: docMedia },
+    );
+    expect(r).toHaveLength(2);
+    // HEADER document com filename
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'document', document: { id: docMedia.mediaId, filename: 'contrato.pdf' } }],
+    });
+    // BODY named
+    expect(r[1].parameters[0]).toMatchObject({
+      type:           'text',
+      parameter_name: 'client_name',
+      text:           'Ana Silva',
+    });
+  });
+
+  // ── TE-MG15: HEADER TEXT existente → regressão zero ──────────────────────
+
+  it('TE-MG15: HEADER TEXT (MVP4A) → comportamento idêntico ao original, sem options', () => {
+    const r = buildGraphComponents(textHeaderComps, 'POSITIONAL', {
+      header: { '1': 'Titulo' },
+      body:   { '1': 'R$ 100' },
+    });
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ type: 'header', parameters: [{ type: 'text', text: 'Titulo' }] });
+    expect(r[1]).toMatchObject({ type: 'body',   parameters: [{ type: 'text', text: 'R$ 100' }] });
+  });
+
+  it('TE-MG15b: HEADER TEXT com options={} (explícito mas vazio) → mesmo resultado', () => {
+    const r = buildGraphComponents(textHeaderComps, 'POSITIONAL', {
+      header: { '1': 'Titulo' },
+      body:   { '1': 'R$ 100' },
+    }, {});
+    expect(r[0]).toMatchObject({ type: 'header', parameters: [{ type: 'text', text: 'Titulo' }] });
+    expect(r[1]).toMatchObject({ type: 'body',   parameters: [{ type: 'text', text: 'R$ 100' }] });
+  });
+
+  // ── TE-MG16: template textual sem HEADER → regressão zero ────────────────
+
+  it('TE-MG16: template puramente textual (sem HEADER) → regressão zero, sem options', () => {
+    const r = buildGraphComponents(pureTextComps, 'POSITIONAL', { body: { '1': 'Olá' } });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ type: 'body', parameters: [{ type: 'text', text: 'Olá' }] });
+  });
+
+  it('TE-MG16b: BODY NAMED (sem HEADER) → regressão zero', () => {
+    const namedComps = [{ type: 'BODY', text: 'Olá {{first_name}}' }];
+    const r = buildGraphComponents(namedComps, 'NAMED', { body: { first_name: 'Maria' } });
+    expect(r[0].parameters[0]).toMatchObject({ parameter_name: 'first_name', text: 'Maria' });
+  });
+
+  // ── Extras: IMAGE NAMED → contrato completo ──────────────────────────────
+
+  it('TE-MG-E01: IMAGE + BODY NAMED → HEADER media correto + BODY named correto', () => {
+    const r = buildGraphComponents(
+      imageNamedComps, 'NAMED', { body: { first_name: 'Ana', order_id: 'PED-555' } },
+      { headerMedia: imageMedia },
+    );
+    expect(r).toHaveLength(2);
+    expect(r[0]).toEqual({
+      type:       'header',
+      parameters: [{ type: 'image', image: { id: imageMedia.mediaId } }],
+    });
+    expect(r[1].parameters).toEqual([
+      { type: 'text', parameter_name: 'first_name', text: 'Ana' },
+      { type: 'text', parameter_name: 'order_id',   text: 'PED-555' },
+    ]);
+  });
+
+  it('TE-MG-E02: mediaId com whitespace ao redor → trimado e aceito', () => {
+    const r = buildGraphComponents(
+      imageComps, 'POSITIONAL', { body: { '1': 'x' } },
+      { headerMedia: { mediaId: '  999888777  ', mediaType: 'IMAGE' } },
+    );
+    // trim aplicado: id deve ser sem espaços
+    expect(r[0].parameters[0].image.id).toBe('999888777');
+  });
+
+  it('TE-MG-E03: DOCUMENT filename com whitespace ao redor → trimado e aceito', () => {
+    const r = buildGraphComponents(
+      docComps, 'POSITIONAL', { body: { '1': 'x' } },
+      { headerMedia: { mediaId: '123', mediaType: 'DOCUMENT', filename: '  doc.pdf  ' } },
+    );
+    expect(r[0].parameters[0].document.filename).toBe('doc.pdf');
+  });
+
+  it('TE-MG-E04: DOCUMENT filename whitespace-only → omitido do payload (tratado como ausente)', () => {
+    const r = buildGraphComponents(
+      docComps, 'POSITIONAL', { body: { '1': 'x' } },
+      { headerMedia: { mediaId: '123', mediaType: 'DOCUMENT', filename: '   ' } },
+    );
+    expect(r[0].parameters[0].document).not.toHaveProperty('filename');
+  });
+
+  it('TE-MG-E05: FOOTER presente → ignorado mesmo em template media', () => {
+    const compsWithFooter = [
+      { type: 'HEADER', format: 'IMAGE' },
+      { type: 'BODY',   text: 'Corpo {{1}}' },
+      { type: 'FOOTER', text: 'Rodapé fixo' },
+    ];
+    const r = buildGraphComponents(
+      compsWithFooter, 'POSITIONAL', { body: { '1': 'x' } },
+      { headerMedia: imageMedia },
+    );
+    expect(r.map(c => c.type)).not.toContain('footer');
+  });
+
+});
