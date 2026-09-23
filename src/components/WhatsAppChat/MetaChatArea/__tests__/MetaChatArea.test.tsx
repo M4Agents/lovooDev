@@ -67,8 +67,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
-import { MetaChatArea, formatTime }                          from '../MetaChatArea'
-import type { MetaChatConversation, MetaChatMessage }        from '../../../../types/meta-whatsapp'
+import { MetaChatArea, formatTime }                                from '../MetaChatArea'
+import type { MetaChatConversation, MetaChatMessage, MetaMessageMedia } from '../../../../types/meta-whatsapp'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -189,6 +189,7 @@ function makeMsg(
   message_type:  string = 'text',
   body:          string = `corpo ${id}`,
   ts:            string | null = '2026-09-21T15:30:00.000Z',
+  media:         MetaMessageMedia | null = null,
 ): MetaChatMessage {
   return {
     id,
@@ -199,6 +200,7 @@ function makeMsg(
     body,
     provider_timestamp: ts,
     created_at:         '2026-09-21T15:00:00.000Z',
+    media,
   }
 }
 
@@ -1319,5 +1321,156 @@ describe('MetaChatArea — MVP4B media template', () => {
     // NÃO deve conter wa_id ou to como argumento de string
     const strArgs = callArgs.filter(a => typeof a === 'string') as string[]
     expect(strArgs).not.toContain(CONV_FULL.wa_id)
+  })
+})
+
+// =============================================================================
+// F-IMG-01..06 — MVP4B.6C: render IMAGE no histórico
+// =============================================================================
+
+describe('MetaChatArea — MVP4B.6C IMAGE render', () => {
+  const IMAGE_MEDIA: MetaMessageMedia = {
+    type:      'image',
+    url:       'https://example.com/img.jpg',
+    filename:  'foto.jpg',
+    mime_type: 'image/jpeg',
+    file_size: 134750,
+  }
+
+  function renderImageMsg(mediaOverride?: Partial<MetaMessageMedia> | null) {
+    const media = mediaOverride === null
+      ? null
+      : { ...IMAGE_MEDIA, ...mediaOverride }
+    const msg = makeMsg('img-001', 'outbound', 'template', 'Corpo da imagem', null, media)
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+  }
+
+  it('F-IMG-01: template com media.type=image → <img> renderizada', () => {
+    renderImageMsg()
+    expect(screen.getByTestId('msg-media-image')).toBeTruthy()
+  })
+
+  it('F-IMG-02: src do <img> = media.url', () => {
+    renderImageMsg()
+    const img = screen.getByTestId('msg-media-image') as HTMLImageElement
+    expect(img.src).toBe(IMAGE_MEDIA.url)
+  })
+
+  it('F-IMG-03: alt do <img> = media.filename', () => {
+    renderImageMsg()
+    const img = screen.getByTestId('msg-media-image') as HTMLImageElement
+    expect(img.alt).toBe(IMAGE_MEDIA.filename)
+  })
+
+  it('F-IMG-04: body continua renderizado após imagem', () => {
+    renderImageMsg()
+    expect(screen.getByText('Corpo da imagem')).toBeTruthy()
+    // img E body presentes simultaneamente
+    expect(screen.getByTestId('msg-media-image')).toBeTruthy()
+  })
+
+  it('F-IMG-05: media=null → sem <img>, body continua', () => {
+    renderImageMsg(null)
+    expect(screen.queryByTestId('msg-media-image')).toBeNull()
+    expect(screen.getByText('Corpo da imagem')).toBeTruthy()
+  })
+
+  it('F-IMG-06: media.url=null → sem <img>, body continua sem quebra', () => {
+    renderImageMsg({ url: null })
+    expect(screen.queryByTestId('msg-media-image')).toBeNull()
+    expect(screen.getByText('Corpo da imagem')).toBeTruthy()
+  })
+})
+
+// =============================================================================
+// F-VID-01..04 — MVP4B.6C: render VIDEO no histórico
+// =============================================================================
+
+describe('MetaChatArea — MVP4B.6C VIDEO render', () => {
+  const VIDEO_MEDIA: MetaMessageMedia = {
+    type:      'video',
+    url:       'https://example.com/vid.mp4',
+    filename:  'video.mp4',
+    mime_type: 'video/mp4',
+    file_size: 5242880,
+  }
+
+  function renderVideoMsg() {
+    const msg = makeMsg('vid-001', 'outbound', 'template', 'Corpo do vídeo', null, VIDEO_MEDIA)
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+  }
+
+  it('F-VID-01: template com media.type=video → <video> renderizado', () => {
+    renderVideoMsg()
+    expect(screen.getByTestId('msg-media-video')).toBeTruthy()
+  })
+
+  it('F-VID-02: <video> possui atributo controls', () => {
+    renderVideoMsg()
+    const video = screen.getByTestId('msg-media-video') as HTMLVideoElement
+    expect(video.controls).toBe(true)
+  })
+
+  it('F-VID-03: <video> NÃO possui autoplay', () => {
+    renderVideoMsg()
+    const video = screen.getByTestId('msg-media-video') as HTMLVideoElement
+    expect(video.autoplay).toBe(false)
+  })
+
+  it('F-VID-04: body permanece abaixo do vídeo', () => {
+    renderVideoMsg()
+    expect(screen.getByText('Corpo do vídeo')).toBeTruthy()
+    expect(screen.getByTestId('msg-media-video')).toBeTruthy()
+  })
+})
+
+// =============================================================================
+// F-DOC-01..05 — MVP4B.6C: render DOCUMENT no histórico
+// =============================================================================
+
+describe('MetaChatArea — MVP4B.6C DOCUMENT render', () => {
+  const DOCUMENT_MEDIA: MetaMessageMedia = {
+    type:      'document',
+    url:       'https://example.com/doc.pdf',
+    filename:  'relatorio.pdf',
+    mime_type: 'application/pdf',
+    file_size: 2097152,
+  }
+
+  function renderDocMsg(mediaOverride?: Partial<MetaMessageMedia>) {
+    const media = { ...DOCUMENT_MEDIA, ...mediaOverride }
+    const msg = makeMsg('doc-001', 'outbound', 'template', 'Corpo do documento', null, media)
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+  }
+
+  it('F-DOC-01: template com media.type=document → card informativo renderizado', () => {
+    renderDocMsg()
+    expect(screen.getByTestId('msg-media-document')).toBeTruthy()
+  })
+
+  it('F-DOC-02: filename visível no card de documento', () => {
+    renderDocMsg()
+    expect(screen.getByText('relatorio.pdf')).toBeTruthy()
+  })
+
+  it('F-DOC-03: file_size visível quando disponível', () => {
+    renderDocMsg()
+    const docCard = screen.getByTestId('msg-media-document')
+    expect(docCard.textContent).toMatch(/2|MB|KB/i)
+  })
+
+  it('F-DOC-04: nenhum link externo <a href=media.url> presente', () => {
+    renderDocMsg()
+    const links = document.querySelectorAll('a[href="https://example.com/doc.pdf"]')
+    expect(links.length).toBe(0)
+  })
+
+  it('F-DOC-05: body permanece abaixo do card de documento', () => {
+    renderDocMsg()
+    expect(screen.getByText('Corpo do documento')).toBeTruthy()
+    expect(screen.getByTestId('msg-media-document')).toBeTruthy()
   })
 })

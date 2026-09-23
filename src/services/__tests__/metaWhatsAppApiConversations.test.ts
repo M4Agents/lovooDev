@@ -132,6 +132,7 @@ const FAKE_CONVERSATION: MetaChatConversation = {
   last_message_preview: 'Olá',
   created_at:           '2026-09-20T10:00:00.000Z',
   updated_at:           '2026-09-21T12:00:00.000Z',
+  profile_picture_url:  null,  // campo obrigatório adicionado em MVP3F
 }
 
 const FAKE_MESSAGE: MetaChatMessage = {
@@ -143,6 +144,7 @@ const FAKE_MESSAGE: MetaChatMessage = {
   body:               '[omitido nos testes]',
   provider_timestamp: '2026-09-21T12:00:00.000Z',
   created_at:         '2026-09-21T12:00:00.001Z',
+  media:              null,   // MVP4B.6C — required; null para mensagens sem mídia
 }
 
 // =============================================================================

@@ -178,8 +178,21 @@ export interface MetaChatConversation {
 //   GET /api/whatsapp/meta/conversations/:id/messages
 //
 // Campos explicitamente excluídos pelo backend: company_id, meta_message_id, updated_at.
+// media_asset_id: usado internamente pelo backend para resolução de mídia; nunca exposto.
 // message_type é string (não literal union) porque o MVP3A entrega 'text' e
 // futuros tipos (image, document, etc.) serão adicionados sem breaking change.
+
+// MVP4B.6C — DTO de mídia para templates IMAGE / VIDEO / DOCUMENT.
+// url = preview_url do asset (campo público do storage).
+// type vem do file_type do asset — somente 'image' | 'video' | 'document' aceitos.
+// Campos não expostos: media_asset_id, s3_key, company_id do asset, Meta media_id.
+export interface MetaMessageMedia {
+  type:      'image' | 'video' | 'document'
+  url:       string | null
+  filename:  string | null
+  mime_type: string | null
+  file_size: number | null
+}
 
 export interface MetaChatMessage {
   id:                 string
@@ -193,6 +206,8 @@ export interface MetaChatMessage {
   // MVP4A — template metadata (nulos em mensagens de texto, presentes em template)
   template_name?:     string | null
   template_language?: string | null
+  // MVP4B.6C — mídia de header de template; null para mensagens sem mídia
+  media:              MetaMessageMedia | null
 }
 
 // ── Response shapes ───────────────────────────────────────────────────────────

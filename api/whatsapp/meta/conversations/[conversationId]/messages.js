@@ -15,6 +15,7 @@
 //   4. validateMetaCaller() — auth + RBAC + feature flag
 //   5. [somente após auth.ok] Lookup de meta_conversations com auth.companyId
 //   6. [somente após conversa válida] Query de meta_messages com auth.companyId
+//   7. [somente após messages] Resolução batched de assets de mídia (MVP4B.6C)
 //
 // Segurança:
 //   - company_id da query identifica o tenant — nunca autoriza acesso diretamente
@@ -24,6 +25,8 @@
 //     nunca do caller — impede travessia cross-tenant via IDs injetados
 //   - 404 idêntico para: inexistente, outro tenant, archived — sem oracle
 //   - SELECT explícito: sem company_id, meta_message_id, updated_at, SELECT *
+//   - media_asset_id: selecionado internamente para enriquecimento; não exposto no DTO
+//   - asset lookup: filtra company_id = auth.companyId (tenant-safe); s3_key nunca exposto
 //   - Respostas 500 nunca expõem stack, erro bruto Supabase, PII ou credentials
 //   - Zero logging de Authorization, token ou segredos
 //
@@ -55,7 +58,8 @@ const LIMIT_DEFAULT = 50;
 // SELECT mínimo: apenas o que é usado nas queries subsequentes.
 const CONV_FIELDS = 'id, instance_id';
 
-// Campos públicos retornados ao frontend.
+// Campos de meta_messages para o SELECT interno.
+// media_asset_id: usado apenas para resolução de mídia (Step 7); não exposto no DTO final.
 // Nunca incluir: company_id, meta_message_id (wamid), updated_at.
 // template_name e template_language: presentes nas colunas desde MVP4A.4.
 // Retornados como null em mensagens de texto — nunca ausentes do shape.
@@ -70,7 +74,16 @@ const MSG_FIELDS = [
   'created_at',
   'template_name',
   'template_language',
+  'media_asset_id',       // MVP4B.6C — interno; removido do DTO antes de retornar
 ].join(', ');
+
+// Campos retornados de company_media_library para enriquecimento do DTO de mídia.
+// Nunca incluir: s3_key (confidencial), company_id (nunca exposto ao frontend).
+const ASSET_FIELDS = 'id, preview_url, original_filename, mime_type, file_type, file_size';
+
+// Tipos de file_type aceitos no DTO de mídia — fail-closed.
+// audio, outros, null, desconhecido → media:null.
+const ALLOWED_MEDIA_TYPES = new Set(['image', 'video', 'document']);
 
 export default async function handler(req, res) {
   // ── 1. Method guard ────────────────────────────────────────────────────────
@@ -177,7 +190,54 @@ export default async function handler(req, res) {
 
   // Inverter para ordem cronológica (mais antiga → mais recente).
   // Spread para evitar mutação do array original retornado pelo Supabase.
-  const messages = [...(data ?? [])].reverse();
+  const rawMessages = [...(data ?? [])].reverse();
+
+  // ── 7. Media resolution — batched, tenant-safe ─────────────────────────────
+  // Sem N+1: uma única query de assets, independente do número de mensagens.
+  // Fail-closed:
+  //   - asset inexistente   → media:null (nunca fallback global)
+  //   - asset outro tenant  → media:null (boundary: company_id = auth.companyId)
+  //   - file_type inválido  → media:null (audio, outros não aceitos)
+  //   - asset query error   → 500 (consistente com padrão do endpoint)
+  // media_asset_id nunca aparece no DTO final.
+  const mediaIds = [...new Set(
+    rawMessages.flatMap(m => (m.media_asset_id ? [m.media_asset_id] : []))
+  )];
+
+  let assetMap = new Map();
+  if (mediaIds.length > 0) {
+    const { data: assets, error: assetErr } = await svc
+      .from('company_media_library')
+      .select(ASSET_FIELDS)
+      .eq('company_id', auth.companyId)   // boundary tenant-safe obrigatório
+      .in('id', mediaIds);
+
+    if (assetErr) {
+      return res.status(500).json({ error: 'internal_error' });
+    }
+
+    for (const asset of (assets ?? [])) {
+      assetMap.set(asset.id, asset);
+    }
+  }
+
+  // Enriquecer DTO: adicionar media; remover media_asset_id do shape público.
+  const messages = rawMessages.map(({ media_asset_id, ...msg }) => {
+    let media = null;
+    if (media_asset_id) {
+      const asset = assetMap.get(media_asset_id);
+      if (asset && ALLOWED_MEDIA_TYPES.has(asset.file_type)) {
+        media = {
+          type:      asset.file_type,
+          url:       asset.preview_url        ?? null,
+          filename:  asset.original_filename  ?? null,
+          mime_type: asset.mime_type          ?? null,
+          file_size: asset.file_size          ?? null,
+        };
+      }
+    }
+    return { ...msg, media };
+  });
 
   return res.status(200).json({ messages });
 

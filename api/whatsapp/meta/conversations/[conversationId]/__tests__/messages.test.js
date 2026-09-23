@@ -67,7 +67,8 @@ const FAKE_CONV_DB = {
   instance_id: FAKE_INSTANCE_ID,
 };
 
-// Mensagens fictícias — DB retorna DESC (mais recente primeiro)
+// Mensagens fictícias — DB retorna DESC (mais recente primeiro).
+// Não incluem media_asset_id → handler trata como null → media:null no DTO.
 const FAKE_MSG_NEWEST = {
   id:                 FAKE_MSG_ID_C,
   conversation_id:    FAKE_CONV_ID,
@@ -100,6 +101,13 @@ const FAKE_MSG_OLDEST = {
   provider_timestamp: '2026-09-21T13:00:00.000Z',
   created_at:         '2026-09-21T13:00:00.000Z',
 };
+
+// Shape esperado no DTO final — media:null para mensagens sem media_asset_id.
+const FAKE_MSG_NEWEST_DTO = { ...FAKE_MSG_NEWEST, media: null };
+const FAKE_MSG_MIDDLE_DTO = { ...FAKE_MSG_MIDDLE, media: null };
+const FAKE_MSG_OLDEST_DTO = { ...FAKE_MSG_OLDEST, media: null };
+const FAKE_MSGS_DESC_DTO  = [FAKE_MSG_NEWEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_OLDEST_DTO];
+const FAKE_MSGS_ASC_DTO   = [FAKE_MSG_OLDEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_NEWEST_DTO];
 
 // Ordem que o DB retorna (DESC): newest → oldest
 const FAKE_MSGS_DESC = [FAKE_MSG_NEWEST, FAKE_MSG_MIDDLE, FAKE_MSG_OLDEST];
@@ -155,6 +163,18 @@ function makeMsgChain(data, error = null) {
   };
 }
 
+/**
+ * Chain para company_media_library (resolução de assets de mídia):
+ * select().eq().in()
+ */
+function makeAssetChain(data, error = null) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq:     vi.fn().mockReturnThis(),
+    in:     vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
 // =============================================================================
 // Setup padrão
 // =============================================================================
@@ -176,7 +196,7 @@ function setupHappyPath(messages = FAKE_MSGS_DESC) {
 // =============================================================================
 
 describe('GET messages — happy path', () => {
-  it('MSG-01: happy path — retorna mensagens em ordem cronológica (oldest→newest)', async () => {
+  it('MSG-01: happy path — retorna mensagens em ordem cronológica (oldest→newest) com media:null', async () => {
     setupHappyPath();
     const req = makeReq();
     const res = makeRes();
@@ -184,9 +204,11 @@ describe('GET messages — happy path', () => {
 
     expect(res._status).toBe(200);
     // Deve estar invertido: DB retorna DESC, handler retorna ASC
-    expect(res._body.messages).toEqual(FAKE_MSGS_ASC);
+    // media:null adicionado a todas mensagens sem media_asset_id
+    expect(res._body.messages).toEqual(FAKE_MSGS_ASC_DTO);
     expect(res._body.messages[0].body).toBe('Mensagem mais antiga');
     expect(res._body.messages[2].body).toBe('Mensagem mais recente');
+    expect(res._body.messages[0].media).toBeNull();
   });
 
   it('MSG-02: conversa existe sem mensagens → 200 { messages: [] }', async () => {
@@ -440,15 +462,16 @@ describe('GET messages — SELECT público', () => {
     expect(msgChain.select).toHaveBeenCalledTimes(1);
     const selectArg = msgChain.select.mock.calls[0][0];
 
-    // Campos públicos esperados (inclui template metadata — MVP4A.4)
+    // Campos esperados (inclui template metadata — MVP4A.4 e media_asset_id — MVP4B.6C)
     const EXPECTED = ['id', 'conversation_id', 'instance_id', 'direction',
                       'message_type', 'body', 'provider_timestamp', 'created_at',
-                      'template_name', 'template_language'];
+                      'template_name', 'template_language',
+                      'media_asset_id']; // MVP4B.6C — interno; não exposto no DTO final
     for (const field of EXPECTED) {
       expect(selectArg).toContain(field);
     }
 
-    // Campos proibidos
+    // Campos proibidos no SELECT (confidenciais / nunca expostos)
     expect(selectArg).not.toContain('company_id');
     expect(selectArg).not.toContain('meta_message_id');
     expect(selectArg).not.toContain('updated_at');
@@ -590,7 +613,7 @@ describe('GET messages — ordenação', () => {
 // =============================================================================
 
 describe('GET messages — reverse', () => {
-  it('MSG-21: DB retorna DESC (newest→oldest), API retorna ASC (oldest→newest)', async () => {
+  it('MSG-21: DB retorna DESC (newest→oldest), API retorna ASC (oldest→newest) — media:null preservado', async () => {
     // Mock retorna as mensagens como o DB faria: newest primeiro
     setupHappyPath(FAKE_MSGS_DESC);
 
@@ -611,6 +634,12 @@ describe('GET messages — reverse', () => {
     // Confirmar timestamps crescentes
     expect(msgs[0].provider_timestamp < msgs[1].provider_timestamp).toBe(true);
     expect(msgs[1].provider_timestamp < msgs[2].provider_timestamp).toBe(true);
+
+    // media:null em todas as mensagens (sem media_asset_id no DB mock)
+    for (const msg of msgs) {
+      expect(msg.media).toBeNull();
+      expect(msg).not.toHaveProperty('media_asset_id');
+    }
   });
 });
 
@@ -619,7 +648,8 @@ describe('GET messages — reverse', () => {
 // =============================================================================
 
 describe('GET messages — template metadata (MVP4A.4)', () => {
-  /** Mensagem de texto: template_name/language são null — campo presente no shape. */
+  /** Mensagem de texto: template_name/language são null — campo presente no shape.
+   *  Sem media_asset_id → media:null no DTO. */
   const FAKE_MSG_TEXT = {
     id:                 'msg-text-0001-0000-0000-000000000001',
     conversation_id:    FAKE_CONV_ID,
@@ -633,7 +663,7 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
     template_language:  null,
   };
 
-  /** Mensagem de template: ambos os campos preenchidos. */
+  /** Mensagem de template textual: ambos os campos preenchidos; sem mídia. */
   const FAKE_MSG_TEMPLATE = {
     id:                 'msg-tmpl-0001-0000-0000-000000000002',
     conversation_id:    FAKE_CONV_ID,
@@ -716,5 +746,333 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
     expect(selectArg).toContain('template_name');
     expect(selectArg).not.toContain('company_id');
     expect(selectArg).not.toContain('meta_message_id');
+  });
+});
+
+// =============================================================================
+// B-01..12 — MVP4B.6C: Media resolution (batched, tenant-safe)
+// =============================================================================
+
+const FAKE_ASSET_ID_1    = 'aaaa1111-0000-0000-0000-000000000001';
+const FAKE_ASSET_ID_2    = 'aaaa2222-0000-0000-0000-000000000002';
+const FAKE_ASSET_ID_3    = 'aaaa3333-0000-0000-0000-000000000003';
+const OTHER_COMPANY_ID   = 'zzzz0000-0000-0000-0000-000000000099';
+
+/** Mensagem de template com media_asset_id */
+function makeMsgWithAsset(id, assetId, overrides = {}) {
+  return {
+    id,
+    conversation_id:    FAKE_CONV_ID,
+    instance_id:        FAKE_INSTANCE_ID,
+    direction:          'outbound',
+    message_type:       'template',
+    body:               'Corpo do template',
+    provider_timestamp: '2026-09-23T18:00:00.000Z',
+    created_at:         '2026-09-23T18:00:00.000Z',
+    template_name:      'lovoo_e2e_image',
+    template_language:  'en',
+    media_asset_id:     assetId,
+    ...overrides,
+  };
+}
+
+/** Asset fictício da company_media_library */
+function makeAsset(id, fileType = 'image', overrides = {}) {
+  return {
+    id,
+    preview_url:       `https://storage.example.com/${id}.jpg`,
+    original_filename: `arquivo-${id}.jpg`,
+    mime_type:         fileType === 'image' ? 'image/jpeg'
+                     : fileType === 'video' ? 'video/mp4'
+                     : 'application/pdf',
+    file_type:         fileType,
+    file_size:         134750,
+    ...overrides,
+  };
+}
+
+describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', () => {
+
+  it('B-01: mensagens sem media_asset_id → nenhuma query company_media_library; media:null', async () => {
+    // DB retorna mensagens sem media_asset_id
+    setupHappyPath(FAKE_MSGS_DESC);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // Apenas 2 chamadas: meta_conversations + meta_messages
+    // Nenhuma chamada para company_media_library
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    for (const msg of res._body.messages) {
+      expect(msg.media).toBeNull();
+    }
+  });
+
+  it('B-02: template IMAGE same-company → media{type,url,filename,mime_type,file_size}', async () => {
+    const dbMsg  = makeMsgWithAsset('msg-img-001', FAKE_ASSET_ID_1);
+    const asset  = makeAsset(FAKE_ASSET_ID_1, 'image');
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toHaveLength(1);
+
+    const media = res._body.messages[0].media;
+    expect(media).not.toBeNull();
+    expect(media.type).toBe('image');
+    expect(media.url).toBe(asset.preview_url);
+    expect(media.filename).toBe(asset.original_filename);
+    expect(media.mime_type).toBe('image/jpeg');
+    expect(media.file_size).toBe(134750);
+  });
+
+  it('B-03: template VIDEO same-company → media.type=video', async () => {
+    const dbMsg = makeMsgWithAsset('msg-vid-001', FAKE_ASSET_ID_1);
+    const asset = makeAsset(FAKE_ASSET_ID_1, 'video', { mime_type: 'video/mp4' });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const media = res._body.messages[0].media;
+    expect(media.type).toBe('video');
+    expect(media.mime_type).toBe('video/mp4');
+  });
+
+  it('B-04: template DOCUMENT same-company → media.type=document', async () => {
+    const dbMsg = makeMsgWithAsset('msg-doc-001', FAKE_ASSET_ID_1);
+    const asset = makeAsset(FAKE_ASSET_ID_1, 'document', { mime_type: 'application/pdf' });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const media = res._body.messages[0].media;
+    expect(media.type).toBe('document');
+  });
+
+  it('B-05: múltiplas mensagens com mesmo asset → deduplicação; asset query batched', async () => {
+    // 2 mensagens apontando para o mesmo asset
+    const msg1  = makeMsgWithAsset('msg-dup-001', FAKE_ASSET_ID_1);
+    const msg2  = makeMsgWithAsset('msg-dup-002', FAKE_ASSET_ID_1);
+    const asset = makeAsset(FAKE_ASSET_ID_1, 'image');
+
+    const assetChain = makeAssetChain([asset]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([msg1, msg2]))
+      .mockReturnValueOnce(assetChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // Apenas 1 chamada para company_media_library (deduplicado)
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(assetChain.in).toHaveBeenCalledTimes(1);
+
+    const ids = assetChain.in.mock.calls[0][1];
+    // Deduplicado: somente 1 ID único
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).toBe(FAKE_ASSET_ID_1);
+
+    // Ambas mensagens recebem a mídia
+    expect(res._body.messages[0].media.type).toBe('image');
+    expect(res._body.messages[1].media.type).toBe('image');
+  });
+
+  it('B-06: múltiplos assets distintos → UMA query de assets (não N+1)', async () => {
+    const msg1   = makeMsgWithAsset('msg-multi-001', FAKE_ASSET_ID_1);
+    const msg2   = makeMsgWithAsset('msg-multi-002', FAKE_ASSET_ID_2);
+    const msg3   = makeMsgWithAsset('msg-multi-003', FAKE_ASSET_ID_3);
+    const asset1 = makeAsset(FAKE_ASSET_ID_1, 'image');
+    const asset2 = makeAsset(FAKE_ASSET_ID_2, 'video', { mime_type: 'video/mp4' });
+    const asset3 = makeAsset(FAKE_ASSET_ID_3, 'document', { mime_type: 'application/pdf' });
+
+    const assetChain = makeAssetChain([asset1, asset2, asset3]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([msg1, msg2, msg3]))
+      .mockReturnValueOnce(assetChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // UMA única chamada para company_media_library — não N+1
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(assetChain.in).toHaveBeenCalledTimes(1);
+
+    const ids = assetChain.in.mock.calls[0][1];
+    expect(ids).toHaveLength(3);
+
+    // Cada mensagem recebe mídia (independente da ordem após reverse)
+    const msgs = res._body.messages;
+    const mediaTypes = msgs.map(m => m.media?.type).sort();
+    expect(mediaTypes).toEqual(['document', 'image', 'video']);
+  });
+
+  it('B-07: asset ID inexistente → media:null (fail-closed)', async () => {
+    const dbMsg = makeMsgWithAsset('msg-missing-001', FAKE_ASSET_ID_1);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([])); // asset não encontrado
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media).toBeNull();
+  });
+
+  it('B-08: asset de outro company nunca resolvido → media:null; boundary tenant explícita', async () => {
+    const dbMsg = makeMsgWithAsset('msg-xten-001', FAKE_ASSET_ID_1);
+    const assetChain = makeAssetChain([]); // DB retorna vazio porque company_id não bate
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(assetChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media).toBeNull();
+
+    // Confirmar que o filtro de company_id foi aplicado na query de assets
+    const eqCalls = assetChain.eq.mock.calls;
+    const companyCall = eqCalls.find(c => c[0] === 'company_id');
+    expect(companyCall).toBeDefined();
+    expect(companyCall[1]).toBe(FAKE_COMPANY_ID); // auth.companyId, não do caller
+  });
+
+  it('B-09: asset file_type=audio → media:null (tipo não aceito)', async () => {
+    const dbMsg = makeMsgWithAsset('msg-audio-001', FAKE_ASSET_ID_1);
+    const asset = makeAsset(FAKE_ASSET_ID_1, 'audio', { mime_type: 'audio/mp3', file_type: 'audio' });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    // audio não é aceito → media:null
+    expect(res._body.messages[0].media).toBeNull();
+  });
+
+  it('B-10: asset query error → 500 internal_error (consistente com padrão do endpoint)', async () => {
+    const dbMsg = makeMsgWithAsset('msg-err-001', FAKE_ASSET_ID_1);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain(null, { message: 'db timeout on assets' }));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toMatchObject({ error: 'internal_error' });
+    // Erro real nunca exposto
+    expect(JSON.stringify(res._body)).not.toContain('db timeout on assets');
+  });
+
+  it('B-11: response não contém campos proibidos (s3_key, company_id do asset, media_asset_id)', async () => {
+    const dbMsg  = makeMsgWithAsset('msg-sec-001', FAKE_ASSET_ID_1);
+    const assetWithS3Key = {
+      ...makeAsset(FAKE_ASSET_ID_1, 'image'),
+      s3_key:     'private/bucket/key.jpg', // campo confidencial — nunca deve chegar ao DTO
+      company_id: FAKE_COMPANY_ID,           // nunca exposto ao frontend
+    };
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([assetWithS3Key]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const responseBody = JSON.stringify(res._body);
+
+    // media_asset_id não deve aparecer no DTO público
+    expect(responseBody).not.toContain('media_asset_id');
+    // s3_key não deve aparecer (somente preview_url é mapeado)
+    expect(responseBody).not.toContain('s3_key');
+    expect(responseBody).not.toContain('private/bucket/key.jpg');
+    // company_id do asset nunca no DTO
+    // (FAKE_COMPANY_ID pode aparecer em outros contextos, mas media não expõe)
+    const msg = res._body.messages[0];
+    expect(msg.media).not.toHaveProperty('company_id');
+    expect(msg.media).not.toHaveProperty('s3_key');
+    expect(msg.media).not.toHaveProperty('id'); // ID do asset não exposto
+  });
+
+  it('B-12: filtros originais de conversation/company/instance preservados com media resolution', async () => {
+    const dbMsg     = makeMsgWithAsset('msg-filt-001', FAKE_ASSET_ID_1);
+    const asset     = makeAsset(FAKE_ASSET_ID_1, 'image');
+    const convChain = makeConvChain(FAKE_CONV_DB);
+    const msgChain  = makeMsgChain([dbMsg]);
+    const assetChain = makeAssetChain([asset]);
+
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(msgChain)
+      .mockReturnValueOnce(assetChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+
+    // Confirmar filtros da messages query preservados
+    const msgEqCalls = msgChain.eq.mock.calls;
+    expect(msgEqCalls.find(c => c[0] === 'company_id'   && c[1] === FAKE_COMPANY_ID)).toBeDefined();
+    expect(msgEqCalls.find(c => c[0] === 'conversation_id')).toBeDefined();
+    expect(msgEqCalls.find(c => c[0] === 'instance_id')).toBeDefined();
+
+    // Ordenação preservada
+    expect(msgChain.order).toHaveBeenCalledTimes(2);
+    expect(msgChain.limit).toHaveBeenCalledWith(50); // LIMIT_DEFAULT=50
+
+    // Asset query tem boundary correta
+    const assetEqCalls = assetChain.eq.mock.calls;
+    expect(assetEqCalls.find(c => c[0] === 'company_id' && c[1] === FAKE_COMPANY_ID)).toBeDefined();
   });
 });

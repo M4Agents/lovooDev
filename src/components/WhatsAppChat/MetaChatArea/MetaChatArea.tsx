@@ -59,6 +59,16 @@ export function formatTime(iso: string | null | undefined): string {
   }
 }
 
+/**
+ * Formata tamanho de arquivo em bytes para exibição legível.
+ * Exportada para permitir teste unitário direto.
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024)            return `${bytes} B`
+  if (bytes < 1024 * 1024)     return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /** Gera iniciais para avatar local — sem fetch de imagem. */
 function getInitials(name: string | null | undefined, fallback: string): string {
   const src = (name || fallback).trim()
@@ -187,8 +197,13 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   const isInbound = message.direction === 'inbound'
   const time      = formatTime(message.provider_timestamp ?? message.created_at)
   // message_type='template': renderiza body persistido — sem reinterpolação.
+  // MVP4B.6C: exibe mídia de header (IMAGE/VIDEO/DOCUMENT) acima do body.
   // Outros tipos (image, audio, etc.) continuam "Mensagem não suportada".
   const isRenderable = message.message_type === 'text' || message.message_type === 'template'
+
+  // MVP4B.6C — Mídia de header (somente para template outbound com media)
+  const hasMedia  = message.message_type === 'template' && message.media != null
+  const mediaType = hasMedia ? message.media!.type : null
 
   return (
     <div
@@ -202,6 +217,51 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
             : 'bg-blue-500 text-white rounded-tr-sm'
         }`}
       >
+        {/* ── IMAGE header ──────────────────────────────────────────────────── */}
+        {hasMedia && mediaType === 'image' && message.media!.url && (
+          <div className="mb-2 -mx-3 -mt-2 rounded-t-2xl overflow-hidden">
+            <img
+              data-testid="msg-media-image"
+              src={message.media!.url}
+              alt={message.media!.filename ?? 'Imagem'}
+              className="w-full max-h-48 object-contain bg-black/5"
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          </div>
+        )}
+
+        {/* ── VIDEO header ──────────────────────────────────────────────────── */}
+        {hasMedia && mediaType === 'video' && message.media!.url && (
+          <div className="mb-2 -mx-3 -mt-2 rounded-t-2xl overflow-hidden">
+            <video
+              data-testid="msg-media-video"
+              src={message.media!.url}
+              controls
+              preload="metadata"
+              className="w-full max-h-48 bg-black/80"
+            />
+          </div>
+        )}
+
+        {/* ── DOCUMENT header ───────────────────────────────────────────────── */}
+        {hasMedia && mediaType === 'document' && (
+          <div
+            data-testid="msg-media-document"
+            className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-black/10"
+          >
+            <span aria-hidden="true" className="text-lg flex-shrink-0">📄</span>
+            <span className="text-xs font-medium truncate flex-1">
+              {message.media!.filename ?? 'Documento'}
+            </span>
+            {message.media!.file_size != null && (
+              <span className="text-xs opacity-70 flex-shrink-0">
+                {formatFileSize(message.media!.file_size)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Body / fallback ───────────────────────────────────────────────── */}
         {isRenderable ? (
           <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
             {message.body}
