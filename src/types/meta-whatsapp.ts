@@ -316,14 +316,23 @@ export interface MetaTemplateParameterValues {
 
 // ── Resposta de envio de template ────────────────────────────────────────────
 // Erros distintos retornados pelo backend (propagados como err.message):
-//   template_not_found          → template inexistente na Graph API
-//   template_language_not_found → idioma inválido para o template
-//   template_unsupported        → template não suportado (ex: media, buttons)
-//   template_params_mismatch    → parâmetros enviados não batem com o template
-//   provider_unavailable        → timeout/rede com Graph
-//   provider_error              → Graph rejeitou com erro
-//   send_persistence_failed     → Graph aceitou, falhou ao salvar localmente
-//                                 ⚠ NÃO reenviar
+//   template_not_found           → template inexistente na Graph API
+//   template_language_not_found  → idioma inválido para o template
+//   template_unsupported         → template não suportado (ex: botões, carousel)
+//   template_params_mismatch     → parâmetros enviados não batem com o template
+//   provider_unavailable         → timeout/rede com Graph
+//   provider_error               → Graph rejeitou com erro
+//   send_persistence_failed      → Graph aceitou, falhou ao salvar localmente
+//                                  ⚠ NÃO reenviar
+// MVP4B — erros de media template:
+//   media_header_required        → template IMAGE/VIDEO/DOCUMENT sem asset
+//   media_header_unexpected      → template textual com asset
+//   media_asset_not_found        → asset inexistente ou outro tenant
+//   media_asset_too_large        → tamanho acima do limite Meta
+//   media_asset_type_unknown     → MIME real não reconhecido
+//   media_asset_type_unsupported → MIME real não suportado pelo Meta
+//   media_asset_type_mismatch    → MIME real diverge do header_media_format
+//   media_provider_unavailable   → falha de storage (download) ou upload /media
 
 export interface MetaSendTemplateResponse {
   ok:         true

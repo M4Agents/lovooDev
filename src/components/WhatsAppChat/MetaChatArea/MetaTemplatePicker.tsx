@@ -20,6 +20,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { metaWhatsAppApi }    from '../../../services/metaWhatsAppApi'
+import { MetaMediaAssetSelector } from './MetaMediaAssetSelector'
+import type { MediaAssetFormat }  from './MetaMediaAssetSelector'
 import type {
   MetaWhatsAppTemplate,
   MetaTemplateParameterValues,
@@ -36,8 +38,9 @@ export interface MetaTemplatePickerProps {
   sending:    boolean
   onClose:    () => void
   onSend:     (
-    template:        MetaWhatsAppTemplate,
-    parameterValues: MetaTemplateParameterValues,
+    template:             MetaWhatsAppTemplate,
+    parameterValues:      MetaTemplateParameterValues,
+    headerMediaAssetId?:  string,
   ) => Promise<void>
 }
 
@@ -112,6 +115,9 @@ export function MetaTemplatePicker({
   const [selected, setSelected]       = useState<MetaWhatsAppTemplate | null>(null)
   const [paramValues, setParamValues] = useState<MetaTemplateParameterValues>({ body: {} })
   const [loadTrigger, setLoadTrigger] = useState(0)   // incrementar → retry
+  // MVP4B: asset selecionado para templates com HEADER media.
+  // Limpo a cada troca de template — nunca persiste entre seleções diferentes.
+  const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null)
 
   // loadGenRef: invalidar loads stale ao reabrir ou ao retomar
   const loadGenRef = useRef(0)
@@ -176,6 +182,8 @@ export function MetaTemplatePicker({
   const handleSelect = useCallback((tmpl: MetaWhatsAppTemplate) => {
     setSelected(tmpl)
     setParamValues(initParamValues(tmpl))
+    // MVP4B: resetar asset ao trocar de template — seleção anterior é incompatível.
+    setSelectedMediaAssetId(null)
   }, [])
 
   const handleParamChange = useCallback((component: 'HEADER' | 'BODY', key: string, value: string) => {
@@ -186,14 +194,25 @@ export function MetaTemplatePicker({
     )
   }, [])
 
+  // MVP4B: template tem HEADER media se header_media_format for IMAGE/VIDEO/DOCUMENT.
+  // undefined é tratado como null (templates MVP4A sem este campo).
+  const hasMediaHeader = selected?.header_media_format != null
+
   const handleSend = useCallback(async () => {
     if (!selected || sending || !paramsComplete(selected, paramValues)) return
-    await onSend(selected, paramValues)
-  }, [selected, sending, paramValues, onSend])
+    if (hasMediaHeader && !selectedMediaAssetId) return
+    await onSend(
+      selected,
+      paramValues,
+      hasMediaHeader ? (selectedMediaAssetId ?? undefined) : undefined,
+    )
+  }, [selected, sending, paramValues, hasMediaHeader, selectedMediaAssetId, onSend])
 
   if (!open) return null
 
-  const canSend      = !!selected && !sending && paramsComplete(selected, paramValues)
+  const textComplete = !!selected && paramsComplete(selected, paramValues)
+  const mediaComplete = !hasMediaHeader || Boolean(selectedMediaAssetId)
+  const canSend      = textComplete && mediaComplete && !sending
   const preview      = selected ? buildPreview(selected.components, selected.parameters, paramValues) : null
   const headerParams = selected?.parameters.filter(p => p.component === 'HEADER') ?? []
   const bodyParams   = selected?.parameters.filter(p => p.component === 'BODY')   ?? []
@@ -292,6 +311,17 @@ export function MetaTemplatePicker({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* MVP4B — Seletor de mídia (somente para templates com HEADER media) */}
+              {selected && hasMediaHeader && (
+                <MetaMediaAssetSelector
+                  companyId={companyId}
+                  mediaFormat={selected.header_media_format as MediaAssetFormat}
+                  selectedAssetId={selectedMediaAssetId}
+                  onSelect={asset => setSelectedMediaAssetId(asset.id)}
+                  disabled={sending}
+                />
               )}
 
               {/* Preview */}

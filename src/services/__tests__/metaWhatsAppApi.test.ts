@@ -271,3 +271,52 @@ describe('metaWhatsAppApi.resolveWabaSelection', () => {
       .rejects.toThrow('Failed to fetch')
   })
 })
+
+// =============================================================================
+// SVC-01..03 — MVP4B: metaWhatsAppApi.sendTemplate — contrato de payload
+// =============================================================================
+
+describe('metaWhatsAppApi.sendTemplate — MVP4B payload', () => {
+  const COMP   = 'co-svc-001'
+  const INST   = 'inst-svc-001'
+  const CONV   = 'conv-svc-001'
+  const TNAME  = 'promo_image'
+  const TLANG  = 'pt_BR'
+  const PARAMS = { body: { '1': 'Teste' } }
+  const ASSET  = 'asset-uuid-001'
+
+  function captureBody(): Promise<Record<string, unknown>> {
+    return new Promise(resolve => {
+      vi.spyOn(global, 'fetch').mockImplementationOnce(async (_url, opts) => {
+        const body = JSON.parse((opts?.body as string) ?? '{}') as Record<string, unknown>
+        resolve(body)
+        return new Response(JSON.stringify({ ok: true, message_id: 'wamid.svc-001' }), { status: 200 })
+      })
+    })
+  }
+
+  it('SVC-01: com headerMediaAssetId → body contém header_media_asset_id exato', async () => {
+    const bodyPromise = captureBody()
+    // Não aguardar resultado — só o body
+    void metaWhatsAppApi.sendTemplate(COMP, INST, CONV, TNAME, TLANG, PARAMS, ASSET)
+    const body = await bodyPromise
+    expect(body.header_media_asset_id).toBe(ASSET)
+  })
+
+  it('SVC-02: sem headerMediaAssetId → body NÃO contém header_media_asset_id', async () => {
+    const bodyPromise = captureBody()
+    void metaWhatsAppApi.sendTemplate(COMP, INST, CONV, TNAME, TLANG, PARAMS, undefined)
+    const body = await bodyPromise
+    expect(body).not.toHaveProperty('header_media_asset_id')
+  })
+
+  it('SVC-03: nenhum campo proibido aparece no body (mime, filename, url, s3_key, media_id)', async () => {
+    const bodyPromise = captureBody()
+    void metaWhatsAppApi.sendTemplate(COMP, INST, CONV, TNAME, TLANG, PARAMS, ASSET)
+    const body = await bodyPromise
+    const forbidden = ['mime', 'mime_type', 'filename', 'url', 'preview_url', 's3_key', 'media_id', 'to', 'wa_id', 'waba_id', 'phone_number_id', 'token', 'access_token', 'components']
+    for (const key of forbidden) {
+      expect(body, `body não deve conter '${key}'`).not.toHaveProperty(key)
+    }
+  })
+})

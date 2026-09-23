@@ -554,12 +554,13 @@ export const metaWhatsAppApi = {
    *   send_persistence_failed (⚠ NÃO reenviar)
    */
   async sendTemplate(
-    companyId:       string,
-    instanceId:      string,
-    conversationId:  string,
-    templateName:    string,
-    templateLanguage: string,
-    parameterValues: MetaTemplateParameterValues,
+    companyId:           string,
+    instanceId:          string,
+    conversationId:      string,
+    templateName:        string,
+    templateLanguage:    string,
+    parameterValues:     MetaTemplateParameterValues,
+    headerMediaAssetId?: string,
   ): Promise<MetaSendTemplateResponse> {
     // ── Validação defensiva pré-request ──────────────────────────────────────
     if (!companyId)              throw new Error('company_id é obrigatório')
@@ -608,8 +609,11 @@ export const metaWhatsAppApi = {
         template_name:    templateName,
         template_language: templateLanguage,
         parameter_values: parameterValues,
-        // NUNCA incluir: to, wa_id, waba_id, phone_number_id,
-        //   token, access_token, components, status, category, parameter_format
+        // MVP4B: header_media_asset_id presente somente para templates media.
+        //   Ausente (campo omitido) para templates textuais — não enviar null/undefined.
+        //   NUNCA incluir: to, wa_id, waba_id, phone_number_id, token, access_token,
+        //   components, status, category, parameter_format, media_id, mime, filename, url.
+        ...(headerMediaAssetId ? { header_media_asset_id: headerMediaAssetId } : {}),
       }),
     })
 

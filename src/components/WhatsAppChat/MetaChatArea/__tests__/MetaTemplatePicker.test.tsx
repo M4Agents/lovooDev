@@ -51,6 +51,33 @@ vi.mock('../../../../services/metaWhatsAppApi', () => ({
   metaWhatsAppApi: { listTemplates: vi.fn() },
 }))
 
+// MVP4B — mock isolado de MetaMediaAssetSelector
+vi.mock('../MetaMediaAssetSelector', () => ({
+  MetaMediaAssetSelector: ({
+    mediaFormat,
+    selectedAssetId,
+    onSelect,
+    disabled,
+  }: {
+    mediaFormat:       string
+    selectedAssetId?:  string | null
+    onSelect:          (a: { id: string }) => void
+    disabled?:         boolean
+  }) => (
+    <div data-testid={`mas-mock-${mediaFormat.toLowerCase()}`}>
+      <span data-testid="mas-selected-value">{selectedAssetId ?? ''}</span>
+      <button
+        type="button"
+        data-testid="mas-select-btn"
+        disabled={!!disabled}
+        onClick={() => onSelect({ id: `mock-asset-id-${mediaFormat.toLowerCase()}` })}
+      >
+        Selecionar mídia
+      </button>
+    </div>
+  ),
+}))
+
 import { metaWhatsAppApi } from '../../../../services/metaWhatsAppApi'
 const mockListTemplates = metaWhatsAppApi.listTemplates as ReturnType<typeof vi.fn>
 
@@ -63,65 +90,121 @@ const COMPANY  = 'co-001'
 const INSTANCE = 'inst-001'
 
 const TMPL_POSITIONAL: MetaWhatsAppTemplate = {
-  id:                 'tpl-pos-001',
-  name:               'hello_world',
-  language:           'pt_BR',
-  status:             'APPROVED',
-  category:           'UTILITY',
-  parameter_format:   'POSITIONAL',
-  components:         [{ type: 'BODY', text: 'Olá, {{1}}! Seu código é {{2}}.' }],
-  parameters:         [
+  id:                  'tpl-pos-001',
+  name:                'hello_world',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  components:          [{ type: 'BODY', text: 'Olá, {{1}}! Seu código é {{2}}.' }],
+  parameters:          [
     { component: 'BODY', key: '1', position: 1, example: 'João' },
     { component: 'BODY', key: '2', position: 2, example: '12345' },
   ],
-  supported:          true,
-  unsupported_reason: null,
+  supported:           true,
+  unsupported_reason:  null,
 }
 
 const TMPL_NAMED: MetaWhatsAppTemplate = {
-  id:                 'tpl-named-002',
-  name:               'order_confirmation',
-  language:           'pt_BR',
-  status:             'APPROVED',
-  category:           'MARKETING',
-  parameter_format:   'NAMED',
-  components:         [
+  id:                  'tpl-named-002',
+  name:                'order_confirmation',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  components:          [
     { type: 'HEADER', text: 'Pedido {{order_id}}' },
     { type: 'BODY',   text: 'Olá, {{name}}! Seu pedido foi confirmado.' },
     { type: 'FOOTER', text: 'Equipe de suporte' },
   ],
-  parameters:         [
+  parameters:          [
     { component: 'HEADER', key: 'order_id', position: null, example: 'ORD-999' },
     { component: 'BODY',   key: 'name',     position: null, example: 'Maria' },
   ],
-  supported:          true,
-  unsupported_reason: null,
+  supported:           true,
+  unsupported_reason:  null,
 }
 
 const TMPL_NO_PARAMS: MetaWhatsAppTemplate = {
-  id:                 'tpl-noparam-003',
-  name:               'simple_template',
-  language:           'en_US',
-  status:             'APPROVED',
-  category:           'UTILITY',
-  parameter_format:   'NAMED',
-  components:         [{ type: 'BODY', text: 'Olá! Bem-vindo.' }],
+  id:                  'tpl-noparam-003',
+  name:                'simple_template',
+  language:            'en_US',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  components:          [{ type: 'BODY', text: 'Olá! Bem-vindo.' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_UNSUPPORTED: MetaWhatsAppTemplate = {
+  id:                  'tpl-unsup-004',
+  name:                'promo_image',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  components:          [{ type: 'HEADER', format: 'IMAGE' }],
+  parameters:          [],
+  supported:           false,
+  unsupported_reason:  'header_media_not_supported',
+}
+
+// MVP4B — templates com header_media_format
+const TMPL_IMAGE: MetaWhatsAppTemplate = {
+  id:                  'tpl-image-010',
+  name:                'promo_with_image',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: 'IMAGE',
+  components:          [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY',   text:   'Confira nossa promoção!' },
+  ],
   parameters:         [],
   supported:          true,
   unsupported_reason: null,
 }
 
-const TMPL_UNSUPPORTED: MetaWhatsAppTemplate = {
-  id:                 'tpl-unsup-004',
-  name:               'promo_image',
-  language:           'pt_BR',
-  status:             'APPROVED',
-  category:           'MARKETING',
-  parameter_format:   'NAMED',
-  components:         [{ type: 'HEADER', format: 'IMAGE' }],
+const TMPL_VIDEO: MetaWhatsAppTemplate = {
+  id:                  'tpl-video-011',
+  name:                'promo_with_video',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: 'VIDEO',
+  components:          [
+    { type: 'HEADER', format: 'VIDEO' },
+    { type: 'BODY',   text:   'Assista nosso vídeo!' },
+  ],
   parameters:         [],
-  supported:          false,
-  unsupported_reason: 'header_media_not_supported',
+  supported:          true,
+  unsupported_reason: null,
+}
+
+const TMPL_DOCUMENT: MetaWhatsAppTemplate = {
+  id:                  'tpl-doc-012',
+  name:                'promo_with_doc',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: 'DOCUMENT',
+  components:          [
+    { type: 'HEADER', format: 'DOCUMENT' },
+    { type: 'BODY',   text:   'Veja nosso documento.' },
+  ],
+  parameters:         [],
+  supported:          true,
+  unsupported_reason: null,
 }
 
 function makeListResp(
@@ -139,7 +222,7 @@ function renderPicker(props: Partial<{
   open:     boolean
   sending:  boolean
   onClose:  () => void
-  onSend:   (t: MetaWhatsAppTemplate, p: MetaTemplateParameterValues) => Promise<void>
+  onSend:   (t: MetaWhatsAppTemplate, p: MetaTemplateParameterValues, headerMediaAssetId?: string) => Promise<void>
 }> = {}) {
   return render(
     <MetaTemplatePicker
@@ -515,5 +598,203 @@ describe('MetaTemplatePicker — ações', () => {
     expect(tmpl).not.toHaveProperty('recipient')
     expect(params).not.toHaveProperty('to')
     expect(params).not.toHaveProperty('wa_id')
+  })
+})
+
+// =============================================================================
+// MTP-01..13 — MVP4B: HEADER media templates
+// =============================================================================
+
+describe('MetaTemplatePicker — MVP4B media header', () => {
+  it('MTP-01: template textual → MetaMediaAssetSelector NÃO renderizado', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_NO_PARAMS]))
+    renderPicker()
+    await waitFor(() => screen.getByText('simple_template'))
+    fireEvent.click(screen.getByText('simple_template'))
+    expect(screen.queryByTestId('mas-mock-image')).toBeNull()
+    expect(screen.queryByTestId('mas-mock-video')).toBeNull()
+    expect(screen.queryByTestId('mas-mock-document')).toBeNull()
+  })
+
+  it('MTP-02: template textual → canSend depende apenas de params (não de asset)', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_NO_PARAMS]))
+    renderPicker()
+    await waitFor(() => screen.getByText('simple_template'))
+    fireEvent.click(screen.getByText('simple_template'))
+    const sendBtn = screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement
+    expect(sendBtn.disabled).toBe(false)  // sem parâmetros → habilitado
+  })
+
+  it('MTP-03: template textual → onSend 3º arg undefined (não passa asset)', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_NO_PARAMS]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('simple_template'))
+    fireEvent.click(screen.getByText('simple_template'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend).toHaveBeenCalledTimes(1)
+    const args = onSend.mock.calls[0] as unknown[]
+    // 3º arg deve ser undefined (ou ausente)
+    expect(args[2]).toBeUndefined()
+  })
+
+  it('MTP-04: template IMAGE → MetaMediaAssetSelector renderizado com mediaFormat=IMAGE', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByText('promo_with_image'))
+    expect(screen.getByTestId('mas-mock-image')).toBeTruthy()
+  })
+
+  it('MTP-05: template IMAGE sem asset selecionado → botão Enviar desabilitado', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByText('promo_with_image'))
+    const sendBtn = screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement
+    expect(sendBtn.disabled).toBe(true)
+  })
+
+  it('MTP-06: template IMAGE com asset selecionado → botão Enviar habilitado', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByText('promo_with_image'))
+    // Selecionar asset via mock
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    const sendBtn = screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement
+    expect(sendBtn.disabled).toBe(false)
+  })
+
+  it('MTP-07: onSend recebe asset id como 3º arg (somente id, nenhum campo proibido)', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend).toHaveBeenCalledTimes(1)
+    const args = onSend.mock.calls[0] as unknown[]
+    expect(args[2]).toBe('mock-asset-id-image')
+    // Garantir que 3º arg seja apenas string (id), sem campos extras
+    expect(typeof args[2]).toBe('string')
+  })
+
+  it('MTP-08: template VIDEO → MetaMediaAssetSelector com mediaFormat=VIDEO; canSend segue mesma lógica', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_VIDEO]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('promo_with_video'))
+    fireEvent.click(screen.getByText('promo_with_video'))
+    expect(screen.getByTestId('mas-mock-video')).toBeTruthy()
+
+    // Sem asset → desabilitado
+    expect((screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement).disabled).toBe(true)
+
+    // Selecionar → habilitado; onSend com id correto
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    expect((screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement).disabled).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-video')
+  })
+
+  it('MTP-09: template DOCUMENT → MetaMediaAssetSelector com mediaFormat=DOCUMENT', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DOCUMENT]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('promo_with_doc'))
+    fireEvent.click(screen.getByText('promo_with_doc'))
+    expect(screen.getByTestId('mas-mock-document')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-document')
+  })
+
+  it('MTP-10: trocar de template IMAGE→NO_PARAMS → asset limpo; sem seletor', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE, TMPL_NO_PARAMS]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_with_image'))
+
+    // Selecionar IMAGE
+    fireEvent.click(screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+
+    // Asset selecionado visível no mock
+    expect(screen.getByTestId('mas-selected-value').textContent).toBe('mock-asset-id-image')
+
+    // Trocar para template textual
+    fireEvent.click(screen.getByText('simple_template'))
+
+    // Seletor não aparece
+    expect(screen.queryByTestId('mas-mock-image')).toBeNull()
+  })
+
+  it('MTP-11: trocar de template IMAGE → DOCUMENT → asset limpo para DOCUMENT', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE, TMPL_DOCUMENT]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_with_image'))
+
+    // Selecionar IMAGE e escolher asset
+    fireEvent.click(screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+
+    // Trocar para DOCUMENT — asset anterior deve ser limpo
+    fireEvent.click(screen.getByText('promo_with_doc'))
+
+    expect(screen.getByTestId('mas-mock-document')).toBeTruthy()
+    // selectedAssetId no mock deve ser '' (limpo)
+    expect(screen.getByTestId('mas-selected-value').textContent).toBe('')
+  })
+
+  it('MTP-12: template IMAGE→DOCUMENT não reaproveita asset anterior no onSend', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE, TMPL_DOCUMENT]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('promo_with_image'))
+
+    fireEvent.click(screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))  // seleciona asset IMAGE
+
+    // Trocar para DOCUMENT (asset limpo)
+    fireEvent.click(screen.getByText('promo_with_doc'))
+
+    // Sem selecionar novo asset → botão desabilitado
+    expect((screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement).disabled).toBe(true)
+
+    // Selecionar asset DOCUMENT
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+
+    // 3º arg deve ser id de DOCUMENT, NÃO de IMAGE
+    expect((onSend.mock.calls[0] as unknown[])[2]).toBe('mock-asset-id-document')
+    expect((onSend.mock.calls[0] as unknown[])[2]).not.toBe('mock-asset-id-image')
+  })
+
+  it('MTP-13: Cancelar não chama onSend', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    const onClose = vi.fn()
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE]))
+    renderPicker({ onSend, onClose })
+    await waitFor(() => screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByText('promo_with_image'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+
+    // Cancelar sem enviar
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+    expect(onSend).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

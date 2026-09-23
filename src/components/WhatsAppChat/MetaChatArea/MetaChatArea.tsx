@@ -99,6 +99,23 @@ function getSendErrorMessage(error: unknown): string {
       return 'Este template contém formatos não suportados (mídia, botões, etc.).'
     case 'template_params_mismatch':
       return 'Os parâmetros fornecidos não correspondem ao template. Verifique os campos.'
+    // ── Media template (MVP4B) ─────────────────────────────────────────────────
+    case 'media_header_required':
+      return 'Este template requer uma mídia de cabeçalho. Selecione uma imagem, vídeo ou documento.'
+    case 'media_header_unexpected':
+      return 'Este template não aceita mídia de cabeçalho.'
+    case 'media_asset_not_found':
+      return 'Mídia não encontrada. Ela pode ter sido removida da biblioteca.'
+    case 'media_asset_too_large':
+      return 'O arquivo é grande demais para ser enviado por este template.'
+    case 'media_asset_type_unknown':
+      return 'Não foi possível identificar o tipo do arquivo de mídia.'
+    case 'media_asset_type_unsupported':
+      return 'Formato de arquivo não suportado pelo Meta WhatsApp.'
+    case 'media_asset_type_mismatch':
+      return 'O arquivo selecionado não corresponde ao tipo de mídia do template.'
+    case 'media_provider_unavailable':
+      return 'Serviço de mídia temporariamente indisponível. Tente novamente.'
     // ── Compartilhados ─────────────────────────────────────────────────────────
     case 'provider_unavailable':
       return 'Serviço temporariamente indisponível. Tente novamente.'
@@ -289,11 +306,15 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     }
   }, [companyId, conversation, conversationId, text, refresh])
 
-  // ── handleSendTemplate (MVP4A) ─────────────────────────────────────────────
+  // ── handleSendTemplate (MVP4A + MVP4B) ────────────────────────────────────
   // Reutiliza os mesmos guards anti-stale do handleSend (sendingRef, sendGenRef, mountedRef).
+  // MVP4B: headerMediaAssetId — UUID do asset validado server-side.
+  //   TEXT: undefined (ausente no payload).
+  //   MEDIA: string (header_media_asset_id no payload).
   const handleSendTemplate = useCallback(async (
-    template:        MetaWhatsAppTemplate,
-    parameterValues: MetaTemplateParameterValues,
+    template:            MetaWhatsAppTemplate,
+    parameterValues:     MetaTemplateParameterValues,
+    headerMediaAssetId?: string,
   ) => {
     if (sendingRef.current || !conversation?.instance_id) return
 
@@ -309,6 +330,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     try {
       // Destinatário resolvido pelo backend via conversation_id.
       // to/wa_id/waba_id/phone_number_id NUNCA enviados pelo frontend.
+      // header_media_asset_id: somente para templates com HEADER media.
       await metaWhatsAppApi.sendTemplate(
         companyId,
         conversation.instance_id,
@@ -316,6 +338,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
         template.name,
         template.language,
         parameterValues,
+        headerMediaAssetId,
       )
       success = true
     } catch (err) {

@@ -95,7 +95,7 @@ vi.mock('../MetaTemplatePicker', () => ({
   }: {
     open:    boolean
     onClose: () => void
-    onSend:  (t: unknown, p: unknown) => Promise<void>
+    onSend:  (t: unknown, p: unknown, headerMediaAssetId?: string) => Promise<void>
     sending: boolean
   }) => {
     if (!open) return null
@@ -117,6 +117,26 @@ vi.mock('../MetaTemplatePicker', () => ({
           }
         >
           Enviar template mock
+        </button>
+        {/* MVP4B — botão para simular envio de template com mídia */}
+        <button
+          type="button"
+          disabled={sending}
+          data-testid="send-media-template-btn"
+          onClick={() =>
+            onSend(
+              {
+                id: 'tpl-media-001', name: 'promo_image', language: 'pt_BR',
+                status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
+                header_media_format: 'IMAGE',
+                components: [], parameters: [], supported: true, unsupported_reason: null,
+              },
+              { body: {} },
+              'asset-mock-id-001',
+            )
+          }
+        >
+          Enviar template media mock
         </button>
       </div>
     )
@@ -142,6 +162,7 @@ const CONV_FULL: MetaChatConversation = {
   instance_id:          'inst-001',
   wa_id:                '5511999990001',
   contact_name:         'João Silva',
+  profile_picture_url:  null,
   status:               'active',
   unread_count:         2,
   last_message_at:      '2026-09-21T15:00:00.000Z',
@@ -1069,9 +1090,11 @@ describe('MetaChatArea — MVP4A Templates', () => {
     fireEvent.click(screen.getByRole('button', { name: /template/i }))
     await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
     const callArgs = mockSendTemplate.mock.calls[0] as unknown[]
-    // sendTemplate recebe somente: companyId, instanceId, conversationId, name, language, paramValues
-    expect(callArgs).toHaveLength(6)
-    // Garantir que nenhum dos 6 args é 'wa_id' ou 'to'
+    // sendTemplate recebe: companyId, instanceId, conversationId, name, language, paramValues, headerMediaAssetId?
+    // Para templates textuais: 7 args (7º = undefined) ou 6 args (omitido).
+    // O importante é que nenhum arg seja wa_id/to.
+    expect(callArgs.length).toBeGreaterThanOrEqual(6)
+    // Garantir que nenhum dos args de string é 'wa_id' ou 'to'
     const strArgs = callArgs.filter(a => typeof a === 'string') as string[]
     expect(strArgs).not.toContain(CONV_FULL.wa_id)
   })
@@ -1192,5 +1215,109 @@ describe('MetaChatArea — MVP4A Templates', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     // Picker não deve estar aberto em B (foi fechado pelo useEffect de conversationId)
     expect(screen.queryByTestId('template-picker-mock')).toBeNull()
+  })
+})
+
+// =============================================================================
+// MCA-01..10 — MVP4B: handleSendTemplate com headerMediaAssetId
+// =============================================================================
+
+describe('MetaChatArea — MVP4B media template', () => {
+  it('MCA-01: sendTemplate com headerMediaAssetId inclui asset id como 7º arg', async () => {
+    mockSendTemplate.mockResolvedValueOnce({ ok: true, message_id: FAKE_WAMID })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => expect(mockSendTemplate).toHaveBeenCalled())
+    const callArgs = mockSendTemplate.mock.calls[0] as unknown[]
+    expect(callArgs[6]).toBe('asset-mock-id-001')
+  })
+
+  it('MCA-02: sendTemplate para template textual NÃO inclui header_media_asset_id', async () => {
+    mockSendTemplate.mockResolvedValueOnce({ ok: true, message_id: FAKE_WAMID })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByText('Enviar template mock')) })
+    await waitFor(() => expect(mockSendTemplate).toHaveBeenCalled())
+    const callArgs = mockSendTemplate.mock.calls[0] as unknown[]
+    // 7º arg deve ser undefined ou ausente para template textual
+    if (callArgs.length > 6) expect(callArgs[6]).toBeUndefined()
+  })
+
+  it('MCA-03: sucesso de template media fecha o picker', async () => {
+    mockSendTemplate.mockResolvedValueOnce({ ok: true, message_id: FAKE_WAMID })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => expect(screen.queryByTestId('template-picker-mock')).toBeNull())
+  })
+
+  it('MCA-04: erro media_header_required exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_header_required'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/cabeçalho/i)
+  })
+
+  it('MCA-05: erro media_asset_not_found exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_asset_not_found'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/biblioteca|removida/i)
+  })
+
+  it('MCA-06: erro media_asset_too_large exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_asset_too_large'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/grande demais/i)
+  })
+
+  it('MCA-07: erro media_asset_type_mismatch exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_asset_type_mismatch'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/tipo de mídia/i)
+  })
+
+  it('MCA-08: erro media_asset_type_unsupported exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_asset_type_unsupported'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/formato|suportado/i)
+  })
+
+  it('MCA-09: erro media_provider_unavailable exibe mensagem amigável', async () => {
+    mockSendTemplate.mockRejectedValueOnce(new Error('media_provider_unavailable'))
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => screen.getByRole('alert'))
+    expect(screen.getByRole('alert').textContent).toMatch(/indispon[íi]vel|tente novamente/i)
+  })
+
+  it('MCA-10: sendTemplate passa companyId e instanceId corretos também para template media', async () => {
+    mockSendTemplate.mockResolvedValueOnce({ ok: true, message_id: FAKE_WAMID })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    fireEvent.click(screen.getByRole('button', { name: /template/i }))
+    await act(async () => { fireEvent.click(screen.getByTestId('send-media-template-btn')) })
+    await waitFor(() => expect(mockSendTemplate).toHaveBeenCalled())
+    const callArgs = mockSendTemplate.mock.calls[0] as unknown[]
+    expect(callArgs[0]).toBe(COMPANY_ID)
+    expect(callArgs[1]).toBe(CONV_FULL.instance_id)
+    expect(callArgs[2]).toBe(CONV_ID)
+    // NÃO deve conter wa_id ou to como argumento de string
+    const strArgs = callArgs.filter(a => typeof a === 'string') as string[]
+    expect(strArgs).not.toContain(CONV_FULL.wa_id)
   })
 })
