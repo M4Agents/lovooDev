@@ -34,53 +34,20 @@
 // =============================================================================
 
 import { fileTypeFromBlob } from 'file-type';
+import {
+  UUID_RE,
+  VALID_MEDIA_TYPES,
+  MEDIA_SIZE_LIMITS,
+  MIME_TO_MEDIA_TYPE,
+  sanitizeFilename,
+} from './mediaConstants.js';
 
 // =============================================================================
-// Constantes
+// Constantes locais
 // =============================================================================
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const VALID_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 // Bucket Supabase Storage onde os assets de company_media_library estão armazenados.
 const STORAGE_BUCKET = 'aws-lovoocrm-media';
-
-// Limite máximo de tamanho por tipo de media.
-//
-// IMAGE e VIDEO: valores per Meta Cloud API documentation (endpoint /media).
-// DOCUMENT: ENGINEERING SAFETY LIMIT — NÃO é o limite oficial da Meta.
-//   A Meta permite até 100 MB no endpoint /media para documentos.
-//   Este limite de 30 MB é uma decisão de engenharia conservadora para:
-//   (a) proteger contra pressão de memória no runtime Vercel (pico ~2–3× tamanho),
-//   (b) reduzir risco de timeout no upload para a Graph API.
-//   Ajuste via revisão explícita quando o limite Meta for confirmado para HEADER de template.
-const MEDIA_SIZE_LIMITS = {
-  IMAGE:    5  * 1024 * 1024, //  5 MB — Meta documentation
-  VIDEO:    16 * 1024 * 1024, // 16 MB — Meta documentation
-  DOCUMENT: 30 * 1024 * 1024, // 30 MB — ENGINEERING SAFETY LIMIT (not Meta limit)
-};
-
-// Whitelist conservadora — Fase 1.
-//
-// Incluídos: formatos amplamente documentados para template HEADER.
-// Excluídos:
-//   image/webp   — suportado pelo endpoint /media, mas pendente confirmação para template HEADER.
-//   DOCX/XLSX/PPTX — file-type detecta (ZIP-based), mas aceite pelo Meta para HEADER pendente.
-//   DOC/XLS/PPT  — file-type não suporta (OLE2/CFB). Retorna application/x-cfb. Excluído permanentemente.
-//
-// Fail-closed: qualquer MIME fora desta whitelist é rejeitado.
-const MIME_TO_MEDIA_TYPE = new Map([
-  ['image/jpeg',      'IMAGE'],
-  ['image/png',       'IMAGE'],
-  ['video/mp4',       'VIDEO'],
-  ['video/3gpp',      'VIDEO'],
-  ['application/pdf', 'DOCUMENT'],
-]);
-
-// Tamanho máximo do filename sanitizado.
-const MAX_FILENAME_LEN       = 200;
-const FALLBACK_DOC_FILENAME  = 'document.pdf';
 
 // =============================================================================
 // Helpers privados
@@ -94,45 +61,6 @@ const FALLBACK_DOC_FILENAME  = 'document.pdf';
  */
 function makeAssetError(code, message) {
   return Object.assign(new Error(message), { code });
-}
-
-/**
- * Sanitiza o filename de um asset DOCUMENT.
- *
- * Requisitos:
- *   - Remove caracteres de controle (0x00-0x1f, 0x7f)
- *   - Remove separadores de path (/ e \)
- *   - Neutraliza sequências de traversal (..)
- *   - Trim de espaços
- *   - Limita a MAX_FILENAME_LEN caracteres
- *   - Rejeita resultado "." ou ".." → fallback
- *   - Rejeita string vazia → fallback
- *
- * NÃO infere MIME pela extensão. Filename é apenas metadata de display.
- *
- * @param {unknown} raw
- * @returns {string}
- */
-function sanitizeFilename(raw) {
-  if (typeof raw !== 'string' || raw.trim() === '') {
-    return FALLBACK_DOC_FILENAME;
-  }
-
-  let name = raw
-    .replace(/[\x00-\x1f\x7f]/g, '') // Remove caracteres de controle
-    .replace(/[/\\]/g, '')             // Remove path separators (antes de checar dots)
-    .replace(/\.{2,}/g, '.')           // Colapsa qualquer sequência de 2+ dots (anti-traversal)
-    .trim();
-
-  if (name.length > MAX_FILENAME_LEN) {
-    name = name.slice(0, MAX_FILENAME_LEN);
-  }
-
-  if (name === '' || name === '.' || name === '..') {
-    return FALLBACK_DOC_FILENAME;
-  }
-
-  return name;
 }
 
 // =============================================================================
