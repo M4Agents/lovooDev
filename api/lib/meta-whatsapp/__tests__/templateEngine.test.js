@@ -314,7 +314,7 @@ describe('analyzeTemplate — estrutura', () => {
     expect(r.unsupported_reason).toBe('header_text_missing');
   });
 
-  it('AT-STR-09: HEADER IMAGE → unsupported', () => {
+  it('AT-STR-09: HEADER IMAGE → supported=true, headerMediaFormat=IMAGE (MVP4B.2)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -322,11 +322,14 @@ describe('analyzeTemplate — estrutura', () => {
         { type: 'BODY', text: 'Olá' },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toMatch(/IMAGE/);
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.unsupported_reason).toBeNull();
+    // Nenhum parâmetro textual gerado pelo header de mídia
+    expect(r.parameters.filter(p => p.component === 'HEADER')).toHaveLength(0);
   });
 
-  it('AT-STR-10: HEADER VIDEO → unsupported', () => {
+  it('AT-STR-10: HEADER VIDEO → supported=true, headerMediaFormat=VIDEO (MVP4B.2)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -334,11 +337,13 @@ describe('analyzeTemplate — estrutura', () => {
         { type: 'BODY', text: 'Olá' },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toMatch(/VIDEO/);
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('VIDEO');
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameters.filter(p => p.component === 'HEADER')).toHaveLength(0);
   });
 
-  it('AT-STR-11: HEADER DOCUMENT → unsupported', () => {
+  it('AT-STR-11: HEADER DOCUMENT → supported=true, headerMediaFormat=DOCUMENT (MVP4B.2)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -346,8 +351,10 @@ describe('analyzeTemplate — estrutura', () => {
         { type: 'BODY', text: 'Olá' },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toMatch(/DOCUMENT/);
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('DOCUMENT');
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameters.filter(p => p.component === 'HEADER')).toHaveLength(0);
   });
 
   it('AT-STR-12: FOOTER estático → suportado, sem parâmetros FOOTER', () => {
@@ -906,6 +913,164 @@ describe('templateEngine — pureza', () => {
     for (const input of inputs) {
       expect(() => validateParameterValues(params, input)).not.toThrow();
     }
+  });
+
+});
+
+// =============================================================================
+// MVP4B.2 — Suporte a HEADER IMAGE / VIDEO / DOCUMENT
+// =============================================================================
+
+describe('analyzeTemplate — MVP4B.2 — media headers', () => {
+
+  /** Factory: template com HEADER de mídia e BODY textual. */
+  function mediaHeaderTemplate(format, bodyText = 'Corpo {{1}}', bodyFmt = 'POSITIONAL') {
+    return {
+      name:             'test_media_template',
+      language:         'pt_BR',
+      status:           'APPROVED',
+      category:         'MARKETING',
+      parameter_format: bodyFmt,
+      components: [
+        { type: 'HEADER', format },
+        { type: 'BODY',   text: bodyText },
+      ],
+    };
+  }
+
+  it('TE-M01: HEADER IMAGE → supported=true, headerMediaFormat=IMAGE, zero params HEADER', () => {
+    const r = analyzeTemplate(mediaHeaderTemplate('IMAGE'));
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameters.filter(p => p.component === 'HEADER')).toHaveLength(0);
+  });
+
+  it('TE-M02: HEADER VIDEO → supported=true, headerMediaFormat=VIDEO', () => {
+    const r = analyzeTemplate(mediaHeaderTemplate('VIDEO'));
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('VIDEO');
+    expect(r.unsupported_reason).toBeNull();
+  });
+
+  it('TE-M03: HEADER DOCUMENT → supported=true, headerMediaFormat=DOCUMENT', () => {
+    const r = analyzeTemplate(mediaHeaderTemplate('DOCUMENT'));
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('DOCUMENT');
+    expect(r.unsupported_reason).toBeNull();
+  });
+
+  it('TE-M04: HEADER TEXT → comportamento anterior intacto, headerMediaFormat=null', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Título fixo' },
+        { type: 'BODY',   text: 'Corpo {{1}}' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBeNull();
+    // Parâmetro textual do BODY presente
+    expect(r.parameters).toHaveLength(1);
+    expect(r.parameters[0].component).toBe('BODY');
+  });
+
+  it('TE-M05: sem HEADER → headerMediaFormat=null', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Corpo' }],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBeNull();
+  });
+
+  it('TE-M06: HEADER format desconhecido (GIF, LOCATION, etc.) → supported=false, headerMediaFormat=null', () => {
+    const cases = ['GIF', 'LOCATION', 'STICKER', 'UNKNOWN_FORMAT'];
+    for (const fmt of cases) {
+      const r = analyzeTemplate({
+        category: 'MARKETING', parameter_format: 'POSITIONAL',
+        components: [
+          { type: 'HEADER', format: fmt },
+          { type: 'BODY',   text: 'Corpo' },
+        ],
+      });
+      expect(r.supported).toBe(false);
+      expect(r.headerMediaFormat).toBeNull();
+    }
+  });
+
+  it('TE-M07: IMAGE + BODY POSITIONAL → params somente BODY, nenhum param HEADER', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY',   text: 'Cliente {{1}}, pedido {{2}}' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    // Somente parâmetros BODY
+    expect(r.parameters.every(p => p.component === 'BODY')).toBe(true);
+    expect(r.parameters).toHaveLength(2);
+    expect(r.parameters[0]).toMatchObject({ component: 'BODY', key: '1', position: 1 });
+    expect(r.parameters[1]).toMatchObject({ component: 'BODY', key: '2', position: 2 });
+  });
+
+  it('TE-M08: IMAGE + BODY NAMED → params somente BODY NAMED, nenhum param HEADER', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY',   text: 'Olá {{first_name}}, código {{code}}' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.parameter_format).toBe('NAMED');
+    expect(r.parameters.every(p => p.component === 'BODY')).toBe(true);
+    expect(r.parameters.map(p => p.key)).toEqual(['first_name', 'code']);
+  });
+
+  it('TE-M09: HEADER IMAGE + component BUTTONS → supported=false (fail-closed)', () => {
+    // Media header sozinho não torna template supported quando há outro component inválido.
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER',  format: 'IMAGE' },
+        { type: 'BODY',    text: 'Corpo' },
+        { type: 'BUTTONS', buttons: [] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toMatch(/BUTTONS/);
+  });
+
+  it('TE-M10: template textual completo (regressão MVP4A) → headerMediaFormat=null, tudo intacto', () => {
+    const r = analyzeTemplate({
+      category:         'MARKETING',
+      parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Pedido {{1}}', example: { header_text: ['PED-001'] } },
+        { type: 'BODY',   text: 'Olá {{1}}, seu pedido {{2}} foi confirmado.',
+          example: { body_text: [['Ana', 'PED-001']] } },
+        { type: 'FOOTER', text: 'Lovoo CRM' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameter_format).toBe('POSITIONAL');
+    expect(r.bodyText).toBe('Olá {{1}}, seu pedido {{2}} foi confirmado.');
+    // Parâmetro HEADER TEXT
+    const hParams = r.parameters.filter(p => p.component === 'HEADER');
+    expect(hParams).toHaveLength(1);
+    expect(hParams[0]).toMatchObject({ key: '1', position: 1, example: 'PED-001' });
+    // Parâmetros BODY
+    const bParams = r.parameters.filter(p => p.component === 'BODY');
+    expect(bParams).toHaveLength(2);
+    expect(bParams[0]).toMatchObject({ key: '1', position: 1, example: 'Ana' });
+    expect(bParams[1]).toMatchObject({ key: '2', position: 2, example: 'PED-001' });
+    // FOOTER nunca gera parâmetros
+    expect(r.parameters.filter(p => p.component === 'FOOTER')).toHaveLength(0);
   });
 
 });

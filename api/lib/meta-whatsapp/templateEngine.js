@@ -1,5 +1,5 @@
 // =============================================================================
-// templateEngine.js — Motor de Templates Meta WhatsApp (escopo textual MVP4A)
+// templateEngine.js — Motor de Templates Meta WhatsApp
 //
 // Módulo puro: sem IO, sem Supabase, sem Graph, sem auth, sem env, sem side
 // effects, sem logging de valores de parâmetros.
@@ -14,6 +14,10 @@
 // component.example é usado SOMENTE como hint para example no DTO.
 //
 // Escopo MVP4A: BODY TEXT obrigatório, HEADER TEXT opcional, FOOTER estático.
+// Escopo MVP4B.2: HEADER IMAGE, VIDEO e DOCUMENT reconhecidos como suportados.
+//   A construção do componente Graph de mídia (link/id) pertence à 4B.4.
+//   Media headers NÃO geram parâmetros textuais — parâmetros textuais são
+//   exclusivamente de HEADER TEXT e BODY.
 // BUTTONS / CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
 // =============================================================================
 
@@ -21,6 +25,11 @@
 const RE_ANY_PLACEHOLDER  = /\{\{([^}]*)\}\}/g;      // qualquer {{...}}
 const RE_POSITIONAL       = /\{\{(\d+)\}\}/g;          // {{N}} dígitos
 const RE_NAMED            = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g; // {{name}}
+
+// Formatos de HEADER de mídia suportados a partir do MVP4B.2.
+// Cada valor corresponde diretamente ao campo `format` do componente Graph API.
+// Formatos desconhecidos continuam fail-closed (unsupported).
+const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 // =============================================================================
 // Helpers privados
@@ -41,6 +50,7 @@ function makeUnsupported(reason, fmt) {
     parameter_format:   fmt,
     parameters:         [],
     bodyText:           null,
+    headerMediaFormat:  null,
   };
 }
 
@@ -260,9 +270,10 @@ export function analyzeTemplate(rawTemplate) {
     }
     const comps = Array.isArray(components) ? components : [];
 
-    let hasBody  = false;
-    let bodyText = null;
-    const params = [];
+    let hasBody           = false;
+    let bodyText          = null;
+    let headerMediaFormat = null; // 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null
+    const params          = [];
 
     for (const comp of comps) {
       // Component sem type válido → fail-closed
@@ -293,19 +304,29 @@ export function analyzeTemplate(rawTemplate) {
             ? rawFmt.toUpperCase()
             : null;
 
-        if (headerFmt !== 'TEXT') {
-          return makeUnsupported(
-            `HEADER format ${String(rawFmt ?? 'unknown')} not supported`,
-            fmt,
-          );
+        // Mídia suportada: IMAGE, VIDEO, DOCUMENT (MVP4B.2)
+        // Não geram parâmetros textuais — a referência de mídia pertence à 4B.4.
+        if (headerFmt !== null && SUPPORTED_MEDIA_HEADER_FORMATS.has(headerFmt)) {
+          headerMediaFormat = headerFmt;
+          continue;
         }
-        if (typeof comp.text !== 'string') {
-          return makeUnsupported('header_text_missing', fmt);
+
+        // TEXT: cabeçalho textual — comportamento original MVP4A.
+        if (headerFmt === 'TEXT') {
+          if (typeof comp.text !== 'string') {
+            return makeUnsupported('header_text_missing', fmt);
+          }
+          const result = parsePlaceholders(comp.text, fmt, 'HEADER', comp.example);
+          if (!result.ok) return makeUnsupported(result.reason, fmt);
+          params.push(...result.params);
+          continue;
         }
-        const result = parsePlaceholders(comp.text, fmt, 'HEADER', comp.example);
-        if (!result.ok) return makeUnsupported(result.reason, fmt);
-        params.push(...result.params);
-        continue;
+
+        // Qualquer outro formato (null de rawFmt não-string, 'GIF', 'LOCATION', etc.): fail-closed.
+        return makeUnsupported(
+          `HEADER format ${String(rawFmt ?? 'unknown')} not supported`,
+          fmt,
+        );
       }
 
       if (type === 'FOOTER') continue; // estático, sempre permitido, sem parâmetros
@@ -324,6 +345,7 @@ export function analyzeTemplate(rawTemplate) {
       parameter_format:   fmt,
       parameters:         params,
       bodyText,
+      headerMediaFormat,
     };
   } catch {
     // Catch defensivo — nenhum dado de rawTemplate vaza
