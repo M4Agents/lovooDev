@@ -1533,15 +1533,48 @@ describe('MetaChatArea — MVP4B.6C DOCUMENT render', () => {
     expect(docCard.textContent).toMatch(/2|MB|KB/i)
   })
 
-  it('F-DOC-04: nenhum link externo <a href=media.url> presente', () => {
+  // F-DOC-04 atualizado: com URL → card é <a> com href correto
+  it('F-DOC-04: com URL → card é <a> com href correto', () => {
     renderDocMsg()
-    const links = document.querySelectorAll('a[href="https://example.com/doc.pdf"]')
-    expect(links.length).toBe(0)
+    const link = screen.getByTestId('msg-media-document')
+    expect(link.tagName.toLowerCase()).toBe('a')
+    expect((link as HTMLAnchorElement).href).toBe('https://example.com/doc.pdf')
   })
 
   it('F-DOC-05: body permanece abaixo do card de documento', () => {
     renderDocMsg()
     expect(screen.getByText('Corpo do documento')).toBeTruthy()
     expect(screen.getByTestId('msg-media-document')).toBeTruthy()
+  })
+
+  // F-DOC-06: target="_blank"
+  it('F-DOC-06: card link possui target="_blank"', () => {
+    renderDocMsg()
+    const link = screen.getByTestId('msg-media-document') as HTMLAnchorElement
+    expect(link.target).toBe('_blank')
+  })
+
+  // F-DOC-07: rel contém noopener e noreferrer
+  it('F-DOC-07: card link possui rel com noopener e noreferrer', () => {
+    renderDocMsg()
+    const link = screen.getByTestId('msg-media-document') as HTMLAnchorElement
+    expect(link.rel).toContain('noopener')
+    expect(link.rel).toContain('noreferrer')
+  })
+
+  // F-DOC-08: sem URL → fallback <div>, não link
+  it('F-DOC-08: sem URL → card é <div> (fallback não clicável)', () => {
+    renderDocMsg({ url: null })
+    const card = screen.getByTestId('msg-media-document')
+    expect(card.tagName.toLowerCase()).toBe('div')
+    expect(card.getAttribute('href')).toBeNull()
+  })
+
+  // F-DOC-09: sem URL → filename e file_size continuam visíveis
+  it('F-DOC-09: sem URL → filename e file_size continuam visíveis no fallback', () => {
+    renderDocMsg({ url: null })
+    expect(screen.getByText('relatorio.pdf')).toBeTruthy()
+    const card = screen.getByTestId('msg-media-document')
+    expect(card.textContent).toMatch(/2|MB|KB/i)
   })
 })

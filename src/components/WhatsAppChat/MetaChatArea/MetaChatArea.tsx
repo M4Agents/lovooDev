@@ -278,20 +278,42 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
 
         {/* ── DOCUMENT header ───────────────────────────────────────────────── */}
         {hasMedia && mediaType === 'document' && (
-          <div
-            data-testid="msg-media-document"
-            className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-black/10"
-          >
-            <span aria-hidden="true" className="text-lg flex-shrink-0">📄</span>
-            <span className="text-xs font-medium truncate flex-1">
-              {message.media!.filename ?? 'Documento'}
-            </span>
-            {message.media!.file_size != null && (
-              <span className="text-xs opacity-70 flex-shrink-0">
-                {formatFileSize(message.media!.file_size)}
-              </span>
-            )}
-          </div>
+          message.media!.url
+            ? (
+              <a
+                href={message.media!.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="msg-media-document"
+                className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-black/10 hover:bg-black/20 cursor-pointer"
+              >
+                <span aria-hidden="true" className="text-lg flex-shrink-0">📄</span>
+                <span className="text-xs font-medium truncate flex-1">
+                  {message.media!.filename ?? 'Documento'}
+                </span>
+                {message.media!.file_size != null && (
+                  <span className="text-xs opacity-70 flex-shrink-0">
+                    {formatFileSize(message.media!.file_size)}
+                  </span>
+                )}
+              </a>
+            )
+            : (
+              <div
+                data-testid="msg-media-document"
+                className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-black/10"
+              >
+                <span aria-hidden="true" className="text-lg flex-shrink-0">📄</span>
+                <span className="text-xs font-medium truncate flex-1">
+                  {message.media!.filename ?? 'Documento'}
+                </span>
+                {message.media!.file_size != null && (
+                  <span className="text-xs opacity-70 flex-shrink-0">
+                    {formatFileSize(message.media!.file_size)}
+                  </span>
+                )}
+              </div>
+            )
         )}
 
         {/* ── Body / fallback ───────────────────────────────────────────────── */}
