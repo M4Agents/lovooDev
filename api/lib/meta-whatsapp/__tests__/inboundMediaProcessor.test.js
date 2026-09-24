@@ -58,9 +58,12 @@ const FAKE_METADATA = {
   file_size: 100 * 1024, // 100 KB — dentro do maxBytes
 };
 
-// Blob simulado — NOT a real Blob; apenas os campos usados pelo processor
+// Blob real (Node.js/Vitest), conteúdo zerado — apenas tamanho importa na maioria dos testes.
+// Deve ser um Blob real para que blob.arrayBuffer() esteja disponível no processor (step 10).
+// MIME não é definido aqui: em produção downloadMediaBytes retorna Blob sem type,
+// e fileTypeFromBlob (mockado) detecta o MIME pelos bytes — não por blob.type.
 function makeMockBlob(size = 1024) {
-  return { size, type: 'application/pdf' };
+  return new Blob([new Uint8Array(size)]);
 }
 
 // =============================================================================
@@ -540,6 +543,36 @@ describe('STORAGE — destinationKey e upload', () => {
     for (const call of mockStorageFrom.mock.calls) {
       expect(call[0]).toBe('aws-lovoocrm-media');
     }
+  });
+
+  it('B-STORAGE-BODY: body enviado ao Storage é ArrayBuffer (não Blob); contentType = detected.mime; upsert=false', async () => {
+    // Prova que a conversão Blob → ArrayBuffer acontece DEPOIS das validações (step 10).
+    // Garante que @supabase/storage-js segue o branch direto onde headers['content-type']
+    // = options.contentType é aplicado — e não o branch FormData que ignora essa opção.
+    const BLOB_SIZE = 2048;
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(BLOB_SIZE));
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'application/pdf', ext: 'pdf' });
+    const { svc, mockUpload, mockStorageFrom } = makeSvc();
+
+    await downloadAndStoreInboundMedia({ ...BASE_PARAMS, svc });
+
+    expect(mockUpload).toHaveBeenCalledOnce();
+    const [, body, options] = mockUpload.mock.calls[0];
+
+    // Body NÃO é Blob — o branch FormData do SDK NÃO será ativado
+    expect(body instanceof Blob).toBe(false);
+    // Body É ArrayBuffer — SDK usa branch direto → content-type header é respeitado
+    expect(body instanceof ArrayBuffer).toBe(true);
+    // byteLength bate com o tamanho dos bytes originais baixados
+    expect(body.byteLength).toBe(BLOB_SIZE);
+
+    // contentType vem de detected.mime (byte authority), não de metadata, filename ou blob.type
+    expect(options.contentType).toBe('application/pdf');
+    // upsert=false sempre — importId garante unicidade do path
+    expect(options.upsert).toBe(false);
+
+    // Bucket hardcoded — nunca vindo do caller
+    expect(mockStorageFrom).toHaveBeenCalledWith('aws-lovoocrm-media');
   });
 
   it('B-20: storage upload failure → inbound_media_storage_failed, sem CML insert', async () => {

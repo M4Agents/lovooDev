@@ -299,9 +299,19 @@ export async function downloadAndStoreInboundMedia({
   const destinationKey  = `${STORAGE_INBOUND_BASE}/${companyId}/meta-inbound/${importId}/${filename}`;
 
   // ── 10. Upload para Supabase Storage ─────────────────────────────────────
+  // Conversão Blob → ArrayBuffer imediatamente antes do upload.
+  // Motivação: @supabase/storage-js v2.79.0 detecta Blob via instanceof e o
+  // envolve em FormData (SDK line ~50-51), ignorando options.contentType.
+  // O campo do arquivo fica com Content-Type = blob.type, que é "" quando o
+  // Blob foi criado sem type (caso de downloadMediaBytes → new Blob(chunks)).
+  // O Storage rejeita porque "" não está em allowed_mime_types do bucket.
+  // ArrayBuffer segue o branch direto (else) onde o SDK aplica:
+  //   headers['content-type'] = options.contentType   ← 'application/pdf' ✅
+  // fileTypeFromBlob continua usando o Blob original (passos 6–8 acima).
+  const uploadBody = await blob.arrayBuffer();
   const { error: uploadErr } = await svc.storage
     .from(STORAGE_BUCKET)
-    .upload(destinationKey, blob, {
+    .upload(destinationKey, uploadBody, {
       contentType: detected.mime,
       upsert:      false, // Nunca sobrescrever — importId garante unicidade
     });

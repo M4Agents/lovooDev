@@ -364,6 +364,18 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     // (3) Storage upload ocorreu exatamente uma vez
     expect(mockStorageUpload).toHaveBeenCalledOnce();
 
+    // (3b) Body do Storage é ArrayBuffer (não Blob) — confirma conversão Blob→ArrayBuffer
+    // em inboundMediaProcessor step 10 (fix INBOUND-MEDIA-STORAGE-BODY).
+    // Garante que @supabase/storage-js usa o branch direto onde content-type é aplicado.
+    const [, uploadBody, uploadOptions] = mockStorageUpload.mock.calls[0];
+    expect(uploadBody instanceof ArrayBuffer).toBe(true);
+    expect(uploadBody instanceof Blob).toBe(false);
+    // byteLength bate com os bytes reais do PDF_BLOB (fileTypeFromBlob real detectou 'application/pdf')
+    expect(uploadBody.byteLength).toBe(PDF_BLOB.size);
+    // contentType vem de detected.mime (byte authority) — não do payload, não de blob.type
+    expect(uploadOptions.contentType).toBe('application/pdf');
+    expect(uploadOptions.upsert).toBe(false);
+
     // (4) CML insert contém campos obrigatórios com valores corretos do servidor
     //     company_id e source_ref devem vir do banco (instance.company_id) e do wamid do payload
     expect(mockCmlInsert).toHaveBeenCalledOnce();
