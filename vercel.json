@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/whatsapp/meta/webhook.js": { "maxDuration": 30 },
     "api/agents/execute-agent.js": { "maxDuration": 60 },
     "api/agents/process-conversation-event.js": { "maxDuration": 60 },
     "api/leads/import-file.js": { "maxDuration": 60 },

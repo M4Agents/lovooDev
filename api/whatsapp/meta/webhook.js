@@ -43,6 +43,8 @@ import {
   getMetaServerConfig,
   getMetaWebhookConfig,
 }                                      from '../../lib/meta-whatsapp/config.js';
+import { decryptMetaToken }            from '../../lib/meta-whatsapp/tokenCrypto.js';
+import { downloadAndStoreInboundMedia } from '../../lib/meta-whatsapp/inboundMediaProcessor.js';
 
 // CRÍTICO: desabilitar body parser do Vercel — obrigatório para HMAC validation.
 // Qualquer re-serialização do body invalida a assinatura.
@@ -51,6 +53,15 @@ export const config = { api: { bodyParser: false } };
 // Statuses outbound suportados nesta fase (MVP2 2C.4).
 // 'played' não está incluído — ignorado silenciosamente.
 const SUPPORTED_STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
+
+// Limite MVP conservador para documentos inbound (INBOUND-DOC-C2).
+// INTENCIONALMENTE 5 MB — não altera MEDIA_SIZE_LIMITS global (infra suporta 30 MB).
+// Justificativa:
+//   - PDFs de negócio comuns: < 2 MB.
+//   - Mantém download + Storage + RPC dentro de maxDuration: 30 s com folga.
+//   - Pressão de memória Vercel: ~2–3× tamanho → ~15 MB pico com 5 MB PDF (seguro).
+//   - Revisável em C3 após validação E2E e decisão operacional.
+const MAX_INBOUND_DOCUMENT_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // =============================================================================
 // State machine — matriz de transições explícita
@@ -194,6 +205,14 @@ async function handlePost(req, res) {
   // ── 7. Iterar defensivamente sobre entries e changes ─────────────────────
   const entries = Array.isArray(payload.entry) ? payload.entry : [];
 
+  // Marcador de falha transiente para batch safety (INBOUND-DOC-C2).
+  // Erros transientes de DOCUMENT marcam este flag e continuam processando
+  // demais eventos do payload, em vez de retornar 500 imediatamente.
+  // Meta reenvia o payload inteiro em caso de 500 — por isso todos os ramos
+  // são idempotentes (TEXT via RPC, DOCUMENT via source_ref + ON CONFLICT,
+  // statuses via TRANSITION_MATRIX).
+  let hasTransientFailure = false;
+
   for (const entry of entries) {
     const changes = Array.isArray(entry.changes) ? entry.changes : [];
 
@@ -214,9 +233,11 @@ async function handlePost(req, res) {
       const phoneNumberId = value.metadata?.phone_number_id;
       if (typeof phoneNumberId !== 'string' || phoneNumberId.length === 0) continue;
 
+      // access_token_enc: somente server-side; nunca logar, nunca retornar,
+      // nunca incluir em erro. Decrypt lazy — somente no ramo DOCUMENT.
       const { data: instance, error: instErr } = await svc
         .from('meta_whatsapp_instances')
-        .select('id, company_id')
+        .select('id, company_id, access_token_enc')
         .eq('phone_number_id', phoneNumberId)
         .is('deleted_at', null)
         .maybeSingle();
@@ -314,23 +335,10 @@ async function handlePost(req, res) {
           continue;
         }
 
-        // B.3 Tipo — MVP3A persiste somente text
-        // Qualquer outro tipo: ignorar sem criar conversa ou incrementar unread
-        if (message.type !== 'text') {
-          console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
-          continue;
-        }
-
-        // B.4 Body — obrigatório para type=text (contrato Meta Cloud API)
-        const body = message.text?.body;
-        if (typeof body !== 'string' || body.trim().length === 0) {
-          console.log('[meta/webhook] event_type=inbound_message invalid_body=true');
-          continue;
-        }
-
-        // B.5 Contact name — lookup por wa_id, nunca por contacts[0]
-        // contacts[] é opcional no payload Meta; contact_name = null é válido
-        // Nunca logar: message.from, wa_id, contact_name, body
+        // B.3 Contact name — lookup compartilhado (pure, sem side effects).
+        // Extraído antes do ramo de tipo para reutilização em TEXT e DOCUMENT.
+        // contacts[] é opcional no payload Meta; contact_name = null é válido.
+        // Nunca logar: message.from, wa_id, contact_name, body.
         const matchedContact = contacts.find(c => c.wa_id === message.from);
         const contactName =
           typeof matchedContact?.profile?.name === 'string' &&
@@ -338,35 +346,185 @@ async function handlePost(req, res) {
             ? matchedContact.profile.name
             : null;
 
-        // B.6 Timestamp — Unix epoch string → ISO 8601 (reutiliza parseMetaTimestamp)
-        // null se ausente/inválido — a RPC possui regra operacional para timestamp null
+        // B.4 Timestamp — Unix epoch string → ISO 8601 (reutiliza parseMetaTimestamp).
+        // null se ausente/inválido — RPCs possuem regra operacional para timestamp null.
         const providerTimestamp = parseMetaTimestamp(message.timestamp);
 
-        // B.7 RPC de persistência atômica — idempotente por (instance_id, wamid)
-        const { data: rpcData, error: rpcErr } = await svc.rpc(
-          'process_meta_inbound_message',
-          {
-            p_company_id:         instance.company_id,
-            p_instance_id:        instance.id,
-            p_wa_id:              message.from,
-            p_meta_message_id:    message.id,
-            p_body:               body,
-            p_contact_name:       contactName,
-            p_provider_timestamp: providerTimestamp,
-          },
-        );
+        // B.5 Ramo por tipo de mensagem —————————————————————————————————————
 
-        if (rpcErr) {
-          // Erro real de DB/RPC — retornar 500 para retry Meta
-          // Duplicata (created=false) NÃO é erro — tratada abaixo
-          console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-          return res.status(500).json({ error: 'Internal error' });
+        if (message.type === 'text') {
+          // ── B.5.1 TEXT (MVP3A — comportamento intacto) ───────────────────
+
+          // Body obrigatório para type=text (contrato Meta Cloud API)
+          const body = message.text?.body;
+          if (typeof body !== 'string' || body.trim().length === 0) {
+            console.log('[meta/webhook] event_type=inbound_message invalid_body=true');
+            continue;
+          }
+
+          // RPC de persistência atômica — idempotente por (instance_id, wamid)
+          const { data: rpcData, error: rpcErr } = await svc.rpc(
+            'process_meta_inbound_message',
+            {
+              p_company_id:         instance.company_id,
+              p_instance_id:        instance.id,
+              p_wa_id:              message.from,
+              p_meta_message_id:    message.id,
+              p_body:               body,
+              p_contact_name:       contactName,
+              p_provider_timestamp: providerTimestamp,
+            },
+          );
+
+          if (rpcErr) {
+            // Erro real de DB/RPC — retornar 500 para retry Meta
+            // Duplicata (created=false) NÃO é erro — tratada abaixo
+            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+            return res.status(500).json({ error: 'Internal error' });
+          }
+
+          const created = rpcData?.created === true;
+          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+
+        } else if (message.type === 'document') {
+          // ── B.5.2 DOCUMENT inbound (INBOUND-DOC-C2) ──────────────────────
+
+          // DOC.1 — Validar document.id (media_id para Graph API)
+          // mime_type e sha256 do payload NÃO são usados como autoridade —
+          // bytes reais determinam o MIME (inboundMediaProcessor / fileTypeFromBlob).
+          const mediaId = message.document?.id;
+          if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
+            // Definitivo — payload inválido; retry da Meta não vai melhorar.
+            console.log('[meta/webhook] event_type=inbound_document outcome=invalid_media_id');
+            continue;
+          }
+
+          // DOC.2 — Early dedupe: verificar se wamid já foi persistido.
+          // Executado ANTES de decrypt/Graph/Storage para economizar I/O em replays.
+          // A RPC permanece a autoridade final contra race condition.
+          const { data: existingMsg, error: dedupeErr } = await svc
+            .from('meta_messages')
+            .select('id')
+            .eq('instance_id', instance.id)
+            .eq('meta_message_id', message.id)
+            .maybeSingle();
+
+          if (dedupeErr) {
+            // Erro de DB ao verificar dedupe — tratar como transiente.
+            // Não assumir que a mensagem existe ou não existe.
+            console.error('[meta/webhook] event_type=inbound_document outcome=dedupe_db_error');
+            hasTransientFailure = true;
+            continue;
+          }
+
+          if (existingMsg) {
+            // Já persistido — skip sem nenhum I/O adicional.
+            console.log('[meta/webhook] event_type=inbound_document outcome=already_persisted');
+            continue;
+          }
+
+          // DOC.3 — Decrypt do token (lazy — somente se documento válido chegou até aqui)
+          // access_token_enc: somente server-side. NUNCA logar ciphertext nem plainToken.
+          let plainToken;
+          try {
+            if (!instance.access_token_enc) {
+              throw new Error('missing_enc');
+            }
+            plainToken = decryptMetaToken(instance.access_token_enc);
+          } catch {
+            // Configuração operacional inválida — 200 skip para evitar retry storm de 7 dias.
+            // Retry da Meta não resolve configuração ausente/corrompida.
+            // NUNCA logar ciphertext, plainToken ou conteúdo do erro de decrypt.
+            console.error('[meta/webhook] event_type=inbound_document outcome=credential_unavailable');
+            continue;
+          }
+
+          // DOC.4 — Download + validação + persistência do asset (inboundMediaProcessor)
+          // Responsabilidades internas: anti-SSRF, redirect controlado, MIME authority
+          // via bytes, Storage, CML com source_ref idempotente.
+          let mediaResult;
+          try {
+            mediaResult = await downloadAndStoreInboundMedia({
+              svc,
+              token:             plainToken,
+              companyId:         instance.company_id,
+              mediaId:           mediaId.trim(),
+              wamid:             message.id,
+              expectedMediaType: 'DOCUMENT',
+              hintFilename:      message.document.filename,   // hint — não confiável
+              maxBytes:          MAX_INBOUND_DOCUMENT_BYTES,
+            });
+          } catch (err) {
+            const code = err?.code;
+
+            // Erros definitivos — arquivo inválido/grande: 200 skip (retry não muda bytes)
+            if (
+              code === 'inbound_media_type_mismatch' ||
+              code === 'inbound_media_too_large'     ||
+              code === 'inbound_media_invalid_input'
+            ) {
+              console.log('[meta/webhook] event_type=inbound_document outcome=%s', code);
+              continue;
+            }
+
+            // media_download_url_invalid — DEBT-DOMAIN-ALLOWLIST-C.
+            // Classificado como transiente: allowlist pode precisar de atualização.
+            // NÃO logar URL nem hostname — não disponível de forma segura neste nível.
+            // NÃO ampliar allowlist por suposição — resolver com evidência real em E2E.
+            if (code === 'media_download_url_invalid') {
+              console.error('[meta/webhook] event_type=inbound_document outcome=media_download_url_invalid');
+              hasTransientFailure = true;
+              continue;
+            }
+
+            // Todos os demais erros: transientes (rede, Graph, Storage, DB)
+            console.error('[meta/webhook] event_type=inbound_document outcome=%s', code ?? 'unknown_media_error');
+            hasTransientFailure = true;
+            continue;
+          }
+
+          // DOC.5 — RPC de persistência da mensagem de mídia
+          // company_id e instance_id: sempre do banco, nunca do payload.
+          const { data: docRpcData, error: docRpcErr } = await svc.rpc(
+            'process_meta_inbound_media_message',
+            {
+              p_company_id:         instance.company_id,
+              p_instance_id:        instance.id,
+              p_wa_id:              message.from,
+              p_meta_message_id:    message.id,
+              p_media_asset_id:     mediaResult.assetId,
+              p_contact_name:       contactName,
+              p_provider_timestamp: providerTimestamp,
+              p_message_type:       'document',
+            },
+          );
+
+          if (docRpcErr) {
+            console.error('[meta/webhook] event_type=inbound_document outcome=rpc_error');
+            hasTransientFailure = true;
+            continue;
+          }
+
+          const docCreated = docRpcData?.created === true;
+          // Log sanitizado — somente booleanos seguros; sem token, URL, filename, from.
+          console.log('[meta/webhook] event_type=inbound_document created=%s reused_asset=%s',
+            docCreated, mediaResult.reused);
+
+        } else {
+          // ── B.5.3 Tipos não suportados (image, video, audio, sticker, etc.) ────
+          // IMAGE e VIDEO: reservados para extensão futura (C3+).
+          // Ignorar silenciosamente — sem criar conversa ou incrementar unread.
+          console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
+          continue;
         }
-
-        const created = rpcData?.created === true;
-        console.log('[meta/webhook] event_type=inbound_message created=%s', created);
       }
     }
+  }
+
+  // Retornar 500 se houve falha transiente em algum DOCUMENT do payload.
+  // Meta reenviará o payload inteiro — idempotência garante segurança do retry.
+  if (hasTransientFailure) {
+    return res.status(500).json({ error: 'Internal error' });
   }
 
   return res.status(200).json({ received: true });

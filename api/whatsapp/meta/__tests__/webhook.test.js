@@ -42,6 +42,17 @@ vi.mock('../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
 }));
 
+// Mocks para INBOUND-DOC-C2 (DOCUMENT inbound)
+const mockDecryptMetaToken = vi.fn();
+vi.mock('../../../lib/meta-whatsapp/tokenCrypto.js', () => ({
+  decryptMetaToken: (...args) => mockDecryptMetaToken(...args),
+}));
+
+const mockDownloadAndStoreInboundMedia = vi.fn();
+vi.mock('../../../lib/meta-whatsapp/inboundMediaProcessor.js', () => ({
+  downloadAndStoreInboundMedia: (...args) => mockDownloadAndStoreInboundMedia(...args),
+}));
+
 import handler from '../webhook.js';
 
 // =============================================================================
@@ -64,7 +75,17 @@ const FAKE_WA_ID         = '5511987654321'; // E.164 sem +, fictício
 const FAKE_CONTACT_NAME  = 'Contato Teste Ficticio';
 const FAKE_BODY          = 'Oi teste mensagem inbound ficticia';
 
-const FAKE_INSTANCE = { id: FAKE_INSTANCE_ID, company_id: FAKE_COMPANY_ID };
+// Fixtures para DOCUMENT inbound (INBOUND-DOC-C2)
+const FAKE_MEDIA_ID          = '123456789012345';   // Graph media_id (numeric string)
+const FAKE_ASSET_ID          = 'eeee0000-0000-0000-0000-000000000005'; // CML UUID
+const FAKE_ACCESS_TOKEN_ENC  = 'encrypted_token_fake_for_tests_only_xxxxxxxxxxxxxxxxxxxx';
+const FAKE_PLAIN_TOKEN       = 'plain_token_fake_for_tests_only_xxxxxxxxxxxxxxxxxxxxx';
+
+const FAKE_INSTANCE = {
+  id:                FAKE_INSTANCE_ID,
+  company_id:        FAKE_COMPANY_ID,
+  access_token_enc:  FAKE_ACCESS_TOKEN_ENC,
+};
 const FAKE_RAW_BODY = Buffer.from('{"object":"whatsapp_business_account","entry":[]}');
 
 // =============================================================================
@@ -249,6 +270,16 @@ beforeEach(() => {
   mockVerifyMetaWebhookSignature.mockReturnValue(true);
   // Default RPC: sucesso com created=true
   mockSvc.rpc.mockResolvedValue(makeRpcResult());
+
+  // Defaults DOCUMENT (INBOUND-DOC-C2)
+  mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+  mockDownloadAndStoreInboundMedia.mockResolvedValue({
+    assetId:  FAKE_ASSET_ID,
+    mimeType: 'application/pdf',
+    fileSize: 102400,
+    filename: 'report.pdf',
+    reused:   false,
+  });
 });
 
 /** Configura DB para happy path com 1 status. */
@@ -1302,5 +1333,447 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     expect(res._status).toBe(401);
     expect(mockSvc.from).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers auxiliares — DOCUMENT inbound (INBOUND-DOC-C2)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cria um objeto de mensagem type='document' com os campos obrigatórios.
+ * documentId=null simula payload sem document.id (caso inválido DOC.1).
+ */
+function makeDocumentMessage({
+  id         = FAKE_INBOUND_WAMID,
+  from       = FAKE_WA_ID,
+  timestamp  = FAKE_TIMESTAMP,
+  documentId = FAKE_MEDIA_ID,
+  filename   = 'report.pdf',
+  mime_type  = 'application/pdf',
+} = {}) {
+  const msg = { id, from, type: 'document', timestamp };
+  if (documentId !== null) {
+    msg.document = { id: documentId, filename, mime_type, sha256: 'sha256_fake_for_tests' };
+  }
+  return msg;
+}
+
+/**
+ * Payload inbound completo com type='document'.
+ * Reutiliza makeInboundPayload para manter estrutura idêntica ao TEXT.
+ */
+function makeDocumentPayload({
+  messages = [makeDocumentMessage()],
+  contacts = [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+  statuses = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  return makeInboundPayload({ messages, contacts, statuses, phoneId });
+}
+
+/**
+ * Chain mínima para svc.from('meta_messages').select().eq().eq().maybeSingle().
+ * Simula a query de early dedupe do ramo DOCUMENT (DOC.2).
+ */
+function makeDedupeChain(data, error = null) {
+  return {
+    select:      vi.fn().mockReturnThis(),
+    eq:          vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
+/**
+ * Erro tipado simulando um throw do inboundMediaProcessor.
+ */
+function makeMediaError(code, message = `media error: ${code}`) {
+  const err = new Error(message);
+  err.code  = code;
+  return err;
+}
+
+/**
+ * Setup completo do DB para o caminho feliz de um DOCUMENT.
+ * Configura:
+ *   1. svc.from('meta_whatsapp_instances') → instância
+ *   2. svc.from('meta_messages')           → dedupe (default: não encontrado)
+ *   3. svc.rpc('process_meta_inbound_media_message') → sucesso
+ *
+ * mockDecryptMetaToken e mockDownloadAndStoreInboundMedia já têm defaults
+ * configurados no beforeEach — apenas sobrescreva quando necessário.
+ */
+function setupDocumentDb({
+  instance        = FAKE_INSTANCE,
+  instErr         = null,
+  dedupeData      = null,   // null = não encontrado → processar
+  dedupeErr       = null,
+  rpcDocResult    = {
+    data:  { created: true, conversation_id: FAKE_CONV_ID, message_id: FAKE_MSG_ID },
+    error: null,
+  },
+} = {}) {
+  mockSvc.from
+    .mockReturnValueOnce(makeInstChain(instance, instErr))
+    .mockReturnValueOnce(makeDedupeChain(dedupeData, dedupeErr));
+  mockSvc.rpc.mockResolvedValueOnce(rpcDocResult);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W-DOC-01..15 — POST inbound DOCUMENT (INBOUND-DOC-C2)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
+  // W-DOC-01 — Caminho feliz completo —————————————————————————————————————————
+  it('W-DOC-01 | caminho feliz: document válido → processor, RPC, 200', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+
+    // Processor chamado com parâmetros corretos — tenant server-side
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
+    expect(processorArgs.companyId).toBe(FAKE_COMPANY_ID);          // sempre do DB
+    expect(processorArgs.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(processorArgs.expectedMediaType).toBe('DOCUMENT');
+    expect(processorArgs.maxBytes).toBe(5 * 1024 * 1024);
+    expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);             // token plain
+
+    // RPC chamado com message_type='document' e asset correto
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const rpcArgs = mockSvc.rpc.mock.calls[0];
+    expect(rpcArgs[0]).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs[1]).toMatchObject({
+      p_company_id:     FAKE_COMPANY_ID,                            // sempre DB
+      p_instance_id:    FAKE_INSTANCE_ID,                           // sempre DB
+      p_media_asset_id: FAKE_ASSET_ID,
+      p_message_type:   'document',
+    });
+  });
+
+  // W-DOC-02 — document.id ausente ————————————————————————————————————————————
+  it('W-DOC-02 | document.id ausente → skip 200; zero decrypt/download/RPC', async () => {
+    const msg     = makeDocumentMessage({ documentId: null });
+    const payload = makeDocumentPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    // Apenas instance lookup — dedupe e RPC NÃO devem ocorrer
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // W-DOC-03 — Duplicate wamid (early dedupe) ——————————————————————————————————
+  it('W-DOC-03 | wamid já persisted → skip 200; zero decrypt/download/RPC', async () => {
+    const existingRow = { id: 'existing-message-uuid' };
+    const payload     = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(existingRow));            // deduplicado
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // W-DOC-04 — Arquivo grande demais (definitivo) ——————————————————————————————
+  it('W-DOC-04 | inbound_media_too_large → skip 200; zero RPC', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_too_large'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);                                  // definitivo → skip
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // W-DOC-05 — Tipo MIME incompatível (definitivo) ———————————————————————————
+  it('W-DOC-05 | inbound_media_type_mismatch → skip 200; zero RPC', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_type_mismatch'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // W-DOC-06 — Falha de metadata Graph (transiente) ——————————————————————————
+  it('W-DOC-06 | media_metadata_failed → 500 (transiente)', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('media_metadata_failed'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+  });
+
+  // W-DOC-07 — Timeout de download (transiente) ———————————————————————————————
+  it('W-DOC-07 | media_download_timeout → 500 (transiente)', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('media_download_timeout'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+  });
+
+  // W-DOC-08 — Credencial ausente (definitivo operacional) ——————————————————
+  it('W-DOC-08 | credential ausente → skip 200; zero download/RPC; nenhum segredo em res', async () => {
+    const instanceNoToken = { id: FAKE_INSTANCE_ID, company_id: FAKE_COMPANY_ID, access_token_enc: null };
+    const payload         = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(instanceNoToken))
+      .mockReturnValueOnce(makeDedupeChain(null));
+
+    // Decrypt falha porque access_token_enc é null — webhook testa internamente antes de chamar
+    // mockDecryptMetaToken NÃO é chamado pois o branch verifica !instance.access_token_enc primeiro
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);                                  // skip, não retry storm
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    // Resposta não deve conter nenhum token ou ciphertext
+    const body = JSON.stringify(res._body ?? {});
+    expect(body).not.toContain('token');
+    expect(body).not.toContain('enc');
+    expect(body).not.toContain('plain');
+  });
+
+  // W-DOC-09 — Falha de Storage (transiente) ——————————————————————————————————
+  it('W-DOC-09 | inbound_media_storage_failed → 500 (transiente)', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_storage_failed'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+  });
+
+  // W-DOC-10 — Falha de RPC (transiente) ——————————————————————————————————————
+  it('W-DOC-10 | RPC process_meta_inbound_media_message falha → 500', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockSvc.rpc.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+  });
+
+  // W-DOC-11 — Asset reutilizado (reused=true) —————————————————————————————————
+  it('W-DOC-11 | reused=true do processor → RPC chamado; 200', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockResolvedValueOnce({
+      assetId:  FAKE_ASSET_ID,
+      mimeType: 'application/pdf',
+      fileSize: 50000,
+      filename: 'report.pdf',
+      reused:   true,                                               // asset pré-existente
+    });
+    mockSvc.rpc.mockResolvedValueOnce({
+      data:  { created: true, conversation_id: FAKE_CONV_ID, message_id: FAKE_MSG_ID },
+      error: null,
+    });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
+  });
+
+  // W-DOC-12 — TEXT + DOCUMENT no mesmo payload ———————————————————————————————
+  it('W-DOC-12 | TEXT + DOCUMENT no mesmo payload → TEXT processado; 200 (doc ok)', async () => {
+    const textMsg = makeInboundMessage({ id: 'wamid_text_01', body: 'Olá' });
+    const docMsg  = makeDocumentMessage({ id: 'wamid_doc_01' });
+
+    const payload = makeInboundPayload({ messages: [textMsg, docMsg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    // instance lookup único (compartilhado por ambas mensagens do entry)
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))            // instance
+      .mockReturnValueOnce(makeDedupeChain(null));                  // dedupe DOC
+
+    // TEXT: rpc process_meta_inbound_message
+    // DOCUMENT: rpc process_meta_inbound_media_message
+    mockSvc.rpc
+      .mockResolvedValueOnce({ data: { created: true }, error: null })  // TEXT
+      .mockResolvedValueOnce({ data: { created: true }, error: null }); // DOCUMENT
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
+  });
+
+  // W-DOC-13 — Falha transiente em 1º doc não aborta o 2º (batch safety) ——————
+  it('W-DOC-13 | DOCUMENT transiente + DOCUMENT ok → 2º processado; retorna 500', async () => {
+    const docMsg1 = makeDocumentMessage({ id: 'wamid_doc_fail', documentId: FAKE_MEDIA_ID });
+    const docMsg2 = makeDocumentMessage({ id: 'wamid_doc_ok',   documentId: '999888777666' });
+
+    const payload = makeInboundPayload({ messages: [docMsg1, docMsg2] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))            // instance
+      .mockReturnValueOnce(makeDedupeChain(null))                   // dedupe doc1
+      .mockReturnValueOnce(makeDedupeChain(null));                  // dedupe doc2
+
+    // doc1: download falha (transiente)
+    mockDownloadAndStoreInboundMedia
+      .mockRejectedValueOnce(makeMediaError('media_metadata_failed'))
+      .mockResolvedValueOnce({ assetId: FAKE_ASSET_ID, mimeType: 'application/pdf', fileSize: 1024, filename: 'ok.pdf', reused: false });
+
+    // doc2: RPC ok
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    // 2º documento ainda foi processado (batch safety)
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();                     // apenas doc2
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+
+    // hasTransientFailure=true → 500 para retry do payload inteiro
+    expect(res._status).toBe(500);
+  });
+
+  // W-DOC-14 — image/video: type_skipped, zero processor ——————————————————————
+  it('W-DOC-14 | type=image e type=video → type_skipped; zero downloadAndStoreInboundMedia', async () => {
+    const imageMsg = { id: 'wamid_img_01', from: FAKE_WA_ID, type: 'image',
+                       image: { id: '111', mime_type: 'image/jpeg' }, timestamp: FAKE_TIMESTAMP };
+    const videoMsg = { id: 'wamid_vid_01', from: FAKE_WA_ID, type: 'video',
+                       video: { id: '222', mime_type: 'video/mp4' }, timestamp: FAKE_TIMESTAMP };
+
+    const payload = makeInboundPayload({ messages: [imageMsg, videoMsg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    // Somente instance lookup (sem dedupe, sem download, sem RPC)
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  // W-DOC-15 — media_download_url_invalid (DEBT-DOMAIN-ALLOWLIST-C) ————————————
+  it('W-DOC-15 | media_download_url_invalid → 500 (transiente; sem URL/token em res)', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('media_download_url_invalid'),
+    );
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(500);
+
+    // Resposta não deve vazar URL, token ou ciphertext
+    const body = JSON.stringify(res._body ?? {});
+    expect(body).not.toContain('fbcdn');
+    expect(body).not.toContain('fbsbx');
+    expect(body).not.toContain('http');
+    expect(body).not.toContain('token');
   });
 });
