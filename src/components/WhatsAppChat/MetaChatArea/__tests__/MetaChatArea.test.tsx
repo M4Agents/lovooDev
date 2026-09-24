@@ -1578,3 +1578,152 @@ describe('MetaChatArea — MVP4B.6C DOCUMENT render', () => {
     expect(card.textContent).toMatch(/2|MB|KB/i)
   })
 })
+
+// =============================================================================
+// F-DOC-01..10 — INBOUND-DOC-C2: render de DOCUMENT inbound no histórico
+//
+// Cobre o novo ramo: message_type='document' + media.type='document'.
+// Completamente separado dos testes MVP4B.6C (que usam message_type='template').
+// =============================================================================
+
+describe('MetaChatArea — INBOUND DOCUMENT render (INBOUND-DOC-C2)', () => {
+  // Fixture de mídia para document inbound
+  const INBOUND_DOC_MEDIA: MetaMessageMedia = {
+    type:      'document',
+    url:       'https://example.com/inbound.pdf',
+    filename:  'contrato.pdf',
+    mime_type: 'application/pdf',
+    file_size: 102400, // 100 KB
+  }
+
+  /**
+   * Cria uma MetaChatMessage para document inbound.
+   * body=null — invariante de DOCUMENT inbound (C2-BACKEND persiste body=NULL).
+   * Usa 'as MetaChatMessage' porque o tipo atual define body: string (pre-C2).
+   * O runtime recebe null do banco — o cast reflete a realidade pós-migration.
+   */
+  function makeInboundDocMsg(mediaOverride?: Partial<MetaMessageMedia> | null): MetaChatMessage {
+    const media =
+      mediaOverride === null
+        ? null
+        : { ...INBOUND_DOC_MEDIA, ...mediaOverride }
+    return {
+      id:                 'inb-doc-test-001',
+      conversation_id:    CONV_ID,
+      instance_id:        'inst-001',
+      direction:          'inbound',
+      message_type:       'document',
+      body:               null as unknown as string,  // invariante pós-C2-BACKEND
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at:         '2026-09-21T15:00:00.000Z',
+      media,
+    } as MetaChatMessage
+  }
+
+  // F-DOC-01 — document inbound válido → card DOCUMENT renderizado —————————————
+  it('F-DOC-01: message_type=document + media.type=document → card DOCUMENT renderizado', () => {
+    mockIdle({ messages: [makeInboundDocMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByTestId('msg-media-document')).toBeTruthy()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  // F-DOC-02 — media.url → <a> clicável com target e rel ——————————————————————
+  it('F-DOC-02: document com media.url → <a> clicável; target="_blank"; rel noopener noreferrer', () => {
+    mockIdle({ messages: [makeInboundDocMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const link = screen.getByTestId('msg-media-document') as HTMLAnchorElement
+    expect(link.tagName.toLowerCase()).toBe('a')
+    expect(link.href).toContain('inbound.pdf')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toContain('noopener')
+    expect(link.rel).toContain('noreferrer')
+  })
+
+  // F-DOC-03 — sem media.url → card não clicável (<div>) ———————————————————————
+  it('F-DOC-03: document sem media.url → card renderiza sem <a> (div não clicável)', () => {
+    mockIdle({ messages: [makeInboundDocMsg({ url: null })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const card = screen.getByTestId('msg-media-document')
+    expect(card.tagName.toLowerCase()).toBe('div')
+    expect(card.getAttribute('href')).toBeNull()
+  })
+
+  // F-DOC-04 — file_size → tamanho formatado visível —————————————————————————
+  it('F-DOC-04: document com file_size → tamanho formatado aparece no card', () => {
+    mockIdle({ messages: [makeInboundDocMsg()] }) // file_size = 102400 = 100 KB
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const card = screen.getByTestId('msg-media-document')
+    // 102400 bytes → '100 KB'
+    expect(card.textContent).toMatch(/100\s*KB/i)
+  })
+
+  // F-DOC-05 — document sem media → fallback ————————————————————————————————————
+  it('F-DOC-05: document sem media (media=null) → "Mensagem não suportada"', () => {
+    mockIdle({ messages: [makeInboundDocMsg(null)] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-document')).toBeNull()
+  })
+
+  // F-DOC-06 — body=null → não crasha; sem texto falso; card visível ————————————
+  it('F-DOC-06: document + body=null → não crasha; sem texto artificial; card visível', () => {
+    mockIdle({ messages: [makeInboundDocMsg()] })
+    expect(() =>
+      render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    ).not.toThrow()
+    // Card existe
+    expect(screen.getByTestId('msg-media-document')).toBeTruthy()
+    // Sem texto fabricado
+    expect(screen.queryByText('Documento')).toBeNull()
+    expect(screen.queryByText('[Documento]')).toBeNull()
+    expect(screen.queryByText('null')).toBeNull()
+    // Sem parágrafo de corpo vazio (não deve existir <p> com string vazia)
+    const paragraphs = document.querySelectorAll('p')
+    for (const p of paragraphs) {
+      // Nenhum parágrafo deve ter exatamente null ou string vazia como conteúdo
+      expect(p.textContent).not.toBe('null')
+    }
+  })
+
+  // F-DOC-07 — document + media.type='image' → fallback ————————————————————————
+  it('F-DOC-07: document + media.type=image → "Mensagem não suportada" (fail-closed)', () => {
+    mockIdle({ messages: [makeInboundDocMsg({ type: 'image', url: 'https://example.com/img.jpg' })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-document')).toBeNull()
+  })
+
+  // F-DOC-08 — document + media.type='video' → fallback ————————————————————————
+  it('F-DOC-08: document + media.type=video → "Mensagem não suportada" (fail-closed)', () => {
+    mockIdle({ messages: [makeInboundDocMsg({ type: 'video', url: 'https://example.com/vid.mp4' })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-document')).toBeNull()
+  })
+
+  // F-DOC-09 — message_type='image' → continua não suportado ———————————————————
+  it('F-DOC-09: message_type=image + media image → continua "Mensagem não suportada"', () => {
+    const msg = makeMsg('img-inb-001', 'inbound', 'image', 'https://example.com/img.jpg', null, {
+      type: 'image', url: 'https://example.com/img.jpg',
+      filename: 'foto.jpg', mime_type: 'image/jpeg', file_size: 50000,
+    })
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    // O renderer de imagem NÃO deve aparecer
+    expect(screen.queryByTestId('msg-media-image')).toBeNull()
+  })
+
+  // F-DOC-10 — message_type='video' → continua não suportado ——————————————————
+  it('F-DOC-10: message_type=video + media video → continua "Mensagem não suportada"', () => {
+    const msg = makeMsg('vid-inb-001', 'inbound', 'video', '', null, {
+      type: 'video', url: 'https://example.com/vid.mp4',
+      filename: 'video.mp4', mime_type: 'video/mp4', file_size: 5000000,
+    })
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+  })
+})

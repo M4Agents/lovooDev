@@ -231,11 +231,18 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   const time      = formatTime(message.provider_timestamp ?? message.created_at)
   // message_type='template': renderiza body persistido — sem reinterpolação.
   // MVP4B.6C: exibe mídia de header (IMAGE/VIDEO/DOCUMENT) acima do body.
-  // Outros tipos (image, audio, etc.) continuam "Mensagem não suportada".
-  const isRenderable = message.message_type === 'text' || message.message_type === 'template'
+  // INBOUND-DOC-C2: document inbound com media.type='document' também é renderizável.
+  // Outros tipos (image, video, audio, etc.) continuam "Mensagem não suportada".
+  const isRenderable =
+    message.message_type === 'text'     ||
+    message.message_type === 'template' ||
+    (message.message_type === 'document' && message.media?.type === 'document')
 
-  // MVP4B.6C — Mídia de header (somente para template outbound com media)
-  const hasMedia  = message.message_type === 'template' && message.media != null
+  // MVP4B.6C — Mídia de header (template outbound com media OU document inbound válido)
+  // Fail-closed: document sem media ou com media.type !== 'document' → hasMedia = false.
+  const hasMedia =
+    (message.message_type === 'template' && message.media != null) ||
+    (message.message_type === 'document' && message.media?.type === 'document')
   const mediaType = hasMedia ? message.media!.type : null
 
   return (
@@ -317,15 +324,18 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
         )}
 
         {/* ── Body / fallback ───────────────────────────────────────────────── */}
-        {isRenderable ? (
-          <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
-            {message.body}
-          </p>
-        ) : (
+        {/* Fail-closed: se não renderizável → "Mensagem não suportada".          */}
+        {/* Body somente quando há conteúdo real: evita <p> vazio para document   */}
+        {/* inbound (body=null). TEXT e TEMPLATE sempre têm body não-nulo.        */}
+        {!isRenderable ? (
           <p className="text-sm italic opacity-70">
             Mensagem não suportada
           </p>
-        )}
+        ) : message.body ? (
+          <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+            {message.body}
+          </p>
+        ) : null}
         {time && (
           <p className={`text-[10px] mt-1 text-right leading-none ${
             isInbound ? 'text-slate-400' : 'text-blue-100'
