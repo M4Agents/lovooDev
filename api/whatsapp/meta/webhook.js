@@ -233,11 +233,9 @@ async function handlePost(req, res) {
       const phoneNumberId = value.metadata?.phone_number_id;
       if (typeof phoneNumberId !== 'string' || phoneNumberId.length === 0) continue;
 
-      // access_token_enc: somente server-side; nunca logar, nunca retornar,
-      // nunca incluir em erro. Decrypt lazy — somente no ramo DOCUMENT.
       const { data: instance, error: instErr } = await svc
         .from('meta_whatsapp_instances')
-        .select('id, company_id, access_token_enc')
+        .select('id, company_id')
         .eq('phone_number_id', phoneNumberId)
         .is('deleted_at', null)
         .maybeSingle();
@@ -423,17 +421,28 @@ async function handlePost(req, res) {
             continue;
           }
 
-          // DOC.3 — Decrypt do token (lazy — somente se documento válido chegou até aqui)
-          // access_token_enc: somente server-side. NUNCA logar ciphertext nem plainToken.
+          // DOC.3 — Lookup de credencial e decrypt (lazy — somente após dedupe miss).
+          // Fonte canônica: meta_whatsapp_credentials (tabela 1:1 com meta_whatsapp_instances).
+          // instance.id: sempre do banco — nunca do payload.
+          // NUNCA logar ciphertext nem plainToken.
+          const { data: credential, error: credErr } = await svc
+            .from('meta_whatsapp_credentials')
+            .select('access_token_enc')
+            .eq('instance_id', instance.id)
+            .maybeSingle();
+
+          if (credErr || !credential?.access_token_enc) {
+            // Configuração operacional inválida ou ausente — 200 skip para evitar retry storm.
+            // Retry da Meta não resolve configuração ausente/corrompida.
+            // NUNCA logar ciphertext, plainToken ou conteúdo do erro.
+            console.error('[meta/webhook] event_type=inbound_document outcome=credential_unavailable');
+            continue;
+          }
+
           let plainToken;
           try {
-            if (!instance.access_token_enc) {
-              throw new Error('missing_enc');
-            }
-            plainToken = decryptMetaToken(instance.access_token_enc);
+            plainToken = decryptMetaToken(credential.access_token_enc);
           } catch {
-            // Configuração operacional inválida — 200 skip para evitar retry storm de 7 dias.
-            // Retry da Meta não resolve configuração ausente/corrompida.
             // NUNCA logar ciphertext, plainToken ou conteúdo do erro de decrypt.
             console.error('[meta/webhook] event_type=inbound_document outcome=credential_unavailable');
             continue;

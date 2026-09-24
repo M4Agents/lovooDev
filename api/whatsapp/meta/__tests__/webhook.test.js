@@ -81,10 +81,17 @@ const FAKE_ASSET_ID          = 'eeee0000-0000-0000-0000-000000000005'; // CML UU
 const FAKE_ACCESS_TOKEN_ENC  = 'encrypted_token_fake_for_tests_only_xxxxxxxxxxxxxxxxxxxx';
 const FAKE_PLAIN_TOKEN       = 'plain_token_fake_for_tests_only_xxxxxxxxxxxxxxxxxxxxx';
 
+// FAKE_INSTANCE representa somente as colunas reais de meta_whatsapp_instances
+// utilizadas pelo webhook. access_token_enc NÃO pertence a esta tabela —
+// está em meta_whatsapp_credentials (tabela separada 1:1).
 const FAKE_INSTANCE = {
-  id:                FAKE_INSTANCE_ID,
-  company_id:        FAKE_COMPANY_ID,
-  access_token_enc:  FAKE_ACCESS_TOKEN_ENC,
+  id:         FAKE_INSTANCE_ID,
+  company_id: FAKE_COMPANY_ID,
+};
+
+// Credencial separada — simula meta_whatsapp_credentials.
+const FAKE_CREDENTIAL = {
+  access_token_enc: FAKE_ACCESS_TOKEN_ENC,
 };
 const FAKE_RAW_BODY = Buffer.from('{"object":"whatsapp_business_account","entry":[]}');
 
@@ -121,6 +128,15 @@ function makeInstChain(data, error = null) {
     select:      vi.fn().mockReturnThis(),
     eq:          vi.fn().mockReturnThis(),
     is:          vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
+/** Chain para meta_whatsapp_credentials: select().eq().maybeSingle() */
+function makeCredentialChain(data, error = null) {
+  return {
+    select:      vi.fn().mockReturnThis(),
+    eq:          vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
   };
 }
@@ -975,6 +991,10 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
       p_contact_name:       FAKE_CONTACT_NAME,
       p_provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
     });
+
+    // TEXT: credential lookup NÃO deve ocorrer — decrypt é lazy (somente DOCUMENT)
+    const fromTableNames = mockSvc.from.mock.calls.map(([t]) => t);
+    expect(fromTableNames).not.toContain('meta_whatsapp_credentials');
   });
 
   // ---------------------------------------------------------------------------
@@ -1224,6 +1244,9 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     expect(mockSvc.rpc).not.toHaveBeenCalled();
     // Update MVP2 deve ter sido chamado
     expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    // STATUS: credential lookup NÃO deve ocorrer — decrypt é lazy (somente DOCUMENT)
+    const fromTableNames = mockSvc.from.mock.calls.map(([t]) => t);
+    expect(fromTableNames).not.toContain('meta_whatsapp_credentials');
   });
 
   // ---------------------------------------------------------------------------
@@ -1408,6 +1431,8 @@ function setupDocumentDb({
   instErr         = null,
   dedupeData      = null,   // null = não encontrado → processar
   dedupeErr       = null,
+  credentialData  = FAKE_CREDENTIAL,
+  credentialErr   = null,
   rpcDocResult    = {
     data:  { created: true, conversation_id: FAKE_CONV_ID, message_id: FAKE_MSG_ID },
     error: null,
@@ -1415,7 +1440,8 @@ function setupDocumentDb({
 } = {}) {
   mockSvc.from
     .mockReturnValueOnce(makeInstChain(instance, instErr))
-    .mockReturnValueOnce(makeDedupeChain(dedupeData, dedupeErr));
+    .mockReturnValueOnce(makeDedupeChain(dedupeData, dedupeErr))
+    .mockReturnValueOnce(makeCredentialChain(credentialData, credentialErr));
   mockSvc.rpc.mockResolvedValueOnce(rpcDocResult);
 }
 
@@ -1455,6 +1481,12 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
       p_media_asset_id: FAKE_ASSET_ID,
       p_message_type:   'document',
     });
+
+    // CRED-01: credential lookup ocorreu em meta_whatsapp_credentials, não em meta_whatsapp_instances
+    const credCalls = mockSvc.from.mock.calls.filter(([t]) => t === 'meta_whatsapp_credentials');
+    expect(credCalls.length).toBe(1);
+    // decrypt recebeu access_token_enc da credencial (não de instance)
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
   });
 
   // W-DOC-02 — document.id ausente ————————————————————————————————————————————
@@ -1503,7 +1535,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('inbound_media_too_large'),
     );
@@ -1523,7 +1556,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('inbound_media_type_mismatch'),
     );
@@ -1543,7 +1577,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('media_metadata_failed'),
     );
@@ -1562,7 +1597,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('media_download_timeout'),
     );
@@ -1574,24 +1610,26 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(res._status).toBe(500);
   });
 
-  // W-DOC-08 — Credencial ausente (definitivo operacional) ——————————————————
-  it('W-DOC-08 | credential ausente → skip 200; zero download/RPC; nenhum segredo em res', async () => {
-    const instanceNoToken = { id: FAKE_INSTANCE_ID, company_id: FAKE_COMPANY_ID, access_token_enc: null };
-    const payload         = makeDocumentPayload();
+  // W-DOC-08 / CRED-02 — Credential row ausente em meta_whatsapp_credentials ——
+  // A instância existe mas não possui credencial (row null no lookup).
+  // Resultado: skip 200, zero download/RPC, nenhum segredo em resposta.
+  it('W-DOC-08 | credential row ausente → skip 200; zero download/RPC; nenhum segredo em res', async () => {
+    const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
+    // Instance ok; dedupe miss; credential lookup retorna null (row inexistente)
     mockSvc.from
-      .mockReturnValueOnce(makeInstChain(instanceNoToken))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null));  // row ausente
 
-    // Decrypt falha porque access_token_enc é null — webhook testa internamente antes de chamar
-    // mockDecryptMetaToken NÃO é chamado pois o branch verifica !instance.access_token_enc primeiro
-
+    // decryptMetaToken NÃO deve ser chamado — guard aborta antes
     const req = makePostReq();
     const res = makeRes();
     await handler(req, res);
 
     expect(res._status).toBe(200);                                  // skip, não retry storm
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
 
@@ -1609,7 +1647,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('inbound_media_storage_failed'),
     );
@@ -1628,7 +1667,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockSvc.rpc.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
 
     const req = makePostReq();
@@ -1645,7 +1685,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockResolvedValueOnce({
       assetId:  FAKE_ASSET_ID,
       mimeType: 'application/pdf',
@@ -1678,7 +1719,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     // instance lookup único (compartilhado por ambas mensagens do entry)
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))            // instance
-      .mockReturnValueOnce(makeDedupeChain(null));                  // dedupe DOC
+      .mockReturnValueOnce(makeDedupeChain(null))                   // dedupe DOC
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));   // credential DOC
 
     // TEXT: rpc process_meta_inbound_message
     // DOCUMENT: rpc process_meta_inbound_media_message
@@ -1707,7 +1749,9 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))            // instance
       .mockReturnValueOnce(makeDedupeChain(null))                   // dedupe doc1
-      .mockReturnValueOnce(makeDedupeChain(null));                  // dedupe doc2
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL))    // credential doc1
+      .mockReturnValueOnce(makeDedupeChain(null))                   // dedupe doc2
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));   // credential doc2
 
     // doc1: download falha (transiente)
     mockDownloadAndStoreInboundMedia
@@ -1751,6 +1795,85 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(mockSvc.rpc).not.toHaveBeenCalled();
   });
 
+  // R-SCHEMA-01 — Regressão: instance lookup SELECT não contém access_token_enc ——
+  // Se alguém adicionar access_token_enc ao SELECT de meta_whatsapp_instances,
+  // este teste falha imediatamente (schema drift detection).
+  it('R-SCHEMA-01 | meta_whatsapp_instances SELECT = "id, company_id" — sem access_token_enc', async () => {
+    const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    const instChain = makeInstChain(FAKE_INSTANCE);
+    mockSvc.from
+      .mockReturnValueOnce(instChain)
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'accepted' }))
+      .mockReturnValueOnce(makeUpdateChain());
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    // Inspecionar o argumento de .select() na query de instance lookup
+    const selectArg = instChain.select.mock.calls[0][0];
+    expect(selectArg).toContain('id');
+    expect(selectArg).toContain('company_id');
+    // CRÍTICO: access_token_enc pertence a meta_whatsapp_credentials — não a esta tabela
+    expect(selectArg).not.toContain('access_token_enc');
+  });
+
+  // CRED-03 — Credential lookup DB error → HTTP 200 skip (não retry storm) ——————
+  it('CRED-03 | credential lookup DB error → HTTP 200; zero decrypt/download/RPC', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null, { message: 'connection timeout' })); // credErr
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    // credErr → skip 200 (não retry storm — retry não resolve erro de configuração)
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    // Nenhum detalhe do erro de DB na resposta
+    const body = JSON.stringify(res._body ?? {});
+    expect(body).not.toContain('connection');
+    expect(body).not.toContain('timeout');
+  });
+
+  // CRED-04 — decryptMetaToken lança → HTTP 200 skip; segredo não vaza ————————
+  it('CRED-04 | decryptMetaToken lança → HTTP 200; zero download/RPC; nenhum segredo em res', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));  // credential ok
+    // decrypt falha (chave corrompida, base64 inválido, etc.)
+    mockDecryptMetaToken.mockImplementationOnce(() => {
+      throw new Error('decryption_failed_bad_key');
+    });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    // decrypt failure → skip 200 (não retry storm)
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    // Mensagem de erro interno NÃO deve vazar na resposta
+    const body = JSON.stringify(res._body ?? {});
+    expect(body).not.toContain('decryption');
+    expect(body).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+    expect(body).not.toContain(FAKE_PLAIN_TOKEN);
+  });
+
   // W-DOC-15 — media_download_url_invalid (DEBT-DOMAIN-ALLOWLIST-C) ————————————
   it('W-DOC-15 | media_download_url_invalid → 500 (transiente; sem URL/token em res)', async () => {
     const payload = makeDocumentPayload();
@@ -1758,7 +1881,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeDedupeChain(null));
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
     mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
       makeMediaError('media_download_url_invalid'),
     );

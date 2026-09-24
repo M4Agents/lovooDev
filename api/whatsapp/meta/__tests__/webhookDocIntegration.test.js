@@ -116,10 +116,11 @@ const FAKE_PUBLIC_URL       = 'https://storage.example.com/biblioteca/companies/
 const FAKE_WA_ID            = '5511987654321';
 const FAKE_CONTACT_NAME     = 'Contato Integracao Ficticio';
 
+// FAKE_INSTANCE representa somente as colunas reais de meta_whatsapp_instances.
+// access_token_enc pertence a meta_whatsapp_credentials (tabela separada 1:1).
 const FAKE_INSTANCE = {
-  id:               FAKE_INSTANCE_ID,
-  company_id:       FAKE_COMPANY_ID,
-  access_token_enc: FAKE_ACCESS_TOKEN_ENC,
+  id:         FAKE_INSTANCE_ID,
+  company_id: FAKE_COMPANY_ID,
 };
 
 // ── PDF fixture mínimo para fileTypeFromBlob real ─────────────────────────────
@@ -142,6 +143,18 @@ function makeInstChain(data, error = null) {
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
   };
 }
+
+/** Chain para meta_whatsapp_credentials: select().eq().maybeSingle() */
+function makeCredentialChain(data, error = null) {
+  return {
+    select:      vi.fn().mockReturnThis(),
+    eq:          vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
+// Captura da última credentialChain criada para assertions de .eq()
+let lastCredentialChain = null;
 
 /**
  * Chain para meta_messages (early dedupe DOC.2):
@@ -248,8 +261,13 @@ function setupIntegrationMocks({ cmlPrecheckData = null, storageUploadError = nu
   mockSvc.from.mockImplementation((tableName) => {
     switch (tableName) {
       case 'meta_whatsapp_instances':
-        // Tenant resolution — retorna FAKE_INSTANCE com access_token_enc
+        // Tenant resolution — somente id e company_id (schema real)
         return makeInstChain(FAKE_INSTANCE);
+
+      case 'meta_whatsapp_credentials':
+        // Credential lookup (DOC.3) — fonte canônica separada da instance
+        lastCredentialChain = makeCredentialChain({ access_token_enc: FAKE_ACCESS_TOKEN_ENC });
+        return lastCredentialChain;
 
       case 'meta_messages':
         // DOC.2 early dedupe — sempre MISS neste conjunto de testes
@@ -366,6 +384,12 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     expect(rpcArgs.p_meta_message_id).toBe(FAKE_WAMID);                      // wamid do payload
     expect(rpcArgs.p_media_asset_id).toBe(FAKE_ASSET_ID);                    // retornado pelo processor real
     expect(rpcArgs.p_message_type).toBe('document');
+
+    // (6) CRED-01: credential lookup usou instance.id do banco (não do payload)
+    expect(lastCredentialChain).not.toBeNull();
+    expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    // decrypt recebeu o access_token_enc da credencial (não de instance)
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
   });
 
   // D-02 — source_ref reuse ──────────────────────────────────────────────────
@@ -412,6 +436,10 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     expect(rpcArgs.p_media_asset_id).toBe(FAKE_ASSET_ID);
     expect(rpcArgs.p_company_id).toBe(FAKE_COMPANY_ID);
     expect(rpcArgs.p_message_type).toBe('document');
+
+    // (8) Credential lookup ocorreu com instance.id correto
+    expect(lastCredentialChain).not.toBeNull();
+    expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
   });
 
   // D-03 — storage failure propagation ──────────────────────────────────────
@@ -453,6 +481,10 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     expect(resBody).not.toContain('stack');
     // Mensagem genérica segura
     expect(res._body).toMatchObject({ error: 'Internal error' });
+
+    // (8) Credential lookup ocorreu (pipeline chegou ao DOC.3)
+    expect(lastCredentialChain).not.toBeNull();
+    expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
   });
 
 });
