@@ -1174,3 +1174,341 @@ export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filenam
 
   return { mediaId };
 }
+
+// =============================================================================
+// Media download — INBOUND-MEDIA-A
+//
+// Primitivas para download de mídia inbound da Meta Cloud API.
+// Reutilizável por IMAGE / VIDEO / DOCUMENT — sem hardcode de tipo.
+//
+// Funções exportadas:
+//   downloadMediaMetadata(token, mediaId)
+//     → GET /{graphVersion}/{mediaId} — retorna URL temporária + metadata auxiliar
+//
+//   downloadMediaBytes(token, url, { maxBytes })
+//     → GET <url> com redirect manual, contagem de bytes em stream, anti-SSRF
+//
+// SEGURANÇA:
+//   - URL temporária retornada por downloadMediaMetadata NUNCA deve ser logada
+//   - token nunca logado em nenhuma das funções
+//   - Anti-SSRF: URL de CDN validada antes de qualquer fetch (+ após redirect)
+//   - Redirect manual com contador explícito — sem seguir redirect automaticamente
+//   - Bearer token enviado somente para hosts validados
+//   - Content-Length é hint — bytes reais contados no stream (autoridade)
+// =============================================================================
+
+// Máximo de redirects seguidos manualmente por operação de download.
+const MAX_MEDIA_REDIRECTS = 3;
+
+// Teto defensivo para o parâmetro maxBytes de downloadMediaBytes.
+// Deve ser >= maior valor em MEDIA_SIZE_LIMITS (DOCUMENT = 30 MB).
+// Impede que o caller passe um limite arbitrariamente grande.
+const MAX_MEDIA_BYTES_CEILING = 30 * 1024 * 1024; // 30 MB
+
+// Provisional Meta CDN allowed hostname suffixes.
+//
+// DEBT DOMAIN-ALLOWLIST-C: confirmar contra URL real retornada por GET /{mediaId}
+// durante INBOUND-DOC-C (inspeção de payload real do Graph antes da implementação
+// do webhook DOCUMENT). Atualizar esta lista com evidência concreta.
+//
+// Regra de boundary check obrigatória (nunca apenas endsWith(suffix)):
+//   hostname === s  OR  hostname.endsWith('.' + s)
+// Previne bypass via 'evilfbcdn.net' — que terminaria com 'fbcdn.net'
+// mas não seria um subdomínio legítimo.
+//
+// Domínios incluídos com base em infraestrutura Meta pública amplamente documentada:
+//   fbcdn.net  — CDN primário Facebook/Meta
+//   fbsbx.com  — CDN Meta business/sandbox
+// Outros (cdninstagram.com, scontent-*) são excluídos até confirmação.
+const MEDIA_DOWNLOAD_ALLOWED_SUFFIXES = Object.freeze(['fbcdn.net', 'fbsbx.com']);
+
+// Detecta IPv4 literal (ex: 127.0.0.1, 10.0.0.1).
+// Impede uso de IPs diretos como destino de fetch, que bypassariam validação
+// de hostname. IPv6 literals ([::1]) são detectados por startsWith('[').
+const IPV4_LITERAL_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+// =============================================================================
+// validateMediaDownloadUrl  (privado)
+// =============================================================================
+
+/**
+ * Valida se uma URL é destino seguro para download de mídia Meta.
+ *
+ * Regras (fail-closed — qualquer violação → throw):
+ *   1. Protocolo exatamente 'https:'
+ *   2. Sem username ou password embutidos na URL
+ *   3. Hostname não é 'localhost'
+ *   4. Hostname não é IPv6 literal (ex: [::1])
+ *   5. Hostname não é IPv4 literal (ex: 127.0.0.1)
+ *   6. Hostname pertence a MEDIA_DOWNLOAD_ALLOWED_SUFFIXES com boundary check
+ *
+ * Nunca loga a URL — pode conter dados sensíveis.
+ * Aplicada antes de CADA fetch (URL inicial + após cada redirect).
+ *
+ * @param {string} rawUrl
+ * @throws {Error} code='media_download_url_invalid' — nunca inclui rawUrl na mensagem
+ */
+function validateMediaDownloadUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  if (hostname === 'localhost') {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  if (hostname.startsWith('[')) { // IPv6 literal
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  if (IPV4_LITERAL_RE.test(hostname)) {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+
+  const allowed = MEDIA_DOWNLOAD_ALLOWED_SUFFIXES.some(
+    s => hostname === s || hostname.endsWith('.' + s),
+  );
+  if (!allowed) {
+    throw makeError('media_download_url_invalid', 'Media download URL invalid');
+  }
+}
+
+// =============================================================================
+// downloadMediaMetadata  (INBOUND-MEDIA-A)
+// =============================================================================
+
+/**
+ * Obtém metadados de uma mídia inbound da Graph API.
+ *
+ * Endpoint: GET /{graphVersion}/{mediaId}
+ * Timeout:  GRAPH_TIMEOUT_MS (10 s) — resposta JSON simples.
+ *
+ * Retorna URL temporária de download e campos auxiliares.
+ * URL ausente ou inválida no payload → fail-closed.
+ *
+ * SEGURANÇA:
+ *   - token nunca logado, nunca presente em mensagem de erro
+ *   - URL retornada NUNCA deve ser logada pelo caller (pode conter dados sensíveis)
+ *   - mediaId validado como numeric string (padrão META_ID_RE do módulo)
+ *   - Campos extras do payload ignorados — shape mínimo e explícito
+ *   - URL construída internamente a partir de graphVersion + mediaId
+ *
+ * @param {string} token   Business token da instância (nunca logar)
+ * @param {string} mediaId Media ID recebido no webhook inbound (numeric string)
+ * @returns {Promise<{
+ *   url:       string,
+ *   mime_type: string|null,
+ *   sha256:    string|null,
+ *   file_size: number|null,
+ * }>}
+ * @throws {Error} err.code in:
+ *   media_metadata_invalid — input inválido, JSON inválido, url ausente/inválida
+ *   media_metadata_failed  — HTTP não-2xx do Graph
+ *   media_metadata_timeout — AbortError / timeout (10 s)
+ *   media_metadata_network — falha de rede não-timeout
+ */
+export async function downloadMediaMetadata(token, mediaId) {
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('media_metadata_invalid', 'Meta media metadata: invalid input');
+  }
+  if (typeof mediaId !== 'string' || !META_ID_RE.test(mediaId)) {
+    throw makeError('media_metadata_invalid', 'Meta media metadata: invalid mediaId');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+  // URL construída internamente — nunca usa valor externo como base de URL
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${mediaId}`);
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    }); // timeout padrão: GRAPH_TIMEOUT_MS (10 s)
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('media_metadata_timeout', 'Meta media metadata request timed out');
+    }
+    throw makeError('media_metadata_network', 'Meta media metadata network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('media_metadata_failed', 'Meta media metadata request failed');
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('media_metadata_invalid', 'Meta media metadata: invalid response');
+  }
+
+  // url é campo obrigatório — ausente ou não-string → fail-closed
+  const downloadUrl = payload?.url;
+  if (typeof downloadUrl !== 'string' || downloadUrl.length === 0) {
+    throw makeError('media_metadata_invalid', 'Meta media metadata: url missing or invalid');
+  }
+
+  return {
+    url:       downloadUrl,
+    mime_type: typeof payload?.mime_type === 'string' ? payload.mime_type  : null,
+    sha256:    typeof payload?.sha256    === 'string' ? payload.sha256     : null,
+    // file_size: somente números finitos válidos; qualquer outro tipo → null
+    file_size: (typeof payload?.file_size === 'number' && Number.isFinite(payload.file_size))
+                 ? payload.file_size : null,
+  };
+}
+
+// =============================================================================
+// downloadMediaBytes  (INBOUND-MEDIA-A)
+// =============================================================================
+
+/**
+ * Baixa os bytes de mídia de uma URL temporária Meta.
+ *
+ * Estratégias de segurança:
+ *   - Anti-SSRF: validateMediaDownloadUrl aplicada ANTES de cada fetch
+ *     (URL inicial + após cada redirect) — nunca segue redirect cegamente
+ *   - Redirect manual com contador explícito (MAX_MEDIA_REDIRECTS = 3)
+ *   - Bearer token enviado somente para hosts validados
+ *   - Content-Length header é hint (não autoridade) — abort rápido se > maxBytes
+ *   - Bytes reais contados em stream — abort imediato se ultrapassar maxBytes
+ *   - maxBytes limitado por MAX_MEDIA_BYTES_CEILING (30 MB) — teto defensivo
+ *
+ * NOTA: O timeout (GRAPH_MEDIA_UPLOAD_TIMEOUT_MS = 60 s) cobre a fase de
+ * conexão + headers do fetch. A leitura do stream body não possui timeout
+ * adicional — comportamento aceitável para MVP, revisável se necessário.
+ *
+ * @param {string} token             Business token da instância (nunca logar)
+ * @param {string} url               URL temporária retornada por downloadMediaMetadata
+ *                                   NUNCA logar este parâmetro
+ * @param {object} options
+ * @param {number} options.maxBytes  Limite de bytes aceitos — inteiro positivo,
+ *                                   máximo MAX_MEDIA_BYTES_CEILING (30 MB)
+ * @returns {Promise<Blob>}          Blob compatível com fileTypeFromBlob
+ * @throws {Error} err.code in:
+ *   media_download_url_invalid  — URL inválida ou host não autorizado (anti-SSRF)
+ *   media_download_failed       — input inválido, HTTP não-2xx, redirect inválido
+ *   media_download_too_large    — Content-Length ou stream excede maxBytes
+ *   media_download_timeout      — AbortError / timeout (60 s)
+ */
+export async function downloadMediaBytes(token, url, { maxBytes }) {
+  // ── Validação de inputs ──────────────────────────────────────────────────
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('media_download_failed', 'Meta media download: invalid token');
+  }
+  if (
+    typeof maxBytes !== 'number'      ||
+    !Number.isInteger(maxBytes)       ||
+    maxBytes <= 0                     ||
+    maxBytes > MAX_MEDIA_BYTES_CEILING
+  ) {
+    throw makeError('media_download_failed', 'Meta media download: invalid maxBytes');
+  }
+
+  let currentUrl  = String(url); // Defensive: garantir string mesmo se URL object
+  let redirectsFollowed = 0;
+
+  // ── Loop de redirect manual ──────────────────────────────────────────────
+  for (;;) {
+    // Validar URL ANTES de qualquer fetch — cobre URL inicial + após redirects
+    validateMediaDownloadUrl(currentUrl);
+
+    let res;
+    try {
+      res = await fetchWithTimeout(
+        currentUrl,
+        {
+          method:   'GET',
+          headers:  { Authorization: `Bearer ${token}` },
+          redirect: 'manual', // Nunca seguir redirect automaticamente
+        },
+        GRAPH_MEDIA_UPLOAD_TIMEOUT_MS, // 60 s — adequado para payloads de até 30 MB
+      );
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw makeError('media_download_timeout', 'Meta media download request timed out');
+      }
+      throw makeError('media_download_failed', 'Meta media download network error');
+    }
+
+    // ── Redirect manual (3xx) ──────────────────────────────────────────────
+    if (res.status >= 300 && res.status < 400) {
+      if (redirectsFollowed >= MAX_MEDIA_REDIRECTS) {
+        throw makeError('media_download_failed', 'Meta media download: too many redirects');
+      }
+      const location = res.headers.get('location');
+      if (typeof location !== 'string' || location.length === 0) {
+        throw makeError('media_download_failed', 'Meta media download: redirect without Location');
+      }
+      let nextUrl;
+      try {
+        // Resolver URL relativa (Meta sempre retorna absoluta, mas por segurança)
+        nextUrl = new URL(location, currentUrl).href;
+      } catch {
+        throw makeError('media_download_failed', 'Meta media download: invalid redirect Location');
+      }
+      // nextUrl será validado pelo validateMediaDownloadUrl no início do próximo ciclo
+      currentUrl = nextUrl;
+      redirectsFollowed++;
+      continue;
+    }
+
+    // ── Falha HTTP (não-2xx, não-3xx) ──────────────────────────────────────
+    if (!res.ok) {
+      throw makeError('media_download_failed', 'Meta media download failed');
+    }
+
+    // ── Pre-check Content-Length (hint — não autoridade) ───────────────────
+    // Abort rápido se header indica arquivo maior que o limite.
+    // Mesmo que passe este check, os bytes reais serão contados abaixo.
+    const clHeader = res.headers.get('content-length');
+    if (clHeader !== null) {
+      const cl = parseInt(clHeader, 10);
+      if (Number.isInteger(cl) && cl > 0 && cl > maxBytes) {
+        throw makeError('media_download_too_large', 'Media file too large');
+      }
+    }
+
+    // ── Leitura de stream com contagem de bytes (autoridade) ───────────────
+    // Content-Length não é fonte de verdade — contamos os bytes reais.
+    // Abort imediato ao ultrapassar maxBytes, sem baixar o arquivo inteiro.
+    if (!res.body) {
+      throw makeError('media_download_failed', 'Meta media download: response has no body');
+    }
+
+    const chunks        = [];
+    let   bytesReceived = 0;
+    const reader        = res.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesReceived += value.byteLength;
+        if (bytesReceived > maxBytes) {
+          reader.cancel().catch(() => { /* ignore cleanup error */ });
+          throw makeError('media_download_too_large', 'Media file too large (stream)');
+        }
+        chunks.push(value);
+      }
+    } catch (err) {
+      try { reader.cancel(); } catch { /* ignore cleanup error */ }
+      throw err;
+    }
+
+    return new Blob(chunks);
+  }
+}
