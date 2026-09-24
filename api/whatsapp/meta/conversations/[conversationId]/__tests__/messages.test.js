@@ -1043,6 +1043,57 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     expect(msg.media).not.toHaveProperty('id'); // ID do asset não exposto
   });
 
+  // ── D-04 — INBOUND-DOC-D: DTO para message_type='document' inbound ────────
+  it('D-04 | message_type=document inbound + media_asset_id → DTO media correto com todos os campos', async () => {
+    // Prova o contrato GET DTO para o cenário real de D e E:
+    // meta_messages row com message_type='document' + direction='inbound' + body=null
+    // deve resultar em media.type='document' com todos os campos obrigatórios no DTO.
+    const FAKE_DOC_ASSET_ID = 'dddd9999-0000-0000-0000-000000000099';
+    const inboundDocMsg = makeMsgWithAsset('msg-inb-doc-001', FAKE_DOC_ASSET_ID, {
+      direction:     'inbound',
+      message_type:  'document',
+      body:          null,
+      template_name: null,
+      template_language: null,
+    });
+    const docAsset = makeAsset(FAKE_DOC_ASSET_ID, 'document', {
+      mime_type:         'application/pdf',
+      original_filename: 'contrato-inbound.pdf',
+      file_size:         204800,
+      preview_url:       'https://storage.example.com/contrato-inbound.pdf',
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundDocMsg]))
+      .mockReturnValueOnce(makeAssetChain([docAsset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toHaveLength(1);
+
+    const msg = res._body.messages[0];
+
+    // Shape da mensagem
+    expect(msg.direction).toBe('inbound');
+    expect(msg.message_type).toBe('document');
+    expect(msg.body).toBeNull();
+
+    // DTO de mídia presente e completo
+    expect(msg.media).not.toBeNull();
+    expect(msg.media.type).toBe('document');
+    expect(msg.media.mime_type).toBe('application/pdf');
+    expect(msg.media.filename).toBe('contrato-inbound.pdf');
+    expect(msg.media.file_size).toBe(204800);
+    expect(msg.media.url).toBe('https://storage.example.com/contrato-inbound.pdf');
+
+    // media_asset_id nunca exposto no DTO público
+    expect(msg).not.toHaveProperty('media_asset_id');
+  });
+
   it('B-12: filtros originais de conversation/company/instance preservados com media resolution', async () => {
     const dbMsg     = makeMsgWithAsset('msg-filt-001', FAKE_ASSET_ID_1);
     const asset     = makeAsset(FAKE_ASSET_ID_1, 'image');
