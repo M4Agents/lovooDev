@@ -80,6 +80,76 @@ function extractReplyId(message) {
   }
 }
 
+// =====================================================
+// HELPERS — VALIDAÇÃO E RESOLUÇÃO DE NOME DE CONTATO
+// =====================================================
+
+/** true se a string contém ao menos uma letra Unicode */
+function isValidName(str) {
+  return /\p{L}/u.test((str || '').trim());
+}
+
+/**
+ * true se o nome é um placeholder gerado pelo sistema.
+ * Rejeita: ".", "", "Lead WhatsApp", "Contato 5582996..."
+ */
+function isPlaceholderName(name) {
+  if (!name) return true;
+  const t = name.trim();
+  return (
+    t === '.' ||
+    t === 'Lead WhatsApp' ||
+    /^Contato \d+$/.test(t) ||
+    t.length === 0
+  );
+}
+
+/**
+ * Consulta a API uazapi para obter o nome do contato.
+ * Chamada aguardada, timeout 2s — falha nunca impede o processamento.
+ * Diagnóstico: apenas estrutura e booleanos, sem nome/telefone/token nos logs.
+ */
+async function fetchContactNameFromUazapi({ token, instanceName, phoneNumber }) {
+  if (!token || !instanceName || !phoneNumber) return null;
+
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 2000);
+
+  try {
+    const res = await fetch(
+      `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceName}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', apikey: token },
+        body:    JSON.stringify({ phone: phoneNumber }),
+        signal:  controller.signal,
+      }
+    );
+
+    if (!res.ok) {
+      console.warn('[fetchContactName] HTTP', res.status);
+      return null;
+    }
+
+    const data = await res.json();
+
+    // Diagnóstico de estrutura — remover após validação em dev com contato conhecido
+    console.log('[fetchContactName] campos em data.data:', Object.keys(data?.data || {}));
+
+    const candidate = data?.data?.name ?? data?.name ?? null;
+
+    if (!isValidName(candidate) || isPlaceholderName(candidate)) return null;
+    return candidate.trim();
+
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'timeout_2s' : err.message;
+    console.warn('[fetchContactName] falhou:', reason);
+    return null;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 async function processMessage(payload) {
   try {
     const { createClient } = await import('@supabase/supabase-js');
@@ -210,8 +280,12 @@ async function processMessage(payload) {
       .replace(/@.*$/, '')
       .replace(/\D/g, '');
 
-    // Nome temporário - será corrigido após buscar company
-    const tempSenderName = message.senderName || payload.chat?.name || `Contato ${phoneNumber}`;
+    // Nome temporário — valida cada fonte antes de aceitar
+    const tempSenderName =
+      (isValidName(message.senderName)   && !isPlaceholderName(message.senderName)   ? message.senderName   : null) ||
+      (isValidName(payload.chat?.name)   && !isPlaceholderName(payload.chat?.name)   ? payload.chat?.name   : null) ||
+      message.senderName ||
+      `Contato ${phoneNumber}`;
 
     let messageText = message.text || '';
     let mediaUrl = null;
@@ -408,14 +482,30 @@ async function processMessage(payload) {
       .is('deleted_at', null)
       .single();
 
-    // Fallback robusto: cadastro → API → chat → genérico
-    const senderName = existingLead?.name || 
-                       tempSenderName;
-    
-    console.log('👤 NOME RESOLVIDO:', { 
-      leadName: existingLead?.name, 
-      tempName: tempSenderName, 
-      finalName: senderName 
+    // Resolução final do nome: cadastro real → payload válido → consulta uazapi → placeholder
+    let senderName;
+
+    if (existingLead?.name && !isPlaceholderName(existingLead.name)) {
+      // Lead com nome real já cadastrado — preservar sem tocar na API
+      senderName = existingLead.name;
+    } else if (!isPlaceholderName(tempSenderName)) {
+      // Payload já carrega nome válido
+      senderName = tempSenderName;
+    } else {
+      // Todas as fontes locais são placeholder — consulta uazapi (aguardada, timeout 2s)
+      const apiName = await fetchContactNameFromUazapi({
+        token:        payload.token,
+        instanceName,
+        phoneNumber,
+      });
+      senderName = (apiName && !isPlaceholderName(apiName)) ? apiName : tempSenderName;
+    }
+
+    console.log('[webhook] nome resolvido:', {
+      origem:        existingLead?.name && !isPlaceholderName(existingLead.name) ? 'lead_existente'
+                   : (senderName !== tempSenderName                              ? 'api_uazapi'
+                                                                                 : 'payload'),
+      ehPlaceholder: isPlaceholderName(senderName),
     });
     
     // USAR FUNÇÃO SECURITY DEFINER PARA PROCESSAR MENSAGEM COMPLETA
@@ -660,6 +750,27 @@ async function processMessage(payload) {
               });
             } catch (err) {
               console.error('[webhook/uazapi] handleLeadReentry failed:', err);
+            }
+
+            // Corrigir nome do lead existente se ainda for placeholder
+            // (a RPC create_lead_from_whatsapp_safe não atualiza leads existentes)
+            const placeholderVisto = existingLead?.name;
+            if (!isPlaceholderName(senderName) && isPlaceholderName(placeholderVisto)) {
+              const { data: updated, error: nameUpdateError } = await supabase
+                .from('leads')
+                .update({ name: senderName, updated_at: new Date().toISOString() })
+                .eq('id',         leadId)
+                .eq('company_id', company.id)
+                .eq('name',       placeholderVisto)   // trava de concorrência
+                .select('id');
+
+              if (nameUpdateError) {
+                console.warn('[webhook] falha ao corrigir nome do lead existente:', nameUpdateError.message);
+              } else if (!updated || updated.length === 0) {
+                console.log('[webhook] atualização condicional não aplicada');
+              } else {
+                console.log('[webhook] nome do lead existente corrigido');
+              }
             }
           }
 
