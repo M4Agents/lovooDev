@@ -36,6 +36,7 @@ import { resumeFromNode, resumeClaimedExecution } from './lib/automation/executo
 import { acquireLock, releaseLock }               from './lib/automation/executionLock.js';
 import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
+import { fetchContactNameFromUazapi } from './lib/webhook/contactNameResolver.js';
 
 // =====================================================
 // EXTRAÇÃO DE REPLY ID DO PAYLOAD UAZAPI
@@ -377,10 +378,14 @@ async function processMessage(payload) {
       /^Contato \d+$/.test(name) ||
       _isInstanceOwnName(name);
 
-    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância.
-    const _whatsAppName = (message.senderName && !_isInstanceOwnName(message.senderName))
-      ? message.senderName
-      : null;
+    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância
+    // nem um placeholder gerado pelo sistema (ex: ".").
+    const _whatsAppName =
+      (message.senderName &&
+       !_isInstanceOwnName(message.senderName) &&
+       !_isPlaceholderName(message.senderName))
+        ? message.senderName
+        : null;
 
     // #region agent log
     fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H2',location:'uazapi-webhook-final.js:instance-resolved',message:'instance_ok_before_name_detection',data:{direction,instanceId:instance?.id,hasInstanceName:Boolean(instance?.instance_name),hasProfileName:Boolean(instance?.profile_name),companyId:company?.id},timestamp:Date.now()})}).catch(()=>{});
@@ -420,32 +425,58 @@ async function processMessage(payload) {
       .is('deleted_at', null)
       .single();
 
-    const _existingName = existingLead?.name;
+    const _existingName    = existingLead?.name;
+    const _placeholderVisto = _existingName;   // guardado para trava de concorrência
 
-    // Nome final: preserva nome real do usuário; substitui placeholder por pushName real.
-    const senderName = (_existingName && !_isPlaceholderName(_existingName))
-      ? _existingName
-      : (_whatsAppName || _existingName || '.');
-    
+    // Resolução final: cadastro real → payload válido → consulta uazapi → placeholder
+    let senderName;
+    let _nameOrigin = 'placeholder';
+
+    if (_existingName && !_isPlaceholderName(_existingName)) {
+      // Lead com nome real já cadastrado — preservar sem chamar a API
+      senderName    = _existingName;
+      _nameOrigin   = 'lead_existente';
+    } else if (_whatsAppName) {
+      // Payload tem nome válido (já filtrado para placeholders acima)
+      senderName    = _whatsAppName;
+      _nameOrigin   = 'payload';
+    } else {
+      // Todas as fontes locais são placeholder — consulta uazapi (await, timeout 2s)
+      const _apiName = await fetchContactNameFromUazapi({
+        token:        payload.token,
+        instanceName,
+        phoneNumber,
+      });
+      senderName  = _apiName ?? _existingName ?? '.';
+      _nameOrigin = _apiName ? 'api_uazapi' : 'placeholder';
+    }
+
     // #region agent log
     fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H2',location:'uazapi-webhook-final.js:nome',message:'NOME_RESOLUCAO_V2',data:{hasWhatsAppName:Boolean(_whatsAppName),isPlaceholder:Boolean(_existingName)&&_isPlaceholderName(_existingName),finalNameLen:String(senderName||'').length,direction},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    console.log('👤 NOME RESOLVIDO:', { 
-      leadName: _existingName, 
-      isPlaceholder: _isPlaceholderName(_existingName),
-      whatsAppName: _whatsAppName, 
-      finalName: senderName 
+    console.log('[webhook] nome resolvido:', {
+      origem:        _nameOrigin,
+      ehPlaceholder: _isPlaceholderName(senderName),
     });
-    
-    // Se o lead existe com nome placeholder E chegou pushName real → atualizar nome.
-    // Fire-and-forget: não bloqueia o fluxo principal do webhook.
-    if (direction === 'inbound' && existingLead?.id && _whatsAppName && _isPlaceholderName(_existingName)) {
-      getSupabaseAdmin()
+
+    // Corrigir lead existente com placeholder quando temos nome válido agora.
+    // Await real + trava de concorrência: só atualiza se o nome ainda for o placeholder observado.
+    if (direction === 'inbound' && existingLead?.id && !_isPlaceholderName(senderName) && _isPlaceholderName(_placeholderVisto)) {
+      const { data: updated, error: nameUpdateError } = await getSupabaseAdmin()
         .from('leads')
-        .update({ name: _whatsAppName, updated_at: new Date().toISOString() })
-        .eq('id', existingLead.id)
-        .then(() => console.log('👤 Nome do lead atualizado de placeholder para real:', _whatsAppName))
-        .catch(err => console.error('⚠️ Falha ao atualizar nome do lead (placeholder→real):', err));
+        .update({ name: senderName, updated_at: new Date().toISOString() })
+        .eq('id',         existingLead.id)
+        .eq('company_id', company.id)
+        .eq('name',       _placeholderVisto)   // trava de concorrência
+        .select('id');
+
+      if (nameUpdateError) {
+        console.warn('[webhook] falha ao corrigir nome do lead existente:', nameUpdateError.message);
+      } else if (!updated || updated.length === 0) {
+        console.log('[webhook] atualização condicional não aplicada');
+      } else {
+        console.log('[webhook] nome do lead existente corrigido');
+      }
     }
 
     // 🎬 PROCESSAR MÍDIA ANTES DE CHAMAR RPC (CORREÇÃO CRÍTICA)
