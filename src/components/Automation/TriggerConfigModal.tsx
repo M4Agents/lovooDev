@@ -21,6 +21,25 @@ interface TriggerConfigModalProps {
   onSave: (triggerId: string, config: Record<string, any>) => void
 }
 
+// Presets padrão de cada gatilho temporal
+const DUE_SOON_PRESETS = [5, 15, 30, 60, 120, 240, 480, 1440]
+const OVERDUE_PRESETS  = [0, 5, 15, 30, 60, 120, 240, 1440]
+
+/** Decompõe minutos em dias / horas / minutos restantes */
+function decomposeMinutes(total: number) {
+  const t = Math.max(0, Math.floor(total))
+  return {
+    days:    Math.floor(t / 1440),
+    hours:   Math.floor((t % 1440) / 60),
+    minutes: t % 60,
+  }
+}
+
+/** Recompõe dias + horas + minutos em total de minutos */
+function composeMinutes(d: number, h: number, m: number) {
+  return Math.max(0, d * 1440 + h * 60 + m)
+}
+
 export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }: TriggerConfigModalProps) {
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
@@ -31,10 +50,36 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
   const { stages, loading: loadingStages } = useFunnelStages(selectedFunnelId)
   const [showKeywordHelp, setShowKeywordHelp] = useState(false)
 
+  // Estados para entrada personalizada de antecedência / tempo após
+  const [showCustomBefore, setShowCustomBefore] = useState(false)
+  const [customBefore, setCustomBefore] = useState({ days: 0, hours: 1, minutes: 0 })
+  const [showCustomAfter,  setShowCustomAfter]  = useState(false)
+  const [customAfter,  setCustomAfter]  = useState({ days: 0, hours: 0, minutes: 0 })
+
   useEffect(() => {
     if (isOpen && trigger) {
       setConfig(trigger.config || {})
       setSelectedFunnelId(trigger.config?.funnelId || '')
+
+      // Detectar se minutes_before é valor customizado (não está nos presets)
+      const mb = trigger.config?.minutes_before
+      if (mb != null && !DUE_SOON_PRESETS.includes(mb)) {
+        setShowCustomBefore(true)
+        setCustomBefore(decomposeMinutes(mb))
+      } else {
+        setShowCustomBefore(false)
+        setCustomBefore({ days: 0, hours: 1, minutes: 0 })
+      }
+
+      // Detectar se minutes_after é valor customizado
+      const ma = trigger.config?.minutes_after
+      if (ma != null && !OVERDUE_PRESETS.includes(ma)) {
+        setShowCustomAfter(true)
+        setCustomAfter(decomposeMinutes(ma))
+      } else {
+        setShowCustomAfter(false)
+        setCustomAfter({ days: 0, hours: 0, minutes: 0 })
+      }
     }
   }, [isOpen, trigger])
 
@@ -839,11 +884,20 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
             {/* ANTECEDÊNCIA */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Antecedência (minutos antes) <span className="text-red-500">*</span>
+                Antecedência <span className="text-red-500">*</span>
               </label>
               <select
-                value={config.minutes_before ?? 60}
-                onChange={(e) => setConfig({ ...config, minutes_before: Number(e.target.value) })}
+                value={showCustomBefore ? 'custom' : (config.minutes_before ?? 60)}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    const current = config.minutes_before ?? 60
+                    setCustomBefore(decomposeMinutes(current))
+                    setShowCustomBefore(true)
+                  } else {
+                    setShowCustomBefore(false)
+                    setConfig({ ...config, minutes_before: Number(e.target.value) })
+                  }
+                }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value={5}>5 minutos</option>
@@ -854,7 +908,48 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 <option value={240}>4 horas</option>
                 <option value={480}>8 horas</option>
                 <option value={1440}>1 dia</option>
+                <option value="custom">Personalizado...</option>
               </select>
+
+              {showCustomBefore && (
+                <div className="mt-3">
+                  <div className="flex gap-2 items-end">
+                    {[
+                      { label: 'dias',  key: 'days',    max: 2  },
+                      { label: 'horas', key: 'hours',   max: 23 },
+                      { label: 'min',   key: 'minutes', max: 59 },
+                    ].map(({ label, key, max }) => (
+                      <div key={key} className="flex flex-col items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={max}
+                          value={customBefore[key as keyof typeof customBefore]}
+                          onChange={(e) => {
+                            const val = Math.min(max, Math.max(0, parseInt(e.target.value) || 0))
+                            const updated = { ...customBefore, [key]: val }
+                            setCustomBefore(updated)
+                            const total = Math.min(2880, composeMinutes(updated.days, updated.hours, updated.minutes))
+                            setConfig({ ...config, minutes_before: total })
+                          }}
+                          className="w-16 border border-gray-300 rounded-md px-2 py-2 text-center focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                    <span className="text-sm text-gray-400 pb-6 ml-1">
+                      = {composeMinutes(customBefore.days, customBefore.hours, customBefore.minutes)} min
+                    </span>
+                  </div>
+                  {composeMinutes(customBefore.days, customBefore.hours, customBefore.minutes) < 1 && (
+                    <p className="text-xs text-red-500 mt-1">O valor mínimo é 1 minuto.</p>
+                  )}
+                  {composeMinutes(customBefore.days, customBefore.hours, customBefore.minutes) > 2880 && (
+                    <p className="text-xs text-red-500 mt-1">Máximo permitido: 2 dias (2.880 min).</p>
+                  )}
+                </div>
+              )}
+
               <p className="text-xs text-gray-500 mt-1">
                 Quantos minutos antes do horário agendado este gatilho deve disparar.
               </p>
@@ -934,8 +1029,17 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 Tempo após o horário <span className="text-red-500">*</span>
               </label>
               <select
-                value={config.minutes_after ?? 0}
-                onChange={(e) => setConfig({ ...config, minutes_after: Number(e.target.value) })}
+                value={showCustomAfter ? 'custom' : (config.minutes_after ?? 0)}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    const current = config.minutes_after ?? 0
+                    setCustomAfter(decomposeMinutes(current))
+                    setShowCustomAfter(true)
+                  } else {
+                    setShowCustomAfter(false)
+                    setConfig({ ...config, minutes_after: Number(e.target.value) })
+                  }
+                }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value={0}>Imediatamente após o horário</option>
@@ -946,7 +1050,45 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 <option value={120}>2 horas após</option>
                 <option value={240}>4 horas após</option>
                 <option value={1440}>1 dia após</option>
+                <option value="custom">Personalizado...</option>
               </select>
+
+              {showCustomAfter && (
+                <div className="mt-3">
+                  <div className="flex gap-2 items-end">
+                    {[
+                      { label: 'dias',  key: 'days',    max: 1  },
+                      { label: 'horas', key: 'hours',   max: 23 },
+                      { label: 'min',   key: 'minutes', max: 59 },
+                    ].map(({ label, key, max }) => (
+                      <div key={key} className="flex flex-col items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={max}
+                          value={customAfter[key as keyof typeof customAfter]}
+                          onChange={(e) => {
+                            const val = Math.min(max, Math.max(0, parseInt(e.target.value) || 0))
+                            const updated = { ...customAfter, [key]: val }
+                            setCustomAfter(updated)
+                            const total = Math.min(1440, composeMinutes(updated.days, updated.hours, updated.minutes))
+                            setConfig({ ...config, minutes_after: total })
+                          }}
+                          className="w-16 border border-gray-300 rounded-md px-2 py-2 text-center focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                    <span className="text-sm text-gray-400 pb-6 ml-1">
+                      = {composeMinutes(customAfter.days, customAfter.hours, customAfter.minutes)} min
+                    </span>
+                  </div>
+                  {composeMinutes(customAfter.days, customAfter.hours, customAfter.minutes) > 1440 && (
+                    <p className="text-xs text-red-500 mt-1">Máximo permitido: 1 dia (1.440 min).</p>
+                  )}
+                </div>
+              )}
+
               <p className="text-xs text-gray-500 mt-1">
                 Quanto tempo após o horário agendado a atividade é considerada vencida. Aplica-se apenas a atividades com status <em>pendente</em>.
               </p>
