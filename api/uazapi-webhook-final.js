@@ -446,6 +446,7 @@ async function processMessage(payload) {
         token:        payload.token,
         instanceName,
         phoneNumber,
+        baseUrl:      payload.BaseUrl,
       });
       senderName  = _apiName ?? _existingName ?? '.';
       _nameOrigin = _apiName ? 'api_uazapi' : 'placeholder';

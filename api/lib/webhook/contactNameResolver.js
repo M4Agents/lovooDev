@@ -36,8 +36,11 @@ export function isValidContactName(str) {
  * Consulta a API uazapi para obter o nome do contato.
  * Chamada aguardada, timeout 2s — falha nunca impede o processamento.
  *
+ * Usa `baseUrl` do payload (ex: https://lovoo.uazapi.com) em vez de URL
+ * hardcoded, para suportar instâncias em servidores próprios.
+ *
  * Contrato com a API (confirmado via `Object.keys(data?.data || {})`):
- *   POST https://api.uazapi.com/chat/GetNameAndImageURL/{instanceName}
+ *   POST {baseUrl}/chat/GetNameAndImageURL/{instanceName}
  *   header: apikey: <token>
  *   body:   { phone: <phoneNumber> }
  *   candidatos lidos: data?.data?.name ?? data?.name
@@ -45,18 +48,21 @@ export function isValidContactName(str) {
  * ⚠  O log de diagnóstico abaixo deve ser removido após validação
  *    em produção com contato de nome conhecido.
  *
- * @param {{ token: string, instanceName: string, phoneNumber: string }} params
+ * @param {{ token: string, instanceName: string, phoneNumber: string, baseUrl?: string }} params
  * @returns {Promise<string|null>} nome real ou null
  */
-export async function fetchContactNameFromUazapi({ token, instanceName, phoneNumber }) {
+export async function fetchContactNameFromUazapi({ token, instanceName, phoneNumber, baseUrl }) {
   if (!token || !instanceName || !phoneNumber) return null;
+
+  // Usa baseUrl do payload; fallback para api.uazapi.com apenas se ausente
+  const apiBase = (baseUrl || 'https://api.uazapi.com').replace(/\/$/, '');
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), 2000);
 
   try {
     const res = await fetch(
-      `https://api.uazapi.com/chat/GetNameAndImageURL/${instanceName}`,
+      `${apiBase}/chat/GetNameAndImageURL/${instanceName}`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', apikey: token },

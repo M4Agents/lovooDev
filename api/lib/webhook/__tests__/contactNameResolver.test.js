@@ -102,6 +102,40 @@ describe('fetchContactNameFromUazapi', () => {
   });
 
   // -------------------------------------------------------------------------
+  // TC-01b: baseUrl do payload é usado em vez de api.uazapi.com
+  // -------------------------------------------------------------------------
+  it('TC-01b: baseUrl personalizado → URL da requisição usa o servidor correto', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { name: 'Ana Lima' } }),
+    });
+
+    await fetchContactNameFromUazapi({
+      token: 'tk', instanceName: 'inst', phoneNumber: '5511',
+      baseUrl: 'https://lovoo.uazapi.com',
+    });
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    expect(calledUrl).toBe('https://lovoo.uazapi.com/chat/GetNameAndImageURL/inst');
+    expect(calledUrl).not.toContain('api.uazapi.com');
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-01c: baseUrl ausente → fallback para api.uazapi.com
+  // -------------------------------------------------------------------------
+  it('TC-01c: sem baseUrl → usa api.uazapi.com como fallback', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { name: 'Carlos' } }),
+    });
+
+    await fetchContactNameFromUazapi({ token: 'tk', instanceName: 'inst', phoneNumber: '5511' });
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    expect(calledUrl).toContain('api.uazapi.com');
+  });
+
+  // -------------------------------------------------------------------------
   // TC-02: senderName era "." no payload; API retorna nome válido
   // -------------------------------------------------------------------------
   it('TC-02: API retorna nome quando payload tinha "." — retorna nome real', async () => {
