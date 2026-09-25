@@ -104,7 +104,7 @@ describe('fetchContactNameFromUazapi', () => {
   // -------------------------------------------------------------------------
   // TC-01b: baseUrl do payload é usado em vez de api.uazapi.com
   // -------------------------------------------------------------------------
-  it('TC-01b: baseUrl personalizado → URL da requisição usa o servidor correto', async () => {
+  it('TC-01b: baseUrl personalizado → URL usa o servidor correto e método GET', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { name: 'Ana Lima' } }),
@@ -115,9 +115,12 @@ describe('fetchContactNameFromUazapi', () => {
       baseUrl: 'https://lovoo.uazapi.com',
     });
 
-    const calledUrl = fetchMock.mock.calls[0][0];
-    expect(calledUrl).toBe('https://lovoo.uazapi.com/chat/GetNameAndImageURL/inst');
+    const [calledUrl, calledOpts] = fetchMock.mock.calls[0];
+    expect(calledUrl).toContain('https://lovoo.uazapi.com/chat/GetNameAndImageURL/inst');
+    expect(calledUrl).toContain('phone=5511');
     expect(calledUrl).not.toContain('api.uazapi.com');
+    expect(calledOpts.method).toBe('GET');
+    expect(calledOpts.body).toBeUndefined();   // GET não tem body
   });
 
   // -------------------------------------------------------------------------

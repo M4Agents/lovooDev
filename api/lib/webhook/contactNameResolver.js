@@ -40,9 +40,9 @@ export function isValidContactName(str) {
  * hardcoded, para suportar instâncias em servidores próprios.
  *
  * Contrato com a API (confirmado via `Object.keys(data?.data || {})`):
- *   POST {baseUrl}/chat/GetNameAndImageURL/{instanceName}
+ *   GET {baseUrl}/chat/GetNameAndImageURL/{instanceName}?phone={phone}
  *   header: apikey: <token>
- *   body:   { phone: <phoneNumber> }
+ *   (POST retorna 405 em lovoo.uazapi.com — endpoint usa GET neste servidor)
  *   candidatos lidos: data?.data?.name ?? data?.name
  *
  * ⚠  O log de diagnóstico abaixo deve ser removido após validação
@@ -61,15 +61,15 @@ export async function fetchContactNameFromUazapi({ token, instanceName, phoneNum
   const tid = setTimeout(() => controller.abort(), 2000);
 
   try {
-    const res = await fetch(
-      `${apiBase}/chat/GetNameAndImageURL/${instanceName}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', apikey: token },
-        body:    JSON.stringify({ phone: phoneNumber }),
-        signal:  controller.signal,
-      }
-    );
+    // Montar URL com phone como query param (GET) — lovoo.uazapi.com retorna 405 para POST
+    const url = new URL(`${apiBase}/chat/GetNameAndImageURL/${instanceName}`);
+    url.searchParams.set('phone', phoneNumber);
+
+    const res = await fetch(url.toString(), {
+      method:  'GET',
+      headers: { 'Content-Type': 'application/json', apikey: token },
+      signal:  controller.signal,
+    });
 
     if (!res.ok) {
       console.warn('[fetchContactName] HTTP', res.status);
