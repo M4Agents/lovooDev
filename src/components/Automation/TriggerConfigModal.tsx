@@ -41,7 +41,12 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
   // Buscar tipos de atividade dinâmicos quando o modal abrir com gatilho de calendário
   useEffect(() => {
     const isCalendarTrigger =
-      trigger?.type === 'calendar.activity_due_soon' ||
+      trigger?.type === 'calendar.activity_created'    ||
+      trigger?.type === 'calendar.activity_completed'  ||
+      trigger?.type === 'calendar.activity_cancelled'  ||
+      trigger?.type === 'calendar.activity_rescheduled' ||
+      trigger?.type === 'calendar.activity_assigned'   ||
+      trigger?.type === 'calendar.activity_due_soon'   ||
       trigger?.type === 'calendar.activity_overdue'
     if (!isOpen || !isCalendarTrigger || !company?.id) return
 
@@ -758,6 +763,71 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 onChange={(e) => setConfig({ ...config, time: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+          </div>
+        )
+
+      case 'calendar.activity_created':
+      case 'calendar.activity_completed':
+      case 'calendar.activity_cancelled':
+      case 'calendar.activity_rescheduled':
+      case 'calendar.activity_assigned':
+        return (
+          <div className="space-y-4">
+
+            {/* TIPO DE ATIVIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo de Atividade
+              </label>
+              <select
+                value={config.activity_type || ''}
+                onChange={(e) => setConfig({ ...config, activity_type: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer tipo</option>
+                {activityTypes.length > 0 ? (
+                  activityTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="call">Ligação</option>
+                    <option value="meeting">Reunião</option>
+                    <option value="email">E-mail</option>
+                    <option value="task">Tarefa</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="demo">Demo</option>
+                    <option value="other">Outro</option>
+                  </>
+                )}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer tipo de atividade.
+              </p>
+            </div>
+
+            {/* PRIORIDADE */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prioridade
+              </label>
+              <select
+                value={config.priority || ''}
+                onChange={(e) => setConfig({ ...config, priority: e.target.value || undefined })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Qualquer prioridade</option>
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para disparar em qualquer prioridade.
+              </p>
             </div>
           </div>
         )
