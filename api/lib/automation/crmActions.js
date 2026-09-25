@@ -98,6 +98,82 @@ async function moveOpportunity(config, context, supabase) {
 // ---------------------------------------------------------------------------
 // Ação: atualizar campos do lead
 // ---------------------------------------------------------------------------
+// Helpers: validação de nome e resolução de variáveis para update_lead
+// ---------------------------------------------------------------------------
+
+/**
+ * Retorna true se a string contém pelo menos uma letra Unicode.
+ * Aceita: João, Ana-Maria, D'Ávila.
+ * Rejeita: ".", "...", "!!!", "???", "-", " ".
+ */
+function isValidName(str) {
+  return /\p{L}/u.test((str || '').trim())
+}
+
+/**
+ * Resolve os valores de `fields` substituindo placeholders `{{varName}}`
+ * pelos valores encontrados em `contextVariables` (context.variables).
+ *
+ * Regras:
+ *   - Tipo não-string → preserva sem alteração
+ *   - Placeholder {{varName}} → substituído; se variável ausente/vazia → campo ignorado
+ *   - Marcador residual {{/}} após substituição → campo ignorado (malformed_placeholder)
+ *   - Campo `name` → validado com isValidName(); inválido → campo ignorado
+ *
+ * @param {Record<string, any>} fields
+ * @param {Record<string, any>} contextVariables
+ * @returns {{ resolved: Record<string, any>, skipped: Record<string, string> }}
+ */
+function resolveFields(fields, contextVariables) {
+  const resolved = {}
+  const skipped  = {}
+
+  for (const [key, value] of Object.entries(fields)) {
+    // Tipo não textual: preserva sem alteração
+    if (typeof value !== 'string') {
+      resolved[key] = value
+      continue
+    }
+
+    let expandedValue = value
+
+    // Passo 1: expandir placeholders, se presentes
+    if (value.includes('{{')) {
+      let hasUnresolved = false
+
+      for (const [, varName] of value.matchAll(/\{\{(\w+)\}\}/g)) {
+        const varValue = contextVariables?.[varName]
+        if (varValue === undefined || varValue === null || String(varValue).trim() === '') {
+          skipped[key] = `variable_not_found:${varName}`
+          hasUnresolved = true
+          break
+        }
+        expandedValue = expandedValue.replaceAll(`{{${varName}}}`, String(varValue))
+      }
+
+      if (hasUnresolved) continue
+    }
+
+    // Passo 2: rejeitar marcador residual — FORA do bloco de interpolação,
+    // cobre literais malformados como "Maria }}" e expansões parciais
+    if (/\{\{|\}\}/.test(expandedValue)) {
+      skipped[key] = 'malformed_placeholder'
+      continue
+    }
+
+    // Passo 3: validação de nome — aplica-se a literais E a valores resolvidos
+    if (key === 'name' && !isValidName(expandedValue)) {
+      skipped[key] = 'name_invalid'
+      continue
+    }
+
+    resolved[key] = expandedValue
+  }
+
+  return { resolved, skipped }
+}
+
+// ---------------------------------------------------------------------------
 
 async function updateLead(config, context, supabase) {
   const leadId = await resolveLeadId(context, supabase)
@@ -108,14 +184,46 @@ async function updateLead(config, context, supabase) {
     throw new Error('Nenhum campo configurado para atualização do lead')
   }
 
-  const { error } = await supabase
+  const { resolved, skipped } = resolveFields(fields, context.variables)
+
+  if (Object.keys(skipped).length > 0) {
+    console.warn('[crmActions][update_lead] campos ignorados:', JSON.stringify(skipped))
+  }
+
+  if (Object.keys(resolved).length === 0) {
+    return {
+      executed: false,
+      action:   'update_lead',
+      leadId,
+      skipped,
+      reason:   'all_fields_skipped',
+    }
+  }
+
+  const { data: updated, error } = await supabase
     .from('leads')
-    .update({ ...fields, updated_at: new Date().toISOString() })
+    .update({ ...resolved, updated_at: new Date().toISOString() })
     .eq('id', Number(leadId))
     .eq('company_id', context.companyId)
+    .select('id')
 
+  // 1. Erro de banco (query rejeitada pelo Supabase/RLS)
   if (error) throw new Error(`Erro ao atualizar lead: ${error.message}`)
-  return { executed: true, action: 'update_lead', leadId, fields: Object.keys(fields) }
+
+  // 2. Query OK mas sem linhas — lead não existe ou pertence a outra empresa
+  if (!updated || updated.length === 0) {
+    throw new Error(
+      `update_lead: lead ${leadId} não encontrado ou não pertence à empresa ${context.companyId}`
+    )
+  }
+
+  return {
+    executed: true,
+    action:   'update_lead',
+    leadId,
+    fields:   Object.keys(resolved),
+    skipped,
+  }
 }
 
 // ---------------------------------------------------------------------------

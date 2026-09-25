@@ -20,6 +20,47 @@ import { supabase } from '../../lib/supabase'
 import ActionTypeSelector, { ACTION_TYPES } from './ActionTypeSelector'
 import { CreateActivityForm, UpdateActivityForm, CompleteActivityForm, CancelActivityForm, RescheduleActivityForm } from './ActivityForms'
 import { companyOwnAgentsApi, type CompanyAgent } from '../../services/companyOwnAgentsApi'
+import { useVariables, type Variable } from '../../hooks/useVariables'
+import VariableAutocomplete from './VariableAutocomplete'
+
+/**
+ * Extrai variáveis definidas pelos nós do flow:
+ *   - execute_agent → config.saveToVariable   (ex: "nome_extraido")
+ *   - delay (time_or_response) → config.response_variable (ex: "resposta_lead")
+ * Retorna lista sem duplicatas (chave única), exibida na categoria "sistema".
+ */
+function getFlowVariables(nodes: Node[]): Variable[] {
+  const seen = new Map<string, Variable>()
+  for (const node of nodes) {
+    const cfg = node.data?.config
+    if (!cfg) continue
+
+    if (node.type === 'execute_agent') {
+      const varName = (cfg.saveToVariable ?? '').trim()
+      if (varName && !seen.has(varName)) {
+        seen.set(varName, {
+          key:         varName,
+          label:       `Agente → ${varName}`,
+          category:    'sistema',
+          description: 'Resultado do nó Execute_agent (salvo em context.variables)',
+        })
+      }
+    }
+
+    if (node.type === 'delay' && cfg.wait_mode === 'time_or_response') {
+      const varName = (cfg.response_variable ?? '').trim()
+      if (varName && !seen.has(varName)) {
+        seen.set(varName, {
+          key:         varName,
+          label:       `Resposta → ${varName}`,
+          category:    'sistema',
+          description: 'Resposta do lead capturada pelo nó Delay (aguardar resposta)',
+        })
+      }
+    }
+  }
+  return Array.from(seen.values())
+}
 
 interface NodeConfigPanelProps {
   selectedNode: Node | null
@@ -32,6 +73,15 @@ interface NodeConfigPanelProps {
 export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, onSave }: NodeConfigPanelProps) {
   const [config, setConfig] = useState<any>(selectedNode?.data?.config || {})
   const { company } = useAuth()
+
+  // Variáveis disponíveis para autocomplete no campo Nome de update_lead
+  const { variables: systemVariables } = useVariables(company?.id || '')
+  // Variáveis dinâmicas declaradas pelos nós do próprio flow (Execute_agent, Delay)
+  const flowVariables = getFlowVariables(nodes ?? [])
+  // flowVariables primeiro → aparecem no topo da categoria "sistema"
+  const variables = [...flowVariables, ...systemVariables.filter(v => !flowVariables.some(fv => fv.key === v.key))]
+  const [showNameAutocomplete, setShowNameAutocomplete] = useState(false)
+  const [nameFilter, setNameFilter] = useState('')
   
   const [tags, setTags] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
@@ -687,16 +737,43 @@ export default function NodeConfigPanel({ selectedNode, flowId, nodes, onClose, 
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Nome
                       </label>
-                      <input
-                        type="text"
-                        value={config.fields?.name || ''}
-                        onChange={(e) => setConfig({ 
-                          ...config, 
-                          fields: { ...config.fields, name: e.target.value }
-                        })}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        placeholder="Nome do lead"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={config.fields?.name || ''}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setConfig({ ...config, fields: { ...config.fields, name: val } })
+                            // Abrir autocomplete ao digitar {{
+                            const match = val.match(/\{\{([^}]*)$/)
+                            if (match) {
+                              setNameFilter(match[1] || '')
+                              setShowNameAutocomplete(true)
+                            } else {
+                              setShowNameAutocomplete(false)
+                            }
+                          }}
+                          onBlur={() => setTimeout(() => setShowNameAutocomplete(false), 150)}
+                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          placeholder="Nome do lead ou {{nome_extraido}}"
+                        />
+                        {showNameAutocomplete && (
+                          <VariableAutocomplete
+                            variables={variables}
+                            filter={nameFilter}
+                            onSelect={(key) => {
+                              const current = config.fields?.name || ''
+                              // Substituir o {{... incompleto pelo token completo
+                              const newValue = current.replace(/\{\{[^}]*$/, `{{${key}}}`)
+                              setConfig({ ...config, fields: { ...config.fields, name: newValue } })
+                              setShowNameAutocomplete(false)
+                            }}
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        💡 Digite <code className="bg-gray-100 px-1 rounded">{'{{' }</code> para inserir uma variável
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
