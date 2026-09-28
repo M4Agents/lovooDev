@@ -930,6 +930,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -1790,71 +1791,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             </div>
           )}
 
-          {/* ── Alerta de Lead Duplicado ─────────────────────────────────── */}
-          {duplicateAlert && (
-            <div className={`rounded-lg border p-4 ${
-              duplicateAlert.type === 'restricted'
-                ? 'bg-red-50 border-red-200'
-                : 'bg-amber-50 border-amber-200'
-            }`}>
-              <div className="flex gap-3">
-                {duplicateAlert.type === 'restricted' ? (
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${
-                    duplicateAlert.type === 'restricted' ? 'text-red-800' : 'text-amber-800'
-                  }`}>
-                    Lead já cadastrado
-                  </p>
-                  <p className={`text-sm mt-1 ${
-                    duplicateAlert.type === 'restricted' ? 'text-red-700' : 'text-amber-700'
-                  }`}>
-                    Já existe o lead <strong>"{duplicateAlert.existingLead.name}"</strong> com
-                    este {duplicateAlert.matchedBy === 'phone' ? 'telefone' : 'e-mail'}.
-                    {duplicateAlert.responsibleName
-                      ? <> Atribuído a <strong>{duplicateAlert.responsibleName}</strong>.</>
-                      : ' Sem responsável definido.'
-                    }
-                  </p>
-                  {duplicateAlert.type === 'restricted' ? (
-                    <p className="text-sm text-red-700 mt-1">
-                      Você não tem acesso a este lead. Entre em contato com o administrador do sistema para obter autorização ou solicitar a atribuição.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-amber-700 mt-1">
-                      Deseja abrir o cadastro existente para edição?
-                    </p>
-                  )}
-                  <div className="flex gap-2 mt-3">
-                    {duplicateAlert.type === 'unrestricted' && (
-                      <button
-                        type="button"
-                        onClick={handleEditDuplicate}
-                        disabled={loading}
-                        className="px-3 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50"
-                      >
-                        {loading ? 'Carregando...' : 'Sim, abrir para edição'}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setDuplicateAlert(null)}
-                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        duplicateAlert.type === 'restricted'
-                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                      }`}
-                    >
-                      {duplicateAlert.type === 'restricted' ? 'Entendi' : 'Não, cancelar'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Botões */}
           <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
@@ -1877,5 +1813,105 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         </form>
       </div>
     </div>
+
+    {/* ── Popup de Lead Duplicado ──────────────────────────────────────── */}
+    {duplicateAlert && (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+
+          {/* Cabeçalho */}
+          <div className={`px-6 py-5 rounded-t-xl border-b ${
+            duplicateAlert.type === 'restricted'
+              ? 'bg-red-50 border-red-200'
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              {duplicateAlert.type === 'restricted'
+                ? <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
+                : <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0" />
+              }
+              <h3 className={`text-base font-semibold ${
+                duplicateAlert.type === 'restricted' ? 'text-red-800' : 'text-amber-800'
+              }`}>
+                Lead já cadastrado
+              </h3>
+            </div>
+          </div>
+
+          {/* Corpo */}
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-gray-700">
+              Já existe um lead com este{' '}
+              <strong>{duplicateAlert.matchedBy === 'phone' ? 'telefone' : 'e-mail'}</strong>{' '}
+              na sua base:
+            </p>
+
+            <div className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 space-y-1.5">
+              <p className="text-sm font-semibold text-gray-900">{duplicateAlert.existingLead.name}</p>
+              {duplicateAlert.existingLead.phone && (
+                <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                  <Phone className="w-3 h-3 flex-shrink-0" />
+                  {duplicateAlert.existingLead.phone}
+                </p>
+              )}
+              {duplicateAlert.existingLead.email && (
+                <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                  <Mail className="w-3 h-3 flex-shrink-0" />
+                  {duplicateAlert.existingLead.email}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 flex items-center gap-1.5 pt-0.5">
+                <User className="w-3 h-3 flex-shrink-0" />
+                {duplicateAlert.responsibleName
+                  ? <><strong>Responsável:</strong>&nbsp;{duplicateAlert.responsibleName}</>
+                  : 'Sem responsável definido'
+                }
+              </p>
+            </div>
+
+            {duplicateAlert.type === 'restricted' ? (
+              <p className="text-sm text-red-600">
+                Você não tem acesso a este lead. Entre em contato com o administrador para solicitar a atribuição.
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600">
+                Deseja abrir o cadastro existente para edição?
+              </p>
+            )}
+          </div>
+
+          {/* Rodapé */}
+          <div className={`px-6 py-4 rounded-b-xl border-t flex justify-end gap-2 ${
+            duplicateAlert.type === 'restricted'
+              ? 'border-red-100 bg-red-50'
+              : 'border-amber-100 bg-amber-50'
+          }`}>
+            {duplicateAlert.type === 'unrestricted' && (
+              <button
+                type="button"
+                onClick={handleEditDuplicate}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Carregando...' : 'Sim, abrir para edição'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDuplicateAlert(null)}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                duplicateAlert.type === 'restricted'
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {duplicateAlert.type === 'restricted' ? 'Entendi' : 'Não, cancelar'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    )}
+    </>
   );
 };
