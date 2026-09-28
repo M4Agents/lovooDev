@@ -45,6 +45,7 @@ import {
 }                                      from '../../lib/meta-whatsapp/config.js';
 import { decryptMetaToken }            from '../../lib/meta-whatsapp/tokenCrypto.js';
 import { downloadAndStoreInboundMedia } from '../../lib/meta-whatsapp/inboundMediaProcessor.js';
+import { MEDIA_SIZE_LIMITS }           from '../../lib/meta-whatsapp/mediaConstants.js';
 
 // CRÍTICO: desabilitar body parser do Vercel — obrigatório para HMAC validation.
 // Qualquer re-serialização do body invalida a assinatura.
@@ -206,10 +207,10 @@ async function handlePost(req, res) {
   const entries = Array.isArray(payload.entry) ? payload.entry : [];
 
   // Marcador de falha transiente para batch safety (INBOUND-DOC-C2).
-  // Erros transientes de DOCUMENT marcam este flag e continuam processando
+  // Erros transientes de DOCUMENT/IMAGE marcam este flag e continuam processando
   // demais eventos do payload, em vez de retornar 500 imediatamente.
   // Meta reenvia o payload inteiro em caso de 500 — por isso todos os ramos
-  // são idempotentes (TEXT via RPC, DOCUMENT via source_ref + ON CONFLICT,
+  // são idempotentes (TEXT via RPC, DOCUMENT/IMAGE via source_ref + ON CONFLICT,
   // statuses via TRANSITION_MATRIX).
   let hasTransientFailure = false;
 
@@ -334,7 +335,7 @@ async function handlePost(req, res) {
         }
 
         // B.3 Contact name — lookup compartilhado (pure, sem side effects).
-        // Extraído antes do ramo de tipo para reutilização em TEXT e DOCUMENT.
+        // Extraído antes do ramo de tipo para reutilização em TEXT, DOCUMENT e IMAGE.
         // contacts[] é opcional no payload Meta; contact_name = null é válido.
         // Nunca logar: message.from, wa_id, contact_name, body.
         const matchedContact = contacts.find(c => c.wa_id === message.from);
@@ -386,143 +387,55 @@ async function handlePost(req, res) {
 
         } else if (message.type === 'document') {
           // ── B.5.2 DOCUMENT inbound (INBOUND-DOC-C2) ──────────────────────
-
-          // DOC.1 — Validar document.id (media_id para Graph API)
-          // mime_type e sha256 do payload NÃO são usados como autoridade —
-          // bytes reais determinam o MIME (inboundMediaProcessor / fileTypeFromBlob).
+          // mime_type e sha256 do payload NÃO são autoridade — bytes reais.
           const mediaId = message.document?.id;
           if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
-            // Definitivo — payload inválido; retry da Meta não vai melhorar.
             console.log('[meta/webhook] event_type=inbound_document outcome=invalid_media_id');
             continue;
           }
+          const docTransient = await processInboundMediaMessage({
+            svc,
+            instance,
+            message,
+            contactName,
+            providerTimestamp,
+            mediaId,
+            expectedMediaType: 'DOCUMENT',
+            rpcMessageType:    'document',
+            hintFilename:      message.document.filename,
+            maxBytes:          MAX_INBOUND_DOCUMENT_BYTES,
+            logEvent:          'inbound_document',
+          });
+          if (docTransient) hasTransientFailure = true;
 
-          // DOC.2 — Early dedupe: verificar se wamid já foi persistido.
-          // Executado ANTES de decrypt/Graph/Storage para economizar I/O em replays.
-          // A RPC permanece a autoridade final contra race condition.
-          const { data: existingMsg, error: dedupeErr } = await svc
-            .from('meta_messages')
-            .select('id')
-            .eq('instance_id', instance.id)
-            .eq('meta_message_id', message.id)
-            .maybeSingle();
-
-          if (dedupeErr) {
-            // Erro de DB ao verificar dedupe — tratar como transiente.
-            // Não assumir que a mensagem existe ou não existe.
-            console.error('[meta/webhook] event_type=inbound_document outcome=dedupe_db_error');
-            hasTransientFailure = true;
+        } else if (message.type === 'image') {
+          // ── B.5.3 IMAGE inbound — mesmo pipeline DOCUMENT, parâmetros IMAGE.
+          // caption do payload é IGNORADO neste MVP (paridade DOCUMENT; body=NULL na RPC).
+          // mime_type e sha256 do payload NÃO são autoridade.
+          // filename: IMAGE oficial não traz filename — processor usa inbound.<ext>.
+          const mediaId = message.image?.id;
+          if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
+            console.log('[meta/webhook] event_type=inbound_image outcome=invalid_media_id');
             continue;
           }
-
-          if (existingMsg) {
-            // Já persistido — skip sem nenhum I/O adicional.
-            console.log('[meta/webhook] event_type=inbound_document outcome=already_persisted');
-            continue;
-          }
-
-          // DOC.3 — Lookup de credencial e decrypt (lazy — somente após dedupe miss).
-          // Fonte canônica: meta_whatsapp_credentials (tabela 1:1 com meta_whatsapp_instances).
-          // instance.id: sempre do banco — nunca do payload.
-          // NUNCA logar ciphertext nem plainToken.
-          const { data: credential, error: credErr } = await svc
-            .from('meta_whatsapp_credentials')
-            .select('access_token_enc')
-            .eq('instance_id', instance.id)
-            .maybeSingle();
-
-          if (credErr || !credential?.access_token_enc) {
-            // Configuração operacional inválida ou ausente — 200 skip para evitar retry storm.
-            // Retry da Meta não resolve configuração ausente/corrompida.
-            // NUNCA logar ciphertext, plainToken ou conteúdo do erro.
-            console.error('[meta/webhook] event_type=inbound_document outcome=credential_unavailable');
-            continue;
-          }
-
-          let plainToken;
-          try {
-            plainToken = decryptMetaToken(credential.access_token_enc);
-          } catch {
-            // NUNCA logar ciphertext, plainToken ou conteúdo do erro de decrypt.
-            console.error('[meta/webhook] event_type=inbound_document outcome=credential_unavailable');
-            continue;
-          }
-
-          // DOC.4 — Download + validação + persistência do asset (inboundMediaProcessor)
-          // Responsabilidades internas: anti-SSRF, redirect controlado, MIME authority
-          // via bytes, Storage, CML com source_ref idempotente.
-          let mediaResult;
-          try {
-            mediaResult = await downloadAndStoreInboundMedia({
-              svc,
-              token:             plainToken,
-              companyId:         instance.company_id,
-              mediaId:           mediaId.trim(),
-              wamid:             message.id,
-              expectedMediaType: 'DOCUMENT',
-              hintFilename:      message.document.filename,   // hint — não confiável
-              maxBytes:          MAX_INBOUND_DOCUMENT_BYTES,
-            });
-          } catch (err) {
-            const code = err?.code;
-
-            // Erros definitivos — arquivo inválido/grande: 200 skip (retry não muda bytes)
-            if (
-              code === 'inbound_media_type_mismatch' ||
-              code === 'inbound_media_too_large'     ||
-              code === 'inbound_media_invalid_input'
-            ) {
-              console.log('[meta/webhook] event_type=inbound_document outcome=%s', code);
-              continue;
-            }
-
-            // media_download_url_invalid — DEBT-DOMAIN-ALLOWLIST-C.
-            // Classificado como transiente: allowlist pode precisar de atualização.
-            // NÃO logar URL nem hostname — não disponível de forma segura neste nível.
-            // NÃO ampliar allowlist por suposição — resolver com evidência real em E2E.
-            if (code === 'media_download_url_invalid') {
-              console.error('[meta/webhook] event_type=inbound_document outcome=media_download_url_invalid');
-              hasTransientFailure = true;
-              continue;
-            }
-
-            // Todos os demais erros: transientes (rede, Graph, Storage, DB)
-            console.error('[meta/webhook] event_type=inbound_document outcome=%s', code ?? 'unknown_media_error');
-            hasTransientFailure = true;
-            continue;
-          }
-
-          // DOC.5 — RPC de persistência da mensagem de mídia
-          // company_id e instance_id: sempre do banco, nunca do payload.
-          const { data: docRpcData, error: docRpcErr } = await svc.rpc(
-            'process_meta_inbound_media_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_media_asset_id:     mediaResult.assetId,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-              p_message_type:       'document',
-            },
-          );
-
-          if (docRpcErr) {
-            console.error('[meta/webhook] event_type=inbound_document outcome=rpc_error');
-            hasTransientFailure = true;
-            continue;
-          }
-
-          const docCreated = docRpcData?.created === true;
-          // Log sanitizado — somente booleanos seguros; sem token, URL, filename, from.
-          console.log('[meta/webhook] event_type=inbound_document created=%s reused_asset=%s',
-            docCreated, mediaResult.reused);
+          const imgTransient = await processInboundMediaMessage({
+            svc,
+            instance,
+            message,
+            contactName,
+            providerTimestamp,
+            mediaId,
+            expectedMediaType: 'IMAGE',
+            rpcMessageType:    'image',
+            hintFilename:      undefined,
+            maxBytes:          MEDIA_SIZE_LIMITS.IMAGE,
+            logEvent:          'inbound_image',
+          });
+          if (imgTransient) hasTransientFailure = true;
 
         } else {
-          // ── B.5.3 Tipos não suportados (image, video, audio, sticker, etc.) ────
-          // IMAGE e VIDEO: reservados para extensão futura (C3+).
-          // Ignorar silenciosamente — sem criar conversa ou incrementar unread.
+          // ── B.5.4 Tipos não suportados (video, audio, sticker, etc.) ────
+          // VIDEO: reservado para extensão futura. IMAGE saiu deste ramo.
           console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
           continue;
         }
@@ -530,7 +443,7 @@ async function handlePost(req, res) {
     }
   }
 
-  // Retornar 500 se houve falha transiente em algum DOCUMENT do payload.
+  // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE do payload.
   // Meta reenviará o payload inteiro — idempotência garante segurança do retry.
   if (hasTransientFailure) {
     return res.status(500).json({ error: 'Internal error' });
@@ -542,6 +455,128 @@ async function handlePost(req, res) {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Pipeline compartilhado DOCUMENT + IMAGE inbound.
+ *
+ * Preserva a semântica validada do ramo DOCUMENT:
+ *   dedupe wamid → credencial lazy (instance.id do banco) → processor existente
+ *   → RPC process_meta_inbound_media_message (body=NULL; caption fora do MVP).
+ *
+ * NÃO baixa mídia, NÃO chama Graph, NÃO chama RPC se o caller já rejeitou mediaId.
+ * NÃO processa VIDEO / AUDIO / STICKER.
+ *
+ * @returns {Promise<boolean>} true = falha transiente (caller marca hasTransientFailure)
+ */
+async function processInboundMediaMessage({
+  svc,
+  instance,
+  message,
+  contactName,
+  providerTimestamp,
+  mediaId,
+  expectedMediaType,
+  rpcMessageType,
+  hintFilename,
+  maxBytes,
+  logEvent,
+}) {
+  // Early dedupe: ANTES de decrypt/Graph/Storage. RPC é autoridade final contra race.
+  const { data: existingMsg, error: dedupeErr } = await svc
+    .from('meta_messages')
+    .select('id')
+    .eq('instance_id', instance.id)
+    .eq('meta_message_id', message.id)
+    .maybeSingle();
+
+  if (dedupeErr) {
+    console.error('[meta/webhook] event_type=%s outcome=dedupe_db_error', logEvent);
+    return true;
+  }
+
+  if (existingMsg) {
+    console.log('[meta/webhook] event_type=%s outcome=already_persisted', logEvent);
+    return false;
+  }
+
+  // Credencial lazy — fonte canônica: meta_whatsapp_credentials.
+  // instance.id: sempre do banco — nunca do payload.
+  const { data: credential, error: credErr } = await svc
+    .from('meta_whatsapp_credentials')
+    .select('access_token_enc')
+    .eq('instance_id', instance.id)
+    .maybeSingle();
+
+  if (credErr || !credential?.access_token_enc) {
+    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
+    return false;
+  }
+
+  let plainToken;
+  try {
+    plainToken = decryptMetaToken(credential.access_token_enc);
+  } catch {
+    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
+    return false;
+  }
+
+  let mediaResult;
+  try {
+    mediaResult = await downloadAndStoreInboundMedia({
+      svc,
+      token:             plainToken,
+      companyId:         instance.company_id,
+      mediaId:           mediaId.trim(),
+      wamid:             message.id,
+      expectedMediaType,
+      hintFilename,
+      maxBytes,
+    });
+  } catch (err) {
+    const code = err?.code;
+
+    if (
+      code === 'inbound_media_type_mismatch' ||
+      code === 'inbound_media_too_large'     ||
+      code === 'inbound_media_invalid_input'
+    ) {
+      console.log('[meta/webhook] event_type=%s outcome=%s', logEvent, code);
+      return false;
+    }
+
+    if (code === 'media_download_url_invalid') {
+      console.error('[meta/webhook] event_type=%s outcome=media_download_url_invalid', logEvent);
+      return true;
+    }
+
+    console.error('[meta/webhook] event_type=%s outcome=%s', logEvent, code ?? 'unknown_media_error');
+    return true;
+  }
+
+  const { data: mediaRpcData, error: mediaRpcErr } = await svc.rpc(
+    'process_meta_inbound_media_message',
+    {
+      p_company_id:         instance.company_id,
+      p_instance_id:        instance.id,
+      p_wa_id:              message.from,
+      p_meta_message_id:    message.id,
+      p_media_asset_id:     mediaResult.assetId,
+      p_contact_name:       contactName,
+      p_provider_timestamp: providerTimestamp,
+      p_message_type:       rpcMessageType,
+    },
+  );
+
+  if (mediaRpcErr) {
+    console.error('[meta/webhook] event_type=%s outcome=rpc_error', logEvent);
+    return true;
+  }
+
+  const created = mediaRpcData?.created === true;
+  console.log('[meta/webhook] event_type=%s created=%s reused_asset=%s',
+    logEvent, created, mediaResult.reused);
+  return false;
+}
 
 /**
  * Consulta a matriz de transições explícita.

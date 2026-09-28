@@ -1115,11 +1115,12 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // INBOUND-08: type image → ignorado, RPC não chamada
+  // INBOUND-08: type image sem image.id → fail-closed (não é type_skipped)
+  // IMAGE com id válido é coberta em W-IMG-01.
   // ---------------------------------------------------------------------------
-  it('INBOUND-08: message.type=image → ignorado + HTTP 200 + RPC não chamada', async () => {
+  it('INBOUND-08: message.type=image sem image.id → skip 200; zero processor/RPC', async () => {
     const msg = makeInboundMessage({ type: 'image', body: undefined });
-    delete msg.text; // imagem não tem text
+    delete msg.text;
     const payload = makeInboundPayload({ messages: [msg] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
@@ -1129,6 +1130,8 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
   });
 
@@ -1773,17 +1776,14 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(res._status).toBe(500);
   });
 
-  // W-DOC-14 — image/video: type_skipped, zero processor ——————————————————————
-  it('W-DOC-14 | type=image e type=video → type_skipped; zero downloadAndStoreInboundMedia', async () => {
-    const imageMsg = { id: 'wamid_img_01', from: FAKE_WA_ID, type: 'image',
-                       image: { id: '111', mime_type: 'image/jpeg' }, timestamp: FAKE_TIMESTAMP };
+  // W-DOC-14 — VIDEO continua type_skipped; IMAGE saiu deste ramo ——————————————
+  it('W-DOC-14 | type=video → type_skipped; zero downloadAndStoreInboundMedia', async () => {
     const videoMsg = { id: 'wamid_vid_01', from: FAKE_WA_ID, type: 'video',
                        video: { id: '222', mime_type: 'video/mp4' }, timestamp: FAKE_TIMESTAMP };
 
-    const payload = makeInboundPayload({ messages: [imageMsg, videoMsg] });
+    const payload = makeInboundPayload({ messages: [videoMsg] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
-    // Somente instance lookup (sem dedupe, sem download, sem RPC)
     mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
 
     const req = makePostReq();
@@ -1899,5 +1899,130 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(body).not.toContain('fbsbx');
     expect(body).not.toContain('http');
     expect(body).not.toContain('token');
+  });
+});
+
+// =============================================================================
+// Helpers — IMAGE inbound
+// =============================================================================
+
+function makeImageMessage({
+  id        = FAKE_INBOUND_WAMID,
+  from      = FAKE_WA_ID,
+  timestamp = FAKE_TIMESTAMP,
+  imageId   = FAKE_MEDIA_ID,
+  mime_type = 'image/jpeg',
+  caption   = 'caption_should_be_ignored_in_mvp',
+} = {}) {
+  const msg = { id, from, type: 'image', timestamp };
+  if (imageId !== null) {
+    msg.image = { id: imageId, mime_type, sha256: 'sha256_fake_image_for_tests', caption };
+  }
+  return msg;
+}
+
+function makeImagePayload({
+  messages = [makeImageMessage()],
+  contacts = [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+  statuses = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  return makeInboundPayload({ messages, contacts, statuses, phoneId });
+}
+
+// =============================================================================
+// W-IMG-01..04 — POST inbound IMAGE
+// =============================================================================
+
+describe('POST — inbound IMAGE', () => {
+  it('W-IMG-01 | caminho feliz: image válida → processor IMAGE, RPC image, 200', async () => {
+    const payload = makeImagePayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
+    expect(processorArgs.companyId).toBe(FAKE_COMPANY_ID);
+    expect(processorArgs.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(processorArgs.expectedMediaType).toBe('IMAGE');
+    expect(processorArgs.maxBytes).toBe(5 * 1024 * 1024);
+    expect(processorArgs.hintFilename).toBeUndefined();
+    expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
+
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
+    expect(rpcName).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs).toMatchObject({
+      p_company_id:     FAKE_COMPANY_ID,
+      p_instance_id:    FAKE_INSTANCE_ID,
+      p_media_asset_id: FAKE_ASSET_ID,
+      p_message_type:   'image',
+    });
+    expect(rpcArgs).not.toHaveProperty('p_body');
+
+    const credCalls = mockSvc.from.mock.calls.filter(([t]) => t === 'meta_whatsapp_credentials');
+    expect(credCalls.length).toBe(1);
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
+  });
+
+  it('W-IMG-02 | image.id ausente → skip 200; zero decrypt/download/RPC', async () => {
+    const payload = makeImagePayload({ messages: [makeImageMessage({ imageId: null })] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-IMG-03 | TEXT + IMAGE no mesmo payload → ambos processados; 200', async () => {
+    const textMsg = makeInboundMessage({ id: 'wamid_text_img_01', body: 'Olá' });
+    const imgMsg  = makeImageMessage({ id: 'wamid_img_ok_01' });
+    const payload = makeInboundPayload({ messages: [textMsg, imgMsg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+
+    mockSvc.rpc
+      .mockResolvedValueOnce({ data: { created: true }, error: null })
+      .mockResolvedValueOnce({ data: { created: true }, error: null });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('image');
+  });
+
+  it('W-IMG-04 | DOCUMENT continua no pipeline após IMAGE ser suportada', async () => {
+    const payload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
+    expect(processorArgs.expectedMediaType).toBe('DOCUMENT');
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
   });
 });

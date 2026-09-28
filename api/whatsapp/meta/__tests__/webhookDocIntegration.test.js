@@ -23,10 +23,12 @@
 //   D-01 — caminho feliz: webhook + processor juntos → asset criado, RPC OK
 //   D-02 — source_ref reuse: CML precheck HIT, early dedupe MISS → asset reutilizado
 //   D-03 — storage failure propagation → 500 transiente, zero RPC, res sanitizada
+//   D-IMG-01 — IMAGE JPEG: processor real + Storage mock + RPC image
+//   D-IMG-02 — IMAGE source_ref reuse (idempotência do processor)
 //
 // NÃO DUPLICA:
 //   batch safety, document.id ausente, too_large, type_mismatch, credential_missing,
-//   metadata_failure, download_timeout, image/video skip, url_invalid — cobertos em W-DOC.
+//   metadata_failure, download_timeout, video skip, url_invalid — cobertos em W-DOC.
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -130,6 +132,13 @@ const FAKE_INSTANCE = {
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34]); // %PDF-1.4
 const PDF_BLOB  = new Blob([PDF_MAGIC], { type: 'application/pdf' });
 
+// JPEG mínimo (JFIF) — fileTypeFromBlob real detecta image/jpeg pelos magic bytes.
+const JPEG_MAGIC = new Uint8Array([
+  0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+  0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+]);
+const JPEG_BLOB = new Blob([JPEG_MAGIC]); // sem type — paridade com downloadMediaBytes real
+
 // =============================================================================
 // Helpers — chains de mock
 // =============================================================================
@@ -202,6 +211,42 @@ function makeDocumentPayload({
     object: 'whatsapp_business_account',
     entry: [{
       id: 'entry-integration-1',
+      changes: [{
+        field: 'messages',
+        value: {
+          messaging_product: 'whatsapp',
+          metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+          messages: msgs,
+          contacts: ctxs,
+        },
+      }],
+    }],
+  };
+}
+
+/** Payload completo com type='image'. Caption presente no payload é ignorada no MVP. */
+function makeImagePayload({
+  messages = null,
+  contacts = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  const msgs = messages ?? [{
+    id:        FAKE_WAMID,
+    from:      FAKE_WA_ID,
+    type:      'image',
+    timestamp: '1739321024',
+    image: {
+      id:        FAKE_MEDIA_ID,
+      mime_type: 'image/jpeg',
+      sha256:    'sha256_fake_image_integration',
+      caption:   'caption_must_not_become_p_body',
+    },
+  }];
+  const ctxs = contacts ?? [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }];
+  return {
+    object: 'whatsapp_business_account',
+    entry: [{
+      id: 'entry-integration-image-1',
       changes: [{
         field: 'messages',
         value: {
@@ -497,6 +542,92 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     // (8) Credential lookup ocorreu (pipeline chegou ao DOC.3)
     expect(lastCredentialChain).not.toBeNull();
     expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+  });
+
+});
+
+// =============================================================================
+// D-IMG-01..02 — Integração IMAGE (processor real, Storage mock)
+// =============================================================================
+
+describe('INBOUND-IMG-D — integração webhook + inboundMediaProcessor (IMAGE)', () => {
+
+  it('D-IMG-01 | JPEG válido → processor real, Storage ArrayBuffer, RPC image, sem p_body', async () => {
+    mockDownloadMediaMetadata.mockResolvedValue({
+      url:       FAKE_CDN_URL,
+      mime_type: 'image/jpeg',
+      sha256:    null,
+      file_size: JPEG_BLOB.size,
+    });
+    mockDownloadMediaBytes.mockResolvedValue(JPEG_BLOB);
+
+    const payload = makeImagePayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupIntegrationMocks();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+
+    expect(mockDownloadMediaMetadata).toHaveBeenCalledOnce();
+    expect(mockDownloadMediaMetadata.mock.calls[0][1]).toBe(FAKE_MEDIA_ID);
+
+    expect(mockStorageUpload).toHaveBeenCalledOnce();
+    const [, uploadBody, uploadOptions] = mockStorageUpload.mock.calls[0];
+    expect(uploadBody instanceof ArrayBuffer).toBe(true);
+    expect(uploadBody instanceof Blob).toBe(false);
+    expect(uploadBody.byteLength).toBe(JPEG_BLOB.size);
+    expect(uploadOptions.contentType).toBe('image/jpeg');
+    expect(uploadOptions.upsert).toBe(false);
+
+    expect(mockCmlInsert).toHaveBeenCalledOnce();
+    const inserted = mockCmlInsert.mock.calls[0][0];
+    expect(inserted.company_id).toBe(FAKE_COMPANY_ID);
+    expect(inserted.source_ref).toBe(`meta-inbound:${FAKE_WAMID}`);
+    expect(inserted.file_type).toBe('image');
+    expect(inserted.mime_type).toBe('image/jpeg');
+    expect(inserted.created_by).toBeNull();
+    expect(inserted.original_filename).toBe('inbound.jpg');
+
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
+    expect(rpcName).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs.p_message_type).toBe('image');
+    expect(rpcArgs.p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(rpcArgs.p_instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(rpcArgs.p_media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(rpcArgs).not.toHaveProperty('p_body');
+
+    expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+  });
+
+  it('D-IMG-02 | source_ref reuse IMAGE: precheck HIT → zero Graph/Storage/insert, RPC image', async () => {
+    const existingAsset = {
+      id:                FAKE_ASSET_ID,
+      mime_type:         'image/jpeg',
+      file_size:         2048,
+      original_filename: 'inbound.jpg',
+    };
+
+    const payload = makeImagePayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupIntegrationMocks({ cmlPrecheckData: existingAsset });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadMediaMetadata).not.toHaveBeenCalled();
+    expect(mockDownloadMediaBytes).not.toHaveBeenCalled();
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockCmlInsert).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('image');
+    expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_body');
   });
 
 });
