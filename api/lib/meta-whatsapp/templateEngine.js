@@ -19,7 +19,8 @@
 //   o componente Graph de HEADER media (IMAGE/VIDEO/DOCUMENT) — puro, sem IO, sem Graph.
 //   Media headers NÃO geram parâmetros textuais — parâmetros textuais são
 //   exclusivamente de HEADER TEXT e BODY.
-// BUTTONS / CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
+// MVP4C.1: BUTTONS é reconhecido e classificado; o envio continua bloqueado
+//   (supported=false). CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
 // =============================================================================
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
@@ -31,6 +32,10 @@ const RE_NAMED            = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g; // {{name}}
 // Cada valor corresponde diretamente ao campo `format` do componente Graph API.
 // Formatos desconhecidos continuam fail-closed (unsupported).
 const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+// Tipos de botão candidatos ao MVP4C. Envio ainda NÃO habilitado (4C.1).
+// URL / PHONE_NUMBER sem fixture no repo — tratados como tipo não suportado.
+const MVP4C_CANDIDATE_BUTTON_TYPES = new Set(['QUICK_REPLY']);
 
 // =============================================================================
 // Helpers privados
@@ -61,6 +66,53 @@ function makeUnsupported(reason, fmt) {
     parameters:         [],
     bodyText:           null,
     headerMediaFormat:  null,
+    buttons:            [],
+  };
+}
+
+/**
+ * Classifica component.buttons na ordem Meta (index 0-based).
+ * Preserva somente type + text quando comprovados. Sem url/phone/example/payload.
+ * @private
+ * @returns {{ ok: false, reason: string } | { ok: true, buttons: object[], blockReason: string }}
+ */
+function classifyButtons(rawButtons) {
+  if (!Array.isArray(rawButtons)) {
+    return { ok: false, reason: 'BUTTONS structure invalid' };
+  }
+
+  const buttons = [];
+  let unknownType = null;
+
+  for (let i = 0; i < rawButtons.length; i++) {
+    const btn = rawButtons[i];
+    if (btn === null || typeof btn !== 'object' || Array.isArray(btn)) {
+      return { ok: false, reason: 'BUTTONS structure invalid' };
+    }
+
+    const rawType = btn.type;
+    if (typeof rawType !== 'string' || rawType.trim().length === 0) {
+      return { ok: false, reason: 'BUTTONS structure invalid' };
+    }
+
+    const type = rawType.trim().toUpperCase();
+    const entry = { index: i, type };
+    if (typeof btn.text === 'string') {
+      entry.text = btn.text;
+    }
+    buttons.push(entry);
+
+    if (!MVP4C_CANDIDATE_BUTTON_TYPES.has(type) && unknownType === null) {
+      unknownType = type;
+    }
+  }
+
+  return {
+    ok: true,
+    buttons,
+    blockReason: unknownType === null
+      ? 'BUTTONS send not enabled'
+      : `BUTTONS type ${unknownType} not supported`,
   };
 }
 
@@ -283,6 +335,8 @@ export function analyzeTemplate(rawTemplate) {
     let hasBody           = false;
     let bodyText          = null;
     let headerMediaFormat = null; // 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null
+    let classifiedButtons = null; // null = sem component BUTTONS
+    let buttonsBlockReason = null;
     const params          = [];
 
     for (const comp of comps) {
@@ -341,12 +395,39 @@ export function analyzeTemplate(rawTemplate) {
 
       if (type === 'FOOTER') continue; // estático, sempre permitido, sem parâmetros
 
+      if (type === 'BUTTONS') {
+        // Um único component BUTTONS. Duplicata → estrutura inválida.
+        if (classifiedButtons !== null) {
+          return makeUnsupported('BUTTONS structure invalid', fmt);
+        }
+        const classified = classifyButtons(comp.buttons);
+        if (!classified.ok) {
+          return makeUnsupported(classified.reason, fmt);
+        }
+        classifiedButtons  = classified.buttons;
+        buttonsBlockReason = classified.blockReason;
+        continue;
+      }
+
       // Qualquer outro tipo: unsupported
       return makeUnsupported(`Component type ${type} not supported`, fmt);
     }
 
     if (!hasBody) {
       return makeUnsupported('Template has no BODY component', fmt);
+    }
+
+    // 4C.1: BUTTONS classificado, envio ainda não habilitado.
+    if (classifiedButtons !== null) {
+      return {
+        supported:          false,
+        unsupported_reason: buttonsBlockReason,
+        parameter_format:   fmt,
+        parameters:         params,
+        bodyText,
+        headerMediaFormat,
+        buttons:            classifiedButtons,
+      };
     }
 
     return {
@@ -356,6 +437,7 @@ export function analyzeTemplate(rawTemplate) {
       parameters:         params,
       bodyText,
       headerMediaFormat,
+      buttons:            [],
     };
   } catch {
     // Catch defensivo — nenhum dado de rawTemplate vaza

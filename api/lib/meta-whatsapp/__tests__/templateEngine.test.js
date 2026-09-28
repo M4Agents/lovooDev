@@ -370,7 +370,7 @@ describe('analyzeTemplate — estrutura', () => {
     expect(r.parameters).toHaveLength(1); // somente BODY param
   });
 
-  it('AT-STR-13: BUTTONS → unsupported', () => {
+  it('AT-STR-13: BUTTONS → reconhecido, send não habilitado (supported=false)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -379,7 +379,9 @@ describe('analyzeTemplate — estrutura', () => {
       ],
     });
     expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toMatch(/BUTTONS/);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.buttons).toEqual([]);
+    expect(r.bodyText).toBe('Olá');
   });
 
   it('AT-STR-14: CAROUSEL → unsupported', () => {
@@ -1031,8 +1033,7 @@ describe('analyzeTemplate — MVP4B.2 — media headers', () => {
     expect(r.parameters.map(p => p.key)).toEqual(['first_name', 'code']);
   });
 
-  it('TE-M09: HEADER IMAGE + component BUTTONS → supported=false (fail-closed)', () => {
-    // Media header sozinho não torna template supported quando há outro component inválido.
+  it('TE-M09: HEADER IMAGE + component BUTTONS → supported=false; media metadata intacta', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -1042,7 +1043,10 @@ describe('analyzeTemplate — MVP4B.2 — media headers', () => {
       ],
     });
     expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toMatch(/BUTTONS/);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.bodyText).toBe('Corpo');
+    expect(r.buttons).toEqual([]);
   });
 
   it('TE-M10: template textual completo (regressão MVP4A) → headerMediaFormat=null, tudo intacto', () => {
@@ -1456,6 +1460,150 @@ describe('buildGraphComponents — media headers (MVP4B.4B)', () => {
       { headerMedia: imageMedia },
     );
     expect(r.map(c => c.type)).not.toContain('footer');
+  });
+
+});
+
+// =============================================================================
+// MVP4C.1 — classificação de BUTTONS (envio ainda não habilitado)
+// =============================================================================
+
+describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
+
+  it('4C1-01 | sem BUTTONS → shape compatível + buttons=[]', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}' },
+        { type: 'BODY',   text: 'Pedido {{1}}' },
+        { type: 'FOOTER', text: 'Rodapé' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameter_format).toBe('POSITIONAL');
+    expect(r.bodyText).toBe('Pedido {{1}}');
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameters.map(p => p.component)).toEqual(['HEADER', 'BODY']);
+    expect(r.buttons).toEqual([]);
+  });
+
+  it('4C1-02 | QUICK_REPLY → classificado; index/type/text; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(r.bodyText).toBe('Confirma?');
+    expect(r.parameters).toEqual([]);
+  });
+
+  it('4C1-03 | múltiplos QUICK_REPLY → índices 0,1 na ordem Meta', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      { index: 1, type: 'QUICK_REPLY', text: 'Não' },
+    ]);
+  });
+
+  it('4C1-04 | tipo desconhecido → fail-closed específico; não crasha', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Abrir' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([{ index: 0, type: 'URL', text: 'Abrir' }]);
+    expect(r.bodyText).toBe('Olá');
+  });
+
+  it('4C1-05 | AUTHENTICATION + COPY_CODE → bloqueio AUTH antes de BUTTONS', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Código {{1}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toMatch(/AUTHENTICATION/);
+    expect(r.buttons).toEqual([]);
+    expect(r.bodyText).toBeNull();
+  });
+
+  it('4C1-06 | HEADER/BODY/FOOTER + BUTTONS → metadata textual intacta', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Pedido {{1}}' },
+        { type: 'BODY',   text: 'Olá {{1}}' },
+        { type: 'FOOTER', text: 'Lovoo' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Ok' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.bodyText).toBe('Olá {{1}}');
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameters.map(p => ({ component: p.component, key: p.key }))).toEqual([
+      { component: 'HEADER', key: '1' },
+      { component: 'BODY',   key: '1' },
+    ]);
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Ok' }]);
+  });
+
+  it('4C1-07 | HEADER IMAGE + BUTTONS → media metadata intacta', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY',   text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.bodyText).toBe('Veja');
+    expect(r.parameters).toEqual([]);
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+  });
+
+  it('4C1-BGC | buildGraphComponents continua omitindo BUTTONS', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Olá {{1}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: { '1': 'Ana' } },
+    );
+    expect(r).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+    expect(r.some(c => String(c.type).toLowerCase() === 'button')).toBe(false);
   });
 
 });
