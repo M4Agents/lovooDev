@@ -1248,7 +1248,13 @@ export const OpportunitiesSection: React.FC<OpportunitiesSectionProps> = ({
                           className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Selecione uma etapa</option>
-                          {stagesByFunnel[activeFunnelId]?.map(stage => (
+                          {stagesByFunnel[activeFunnelId]
+                            ?.filter(stage =>
+                              !stage.is_hidden ||
+                              (stage.id === positions[oppId]?.stage_id &&
+                               activeFunnelId === positions[oppId]?.funnel_id)
+                            )
+                            .map(stage => (
                             <option key={stage.id} value={stage.id}>{stage.name}</option>
                           ))}
                         </select>
