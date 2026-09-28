@@ -97,6 +97,7 @@ const TMPL_POSITIONAL: MetaWhatsAppTemplate = {
   category:            'UTILITY',
   parameter_format:    'POSITIONAL',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'BODY', text: 'Olá, {{1}}! Seu código é {{2}}.' }],
   parameters:          [
     { component: 'BODY', key: '1', position: 1, example: 'João' },
@@ -114,6 +115,7 @@ const TMPL_NAMED: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'NAMED',
   header_media_format: null,
+  buttons:             [],
   components:          [
     { type: 'HEADER', text: 'Pedido {{order_id}}' },
     { type: 'BODY',   text: 'Olá, {{name}}! Seu pedido foi confirmado.' },
@@ -135,6 +137,7 @@ const TMPL_NO_PARAMS: MetaWhatsAppTemplate = {
   category:            'UTILITY',
   parameter_format:    'NAMED',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'BODY', text: 'Olá! Bem-vindo.' }],
   parameters:          [],
   supported:           true,
@@ -149,6 +152,7 @@ const TMPL_UNSUPPORTED: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'NAMED',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'HEADER', format: 'IMAGE' }],
   parameters:          [],
   supported:           false,
@@ -164,6 +168,7 @@ const TMPL_IMAGE: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'POSITIONAL',
   header_media_format: 'IMAGE',
+  buttons:             [],
   components:          [
     { type: 'HEADER', format: 'IMAGE' },
     { type: 'BODY',   text:   'Confira nossa promoção!' },
@@ -181,6 +186,7 @@ const TMPL_VIDEO: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'POSITIONAL',
   header_media_format: 'VIDEO',
+  buttons:             [],
   components:          [
     { type: 'HEADER', format: 'VIDEO' },
     { type: 'BODY',   text:   'Assista nosso vídeo!' },
@@ -198,6 +204,7 @@ const TMPL_DOCUMENT: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'POSITIONAL',
   header_media_format: 'DOCUMENT',
+  buttons:             [],
   components:          [
     { type: 'HEADER', format: 'DOCUMENT' },
     { type: 'BODY',   text:   'Veja nosso documento.' },
@@ -205,6 +212,95 @@ const TMPL_DOCUMENT: MetaWhatsAppTemplate = {
   parameters:         [],
   supported:          true,
   unsupported_reason: null,
+}
+
+const TMPL_QR_SINGLE: MetaWhatsAppTemplate = {
+  id:                  'tpl-qr-020',
+  name:                'confirm_quick_reply',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  buttons:             [{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }],
+  components:          [
+    { type: 'BODY', text: 'Confirma?' },
+    {
+      type: 'BUTTONS',
+      buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' }],
+    },
+  ],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_QR_MULTI: MetaWhatsAppTemplate = {
+  id:                  'tpl-qr-021',
+  name:                'choose_option',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  buttons:             [
+    { index: 1, type: 'QUICK_REPLY', text: 'Talvez' },
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    { index: 2, type: 'QUICK_REPLY', text: 'Não' },
+  ],
+  components:          [{ type: 'BODY', text: 'Escolha uma opção.' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_QR_BODY_PARAM: MetaWhatsAppTemplate = {
+  id:                  'tpl-qr-022',
+  name:                'greet_and_confirm',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  buttons:             [{ index: 0, type: 'QUICK_REPLY', text: 'Ok' }],
+  components:          [{ type: 'BODY', text: 'Olá, {{name}}!' }],
+  parameters:          [{ component: 'BODY', key: 'name', position: null, example: 'Ana' }],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_IMAGE_QR: MetaWhatsAppTemplate = {
+  id:                  'tpl-qr-023',
+  name:                'promo_image_qr',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: 'IMAGE',
+  buttons:             [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+  components:          [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY',   text:   'Confira nossa promoção!' },
+    { type: 'FOOTER', text:   'Oferta limitada' },
+  ],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_URL_UNSUPPORTED: MetaWhatsAppTemplate = {
+  id:                  'tpl-url-024',
+  name:                'see_website',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'NAMED',
+  header_media_format: null,
+  buttons:             [{ index: 0, type: 'URL', text: 'Site', url: 'https://example.com', url_kind: 'static' }],
+  components:          [{ type: 'BODY', text: 'Veja o site.' }],
+  parameters:          [],
+  supported:           false,
+  unsupported_reason:  'buttons_not_supported',
 }
 
 function makeListResp(
@@ -796,5 +892,149 @@ describe('MetaTemplatePicker — MVP4B media header', () => {
     fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
     expect(onSend).not.toHaveBeenCalled()
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+// =============================================================================
+// FE-QR-01..10 — MVP4C.2C QUICK_REPLY preview
+// =============================================================================
+
+describe('MetaTemplatePicker — MVP4C.2C QUICK_REPLY', () => {
+  it('FE-QR-01: QR único aparece como chip read-only', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_SINGLE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    expect(screen.getByTestId('preview-buttons')).toBeTruthy()
+    expect(screen.getByTestId('preview-button-0').textContent).toBe('Sim')
+  })
+
+  it('FE-QR-02: múltiplos QR aparecem na ordem de index', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_MULTI]))
+    renderPicker()
+    await waitFor(() => screen.getByText('choose_option'))
+    fireEvent.click(screen.getByText('choose_option'))
+    const chips = screen.getByTestId('preview-buttons').querySelectorAll('[data-testid^="preview-button-"]')
+    expect(Array.from(chips).map(el => el.getAttribute('data-testid'))).toEqual([
+      'preview-button-0',
+      'preview-button-1',
+      'preview-button-2',
+    ])
+    expect(Array.from(chips).map(el => el.textContent)).toEqual(['Sim', 'Talvez', 'Não'])
+  })
+
+  it('FE-QR-03: nenhum input de QR', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_SINGLE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    const preview = screen.getByTestId('preview-buttons')
+    expect(preview.querySelector('input')).toBeNull()
+    expect(preview.querySelector('button')).toBeNull()
+    expect(preview.querySelector('a')).toBeNull()
+    expect(screen.queryByLabelText(/payload|QUICK_REPLY|botão/i)).toBeNull()
+  })
+
+  it('FE-QR-04: payload não aparece no DOM', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_SINGLE]))
+    const { container } = renderPicker()
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    expect(container.textContent).not.toContain('secret-qr-payload')
+    expect(container.textContent).not.toContain('lovoo:qr:v1')
+    expect(container.textContent).not.toContain('payload')
+  })
+
+  it('FE-QR-05: send de QR sem BODY params usa contrato anterior, sem buttons/payload', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_SINGLE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend).toHaveBeenCalledTimes(1)
+    const [tmpl, params, asset] = onSend.mock.calls[0] as [
+      MetaWhatsAppTemplate,
+      MetaTemplateParameterValues,
+      string | undefined,
+    ]
+    expect(tmpl.name).toBe('confirm_quick_reply')
+    expect(tmpl.language).toBe('pt_BR')
+    expect(params).toEqual({ body: {} })
+    expect(params).not.toHaveProperty('buttons')
+    expect(params).not.toHaveProperty('payload')
+    expect(asset).toBeUndefined()
+  })
+
+  it('FE-QR-06: BODY param + QR → somente input de BODY', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_BODY_PARAM]))
+    renderPicker()
+    await waitFor(() => screen.getByText('greet_and_confirm'))
+    fireEvent.click(screen.getByText('greet_and_confirm'))
+    expect(screen.getByLabelText('Parâmetro BODY name')).toBeTruthy()
+    expect(screen.queryByLabelText(/HEADER/)).toBeNull()
+    expect(screen.getByTestId('preview-button-0').textContent).toBe('Ok')
+    expect(screen.getAllByRole('textbox')).toHaveLength(1)
+  })
+
+  it('FE-QR-07: media + QR → seletor existente + chips, sem duplicar mídia', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE_QR]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_image_qr'))
+    fireEvent.click(screen.getByText('promo_image_qr'))
+    expect(screen.getByTestId('mas-mock-image')).toBeTruthy()
+    expect(screen.getByTestId('preview-body').textContent).toBe('Confira nossa promoção!')
+    expect(screen.getByTestId('preview-footer').textContent).toBe('Oferta limitada')
+    expect(screen.getByTestId('preview-button-0').textContent).toBe('Quero')
+    expect(screen.queryAllByTestId('mas-mock-image')).toHaveLength(1)
+  })
+
+  it('FE-QR-08: A→B e B→A sem estado stale', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_POSITIONAL, TMPL_QR_SINGLE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('hello_world'))
+
+    fireEvent.click(screen.getByText('hello_world'))
+    fireEvent.change(screen.getByLabelText('Parâmetro BODY 1'), { target: { value: 'Carlos' } })
+    fireEvent.change(screen.getByLabelText('Parâmetro BODY 2'), { target: { value: '99999' } })
+
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    expect(screen.queryByLabelText('Parâmetro BODY 1')).toBeNull()
+    expect(screen.getByTestId('preview-button-0')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {} })
+    expect(JSON.stringify(onSend.mock.calls[0][1])).not.toContain('Carlos')
+
+    fireEvent.click(screen.getByText('hello_world'))
+    expect(screen.getByLabelText('Parâmetro BODY 1')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Parâmetro BODY 2')).toHaveProperty('value', '')
+    expect(screen.queryByTestId('preview-buttons')).toBeNull()
+  })
+
+  it('FE-QR-09: template supported=false não aparece', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_SINGLE, TMPL_URL_UNSUPPORTED]))
+    renderPicker()
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    expect(screen.queryByText('see_website')).toBeNull()
+  })
+
+  it('FE-QR-10: text/media existentes sem regressão', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_NO_PARAMS, TMPL_IMAGE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('simple_template'))
+    fireEvent.click(screen.getByText('simple_template'))
+    expect(screen.getByTestId('preview-body').textContent).toBe('Olá! Bem-vindo.')
+    expect(screen.queryByTestId('preview-buttons')).toBeNull()
+    expect(screen.queryByTestId('mas-mock-image')).toBeNull()
+
+    fireEvent.click(screen.getByText('promo_with_image'))
+    expect(screen.getByTestId('mas-mock-image')).toBeTruthy()
+    expect(screen.getByTestId('preview-body').textContent).toBe('Confira nossa promoção!')
+    expect(screen.queryByTestId('preview-buttons')).toBeNull()
   })
 })

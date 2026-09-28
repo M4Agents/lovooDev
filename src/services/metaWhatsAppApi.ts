@@ -46,6 +46,7 @@ import type {
   MetaTemplateParameterValues,
   MetaWabaSelectionOption,
   MetaWhatsAppInstance,
+  MetaTemplateButton,
   MetaWhatsAppTemplate,
   OnboardingCompleteInstance,
   OnboardingCompletePayload,
@@ -76,6 +77,49 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     'Content-Type': 'application/json',
     Authorization:  `Bearer ${session.access_token}`,
   }
+}
+
+/**
+ * Preserva o DTO sanitizado `buttons` retornado pelo backend.
+ * Nunca reconstrói a partir de components[].buttons.
+ * Nunca copia payload ou phone_number.
+ * Campo ausente/null → []; tipo inválido → throw (fail-closed).
+ */
+function mapSanitizedButtons(raw: unknown): MetaTemplateButton[] {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) {
+    throw new Error('Resposta inválida do servidor: template.buttons inválido')
+  }
+
+  const buttons: MetaTemplateButton[] = []
+
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('Resposta inválida do servidor: button não é objeto')
+    }
+
+    const b = item as Record<string, unknown>
+
+    if (!Number.isInteger(b.index) || (b.index as number) < 0) {
+      throw new Error('Resposta inválida do servidor: button.index inválido')
+    }
+    if (typeof b.type !== 'string' || !b.type) {
+      throw new Error('Resposta inválida do servidor: button.type inválido')
+    }
+
+    const mapped: MetaTemplateButton = {
+      index: b.index as number,
+      type:  b.type,
+    }
+    if (typeof b.text === 'string') mapped.text = b.text
+    if (typeof b.url === 'string') mapped.url = b.url
+    if (b.url_kind === 'static' || b.url_kind === 'dynamic' || b.url_kind === 'unknown') {
+      mapped.url_kind = b.url_kind
+    }
+    buttons.push(mapped)
+  }
+
+  return buttons
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -526,6 +570,7 @@ export const metaWhatsAppApi = {
         supported:           tmpl.supported        as boolean,
         unsupported_reason:  tmpl.unsupported_reason as string | null,
         header_media_format: tmpl.header_media_format as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null, // MVP4B.3
+        buttons:             mapSanitizedButtons(tmpl.buttons),
       })
     }
 

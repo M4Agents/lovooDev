@@ -602,6 +602,7 @@ const FAKE_TEMPLATE_POSITIONAL: MetaWhatsAppTemplate = {
   category:            'UTILITY',
   parameter_format:    'POSITIONAL',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'BODY', text: 'Olá, {1}!' }],
   parameters:          [{ component: 'BODY', key: '1', position: 1, example: 'João' }],
   supported:           true,
@@ -616,6 +617,7 @@ const FAKE_TEMPLATE_NAMED: MetaWhatsAppTemplate = {
   category:            'UTILITY',
   parameter_format:    'NAMED',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'BODY', text: 'Pedido {{order_id}} confirmado.' }],
   parameters:          [{ component: 'BODY', key: 'order_id', position: null, example: '12345' }],
   supported:           true,
@@ -630,6 +632,7 @@ const FAKE_TEMPLATE_UNSUPPORTED: MetaWhatsAppTemplate = {
   category:            'MARKETING',
   parameter_format:    'NAMED',
   header_media_format: null,
+  buttons:             [],
   components:          [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Promoção!' }],
   parameters:          [],
   supported:           false,
@@ -807,6 +810,58 @@ describe('metaWhatsAppApi.listTemplates', () => {
     expect(url.searchParams.has('limit')).toBe(false)
     expect(url.searchParams.has('status')).toBe(false)
     expect(url.searchParams.has('name')).toBe(false)
+  })
+
+  it('LT-21: top-level buttons sanitizado é preservado; payload e phone_number não são copiados', async () => {
+    mockFetch({
+      templates: [{
+        ...FAKE_TEMPLATE_POSITIONAL,
+        buttons: [
+          { index: 0, type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' },
+          { index: 1, type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+        ],
+      }],
+      next_cursor: null,
+    })
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+    ])
+    expect(result.templates[0].buttons[0]).not.toHaveProperty('payload')
+    expect(result.templates[0].buttons[1]).not.toHaveProperty('phone_number')
+    expect(JSON.stringify(result.templates[0].buttons)).not.toContain('secret-qr-payload')
+    expect(JSON.stringify(result.templates[0].buttons)).not.toContain('+5511999999999')
+  })
+
+  it('LT-22: components[].buttons NÃO é usado como fallback do DTO', async () => {
+    mockFetch({
+      templates: [{
+        ...FAKE_TEMPLATE_POSITIONAL,
+        buttons: undefined,
+        components: [
+          { type: 'BODY', text: 'Olá, {1}!' },
+          {
+            type: 'BUTTONS',
+            buttons: [{ type: 'QUICK_REPLY', text: 'Do components', payload: 'raw-payload' }],
+          },
+        ],
+      }],
+      next_cursor: null,
+    })
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].buttons).toEqual([])
+    expect(JSON.stringify(result.templates[0].buttons)).not.toContain('Do components')
+    expect(JSON.stringify(result.templates[0].buttons)).not.toContain('raw-payload')
+  })
+
+  it('LT-23: buttons inválido (não-array) → throw fail-closed', async () => {
+    mockFetch({
+      templates: [{ ...FAKE_TEMPLATE_POSITIONAL, buttons: { type: 'QUICK_REPLY' } }],
+      next_cursor: null,
+    })
+    await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow(/buttons/)
   })
 })
 

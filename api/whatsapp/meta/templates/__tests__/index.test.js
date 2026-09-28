@@ -40,7 +40,7 @@
 //   TPL-32  HEADER IMAGE → supported=true + header_media_format=IMAGE  (MVP4B.3)
 //   TPL-33  HEADER VIDEO → supported=true + header_media_format=VIDEO  (MVP4B.3)
 //   TPL-34  HEADER DOCUMENT → supported=true + header_media_format=DOCUMENT  (MVP4B.3)
-//   TPL-35  BUTTONS → supported=false
+//   TPL-35  BUTTONS URL → supported=false
 //   TPL-36  CAROUSEL → supported=false
 //   TPL-37  AUTHENTICATION → supported=false
 //   TPL-38  unknown parameter_format → supported=false
@@ -1051,17 +1051,17 @@ describe('TPL-34 HEADER DOCUMENT supported', () => {
 });
 
 // =============================================================================
-// TPL-35  BUTTONS → supported=false
+// TPL-35  BUTTONS URL → supported=false
 // =============================================================================
 
 describe('TPL-35 BUTTONS unsupported', () => {
-  it('componente BUTTONS → supported=false', async () => {
+  it('componente BUTTONS URL → supported=false', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-btn',
       components: [
         { type: 'BODY', text: 'Clique!', example: { body_text: [[]] } },
-        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com' }] },
       ],
     };
     mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
@@ -1069,7 +1069,7 @@ describe('TPL-35 BUTTONS unsupported', () => {
     const res = makeRes();
     await handler(req, res);
     expect(res._body.templates[0].supported).toBe(false);
-    expect(res._body.templates[0].unsupported_reason).toContain('BUTTONS');
+    expect(res._body.templates[0].unsupported_reason).toBeTruthy();
   });
 });
 
@@ -1901,15 +1901,15 @@ describe('GET-M05 sem HEADER — header_media_format=null', () => {
   });
 });
 
-describe('GET-M06 HEADER IMAGE + BUTTONS — fail-closed', () => {
-  it('IMAGE + BUTTONS → supported=false (BUTTONS não suportado)', async () => {
+describe('GET-M06 HEADER IMAGE + BUTTONS URL — fail-closed', () => {
+  it('IMAGE + URL → supported=false (URL não suportado)', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'get-m06-img-btn',
       components: [
         { type: 'HEADER',  format: 'IMAGE', example: {} },
         { type: 'BODY',    text: 'Clique!', example: { body_text: [[]] } },
-        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com' }] },
       ],
     };
     mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
@@ -1920,7 +1920,6 @@ describe('GET-M06 HEADER IMAGE + BUTTONS — fail-closed', () => {
     const result = res._body.templates[0];
     expect(result.supported).toBe(false);
     expect(result.unsupported_reason).toBeTruthy();
-    // Aceitar HEADER IMAGE não libera BUTTONS
   });
 });
 
@@ -2065,7 +2064,7 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     expect(res._body.next_cursor).toBeNull();
   });
 
-  it('QUICK_REPLY → buttons sanitizado; supported=false; payload não vaza', async () => {
+  it('QUICK_REPLY → buttons sanitizado; supported=true; payload não vaza', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c2a-qr',
@@ -2083,8 +2082,8 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     await handler(req, res);
 
     const result = res._body.templates[0];
-    expect(result.supported).toBe(false);
-    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.supported).toBe(true);
+    expect(result.unsupported_reason).toBeNull();
     expect(result.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(result.buttons[0]).not.toHaveProperty('payload');
     expect(JSON.stringify(result.buttons)).not.toContain('secret-qr-payload');
@@ -2161,26 +2160,26 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     expect(res._status).toBe(200);
     expect(res._body.next_cursor).toBe('opaque-cursor-4c2a');
     expect(res._body.templates[0].buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Ok' }]);
-    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].supported).toBe(true);
   });
 
 });
 
 // =============================================================================
-// MVP4C.2B — GET gate: engine capability ≠ picker discovery
+// MVP4C.2C — GET reflete analysis.supported (gate temporário removido)
 // =============================================================================
 
-describe('GET — MVP4C.2B picker gate', () => {
+describe('GET — MVP4C.2C analysis.supported', () => {
 
-  it('QUICK_REPLY-only: engine supported=true; GET supported=false; UI reason; sem payload', async () => {
+  it('QUICK_REPLY-only: GET supported=true; buttons sanitizados; sem payload', async () => {
     const raw = {
       ...FAKE_TEMPLATE_SIMPLE,
-      id: 'tpl-4c2b-qr',
+      id: 'tpl-4c2c-qr',
       name: 'qr_only',
       language: 'pt_BR',
       components: [
         { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
-        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' }] },
       ],
     };
     const engine = analyzeTemplate(raw);
@@ -2193,11 +2192,13 @@ describe('GET — MVP4C.2B picker gate', () => {
     await handler(req, res);
 
     const dto = res._body.templates[0];
-    expect(dto.supported).toBe(false);
-    expect(dto.unsupported_reason).toBe('BUTTONS UI not enabled');
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
     expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(dto.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto.buttons)).not.toContain('secret-qr-payload');
     expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(dto)).not.toContain('BUTTONS UI not enabled');
   });
 
   it('sem BUTTONS → GET supported=true intacto', async () => {
@@ -2210,10 +2211,10 @@ describe('GET — MVP4C.2B picker gate', () => {
     expect(res._body.templates[0].buttons).toEqual([]);
   });
 
-  it('URL e PHONE_NUMBER continuam GET supported=false (engine também false)', async () => {
+  it('URL, PHONE_NUMBER e mix continuam GET supported=false', async () => {
     const urlTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
-      id: 'tpl-4c2b-url',
+      id: 'tpl-4c2c-url',
       components: [
         { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
         { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com' }] },
@@ -2221,26 +2222,66 @@ describe('GET — MVP4C.2B picker gate', () => {
     };
     const phoneTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
-      id: 'tpl-4c2b-phone',
+      id: 'tpl-4c2c-phone',
       components: [
         { type: 'BODY', text: 'Ligue', example: { body_text: [[]] } },
         { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Contato' }] },
       ],
     };
+    const mixTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2c-mix',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Site', url: 'https://example.com' },
+          ],
+        },
+      ],
+    };
     expect(analyzeTemplate(urlTpl).supported).toBe(false);
     expect(analyzeTemplate(phoneTpl).supported).toBe(false);
+    expect(analyzeTemplate(mixTpl).supported).toBe(false);
 
-    mockListMessageTemplates.mockResolvedValue(makeListResult([urlTpl, phoneTpl]));
+    mockListMessageTemplates.mockResolvedValue(makeListResult([urlTpl, phoneTpl, mixTpl]));
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
 
-    const urlDto = res._body.templates.find(t => t.id === 'tpl-4c2b-url');
-    const phoneDto = res._body.templates.find(t => t.id === 'tpl-4c2b-phone');
+    const urlDto = res._body.templates.find(t => t.id === 'tpl-4c2c-url');
+    const phoneDto = res._body.templates.find(t => t.id === 'tpl-4c2c-phone');
+    const mixDto = res._body.templates.find(t => t.id === 'tpl-4c2c-mix');
     expect(urlDto.supported).toBe(false);
-    expect(urlDto.unsupported_reason).not.toBe('BUTTONS UI not enabled');
+    expect(urlDto.unsupported_reason).toBeTruthy();
     expect(phoneDto.supported).toBe(false);
-    expect(phoneDto.unsupported_reason).not.toBe('BUTTONS UI not enabled');
+    expect(phoneDto.unsupported_reason).toBeTruthy();
+    expect(mixDto.supported).toBe(false);
+    expect(mixDto.unsupported_reason).toBeTruthy();
+    expect(JSON.stringify(res._body)).not.toContain('BUTTONS UI not enabled');
+  });
+
+  it('IMAGE + QUICK_REPLY-only → GET supported=true', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2c-img-qr',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.header_media_format).toBe('IMAGE');
+    expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
   });
 
 });

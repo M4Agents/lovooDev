@@ -260,7 +260,8 @@ export interface MetaSendMessageResponse {
 //   POST /api/whatsapp/meta/messages/send-template
 //
 // Apenas templates aprovados (status=APPROVED) são retornados pela API.
-// Media, buttons, carousel e authentication templates não são modelados aqui.
+// buttons é o DTO sanitizado do backend (index/type/text/url_kind).
+// Carousel e authentication continuam fora deste contrato.
 // =============================================================================
 
 // ── Formato dos parâmetros do template ───────────────────────────────────────
@@ -290,6 +291,18 @@ export interface MetaTemplateComponent {
   [key: string]: unknown
 }
 
+// ── Botão sanitizado do template (MVP4C.2C) ──────────────────────────────────
+// Espelha o DTO top-level do GET. Nunca inclui payload, phone_number
+// nem component Graph de runtime.
+
+export interface MetaTemplateButton {
+  index:      number
+  type:       string
+  text?:      string
+  url?:       string
+  url_kind?:  'static' | 'dynamic' | 'unknown'
+}
+
 // ── Template de mensagem completo ─────────────────────────────────────────────
 // Retornado pelo endpoint GET /templates após análise do templateEngine.
 // MVP4B.3: header_media_format classifica o tipo de mídia do HEADER.
@@ -311,6 +324,7 @@ export interface MetaWhatsAppTemplate {
   supported:           boolean
   unsupported_reason:  string | null
   header_media_format: 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null  // MVP4B.3
+  buttons:             MetaTemplateButton[]                   // MVP4C.2C
 }
 
 // ── Resposta de listagem de templates ────────────────────────────────────────

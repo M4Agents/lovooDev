@@ -112,6 +112,7 @@ vi.mock('../MetaTemplatePicker', () => ({
                 id: 'tpl-mock-001', name: 'hello_world', language: 'pt_BR',
                 status: 'APPROVED', category: 'UTILITY', parameter_format: 'POSITIONAL',
                 components: [], parameters: [], supported: true, unsupported_reason: null,
+                header_media_format: null, buttons: [],
               },
               { body: { '1': 'João' } },
             )
@@ -131,6 +132,7 @@ vi.mock('../MetaTemplatePicker', () => ({
                 status: 'APPROVED', category: 'MARKETING', parameter_format: 'POSITIONAL',
                 header_media_format: 'IMAGE',
                 components: [], parameters: [], supported: true, unsupported_reason: null,
+                buttons: [],
               },
               { body: {} },
               'cml:aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa',

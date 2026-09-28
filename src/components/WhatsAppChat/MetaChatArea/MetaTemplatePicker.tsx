@@ -24,6 +24,7 @@ import { MetaMediaAssetSelector } from './MetaMediaAssetSelector'
 import type { MediaAssetFormat }  from './MetaMediaAssetSelector'
 import type {
   MetaWhatsAppTemplate,
+  MetaTemplateButton,
   MetaTemplateParameterValues,
   MetaTemplateComponent,
   MetaTemplateParameter,
@@ -90,6 +91,18 @@ function buildPreview(
       footer = c.text // FOOTER é estático
   }
   return { header, body, footer }
+}
+
+/** QUICK_REPLY sanitizados, em ordem de index. Só text — nunca payload. */
+function previewQuickReplies(buttons: MetaTemplateButton[] | undefined): { index: number; text: string }[] {
+  if (!Array.isArray(buttons)) return []
+  return buttons
+    .filter((b): b is MetaTemplateButton & { text: string } =>
+      b.type === 'QUICK_REPLY' && typeof b.text === 'string' && b.text.trim().length > 0,
+    )
+    .slice()
+    .sort((a, b) => a.index - b.index)
+    .map(b => ({ index: b.index, text: b.text.trim() }))
 }
 
 /** True quando todos os parâmetros do template têm valor não vazio. */
@@ -214,8 +227,10 @@ export function MetaTemplatePicker({
   const mediaComplete = !hasMediaHeader || Boolean(selectedPickerId)
   const canSend      = textComplete && mediaComplete && !sending
   const preview      = selected ? buildPreview(selected.components, selected.parameters, paramValues) : null
+  const qrChips      = selected ? previewQuickReplies(selected.buttons) : []
   const headerParams = selected?.parameters.filter(p => p.component === 'HEADER') ?? []
   const bodyParams   = selected?.parameters.filter(p => p.component === 'BODY')   ?? []
+  const showPreview  = !!(preview && (preview.header || preview.body || preview.footer || qrChips.length > 0))
 
   return (
     <div
@@ -325,12 +340,28 @@ export function MetaTemplatePicker({
               )}
 
               {/* Preview */}
-              {preview && (preview.header || preview.body || preview.footer) && (
+              {showPreview && preview && (
                 <div className="mx-4 mb-4 rounded-xl bg-slate-50 p-3 border border-slate-200/60">
                   <p className="text-xs font-medium text-slate-500 mb-2">Pré-visualização</p>
                   {preview.header && <p className="text-xs font-semibold text-slate-700 mb-1" data-testid="preview-header">{preview.header}</p>}
                   {preview.body   && <p className="text-sm text-slate-700 leading-relaxed break-words whitespace-pre-wrap" data-testid="preview-body">{preview.body}</p>}
                   {preview.footer && <p className="text-xs text-slate-400 mt-1 italic" data-testid="preview-footer">{preview.footer}</p>}
+                  {qrChips.length > 0 && (
+                    <div
+                      data-testid="preview-buttons"
+                      className={`flex flex-wrap gap-1.5${preview.header || preview.body || preview.footer ? ' mt-2' : ''}`}
+                    >
+                      {qrChips.map(chip => (
+                        <span
+                          key={`qr-${chip.index}`}
+                          data-testid={`preview-button-${chip.index}`}
+                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs text-slate-700"
+                        >
+                          {chip.text}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
