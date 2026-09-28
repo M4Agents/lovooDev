@@ -1776,12 +1776,14 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(res._status).toBe(500);
   });
 
-  // W-DOC-14 — VIDEO continua type_skipped; IMAGE saiu deste ramo ——————————————
-  it('W-DOC-14 | type=video → type_skipped; zero downloadAndStoreInboundMedia', async () => {
-    const videoMsg = { id: 'wamid_vid_01', from: FAKE_WA_ID, type: 'video',
-                       video: { id: '222', mime_type: 'video/mp4' }, timestamp: FAKE_TIMESTAMP };
+  // W-DOC-14 — AUDIO e STICKER continuam type_skipped; VIDEO saiu deste ramo ———
+  it('W-DOC-14 | type=audio e type=sticker → type_skipped; zero processor/RPC', async () => {
+    const audioMsg = { id: 'wamid_aud_01', from: FAKE_WA_ID, type: 'audio',
+                       audio: { id: '333', mime_type: 'audio/ogg' }, timestamp: FAKE_TIMESTAMP };
+    const stickerMsg = { id: 'wamid_stk_01', from: FAKE_WA_ID, type: 'sticker',
+                         sticker: { id: '444', mime_type: 'image/webp' }, timestamp: FAKE_TIMESTAMP };
 
-    const payload = makeInboundPayload({ messages: [videoMsg] });
+    const payload = makeInboundPayload({ messages: [audioMsg, stickerMsg] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
     mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
@@ -1792,6 +1794,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
 
     expect(res._status).toBe(200);
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
   });
 
@@ -2024,5 +2027,141 @@ describe('POST — inbound IMAGE', () => {
     const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
     expect(processorArgs.expectedMediaType).toBe('DOCUMENT');
     expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
+  });
+});
+
+// =============================================================================
+// Helpers — VIDEO inbound
+// =============================================================================
+
+function makeVideoMessage({
+  id        = FAKE_INBOUND_WAMID,
+  from      = FAKE_WA_ID,
+  timestamp = FAKE_TIMESTAMP,
+  videoId   = FAKE_MEDIA_ID,
+  mime_type = 'video/mp4',
+  caption   = 'caption_should_be_ignored_in_mvp',
+} = {}) {
+  const msg = { id, from, type: 'video', timestamp };
+  if (videoId !== null) {
+    msg.video = { id: videoId, mime_type, sha256: 'sha256_fake_video_for_tests', caption };
+  }
+  return msg;
+}
+
+function makeVideoPayload({
+  messages = [makeVideoMessage()],
+  contacts = [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+  statuses = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  return makeInboundPayload({ messages, contacts, statuses, phoneId });
+}
+
+// =============================================================================
+// W-VID-01..04 — POST inbound VIDEO
+// =============================================================================
+
+describe('POST — inbound VIDEO', () => {
+  it('W-VID-01 | caminho feliz: video válida → processor VIDEO, RPC video, 200', async () => {
+    const payload = makeVideoPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
+    expect(processorArgs.companyId).toBe(FAKE_COMPANY_ID);
+    expect(processorArgs.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(processorArgs.expectedMediaType).toBe('VIDEO');
+    expect(processorArgs.maxBytes).toBe(16 * 1024 * 1024);
+    expect(processorArgs.hintFilename).toBeUndefined();
+    expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
+
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
+    expect(rpcName).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs).toMatchObject({
+      p_company_id:     FAKE_COMPANY_ID,
+      p_instance_id:    FAKE_INSTANCE_ID,
+      p_media_asset_id: FAKE_ASSET_ID,
+      p_message_type:   'video',
+    });
+    expect(rpcArgs).not.toHaveProperty('p_body');
+
+    const credCalls = mockSvc.from.mock.calls.filter(([t]) => t === 'meta_whatsapp_credentials');
+    expect(credCalls.length).toBe(1);
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
+  });
+
+  it('W-VID-02 | video.id ausente → skip 200; zero decrypt/download/RPC', async () => {
+    const payload = makeVideoPayload({ messages: [makeVideoMessage({ videoId: null })] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-VID-03 | TEXT + VIDEO no mesmo payload → ambos processados; 200', async () => {
+    const textMsg = makeInboundMessage({ id: 'wamid_text_vid_01', body: 'Olá' });
+    const vidMsg  = makeVideoMessage({ id: 'wamid_vid_ok_01' });
+    const payload = makeInboundPayload({ messages: [textMsg, vidMsg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+
+    mockSvc.rpc
+      .mockResolvedValueOnce({ data: { created: true }, error: null })
+      .mockResolvedValueOnce({ data: { created: true }, error: null });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('video');
+  });
+
+  it('W-VID-04 | DOCUMENT e IMAGE continuam no pipeline após VIDEO ser suportada', async () => {
+    const docPayload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(docPayload)));
+    setupDocumentDb();
+
+    const docReq = makePostReq();
+    const docRes = makeRes();
+    await handler(docReq, docRes);
+
+    expect(docRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].expectedMediaType).toBe('DOCUMENT');
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
+
+    const imgPayload = makeImagePayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(imgPayload)));
+    setupDocumentDb();
+
+    const imgReq = makePostReq();
+    const imgRes = makeRes();
+    await handler(imgReq, imgRes);
+
+    expect(imgRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[1][0].expectedMediaType).toBe('IMAGE');
+    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('image');
   });
 });

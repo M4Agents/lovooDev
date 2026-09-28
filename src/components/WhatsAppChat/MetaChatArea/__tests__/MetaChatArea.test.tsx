@@ -1714,16 +1714,16 @@ describe('MetaChatArea — INBOUND DOCUMENT render (INBOUND-DOC-C2)', () => {
     expect(screen.queryByText('Mensagem não suportada')).toBeNull()
   })
 
-  // F-DOC-10 — message_type='video' → continua não suportado ——————————————————
-  it('F-DOC-10: message_type=video + media video → continua "Mensagem não suportada"', () => {
-    const msg = makeMsg('vid-inb-001', 'inbound', 'video', '', null, {
+  // F-DOC-10 — message_type='video' inbound válido agora renderiza —————————————
+  it('F-DOC-10: message_type=video + media video + URL → renderiza msg-media-video', () => {
+    const msg = makeMsg('vid-inb-001', 'inbound', 'video', null as unknown as string, null, {
       type: 'video', url: 'https://example.com/vid.mp4',
       filename: 'video.mp4', mime_type: 'video/mp4', file_size: 5000000,
     })
     mockIdle({ messages: [msg] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
-    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+    expect(screen.getByTestId('msg-media-video')).toBeTruthy()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
   })
 })
 
@@ -1802,20 +1802,143 @@ describe('MetaChatArea — INBOUND IMAGE render', () => {
     expect(screen.queryByTestId('msg-media-image')).toBeNull()
   })
 
-  it('F-INB-IMG-06: VIDEO inbound continua não suportado', () => {
-    const msg = makeMsg('vid-inb-img-suite', 'inbound', 'video', '', null, {
+  it('F-INB-IMG-06: VIDEO inbound válido agora renderiza msg-media-video', () => {
+    const msg = makeMsg('vid-inb-img-suite', 'inbound', 'video', null as unknown as string, null, {
       type: 'video', url: 'https://example.com/vid.mp4',
       filename: 'video.mp4', mime_type: 'video/mp4', file_size: 5000000,
     })
     mockIdle({ messages: [msg] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
-    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+    expect(screen.getByTestId('msg-media-video')).toBeTruthy()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
   })
 
   it('F-INB-IMG-07: DOCUMENT inbound continua renderizando card clicável', () => {
     const doc: MetaChatMessage = {
       id:                 'inb-doc-after-img',
+      conversation_id:    CONV_ID,
+      instance_id:        'inst-001',
+      direction:          'inbound',
+      message_type:       'document',
+      body:               null as unknown as string,
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at:         '2026-09-21T15:00:00.000Z',
+      media: {
+        type: 'document', url: 'https://example.com/contrato.pdf',
+        filename: 'contrato.pdf', mime_type: 'application/pdf', file_size: 102400,
+      },
+    }
+    mockIdle({ messages: [doc] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const link = screen.getByTestId('msg-media-document') as HTMLAnchorElement
+    expect(link.tagName.toLowerCase()).toBe('a')
+    expect(link.href).toContain('contrato.pdf')
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+})
+
+// =============================================================================
+// F-INB-VID — INBOUND VIDEO render (fail-closed)
+// =============================================================================
+
+describe('MetaChatArea — INBOUND VIDEO render', () => {
+  const INBOUND_VID_MEDIA: MetaMessageMedia = {
+    type:      'video',
+    url:       'https://example.com/inbound.mp4',
+    filename:  'inbound.mp4',
+    mime_type: 'video/mp4',
+    file_size: 1_048_576,
+  }
+
+  function makeInboundVidMsg(
+    mediaOverride?: Partial<MetaMessageMedia> | null,
+    body: string | null = null,
+  ): MetaChatMessage {
+    const media =
+      mediaOverride === null
+        ? null
+        : { ...INBOUND_VID_MEDIA, ...mediaOverride }
+    return {
+      id:                 'inb-vid-test-001',
+      conversation_id:    CONV_ID,
+      instance_id:        'inst-001',
+      direction:          'inbound',
+      message_type:       'video',
+      body:               body as unknown as string,
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at:         '2026-09-21T15:00:00.000Z',
+      media,
+    } as MetaChatMessage
+  }
+
+  it('F-INB-VID-01: inbound video + media.type=video + URL → msg-media-video com controls', () => {
+    mockIdle({ messages: [makeInboundVidMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const video = screen.getByTestId('msg-media-video') as HTMLVideoElement
+    expect(video.src).toContain('inbound.mp4')
+    expect(video.controls).toBe(true)
+    expect(video.autoplay).toBe(false)
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('F-INB-VID-02: body=null → não crasha; sem texto fabricado', () => {
+    mockIdle({ messages: [makeInboundVidMsg()] })
+    expect(() =>
+      render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    ).not.toThrow()
+    expect(screen.getByTestId('msg-media-video')).toBeTruthy()
+    expect(screen.queryByText('Vídeo')).toBeNull()
+    expect(screen.queryByText('[Vídeo]')).toBeNull()
+    expect(screen.queryByText('null')).toBeNull()
+  })
+
+  it('F-INB-VID-03: video + media.type=image → Mensagem não suportada', () => {
+    mockIdle({ messages: [makeInboundVidMsg({ type: 'image', url: 'https://example.com/img.jpg' })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+    expect(screen.queryByTestId('msg-media-image')).toBeNull()
+  })
+
+  it('F-INB-VID-04: video sem media → Mensagem não suportada', () => {
+    mockIdle({ messages: [makeInboundVidMsg(null)] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+  })
+
+  it('F-INB-VID-05: video + media.url=null → Mensagem não suportada (não inventa conteúdo)', () => {
+    mockIdle({ messages: [makeInboundVidMsg({ url: null })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+  })
+
+  it('F-INB-VID-06: IMAGE inbound continua renderizando', () => {
+    const img: MetaChatMessage = {
+      id:                 'inb-img-after-vid',
+      conversation_id:    CONV_ID,
+      instance_id:        'inst-001',
+      direction:          'inbound',
+      message_type:       'image',
+      body:               null as unknown as string,
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at:         '2026-09-21T15:00:00.000Z',
+      media: {
+        type: 'image', url: 'https://example.com/inbound.jpg',
+        filename: 'inbound.jpg', mime_type: 'image/jpeg', file_size: 20480,
+      },
+    }
+    mockIdle({ messages: [img] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const el = screen.getByTestId('msg-media-image') as HTMLImageElement
+    expect(el.src).toContain('inbound.jpg')
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('F-INB-VID-07: DOCUMENT inbound continua renderizando card clicável', () => {
+    const doc: MetaChatMessage = {
+      id:                 'inb-doc-after-vid',
       conversation_id:    CONV_ID,
       instance_id:        'inst-001',
       direction:          'inbound',

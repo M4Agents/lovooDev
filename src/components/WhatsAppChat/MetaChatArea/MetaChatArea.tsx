@@ -233,22 +233,29 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   // MVP4B.6C: exibe mídia de header (IMAGE/VIDEO/DOCUMENT) acima do body.
   // INBOUND-DOC-C2: document inbound com media.type='document' também é renderizável.
   // INBOUND-IMG: image inbound somente com media.type='image' e URL válida.
-  // VIDEO inbound e tipos desconhecidos continuam "Mensagem não suportada".
+  // INBOUND-VID: video inbound somente com media.type='video' e URL válida.
+  // Tipos desconhecidos continuam "Mensagem não suportada".
   const isInboundImage =
     message.message_type === 'image' &&
     message.media?.type === 'image' &&
+    Boolean(message.media.url)
+  const isInboundVideo =
+    message.message_type === 'video' &&
+    message.media?.type === 'video' &&
     Boolean(message.media.url)
   const isRenderable =
     message.message_type === 'text'     ||
     message.message_type === 'template' ||
     (message.message_type === 'document' && message.media?.type === 'document') ||
-    isInboundImage
+    isInboundImage ||
+    isInboundVideo
 
-  // Fail-closed: image sem URL, sem media, ou media.type divergente → hasMedia = false.
+  // Fail-closed: image/video sem URL, sem media, ou media.type divergente → hasMedia = false.
   const hasMedia =
     (message.message_type === 'template' && message.media != null) ||
     (message.message_type === 'document' && message.media?.type === 'document') ||
-    isInboundImage
+    isInboundImage ||
+    isInboundVideo
   const mediaType = hasMedia ? message.media!.type : null
 
   return (
@@ -332,7 +339,7 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
         {/* ── Body / fallback ───────────────────────────────────────────────── */}
         {/* Fail-closed: se não renderizável → "Mensagem não suportada".          */}
         {/* Body somente quando há conteúdo real: evita <p> vazio para document   */}
-        {/* / image inbound (body=null). Não fabrica "Imagem" nem caption.        */}
+        {/* / image / video inbound (body=null). Não fabrica caption.             */}
         {/* TEXT e TEMPLATE sempre têm body não-nulo.                             */}
         {!isRenderable ? (
           <p className="text-sm italic opacity-70">

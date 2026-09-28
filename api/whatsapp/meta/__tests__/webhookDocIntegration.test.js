@@ -25,10 +25,12 @@
 //   D-03 — storage failure propagation → 500 transiente, zero RPC, res sanitizada
 //   D-IMG-01 — IMAGE JPEG: processor real + Storage mock + RPC image
 //   D-IMG-02 — IMAGE source_ref reuse (idempotência do processor)
+//   D-VID-01 — VIDEO MP4: processor real + Storage mock + RPC video
+//   D-VID-02 — VIDEO source_ref reuse (idempotência do processor)
 //
 // NÃO DUPLICA:
 //   batch safety, document.id ausente, too_large, type_mismatch, credential_missing,
-//   metadata_failure, download_timeout, video skip, url_invalid — cobertos em W-DOC.
+//   metadata_failure, download_timeout, audio/sticker skip, url_invalid — cobertos em W-DOC.
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -139,6 +141,15 @@ const JPEG_MAGIC = new Uint8Array([
 ]);
 const JPEG_BLOB = new Blob([JPEG_MAGIC]); // sem type — paridade com downloadMediaBytes real
 
+// MP4 mínimo (ISO BMFF ftyp/isom) — fileTypeFromBlob real detecta video/mp4.
+// Box: size=24, type=ftyp, major=isom, minor=0, compatible=isom+mp41.
+const MP4_MAGIC = new Uint8Array([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+  0x69, 0x73, 0x6F, 0x6D, 0x00, 0x00, 0x00, 0x00,
+  0x69, 0x73, 0x6F, 0x6D, 0x6D, 0x70, 0x34, 0x31,
+]);
+const MP4_BLOB = new Blob([MP4_MAGIC]); // sem type — paridade com downloadMediaBytes real
+
 // =============================================================================
 // Helpers — chains de mock
 // =============================================================================
@@ -211,6 +222,42 @@ function makeDocumentPayload({
     object: 'whatsapp_business_account',
     entry: [{
       id: 'entry-integration-1',
+      changes: [{
+        field: 'messages',
+        value: {
+          messaging_product: 'whatsapp',
+          metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+          messages: msgs,
+          contacts: ctxs,
+        },
+      }],
+    }],
+  };
+}
+
+/** Payload completo com type='video'. Caption presente no payload é ignorada no MVP. */
+function makeVideoPayload({
+  messages = null,
+  contacts = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  const msgs = messages ?? [{
+    id:        FAKE_WAMID,
+    from:      FAKE_WA_ID,
+    type:      'video',
+    timestamp: '1739321024',
+    video: {
+      id:        FAKE_MEDIA_ID,
+      mime_type: 'video/mp4',
+      sha256:    'sha256_fake_video_integration',
+      caption:   'caption_must_not_become_p_body',
+    },
+  }];
+  const ctxs = contacts ?? [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }];
+  return {
+    object: 'whatsapp_business_account',
+    entry: [{
+      id: 'entry-integration-video-1',
       changes: [{
         field: 'messages',
         value: {
@@ -626,6 +673,92 @@ describe('INBOUND-IMG-D — integração webhook + inboundMediaProcessor (IMAGE)
     expect(mockCmlInsert).not.toHaveBeenCalled();
     expect(mockSvc.rpc).toHaveBeenCalledOnce();
     expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('image');
+    expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_body');
+  });
+
+});
+
+// =============================================================================
+// D-VID-01..02 — Integração VIDEO (processor real, Storage mock)
+// =============================================================================
+
+describe('INBOUND-VID-D — integração webhook + inboundMediaProcessor (VIDEO)', () => {
+
+  it('D-VID-01 | MP4 válido → processor real, Storage ArrayBuffer, RPC video, sem p_body', async () => {
+    mockDownloadMediaMetadata.mockResolvedValue({
+      url:       FAKE_CDN_URL,
+      mime_type: 'video/mp4',
+      sha256:    null,
+      file_size: MP4_BLOB.size,
+    });
+    mockDownloadMediaBytes.mockResolvedValue(MP4_BLOB);
+
+    const payload = makeVideoPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupIntegrationMocks();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+
+    expect(mockDownloadMediaMetadata).toHaveBeenCalledOnce();
+    expect(mockDownloadMediaMetadata.mock.calls[0][1]).toBe(FAKE_MEDIA_ID);
+
+    expect(mockStorageUpload).toHaveBeenCalledOnce();
+    const [, uploadBody, uploadOptions] = mockStorageUpload.mock.calls[0];
+    expect(uploadBody instanceof ArrayBuffer).toBe(true);
+    expect(uploadBody instanceof Blob).toBe(false);
+    expect(uploadBody.byteLength).toBe(MP4_BLOB.size);
+    expect(uploadOptions.contentType).toBe('video/mp4');
+    expect(uploadOptions.upsert).toBe(false);
+
+    expect(mockCmlInsert).toHaveBeenCalledOnce();
+    const inserted = mockCmlInsert.mock.calls[0][0];
+    expect(inserted.company_id).toBe(FAKE_COMPANY_ID);
+    expect(inserted.source_ref).toBe(`meta-inbound:${FAKE_WAMID}`);
+    expect(inserted.file_type).toBe('video');
+    expect(inserted.mime_type).toBe('video/mp4');
+    expect(inserted.created_by).toBeNull();
+    expect(inserted.original_filename).toBe('inbound.mp4');
+
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
+    expect(rpcName).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs.p_message_type).toBe('video');
+    expect(rpcArgs.p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(rpcArgs.p_instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(rpcArgs.p_media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(rpcArgs).not.toHaveProperty('p_body');
+
+    expect(lastCredentialChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+  });
+
+  it('D-VID-02 | source_ref reuse VIDEO: precheck HIT → zero Graph/Storage/insert, RPC video', async () => {
+    const existingAsset = {
+      id:                FAKE_ASSET_ID,
+      mime_type:         'video/mp4',
+      file_size:         2048,
+      original_filename: 'inbound.mp4',
+    };
+
+    const payload = makeVideoPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupIntegrationMocks({ cmlPrecheckData: existingAsset });
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadMediaMetadata).not.toHaveBeenCalled();
+    expect(mockDownloadMediaBytes).not.toHaveBeenCalled();
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockCmlInsert).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('video');
     expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
     expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_body');
   });

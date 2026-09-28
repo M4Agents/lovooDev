@@ -207,10 +207,10 @@ async function handlePost(req, res) {
   const entries = Array.isArray(payload.entry) ? payload.entry : [];
 
   // Marcador de falha transiente para batch safety (INBOUND-DOC-C2).
-  // Erros transientes de DOCUMENT/IMAGE marcam este flag e continuam processando
+  // Erros transientes de DOCUMENT/IMAGE/VIDEO marcam este flag e continuam processando
   // demais eventos do payload, em vez de retornar 500 imediatamente.
   // Meta reenvia o payload inteiro em caso de 500 — por isso todos os ramos
-  // são idempotentes (TEXT via RPC, DOCUMENT/IMAGE via source_ref + ON CONFLICT,
+  // são idempotentes (TEXT via RPC, DOCUMENT/IMAGE/VIDEO via source_ref + ON CONFLICT,
   // statuses via TRANSITION_MATRIX).
   let hasTransientFailure = false;
 
@@ -335,7 +335,7 @@ async function handlePost(req, res) {
         }
 
         // B.3 Contact name — lookup compartilhado (pure, sem side effects).
-        // Extraído antes do ramo de tipo para reutilização em TEXT, DOCUMENT e IMAGE.
+        // Extraído antes do ramo de tipo para reutilização em TEXT, DOCUMENT, IMAGE e VIDEO.
         // contacts[] é opcional no payload Meta; contact_name = null é válido.
         // Nunca logar: message.from, wa_id, contact_name, body.
         const matchedContact = contacts.find(c => c.wa_id === message.from);
@@ -433,9 +433,33 @@ async function handlePost(req, res) {
           });
           if (imgTransient) hasTransientFailure = true;
 
+        } else if (message.type === 'video') {
+          // ── B.5.4 VIDEO inbound — mesmo pipeline DOCUMENT/IMAGE, parâmetros VIDEO.
+          // caption do payload é IGNORADO neste MVP (paridade IMAGE; body=NULL na RPC).
+          // mime_type e sha256 do payload NÃO são autoridade.
+          // filename: VIDEO oficial normalmente não traz filename — processor usa inbound.<ext>.
+          const mediaId = message.video?.id;
+          if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
+            console.log('[meta/webhook] event_type=inbound_video outcome=invalid_media_id');
+            continue;
+          }
+          const vidTransient = await processInboundMediaMessage({
+            svc,
+            instance,
+            message,
+            contactName,
+            providerTimestamp,
+            mediaId,
+            expectedMediaType: 'VIDEO',
+            rpcMessageType:    'video',
+            hintFilename:      undefined,
+            maxBytes:          MEDIA_SIZE_LIMITS.VIDEO,
+            logEvent:          'inbound_video',
+          });
+          if (vidTransient) hasTransientFailure = true;
+
         } else {
-          // ── B.5.4 Tipos não suportados (video, audio, sticker, etc.) ────
-          // VIDEO: reservado para extensão futura. IMAGE saiu deste ramo.
+          // ── B.5.5 Tipos não suportados (audio, sticker, etc.) ────
           console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
           continue;
         }
@@ -443,7 +467,7 @@ async function handlePost(req, res) {
     }
   }
 
-  // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE do payload.
+  // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE/VIDEO do payload.
   // Meta reenviará o payload inteiro — idempotência garante segurança do retry.
   if (hasTransientFailure) {
     return res.status(500).json({ error: 'Internal error' });
@@ -457,14 +481,14 @@ async function handlePost(req, res) {
 // =============================================================================
 
 /**
- * Pipeline compartilhado DOCUMENT + IMAGE inbound.
+ * Pipeline compartilhado DOCUMENT + IMAGE + VIDEO inbound.
  *
  * Preserva a semântica validada do ramo DOCUMENT:
  *   dedupe wamid → credencial lazy (instance.id do banco) → processor existente
  *   → RPC process_meta_inbound_media_message (body=NULL; caption fora do MVP).
  *
  * NÃO baixa mídia, NÃO chama Graph, NÃO chama RPC se o caller já rejeitou mediaId.
- * NÃO processa VIDEO / AUDIO / STICKER.
+ * NÃO processa AUDIO / STICKER.
  *
  * @returns {Promise<boolean>} true = falha transiente (caller marca hasTransientFailure)
  */
