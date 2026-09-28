@@ -343,9 +343,17 @@ export const EditFunnelModal: React.FC<EditFunnelModalProps> = ({
     if (!deletingStageId) return
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('Sessão expirada. Recarregue a página e tente novamente.')
+      }
+
       const response = await fetch('/api/funnel/delete-stage', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           stage_id: deletingStageId,
           move_to_stage_id: moveToStageId || undefined
