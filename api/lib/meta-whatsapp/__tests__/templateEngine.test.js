@@ -1488,7 +1488,7 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
     expect(r.buttons).toEqual([]);
   });
 
-  it('4C1-02 | QUICK_REPLY → classificado; index/type/text; supported=false', () => {
+  it('4C1-02 | QUICK_REPLY → classificado; index/type/text; supported=true (4C.2B)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -1496,8 +1496,8 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(r.bodyText).toBe('Confirma?');
     expect(r.parameters).toEqual([]);
@@ -1517,8 +1517,8 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
         },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons).toEqual([
       { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
       { index: 1, type: 'QUICK_REPLY', text: 'Não' },
@@ -1563,8 +1563,8 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Ok' }] },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.bodyText).toBe('Olá {{1}}');
     expect(r.headerMediaFormat).toBeNull();
     expect(r.parameters.map(p => ({ component: p.component, key: p.key }))).toEqual([
@@ -1583,27 +1583,35 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.headerMediaFormat).toBe('IMAGE');
     expect(r.bodyText).toBe('Veja');
     expect(r.parameters).toEqual([]);
     expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
   });
 
-  it('4C1-BGC | buildGraphComponents continua omitindo BUTTONS', () => {
-    const r = buildGraphComponents(
+  it('4C1-BGC | buildGraphComponents sem templateIdentity + QR → fail-closed', () => {
+    expect(() => buildGraphComponents(
       [
         { type: 'BODY', text: 'Olá {{1}}' },
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
       ],
       'POSITIONAL',
       { body: { '1': 'Ana' } },
-    );
-    expect(r).toEqual([
-      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
-    ]);
-    expect(r.some(c => String(c.type).toLowerCase() === 'button')).toBe(false);
+    )).toThrow();
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Olá {{1}}' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        ],
+        'POSITIONAL',
+        { body: { '1': 'Ana' } },
+      );
+    } catch (err) {
+      expect(err.code).toBe('build_qr_identity_missing');
+    }
   });
 
 });
@@ -1622,8 +1630,8 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-payload' }] },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(r.buttons[0]).not.toHaveProperty('payload');
     expect(r.buttons[0]).not.toHaveProperty('url_kind');
@@ -1841,6 +1849,312 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
     expect(media.unsupported_reason).toBeNull();
     expect(media.buttons).toEqual([]);
     expect(media.headerMediaFormat).toBe('IMAGE');
+  });
+
+});
+
+// =============================================================================
+// MVP4C.2B — QUICK_REPLY-only send capability (payload backend-only)
+// =============================================================================
+
+const QR_IDENTITY = { templateIdentity: { name: 'hello_world', language: 'pt_BR' } };
+
+describe('analyzeTemplate / buildGraphComponents — MVP4C.2B QUICK_REPLY send', () => {
+
+  it('4C2B-01 | um QUICK_REPLY → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(r.buttons[0]).not.toHaveProperty('payload');
+  });
+
+  it('4C2B-02 | dois QUICK_REPLY → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.buttons.map(b => b.index)).toEqual([0, 1]);
+  });
+
+  it('4C2B-02b | QUICK_REPLY sem text ou text vazio → supported=false', () => {
+    const missing = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY' }] },
+      ],
+    });
+    expect(missing.supported).toBe(false);
+
+    const blank = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: '   ' }] },
+      ],
+    });
+    expect(blank.supported).toBe(false);
+  });
+
+  it('4C2B-03 | Graph component único correto', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+      },
+    ]);
+  });
+
+  it('4C2B-04 | múltiplos → índices "0","1" e ordem preservada', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r.map(c => c.index)).toEqual(['0', '1']);
+    expect(r.map(c => c.sub_type)).toEqual(['quick_reply', 'quick_reply']);
+  });
+
+  it('4C2B-05/06 | payload determinístico e estável', () => {
+    const comps = [
+      { type: 'BODY', text: 'Confirma?' },
+      { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+    ];
+    const a = buildGraphComponents(comps, 'POSITIONAL', { body: {} }, QR_IDENTITY);
+    const b = buildGraphComponents(comps, 'POSITIONAL', { body: {} }, QR_IDENTITY);
+    expect(a[0].parameters[0].payload).toBe('lovoo:qr:v1:hello_world:pt_BR:0');
+    expect(a[0].parameters[0].payload).toBe(b[0].parameters[0].payload);
+  });
+
+  it('4C2B-07 | mudança do text não muda payload', () => {
+    const a = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'X' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL', { body: {} }, QR_IDENTITY,
+    );
+    const b = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'X' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Confirmar agora' }] },
+      ],
+      'POSITIONAL', { body: {} }, QR_IDENTITY,
+    );
+    expect(a[0].parameters[0].payload).toBe(b[0].parameters[0].payload);
+  });
+
+  it('4C2B-08 | mudança de index muda payload', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'X' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'A' },
+            { type: 'QUICK_REPLY', text: 'B' },
+          ],
+        },
+      ],
+      'POSITIONAL', { body: {} }, QR_IDENTITY,
+    );
+    expect(r[0].parameters[0].payload).toBe('lovoo:qr:v1:hello_world:pt_BR:0');
+    expect(r[1].parameters[0].payload).toBe('lovoo:qr:v1:hello_world:pt_BR:1');
+    expect(r[0].parameters[0].payload).not.toBe(r[1].parameters[0].payload);
+  });
+
+  it('4C2B-08b | identity diferente muda payload', () => {
+    const comps = [
+      { type: 'BODY', text: 'X' },
+      { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+    ];
+    const a = buildGraphComponents(comps, 'POSITIONAL', { body: {} }, QR_IDENTITY);
+    const b = buildGraphComponents(comps, 'POSITIONAL', { body: {} }, {
+      templateIdentity: { name: 'outro_tpl', language: 'pt_BR' },
+    });
+    const c = buildGraphComponents(comps, 'POSITIONAL', { body: {} }, {
+      templateIdentity: { name: 'hello_world', language: 'en' },
+    });
+    expect(a[0].parameters[0].payload).not.toBe(b[0].parameters[0].payload);
+    expect(a[0].parameters[0].payload).not.toBe(c[0].parameters[0].payload);
+  });
+
+  it('4C2B-08c | builder sem templateIdentity para QR → fail-closed', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'X' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_qr_identity_missing');
+    }
+  });
+
+  it('4C2B-09 | QR + URL → unsupported', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'X' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Site', url: 'https://example.com' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+  });
+
+  it('4C2B-10 | QR + PHONE_NUMBER → unsupported', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'X' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'PHONE_NUMBER', text: 'Ligar' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type PHONE_NUMBER not supported');
+  });
+
+  it('4C2B-11 | unknown → unsupported', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'X' },
+        { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Abrir' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type FLOW not supported');
+  });
+
+  it('4C2B-12 | AUTH continua unsupported', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Código {{1}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Ok' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toMatch(/AUTHENTICATION/);
+    expect(r.buttons).toEqual([]);
+  });
+
+  it('4C2B-13 | parameter_values.buttons → rejeitado', () => {
+    const r = validateParameterValues(
+      [],
+      { body: {}, buttons: { '0': 'x' } },
+    );
+    expect(r.valid).toBe(false);
+    expect(r.error).toBe('template_params_mismatch');
+  });
+
+  it('4C2B-14 | text sem buttons continua idêntico', () => {
+    const r = buildGraphComponents(
+      [{ type: 'BODY', text: 'Olá {{1}}' }, { type: 'FOOTER', text: 'Rodapé' }],
+      'POSITIONAL',
+      { body: { '1': 'Ana' } },
+    );
+    expect(r).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+  });
+
+  it('4C2B-15 | media HEADER + QUICK_REPLY coexistem', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      {
+        headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' },
+        templateIdentity: { name: 'promo', language: 'pt_BR' },
+      },
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'mid-1' } }] },
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:promo:pt_BR:0' }],
+      },
+    ]);
+  });
+
+  it('4C2B-16 | payload acima do teto Lovoo → fail-closed', () => {
+    const hugeName = 'n'.repeat(1100);
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'X' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+        { templateIdentity: { name: hugeName, language: 'pt_BR' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_qr_payload_too_long');
+    }
   });
 
 });

@@ -109,6 +109,12 @@ function sanitizeTemplate(raw) {
   const components    = Array.isArray(raw.components) ? raw.components : [];
   const safeComponents = components.map(({ example: _ex, ...rest }) => rest);
 
+  // 4C.2B: capability do engine ≠ discovery no picker.
+  // QUICK_REPLY-only pode ser engine-supported; GET anuncia supported=false até a UI.
+  const engineSupported = analysis.supported === true;
+  const hasButtons      = Array.isArray(analysis.buttons) && analysis.buttons.length > 0;
+  const pickerSupported = engineSupported && !hasButtons;
+
   return {
     id:                  raw.id,
     name:                raw.name,
@@ -118,8 +124,12 @@ function sanitizeTemplate(raw) {
     parameter_format:    analysis.parameter_format,
     components:          safeComponents,
     parameters:          analysis.parameters,
-    supported:           analysis.supported,
-    unsupported_reason:  analysis.unsupported_reason,
+    supported:           pickerSupported,
+    unsupported_reason:  pickerSupported
+      ? null
+      : (engineSupported && hasButtons
+          ? 'BUTTONS UI not enabled'
+          : analysis.unsupported_reason),
     header_media_format: analysis.headerMediaFormat, // null | 'IMAGE' | 'VIDEO' | 'DOCUMENT' (MVP4B.3)
     buttons:             analysis.buttons ?? [],     // classificação sanitizada (MVP4C.2A)
   };

@@ -429,9 +429,16 @@ export default async function handler(req, res) {
       rawTemplate.components,
       analysis.parameter_format,
       parameterValues,
-      hasMediaHeader
-        ? { headerMedia: { mediaId: uploadedMediaId, mediaType: uploadedMediaType, filename: uploadedFilename } }
-        : {},
+      {
+        // Identity vem EXCLUSIVAMENTE do template relido na WABA — nunca do body.
+        templateIdentity: {
+          name:     rawTemplate.name,
+          language: rawTemplate.language,
+        },
+        ...(hasMediaHeader
+          ? { headerMedia: { mediaId: uploadedMediaId, mediaType: uploadedMediaType, filename: uploadedFilename } }
+          : {}),
+      },
     );
   } catch {
     // NÃO repetir upload. NÃO chamar sendTemplateMessage.

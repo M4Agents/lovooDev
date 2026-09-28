@@ -2758,3 +2758,141 @@ describe('TEXT-05 payload Graph textual permanece equivalente ao anterior (sem m
     expect(tplStr).not.toContain('document');
   });
 });
+
+// =============================================================================
+// MVP4C.2B — QUICK_REPLY backend send (engine mockado; Graph mockado)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_QR = {
+  id: 'tpl-qr',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Confirma?' },
+    { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+  ],
+};
+
+const FAKE_ANALYSIS_QR = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Confirma?', headerMediaFormat: null,
+  buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }],
+};
+
+const FAKE_COMPONENTS_QR = [
+  {
+    type: 'button',
+    sub_type: 'quick_reply',
+    index: '0',
+    parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+  },
+];
+
+describe('4C2B-SEND | QUICK_REPLY-only chega ao Graph uma vez', () => {
+  it('sendTemplateMessage exatamente 1; recipient do banco; identity do rawTemplate', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {} },
+        components: [{ type: 'button', payload: 'frontend-forged' }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_QR);
+    expect(JSON.stringify(tpl)).not.toContain('frontend-forged');
+
+    const [, , , opts] = mockBuildGraphComponents.mock.calls[0];
+    expect(opts.templateIdentity).toEqual({
+      name: FAKE_RAW_TEMPLATE_QR.name,
+      language: FAKE_RAW_TEMPLATE_QR.language,
+    });
+  });
+});
+
+describe('4C2B-SEND | mix unsupported → zero Graph WRITE', () => {
+  it('analyzeTemplate.supported=false → 422; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_QR,
+      components: [
+        { type: 'BODY', text: 'X' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Site', url: 'https://example.com' },
+          ],
+        },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS type URL not supported',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'X',
+      headerMediaFormat: null, buttons: [],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('4C2B-SEND | builder lança antes do Graph → send 0', () => {
+  it('buildGraphComponents throw → 500; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    const err = new Error('identity'); err.code = 'build_qr_identity_missing';
+    mockBuildGraphComponents.mockImplementation(() => { throw err; });
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(500);
+    expect(res._body.error).toBe('internal_error');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('4C2B-SEND | persistência existente após QR send', () => {
+  it('INSERT chat/tracking após Graph success; media_asset_id null', async () => {
+    const chatInsert = vi.fn().mockResolvedValue({ data: null, error: null });
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce({ insert: chatInsert });
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+    mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(chatInsert).toHaveBeenCalledOnce();
+    expect(chatInsert.mock.calls[0][0].message_type).toBe('template');
+    expect(chatInsert.mock.calls[0][0].media_asset_id).toBeNull();
+  });
+});

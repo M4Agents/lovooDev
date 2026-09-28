@@ -84,6 +84,7 @@ vi.mock('../../../../lib/meta-whatsapp/graphClient.js', () => ({
 }));
 
 import handler from '../index.js';
+import { analyzeTemplate } from '../../../../lib/meta-whatsapp/templateEngine.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -2161,6 +2162,85 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     expect(res._body.next_cursor).toBe('opaque-cursor-4c2a');
     expect(res._body.templates[0].buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Ok' }]);
     expect(res._body.templates[0].supported).toBe(false);
+  });
+
+});
+
+// =============================================================================
+// MVP4C.2B — GET gate: engine capability ≠ picker discovery
+// =============================================================================
+
+describe('GET — MVP4C.2B picker gate', () => {
+
+  it('QUICK_REPLY-only: engine supported=true; GET supported=false; UI reason; sem payload', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2b-qr',
+      name: 'qr_only',
+      language: 'pt_BR',
+      components: [
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    };
+    const engine = analyzeTemplate(raw);
+    expect(engine.supported).toBe(true);
+    expect(engine.unsupported_reason).toBeNull();
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(false);
+    expect(dto.unsupported_reason).toBe('BUTTONS UI not enabled');
+    expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(dto.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+  });
+
+  it('sem BUTTONS → GET supported=true intacto', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_SIMPLE]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].unsupported_reason).toBeNull();
+    expect(res._body.templates[0].buttons).toEqual([]);
+  });
+
+  it('URL e PHONE_NUMBER continuam GET supported=false (engine também false)', async () => {
+    const urlTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2b-url',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com' }] },
+      ],
+    };
+    const phoneTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2b-phone',
+      components: [
+        { type: 'BODY', text: 'Ligue', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Contato' }] },
+      ],
+    };
+    expect(analyzeTemplate(urlTpl).supported).toBe(false);
+    expect(analyzeTemplate(phoneTpl).supported).toBe(false);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([urlTpl, phoneTpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const urlDto = res._body.templates.find(t => t.id === 'tpl-4c2b-url');
+    const phoneDto = res._body.templates.find(t => t.id === 'tpl-4c2b-phone');
+    expect(urlDto.supported).toBe(false);
+    expect(urlDto.unsupported_reason).not.toBe('BUTTONS UI not enabled');
+    expect(phoneDto.supported).toBe(false);
+    expect(phoneDto.unsupported_reason).not.toBe('BUTTONS UI not enabled');
   });
 
 });

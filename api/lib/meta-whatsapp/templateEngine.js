@@ -23,6 +23,8 @@
 //   (supported=false). CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
 // MVP4C.2A: classifyButtons distingue URL static/dynamic/unknown e sanitiza
 //   PHONE_NUMBER (sem expor o número). Send continua bloqueado.
+// MVP4C.2B: QUICK_REPLY-only → analyzeTemplate.supported=true. Payload runtime
+//   gerado no builder (options.templateIdentity). GET/picker continua gated.
 // =============================================================================
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
@@ -35,9 +37,14 @@ const RE_NAMED            = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g; // {{name}}
 // Formatos desconhecidos continuam fail-closed (unsupported).
 const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
-// Tipos de botão candidatos ao MVP4C. Envio ainda NÃO habilitado (4C.1).
-// URL / PHONE_NUMBER sem fixture no repo — tratados como tipo não suportado.
+// Tipos de botão candidatos ao MVP4C. 4C.2B habilita send somente QUICK_REPLY-only.
+// URL / PHONE_NUMBER / FLOW / outros → fail-closed.
 const MVP4C_CANDIDATE_BUTTON_TYPES = new Set(['QUICK_REPLY']);
+
+// Limite defensivo Lovoo — NÃO é limite oficial Meta (desconhecido nesta fatia).
+// Acima do teto interno de name (512) + language (64) do send-template.
+const LOVOO_QR_PAYLOAD_MAX_LEN = 1024;
+const QR_PAYLOAD_PREFIX        = 'lovoo:qr:v1';
 
 // =============================================================================
 // Helpers privados
@@ -176,6 +183,39 @@ function classifyButtons(rawButtons, parameterFormat) {
       ? 'BUTTONS send not enabled'
       : `BUTTONS type ${unknownType} not supported`,
   };
+}
+
+/** True somente se todos os botões são QUICK_REPLY com text não vazio. @private */
+function isQuickReplyOnlyReady(buttons) {
+  if (!Array.isArray(buttons) || buttons.length === 0) return false;
+  return buttons.every(b =>
+    b?.type === 'QUICK_REPLY'
+    && typeof b.text === 'string'
+    && b.text.trim().length > 0,
+  );
+}
+
+/**
+ * Resolve identity backend-only para payload QR.
+ * name/language devem ser strings não vazias (após trim).
+ * @private
+ */
+function resolveTemplateIdentity(options) {
+  const raw = options?.templateIdentity;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const name     = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const language = typeof raw.language === 'string' ? raw.language.trim() : '';
+  if (!name || !language) return null;
+  return { name, language };
+}
+
+/**
+ * Payload runtime QUICK_REPLY — determinístico, independente de text.
+ * Nunca logar o valor retornado.
+ * @private
+ */
+function buildQuickReplyPayload(name, language, index) {
+  return `${QR_PAYLOAD_PREFIX}:${name}:${language}:${index}`;
 }
 
 /** Extrai exemplo POSITIONAL de um componente. */
@@ -479,11 +519,13 @@ export function analyzeTemplate(rawTemplate) {
       return makeUnsupported('Template has no BODY component', fmt);
     }
 
-    // 4C.1 / 4C.2A: BUTTONS classificado (URL kind incluso); envio ainda não habilitado.
+    // 4C.2B: QUICK_REPLY-only com text válido → supported=true.
+    // Mix / vazio / text ausente / tipo desconhecido → supported=false.
     if (classifiedButtons !== null) {
+      const qrReady = isQuickReplyOnlyReady(classifiedButtons);
       return {
-        supported:          false,
-        unsupported_reason: buttonsBlockReason,
+        supported:          qrReady,
+        unsupported_reason: qrReady ? null : buttonsBlockReason,
         parameter_format:   fmt,
         parameters:         params,
         bodyText,
@@ -531,6 +573,12 @@ export function validateParameterValues(parameters, parameterValues) {
     Array.isArray(parameterValues)
   ) {
     return { valid: false, error: 'invalid_request' };
+  }
+
+  // 4C.2B: chave buttons é runtime proibida — payload nasce só no builder.
+  // Dívida: demais chaves extras no root (além de header/body) ainda não são varridas.
+  if (Object.prototype.hasOwnProperty.call(parameterValues, 'buttons')) {
+    return { valid: false, error: 'template_params_mismatch' };
   }
 
   // body: obrigatório, plain object
@@ -626,12 +674,19 @@ export function validateParameterValues(parameters, parameterValues) {
  * @param {string}   options.headerMedia.mediaId   Media ID retornado pelo Graph /media upload
  * @param {string}   options.headerMedia.mediaType 'IMAGE' | 'VIDEO' | 'DOCUMENT'
  * @param {string}   [options.headerMedia.filename] Hint de nome de arquivo (DOCUMENT)
+ * @param {object} [options.templateIdentity]      Identidade do template relido no WABA (4C.2B)
+ * @param {string}   options.templateIdentity.name     rawTemplate.name
+ * @param {string}   options.templateIdentity.language rawTemplate.language
  * @returns {Array}  components[] prontos para sendTemplateMessage
  * @throws {Error} err.code in:
  *   build_media_unexpected      — headerMedia fornecido para template sem HEADER media
  *   build_media_header_missing  — template tem HEADER media mas headerMedia ausente
  *   build_media_invalid_input   — mediaId vazio ou whitespace-only
  *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
+ *   build_buttons_invalid       — BUTTONS malformado
+ *   build_buttons_unsupported   — BUTTONS não é QUICK_REPLY-only
+ *   build_qr_identity_missing   — templateIdentity ausente/inválido para QR
+ *   build_qr_payload_too_long   — payload excede LOVOO_QR_PAYLOAD_MAX_LEN
  */
 export function buildGraphComponents(templateComponents, parameterFormat, parameterValues, options = {}) {
   const comps       = Array.isArray(templateComponents) ? templateComponents : [];
@@ -742,6 +797,49 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
       const parameters = buildTextParameters(comp.text, parameterFormat, bodyValues);
       if (parameters.length > 0) {
         result.push({ type: 'body', parameters });
+      }
+      continue;
+    }
+
+    if (type === 'BUTTONS') {
+      const classified = classifyButtons(comp.buttons, parameterFormat);
+      if (!classified.ok) {
+        throw makeEngineError(
+          'build_buttons_invalid',
+          'buildGraphComponents: BUTTONS structure invalid',
+        );
+      }
+      if (classified.buttons.length === 0) continue;
+
+      if (!isQuickReplyOnlyReady(classified.buttons)) {
+        throw makeEngineError(
+          'build_buttons_unsupported',
+          'buildGraphComponents: BUTTONS type not enabled for send',
+        );
+      }
+
+      const identity = resolveTemplateIdentity(options);
+      if (!identity) {
+        throw makeEngineError(
+          'build_qr_identity_missing',
+          'buildGraphComponents: templateIdentity required for QUICK_REPLY',
+        );
+      }
+
+      for (const btn of classified.buttons) {
+        const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
+        if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+          throw makeEngineError(
+            'build_qr_payload_too_long',
+            'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+          );
+        }
+        result.push({
+          type:       'button',
+          sub_type:   'quick_reply',
+          index:      String(btn.index),
+          parameters: [{ type: 'payload', payload }],
+        });
       }
       continue;
     }
