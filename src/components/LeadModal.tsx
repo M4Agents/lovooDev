@@ -78,7 +78,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   onSave
 }) => {
   const { company, user } = useAuth();
-  const { canAssignLead, currentUserId, isRestrictedToOwnLeads } = useLeadPermissions();
+  const { canAssignLead, canEditLead, currentUserId } = useLeadPermissions();
   const { canViewNuvemshopData } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -451,7 +451,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     const { existingLead } = data;
 
     setDuplicateAlert({
-      type: isRestrictedToOwnLeads() ? 'restricted' : 'unrestricted',
+      type: canEditLead(existingLead) ? 'unrestricted' : 'restricted',
       existingLead,
       responsibleName: existingLead.responsibleName ?? '',
       matchedBy: existingLead.matchedBy,
