@@ -46,10 +46,11 @@
 // DTO:
 //   Cada template retorna: id, name, language, status, category,
 //   parameter_format, components, parameters, supported, unsupported_reason,
-//   header_media_format.
+//   header_media_format, buttons.
 //   'parameters' é lista normalizada derivada server-side (picker-ready).
 //   'supported' / 'unsupported_reason' indicam capacidade do MVP atual.
 //   'header_media_format' classifica o tipo de mídia do HEADER: null | 'IMAGE' | 'VIDEO' | 'DOCUMENT'.
+//   'buttons' é classificação sanitizada do engine (index/type/text/url_kind). Send ainda bloqueado.
 //   MVP4B.2: IMAGE/VIDEO/DOCUMENT → supported=true. O envio real de mídia pertence à 4B.4.
 //
 // Parsing de placeholders:
@@ -120,6 +121,7 @@ function sanitizeTemplate(raw) {
     supported:           analysis.supported,
     unsupported_reason:  analysis.unsupported_reason,
     header_media_format: analysis.headerMediaFormat, // null | 'IMAGE' | 'VIDEO' | 'DOCUMENT' (MVP4B.3)
+    buttons:             analysis.buttons ?? [],     // classificação sanitizada (MVP4C.2A)
   };
 }
 

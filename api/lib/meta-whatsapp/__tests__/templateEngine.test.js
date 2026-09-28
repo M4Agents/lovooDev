@@ -1535,7 +1535,7 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
     });
     expect(r.supported).toBe(false);
     expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
-    expect(r.buttons).toEqual([{ index: 0, type: 'URL', text: 'Abrir' }]);
+    expect(r.buttons).toEqual([{ index: 0, type: 'URL', text: 'Abrir', url_kind: 'unknown' }]);
     expect(r.bodyText).toBe('Olá');
   });
 
@@ -1604,6 +1604,243 @@ describe('analyzeTemplate — MVP4C.1 BUTTONS classification', () => {
       { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
     ]);
     expect(r.some(c => String(c.type).toLowerCase() === 'button')).toBe(false);
+  });
+
+});
+
+// =============================================================================
+// MVP4C.2A — classificação de definição (envio continua bloqueado)
+// =============================================================================
+
+describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
+
+  it('4C2A-01 | QUICK_REPLY → index/type/text; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-payload' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS send not enabled');
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(r.buttons[0]).not.toHaveProperty('payload');
+    expect(r.buttons[0]).not.toHaveProperty('url_kind');
+  });
+
+  it('4C2A-02 | URL static → url_kind=static; url preservada; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja o site' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir', url: 'https://example.com/loja' }],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/loja', url_kind: 'static',
+    }]);
+  });
+
+  it('4C2A-03 | URL POSITIONAL dynamic {{1}} → url_kind=dynamic; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Pedido {{1}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Rastrear', url: 'https://example.com/p/{{1}}' }],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Rastrear',
+      url: 'https://example.com/p/{{1}}', url_kind: 'dynamic',
+    }]);
+    expect(r.parameters.map(p => p.key)).toEqual(['1']);
+  });
+
+  it('4C2A-04 | URL NAMED dynamic → url_kind=dynamic; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Pedido {{order_id}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Rastrear', url: 'https://example.com/p/{{order_id}}' }],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Rastrear',
+      url: 'https://example.com/p/{{order_id}}', url_kind: 'dynamic',
+    }]);
+  });
+
+  it('4C2A-05 | URL ausente → url_kind=unknown; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Abrir' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([{ index: 0, type: 'URL', text: 'Abrir', url_kind: 'unknown' }]);
+    expect(r.buttons[0]).not.toHaveProperty('url');
+  });
+
+  it('4C2A-06 | URL com múltiplos placeholders → unknown; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir', url: 'https://example.com/{{1}}/{{2}}' }],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/{{1}}/{{2}}', url_kind: 'unknown',
+    }]);
+  });
+
+  it('4C2A-07 | placeholder incompatível com parameter_format → unknown; supported=false', () => {
+    const positionalNamed = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir', url: 'https://example.com/{{order_id}}' }],
+        },
+      ],
+    });
+    expect(positionalNamed.supported).toBe(false);
+    expect(positionalNamed.buttons[0].url_kind).toBe('unknown');
+
+    const namedPositional = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir', url: 'https://example.com/{{1}}' }],
+        },
+      ],
+    });
+    expect(namedPositional.supported).toBe(false);
+    expect(namedPositional.buttons[0].url_kind).toBe('unknown');
+  });
+
+  it('4C2A-08 | PHONE_NUMBER → index/type/text; sem phone_number; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Ligue' },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'PHONE_NUMBER', text: 'Contato', phone_number: '+5511999999999' }],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type PHONE_NUMBER not supported');
+    expect(r.buttons).toEqual([{ index: 0, type: 'PHONE_NUMBER', text: 'Contato' }]);
+    expect(r.buttons[0]).not.toHaveProperty('phone_number');
+  });
+
+  it('4C2A-09 | mixed QUICK_REPLY + URL → ordem/índices; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Site', url: 'https://example.com' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      { index: 1, type: 'URL', text: 'Site', url: 'https://example.com', url_kind: 'static' },
+    ]);
+  });
+
+  it('4C2A-10 | tipo desconhecido → fail-closed', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Olá' },
+        { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Abrir fluxo' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type FLOW not supported');
+    expect(r.buttons).toEqual([{ index: 0, type: 'FLOW', text: 'Abrir fluxo' }]);
+    expect(r.buttons[0]).not.toHaveProperty('url');
+    expect(r.buttons[0]).not.toHaveProperty('url_kind');
+  });
+
+  it('4C2A-11 | AUTHENTICATION → early block intacto', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Código {{1}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toMatch(/AUTHENTICATION/);
+    expect(r.buttons).toEqual([]);
+    expect(r.bodyText).toBeNull();
+  });
+
+  it('4C2A-12 | text/media sem BUTTONS → baseline compatível', () => {
+    const text = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}' },
+        { type: 'BODY', text: 'Pedido {{1}}' },
+        { type: 'FOOTER', text: 'Rodapé' },
+      ],
+    });
+    expect(text.supported).toBe(true);
+    expect(text.unsupported_reason).toBeNull();
+    expect(text.buttons).toEqual([]);
+    expect(text.headerMediaFormat).toBeNull();
+    expect(text.parameters.map(p => p.component)).toEqual(['HEADER', 'BODY']);
+
+    const media = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+    });
+    expect(media.supported).toBe(true);
+    expect(media.unsupported_reason).toBeNull();
+    expect(media.buttons).toEqual([]);
+    expect(media.headerMediaFormat).toBe('IMAGE');
   });
 
 });

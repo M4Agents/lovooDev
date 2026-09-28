@@ -2041,3 +2041,126 @@ describe('GET-M10 F-01 — raw examples de mídia não expostos mesmo com suppor
     expect(bodyStr).not.toContain('header_handle');
   });
 });
+
+// =============================================================================
+// MVP4C.2A — DTO buttons (classificação sanitizada; send continua bloqueado)
+// =============================================================================
+
+describe('GET — MVP4C.2A buttons DTO', () => {
+
+  it('template sem BUTTONS → buttons=[] e demais campos intactos', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_SIMPLE]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const tpl = res._body.templates[0];
+    expect(tpl.buttons).toEqual([]);
+    expect(tpl.supported).toBe(true);
+    expect(tpl.unsupported_reason).toBeNull();
+    expect(tpl.components[0]).not.toHaveProperty('example');
+    expect(tpl.components[0].type).toBe('BODY');
+    expect(res._body.next_cursor).toBeNull();
+  });
+
+  it('QUICK_REPLY → buttons sanitizado; supported=false; payload não vaza', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2a-qr',
+      components: [
+        { type: 'BODY', text: 'Clique!', example: { body_text: [['hint']] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(false);
+    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(result.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(result.buttons)).not.toContain('secret-qr-payload');
+    result.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
+    expect(result.components.some(c => c.type === 'BODY')).toBe(true);
+    expect(result.components.some(c => c.type === 'BUTTONS')).toBe(true);
+  });
+
+  it('URL → buttons inclui url/url_kind; supported=false', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2a-url',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(false);
+    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    }]);
+  });
+
+  it('PHONE_NUMBER → top-level buttons não expõe phone_number; supported=false', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2a-phone',
+      components: [
+        { type: 'BODY', text: 'Ligue', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'PHONE_NUMBER', text: 'Contato', phone_number: '+5511999999999' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const result = res._body.templates[0];
+    expect(result.supported).toBe(false);
+    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.buttons).toEqual([{ index: 0, type: 'PHONE_NUMBER', text: 'Contato' }]);
+    expect(result.buttons[0]).not.toHaveProperty('phone_number');
+    expect(JSON.stringify(result.buttons)).not.toContain('+5511999999999');
+  });
+
+  it('paginação intacta com template BUTTONS', async () => {
+    const tpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c2a-page',
+      components: [
+        { type: 'BODY', text: 'Clique!', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Ok' }] },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([tpl], 'opaque-cursor-4c2a'));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.next_cursor).toBe('opaque-cursor-4c2a');
+    expect(res._body.templates[0].buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Ok' }]);
+    expect(res._body.templates[0].supported).toBe(false);
+  });
+
+});

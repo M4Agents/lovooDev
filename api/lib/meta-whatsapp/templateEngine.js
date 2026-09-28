@@ -21,6 +21,8 @@
 //   exclusivamente de HEADER TEXT e BODY.
 // MVP4C.1: BUTTONS é reconhecido e classificado; o envio continua bloqueado
 //   (supported=false). CAROUSEL / AUTHENTICATION / CATALOG / outros → unsupported.
+// MVP4C.2A: classifyButtons distingue URL static/dynamic/unknown e sanitiza
+//   PHONE_NUMBER (sem expor o número). Send continua bloqueado.
 // =============================================================================
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
@@ -71,12 +73,63 @@ function makeUnsupported(reason, fmt) {
 }
 
 /**
+ * Classifica url_kind de um botão URL a partir de button.url e parameter_format.
+ * button.example NÃO define aridade.
+ *
+ * POSITIONAL: dinâmica somente com exatamente um {{1}} válido.
+ * NAMED:      dinâmica somente com exatamente um {{nome}} válido (RE_NAMED).
+ *
+ * @private
+ * @returns {{ kind: 'static'|'dynamic'|'unknown', url: string|null }}
+ */
+function classifyUrlKind(rawUrl, parameterFormat) {
+  if (typeof rawUrl !== 'string' || rawUrl.trim().length === 0) {
+    return { kind: 'unknown', url: null };
+  }
+
+  const allInners = collectInners(rawUrl, RE_ANY_PLACEHOLDER);
+
+  if (allInners.size === 0) {
+    return { kind: 'static', url: rawUrl };
+  }
+
+  if (parameterFormat === 'POSITIONAL') {
+    const digitInners = collectInners(rawUrl, RE_POSITIONAL);
+    for (const inner of allInners) {
+      if (!digitInners.has(inner)) {
+        return { kind: 'unknown', url: rawUrl };
+      }
+    }
+    if (digitInners.size === 1 && digitInners.has('1')) {
+      return { kind: 'dynamic', url: rawUrl };
+    }
+    return { kind: 'unknown', url: rawUrl };
+  }
+
+  if (parameterFormat === 'NAMED') {
+    const namedInners = collectInners(rawUrl, RE_NAMED);
+    for (const inner of allInners) {
+      if (!namedInners.has(inner)) {
+        return { kind: 'unknown', url: rawUrl };
+      }
+    }
+    if (namedInners.size === 1) {
+      return { kind: 'dynamic', url: rawUrl };
+    }
+    return { kind: 'unknown', url: rawUrl };
+  }
+
+  return { kind: 'unknown', url: rawUrl };
+}
+
+/**
  * Classifica component.buttons na ordem Meta (index 0-based).
- * Preserva somente type + text quando comprovados. Sem url/phone/example/payload.
+ * Preserva type + text. URL adiciona url (quando string válida) + url_kind.
+ * PHONE_NUMBER não expõe phone_number. payload de definição nunca entra no DTO.
  * @private
  * @returns {{ ok: false, reason: string } | { ok: true, buttons: object[], blockReason: string }}
  */
-function classifyButtons(rawButtons) {
+function classifyButtons(rawButtons, parameterFormat) {
   if (!Array.isArray(rawButtons)) {
     return { ok: false, reason: 'BUTTONS structure invalid' };
   }
@@ -100,6 +153,15 @@ function classifyButtons(rawButtons) {
     if (typeof btn.text === 'string') {
       entry.text = btn.text;
     }
+
+    if (type === 'URL') {
+      const classified = classifyUrlKind(btn.url, parameterFormat);
+      if (classified.url !== null) {
+        entry.url = classified.url;
+      }
+      entry.url_kind = classified.kind;
+    }
+
     buttons.push(entry);
 
     if (!MVP4C_CANDIDATE_BUTTON_TYPES.has(type) && unknownType === null) {
@@ -400,7 +462,7 @@ export function analyzeTemplate(rawTemplate) {
         if (classifiedButtons !== null) {
           return makeUnsupported('BUTTONS structure invalid', fmt);
         }
-        const classified = classifyButtons(comp.buttons);
+        const classified = classifyButtons(comp.buttons, fmt);
         if (!classified.ok) {
           return makeUnsupported(classified.reason, fmt);
         }
@@ -417,7 +479,7 @@ export function analyzeTemplate(rawTemplate) {
       return makeUnsupported('Template has no BODY component', fmt);
     }
 
-    // 4C.1: BUTTONS classificado, envio ainda não habilitado.
+    // 4C.1 / 4C.2A: BUTTONS classificado (URL kind incluso); envio ainda não habilitado.
     if (classifiedButtons !== null) {
       return {
         supported:          false,
