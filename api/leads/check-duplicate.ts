@@ -107,38 +107,66 @@ export default async function handler(req: any, res: any) {
     return res.status(403).json({ error: 'Acesso negado' });
   }
 
-  // ── Montar condições de busca ─────────────────────────────────────────────
-  const conditions: string[] = [];
-
-  if (phone) {
-    const lookupValues = buildPhoneLookupValues(String(phone));
-    if (lookupValues.length > 0) {
-      conditions.push(`phone_normalized.in.(${lookupValues.join(',')})`);
-    }
-  }
-
+  // ── Buscar duplicata (service_role — ignora RLS / restrict_leads_to_owner) ─
+  // NÃO usar .or('col.in.(a,b,c)') — o PostgREST parte o filtro nas vírgulas
+  // do in.() e a query quebra com 500. Telefone e e-mail são consultas separadas.
+  const leadSelect = 'id, name, phone, email, responsible_user_id';
   const emailNorm = (email ?? '').trim().toLowerCase();
-  if (emailNorm.includes('@')) {
-    conditions.push(`email.ilike.${emailNorm}`);
-  }
+  const lookupValues = phone ? buildPhoneLookupValues(String(phone)) : [];
 
-  if (conditions.length === 0) {
+  if (lookupValues.length === 0 && !emailNorm.includes('@')) {
     return res.status(200).json({ isDuplicate: false });
   }
 
-  // ── Buscar com service_role (ignora RLS — cobre restrict_leads_to_owner) ──
-  const { data: found, error: queryError } = await svc
-    .from('leads')
-    .select('id, name, phone, email, responsible_user_id')
-    .eq('company_id', company_id)
-    .is('deleted_at', null)
-    .or(conditions.join(','))
-    .limit(1)
-    .maybeSingle();
+  let found: {
+    id: number;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    responsible_user_id: string | null;
+  } | null = null;
+  let matchedBy: 'phone' | 'email' = 'phone';
 
-  if (queryError) {
-    console.error('[check-duplicate] query error:', queryError);
-    return res.status(500).json({ error: 'Erro ao verificar duplicata' });
+  if (lookupValues.length > 0) {
+    const { data: byPhone, error: phoneError } = await svc
+      .from('leads')
+      .select(leadSelect)
+      .eq('company_id', company_id)
+      .is('deleted_at', null)
+      .in('phone_normalized', lookupValues)
+      .limit(1)
+      .maybeSingle();
+
+    if (phoneError) {
+      console.error('[check-duplicate] phone query error:', phoneError.message);
+      return res.status(500).json({ error: 'Erro ao verificar duplicata' });
+    }
+
+    if (byPhone) {
+      found = byPhone;
+      matchedBy = 'phone';
+    }
+  }
+
+  if (!found && emailNorm.includes('@')) {
+    const { data: byEmail, error: emailError } = await svc
+      .from('leads')
+      .select(leadSelect)
+      .eq('company_id', company_id)
+      .is('deleted_at', null)
+      .ilike('email', emailNorm)
+      .limit(1)
+      .maybeSingle();
+
+    if (emailError) {
+      console.error('[check-duplicate] email query error:', emailError.message);
+      return res.status(500).json({ error: 'Erro ao verificar duplicata' });
+    }
+
+    if (byEmail) {
+      found = byEmail;
+      matchedBy = 'email';
+    }
   }
 
   if (!found) {
@@ -161,10 +189,6 @@ export default async function handler(req: any, res: any) {
       responsibleUser?.email ||
       'usuário não identificado';
   }
-
-  // Inferir campo que gerou o match
-  const matchedBy: 'phone' | 'email' =
-    phone && found.phone ? 'phone' : 'email';
 
   return res.status(200).json({
     isDuplicate: true,

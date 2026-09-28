@@ -428,7 +428,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     if (!phoneNorm && !emailNorm.includes('@')) return false;
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return false;
+    if (!session?.access_token) {
+      throw new Error('sessao_ausente');
+    }
 
     const response = await fetch('/api/leads/check-duplicate', {
       method: 'POST',
@@ -443,7 +445,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       }),
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) {
+      throw new Error('check_duplicate_falhou');
+    }
 
     const data = await response.json();
     if (!data.isDuplicate) return false;
