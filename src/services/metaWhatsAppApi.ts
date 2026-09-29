@@ -644,6 +644,17 @@ export const metaWhatsAppApi = {
       }
     }
 
+    // 4C.3C: url, se presente, deve ser objeto (não null/array). Suffix opaco — sem mutar.
+    if (parameterValues.url !== undefined) {
+      if (
+        parameterValues.url === null ||
+        typeof parameterValues.url !== 'object' ||
+        Array.isArray(parameterValues.url)
+      ) {
+        throw new Error('parameter_values.url inválido')
+      }
+    }
+
     const headers = await getAuthHeaders()
 
     const res = await fetch('/api/whatsapp/meta/messages/send-template', {

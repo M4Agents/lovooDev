@@ -863,6 +863,33 @@ describe('metaWhatsAppApi.listTemplates', () => {
     await expect(metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID))
       .rejects.toThrow(/buttons/)
   })
+
+  it('LT-24: mapper preserva url e url_kind; não copia payload', async () => {
+    mockFetch({
+      templates: [{
+        ...FAKE_TEMPLATE_POSITIONAL,
+        buttons: [{
+          index: 0,
+          type: 'URL',
+          text: 'Abrir teste',
+          url: 'https://example.com/test/{{1}}',
+          url_kind: 'dynamic',
+          payload: 'should-not-copy',
+        }],
+      }],
+      next_cursor: null,
+    })
+    const result = await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(result.templates[0].buttons).toEqual([{
+      index: 0,
+      type: 'URL',
+      text: 'Abrir teste',
+      url: 'https://example.com/test/{{1}}',
+      url_kind: 'dynamic',
+    }])
+    expect(result.templates[0].buttons[0]).not.toHaveProperty('payload')
+    expect(JSON.stringify(result.templates[0].buttons)).not.toContain('should-not-copy')
+  })
 })
 
 // =============================================================================
@@ -1111,5 +1138,38 @@ describe('metaWhatsAppApi.sendTemplate', () => {
     mockFetch({ error: 'provider_unavailable' }, 503)
     await expect(metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY))
       .rejects.toThrow('provider_unavailable')
+  })
+
+  it('ST-26: parameter_values.url preservado sem mutar suffix', async () => {
+    const spy = mockFetch(SEND_TMPL_SUCCESS)
+    const params = { body: {}, url: { '0': ' 12345 ' } }
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, params)
+    const body = calledParsedBody(spy)
+    expect(body.parameter_values).toEqual({ body: {}, url: { '0': ' 12345 ' } })
+    expect(JSON.stringify(body.parameter_values)).not.toContain('https://example.com/test/12345')
+    expect(body.parameter_values).not.toHaveProperty('buttons')
+    expect(body).not.toHaveProperty('components')
+  })
+
+  it('ST-27: url null/array/primitive → throw sem fetch; ausência preserva body-only', async () => {
+    const spy = vi.spyOn(global, 'fetch')
+    await expect(metaWhatsAppApi.sendTemplate(
+      COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG,
+      { body: {}, url: null as never },
+    )).rejects.toThrow('parameter_values.url inválido')
+    await expect(metaWhatsAppApi.sendTemplate(
+      COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG,
+      { body: {}, url: [] as never },
+    )).rejects.toThrow('parameter_values.url inválido')
+    await expect(metaWhatsAppApi.sendTemplate(
+      COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG,
+      { body: {}, url: '12345' as never },
+    )).rejects.toThrow('parameter_values.url inválido')
+    expect(spy).not.toHaveBeenCalled()
+
+    const okSpy = mockFetch(SEND_TMPL_SUCCESS)
+    await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
+    expect(calledParsedBody(okSpy).parameter_values).toEqual(TMPL_PARAMS_BODY_ONLY)
+    expect(calledParsedBody(okSpy).parameter_values).not.toHaveProperty('url')
   })
 })

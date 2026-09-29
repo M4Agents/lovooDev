@@ -1038,3 +1038,185 @@ describe('MetaTemplatePicker — MVP4C.2C QUICK_REPLY', () => {
     expect(screen.queryByTestId('preview-buttons')).toBeNull()
   })
 })
+
+// =============================================================================
+// FE-URL-01.. — MVP4C.3C dynamic URL suffix
+// =============================================================================
+
+const TMPL_URL_DYNAMIC: MetaWhatsAppTemplate = {
+  id:                  'tpl-url-dyn-030',
+  name:                'lovoo_e2e_url_dynamic',
+  language:            'en',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [{
+    index: 0, type: 'URL', text: 'Abrir teste',
+    url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+  }],
+  components:          [
+    { type: 'BODY', text: 'Esta é uma mensagem de teste do botão URL dinâmico.' },
+    { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }] },
+  ],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_URL_DYNAMIC_B: MetaWhatsAppTemplate = {
+  ...TMPL_URL_DYNAMIC,
+  id:   'tpl-url-dyn-031',
+  name: 'lovoo_e2e_url_dynamic_b',
+  buttons: [{
+    index: 0, type: 'URL', text: 'Outro teste',
+    url: 'https://example.com/other/{{1}}', url_kind: 'dynamic',
+  }],
+}
+
+const TMPL_BODY_AND_URL: MetaWhatsAppTemplate = {
+  ...TMPL_URL_DYNAMIC,
+  id:   'tpl-url-dyn-032',
+  name: 'order_url_dynamic',
+  components: [
+    { type: 'BODY', text: 'Pedido {{1}}' },
+    { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }] },
+  ],
+  parameters: [
+    { component: 'BODY', key: '1', position: 1, example: '99' },
+  ],
+}
+
+describe('MetaTemplatePicker — MVP4C.3C dynamic URL', () => {
+  it('FE-URL-01: label, prefixo read-only, 1 input; prefixo não é link', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+
+    expect(screen.getByTestId('preview-url-label').textContent).toBe('Abrir teste')
+    expect(screen.getByTestId('preview-url-prefix').textContent).toBe('https://example.com/test/')
+    expect(screen.getByTestId('preview-url-prefix').closest('a')).toBeNull()
+    expect(screen.getAllByTestId('url-suffix-0')).toHaveLength(1)
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toHaveProperty('value', '')
+  })
+
+  it('FE-URL-02: vazio e whitespace desabilitam Enviar; suffix habilita', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+
+    const send = () => screen.getByRole('button', { name: /enviar template/i })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '   ' } })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+    expect(send()).toHaveProperty('disabled', false)
+  })
+
+  it('FE-URL-03: onSend recebe só suffix; sem URL completa/buttons/components/payload', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(onSend.mock.calls[0][0].name).toBe('lovoo_e2e_url_dynamic')
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': '12345' } })
+    const pv = JSON.stringify(onSend.mock.calls[0][1])
+    expect(pv).not.toContain('https://example.com/test/12345')
+    expect(pv).not.toContain('https://example.com/test/{{1}}')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('buttons')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('components')
+    expect(pv).not.toContain('payload')
+    expect(pv).not.toContain('lovoo:qr:v1')
+  })
+
+  it('FE-URL-04: BODY params + URL coexistem', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_BODY_AND_URL]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('order_url_dynamic'))
+    fireEvent.click(screen.getByText('order_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Parâmetro BODY 1'), { target: { value: '99' } })
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '99' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: { '1': '99' }, url: { '0': '99' } })
+  })
+
+  it('FE-URL-05: URL → text limpa url; text → URL inicia vazio; URL A → URL B limpa suffix', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([
+      TMPL_URL_DYNAMIC, TMPL_NO_PARAMS, TMPL_URL_DYNAMIC_B,
+    ]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+
+    fireEvent.click(screen.getByText('simple_template'))
+    expect(screen.queryByLabelText('Sufixo do botão URL 0')).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {} })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('url')
+    expect(JSON.stringify(onSend.mock.calls[0][1])).not.toContain('12345')
+
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toHaveProperty('value', '')
+    expect(screen.getByRole('button', { name: /enviar template/i })).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic_b'))
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toHaveProperty('value', '')
+    expect(screen.getByRole('button', { name: /enviar template/i })).toHaveProperty('disabled', true)
+  })
+
+  it('FE-URL-06: QR sem input URL; media intacta; static unsupported ausente', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([
+      TMPL_QR_SINGLE, TMPL_IMAGE, TMPL_URL_UNSUPPORTED, TMPL_URL_DYNAMIC,
+    ]))
+    renderPicker()
+    await waitFor(() => screen.getByText('confirm_quick_reply'))
+    expect(screen.queryByText('see_website')).toBeNull()
+
+    fireEvent.click(screen.getByText('confirm_quick_reply'))
+    expect(screen.getByTestId('preview-button-0')).toBeTruthy()
+    expect(screen.queryByLabelText('Sufixo do botão URL 0')).toBeNull()
+    expect(screen.queryByTestId('preview-url-button')).toBeNull()
+
+    fireEvent.click(screen.getByText('promo_with_image'))
+    expect(screen.getByTestId('mas-mock-image')).toBeTruthy()
+    expect(screen.queryByLabelText('Sufixo do botão URL 0')).toBeNull()
+
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toBeTruthy()
+    expect(screen.queryByTestId('preview-buttons')).toBeNull()
+    expect(screen.queryByTestId('mas-mock-image')).toBeNull()
+  })
+
+  it('FE-URL-07: suffix com espaços laterais é enviado sem trim', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: ' 12345 ' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': ' 12345 ' } })
+  })
+})

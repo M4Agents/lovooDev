@@ -341,6 +341,7 @@ export interface GetMetaTemplatesResponse {
 export interface MetaTemplateParameterValues {
   header?: Record<string, string>
   body:    Record<string, string>
+  url?:    Record<string, string>  // MVP4C.3C — suffix por index; nunca URL completa
 }
 
 // ── Resposta de envio de template ────────────────────────────────────────────

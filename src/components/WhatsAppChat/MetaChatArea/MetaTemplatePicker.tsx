@@ -7,6 +7,7 @@
 //   - Carregar templates via listTemplates (máx 3 páginas)
 //   - Filtrar somente supported=true
 //   - Selecionar template + coletar parâmetros HEADER/BODY independentemente
+//   - MVP4C.3C: 1 URL dynamic POSITIONAL — suffix em parameter_values.url["0"]
 //   - Exibir preview textual local (não porta templateEngine.js)
 //   - Solicitar envio via onSend — parent é responsável pela chamada real
 //
@@ -50,7 +51,32 @@ export interface MetaTemplatePickerProps {
 /** Constrói paramValues inicial a partir dos parâmetros do template selecionado. */
 function initParamValues(tmpl: MetaWhatsAppTemplate): MetaTemplateParameterValues {
   const hasHeader = tmpl.parameters.some(p => p.component === 'HEADER')
-  return hasHeader ? { header: {}, body: {} } : { body: {} }
+  const base: MetaTemplateParameterValues = hasHeader ? { header: {}, body: {} } : { body: {} }
+  if (findSingleDynamicUrlButton(tmpl.buttons)) {
+    return { ...base, url: { '0': '' } }
+  }
+  return base
+}
+
+/**
+ * Primeiro slice 4C.3C: exatamente 1 botão URL dynamic no index 0.
+ * Fonte: DTO sanitizado. Nunca components[].buttons.
+ */
+function findSingleDynamicUrlButton(
+  buttons: MetaTemplateButton[] | undefined,
+): MetaTemplateButton | null {
+  if (!Array.isArray(buttons) || buttons.length !== 1) return null
+  const b = buttons[0]
+  if (b.type !== 'URL') return null
+  if (b.url_kind !== 'dynamic') return null
+  if (b.index !== 0) return null
+  return b
+}
+
+/** Prefixo visual: remove somente o {{1}} FINAL. Sem concatenar URL de envio. */
+function visualUrlPrefix(url: string | undefined): string | null {
+  if (typeof url !== 'string' || !url.endsWith('{{1}}')) return null
+  return url.slice(0, -'{{1}}'.length)
 }
 
 /**
@@ -110,6 +136,10 @@ function paramsComplete(tmpl: MetaWhatsAppTemplate, vals: MetaTemplateParameterV
   for (const p of tmpl.parameters) {
     const v = p.component === 'HEADER' ? (vals.header?.[p.key] ?? '') : (vals.body[p.key] ?? '')
     if (!v.trim()) return false
+  }
+  if (findSingleDynamicUrlButton(tmpl.buttons)) {
+    const suffix = vals.url?.['0'] ?? ''
+    if (typeof suffix !== 'string' || !suffix.trim()) return false
   }
   return true
 }
@@ -207,6 +237,10 @@ export function MetaTemplatePicker({
     )
   }, [])
 
+  const handleUrlSuffixChange = useCallback((value: string) => {
+    setParamValues(prev => ({ ...prev, url: { ...(prev.url ?? {}), '0': value } }))
+  }, [])
+
   // MVP4B: template tem HEADER media se header_media_format for IMAGE/VIDEO/DOCUMENT.
   // undefined é tratado como null (templates MVP4A sem este campo).
   const hasMediaHeader = selected?.header_media_format != null
@@ -228,9 +262,11 @@ export function MetaTemplatePicker({
   const canSend      = textComplete && mediaComplete && !sending
   const preview      = selected ? buildPreview(selected.components, selected.parameters, paramValues) : null
   const qrChips      = selected ? previewQuickReplies(selected.buttons) : []
+  const urlButton    = selected ? findSingleDynamicUrlButton(selected.buttons) : null
+  const urlPrefix    = urlButton ? visualUrlPrefix(urlButton.url) : null
   const headerParams = selected?.parameters.filter(p => p.component === 'HEADER') ?? []
   const bodyParams   = selected?.parameters.filter(p => p.component === 'BODY')   ?? []
-  const showPreview  = !!(preview && (preview.header || preview.body || preview.footer || qrChips.length > 0))
+  const showPreview  = !!(preview && (preview.header || preview.body || preview.footer || qrChips.length > 0 || urlButton))
 
   return (
     <div
@@ -346,6 +382,39 @@ export function MetaTemplatePicker({
                   {preview.header && <p className="text-xs font-semibold text-slate-700 mb-1" data-testid="preview-header">{preview.header}</p>}
                   {preview.body   && <p className="text-sm text-slate-700 leading-relaxed break-words whitespace-pre-wrap" data-testid="preview-body">{preview.body}</p>}
                   {preview.footer && <p className="text-xs text-slate-400 mt-1 italic" data-testid="preview-footer">{preview.footer}</p>}
+                  {urlButton && (
+                    <div
+                      data-testid="preview-url-button"
+                      className={`space-y-1.5${preview.header || preview.body || preview.footer ? ' mt-2' : ''}`}
+                    >
+                      {typeof urlButton.text === 'string' && urlButton.text.trim().length > 0 && (
+                        <span
+                          data-testid="preview-url-label"
+                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs text-slate-700"
+                        >
+                          {urlButton.text}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1 min-w-0">
+                        {urlPrefix != null && (
+                          <span
+                            data-testid="preview-url-prefix"
+                            className="text-xs text-slate-500 truncate"
+                          >
+                            {urlPrefix}
+                          </span>
+                        )}
+                        <input
+                          type="text"
+                          aria-label="Sufixo do botão URL 0"
+                          data-testid="url-suffix-0"
+                          value={paramValues.url?.['0'] ?? ''}
+                          onChange={e => handleUrlSuffixChange(e.target.value)}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                        />
+                      </div>
+                    </div>
+                  )}
                   {qrChips.length > 0 && (
                     <div
                       data-testid="preview-buttons"
