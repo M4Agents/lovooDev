@@ -6,7 +6,7 @@
 //
 // Exports públicos:
 //   analyzeTemplate(rawTemplate)
-//   validateParameterValues(parameters, parameterValues)
+//   validateParameterValues(parameters, parameterValues, context?)
 //   buildGraphComponents(templateComponents, parameterFormat, parameterValues, options?)
 //   interpolateBody(bodyText, parameterFormat, bodyValues)
 //
@@ -25,6 +25,8 @@
 //   PHONE_NUMBER (sem expor o número). Send continua bloqueado.
 // MVP4C.2B: QUICK_REPLY-only → analyzeTemplate.supported=true. Payload runtime
 //   gerado no builder (options.templateIdentity). GET/picker continua gated.
+// MVP4C.3B: 1 URL POSITIONAL com {{1}} no FINAL → supported=true. Runtime
+//   envia somente o suffix em parameter_values.url; Meta aplica à base aprovada.
 // =============================================================================
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
@@ -38,7 +40,8 @@ const RE_NAMED            = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g; // {{name}}
 const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 // Tipos de botão candidatos ao MVP4C. 4C.2B habilita send somente QUICK_REPLY-only.
-// URL / PHONE_NUMBER / FLOW / outros → fail-closed.
+// URL send-ready é gated por isSinglePositionalDynamicUrlSendReady — NÃO entra aqui.
+// PHONE_NUMBER / FLOW / outros → fail-closed.
 const MVP4C_CANDIDATE_BUTTON_TYPES = new Set(['QUICK_REPLY']);
 
 // Limite defensivo Lovoo — NÃO é limite oficial Meta (desconhecido nesta fatia).
@@ -193,6 +196,23 @@ function isQuickReplyOnlyReady(buttons) {
     && typeof b.text === 'string'
     && b.text.trim().length > 0,
   );
+}
+
+/**
+ * True somente para o slice 4C.3B: 1 URL POSITIONAL com {{1}} no FINAL.
+ * classifyUrlKind permanece descritivo ({{1}} no meio continua url_kind=dynamic).
+ * @private
+ */
+function isSinglePositionalDynamicUrlSendReady(buttons, parameterFormat, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (parameterFormat !== 'POSITIONAL') return false;
+  if (!Array.isArray(buttons) || buttons.length !== 1) return false;
+  const b = buttons[0];
+  if (b?.type !== 'URL') return false;
+  if (typeof b.url !== 'string') return false;
+  if (!b.url.endsWith('{{1}}')) return false;
+  const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+  return allInners.size === 1 && allInners.has('1');
 }
 
 /**
@@ -520,12 +540,19 @@ export function analyzeTemplate(rawTemplate) {
     }
 
     // 4C.2B: QUICK_REPLY-only com text válido → supported=true.
-    // Mix / vazio / text ausente / tipo desconhecido → supported=false.
+    // 4C.3B: 1 URL POSITIONAL com {{1}} no FINAL, sem HEADER media → supported=true.
+    // Mix / static / NAMED / media+URL / tipo desconhecido → supported=false.
     if (classifiedButtons !== null) {
-      const qrReady = isQuickReplyOnlyReady(classifiedButtons);
+      const qrReady  = isQuickReplyOnlyReady(classifiedButtons);
+      const urlReady = isSinglePositionalDynamicUrlSendReady(
+        classifiedButtons,
+        fmt,
+        headerMediaFormat,
+      );
+      const ready = qrReady || urlReady;
       return {
-        supported:          qrReady,
-        unsupported_reason: qrReady ? null : buttonsBlockReason,
+        supported:          ready,
+        unsupported_reason: ready ? null : buttonsBlockReason,
         parameter_format:   fmt,
         parameters:         params,
         bodyText,
@@ -563,9 +590,13 @@ export function analyzeTemplate(rawTemplate) {
  *
  * @param {Array}  parameters      Saída de analyzeTemplate().parameters
  * @param {unknown} parameterValues  Valor bruto enviado pelo frontend
+ * @param {object} [context]       Contexto derivado de analyzeTemplate (nunca do frontend)
+ * @param {Array}  [context.buttons]
+ * @param {string} [context.parameterFormat]
+ * @param {string|null} [context.headerMediaFormat]
  * @returns {{ valid: true } | { valid: false, error: string }}
  */
-export function validateParameterValues(parameters, parameterValues) {
+export function validateParameterValues(parameters, parameterValues, context = {}) {
   // Validação estrutural de parameterValues
   if (
     parameterValues === null ||
@@ -576,7 +607,8 @@ export function validateParameterValues(parameters, parameterValues) {
   }
 
   // 4C.2B: chave buttons é runtime proibida — payload nasce só no builder.
-  // Dívida: demais chaves extras no root (além de header/body) ainda não são varridas.
+  // 4C.3B: chave url é exigida somente no slice send-ready; caso contrário mismatch.
+  // Dívida: demais chaves extras no root (além de header/body/url) ainda não são varridas.
   if (Object.prototype.hasOwnProperty.call(parameterValues, 'buttons')) {
     return { valid: false, error: 'template_params_mismatch' };
   }
@@ -646,6 +678,39 @@ export function validateParameterValues(parameters, parameterValues) {
     }
   }
 
+  const ctx = (context !== null && typeof context === 'object' && !Array.isArray(context))
+    ? context
+    : {};
+  const urlReady = isSinglePositionalDynamicUrlSendReady(
+    ctx.buttons,
+    ctx.parameterFormat,
+    ctx.headerMediaFormat ?? null,
+  );
+  const hasOwnUrl = Object.prototype.hasOwnProperty.call(parameterValues, 'url');
+
+  if (urlReady) {
+    if (!hasOwnUrl) return { valid: false, error: 'template_params_mismatch' };
+    const urlValues = parameterValues.url;
+    if (
+      urlValues === null
+      || typeof urlValues !== 'object'
+      || Array.isArray(urlValues)
+    ) {
+      return { valid: false, error: 'template_params_mismatch' };
+    }
+    if (!strictKeyMatch(['0'], Object.keys(urlValues))) {
+      return { valid: false, error: 'template_params_mismatch' };
+    }
+    if (!Object.prototype.hasOwnProperty.call(urlValues, '0')) {
+      return { valid: false, error: 'template_params_mismatch' };
+    }
+    const urlVal = urlValues['0'];
+    if (typeof urlVal !== 'string') return { valid: false, error: 'template_params_mismatch' };
+    if (urlVal.trim().length === 0) return { valid: false, error: 'template_params_mismatch' };
+  } else if (hasOwnUrl) {
+    return { valid: false, error: 'template_params_mismatch' };
+  }
+
   return { valid: true };
 }
 
@@ -668,7 +733,7 @@ export function validateParameterValues(parameters, parameterValues) {
  *
  * @param {Array}  templateComponents  rawTemplate.components (array original)
  * @param {string} parameterFormat     'POSITIONAL' | 'NAMED'
- * @param {object} parameterValues     { header?, body } — já validado
+ * @param {object} parameterValues     { header?, body, url? } — já validado
  * @param {object} [options]           Opções adicionais (backward-compatible — padrão {})
  * @param {object} [options.headerMedia]           Mídia resolvida server-side (MVP4B.4B)
  * @param {string}   options.headerMedia.mediaId   Media ID retornado pelo Graph /media upload
@@ -684,7 +749,7 @@ export function validateParameterValues(parameters, parameterValues) {
  *   build_media_invalid_input   — mediaId vazio ou whitespace-only
  *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
  *   build_buttons_invalid       — BUTTONS malformado
- *   build_buttons_unsupported   — BUTTONS não é QUICK_REPLY-only
+ *   build_buttons_unsupported   — BUTTONS não é QR-only nem URL dynamic send-ready
  *   build_qr_identity_missing   — templateIdentity ausente/inválido para QR
  *   build_qr_payload_too_long   — payload excede LOVOO_QR_PAYLOAD_MAX_LEN
  */
@@ -811,34 +876,61 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
       }
       if (classified.buttons.length === 0) continue;
 
-      if (!isQuickReplyOnlyReady(classified.buttons)) {
+      if (isQuickReplyOnlyReady(classified.buttons)) {
+        const identity = resolveTemplateIdentity(options);
+        if (!identity) {
+          throw makeEngineError(
+            'build_qr_identity_missing',
+            'buildGraphComponents: templateIdentity required for QUICK_REPLY',
+          );
+        }
+
+        for (const btn of classified.buttons) {
+          const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
+          if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+            throw makeEngineError(
+              'build_qr_payload_too_long',
+              'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+            );
+          }
+          result.push({
+            type:       'button',
+            sub_type:   'quick_reply',
+            index:      String(btn.index),
+            parameters: [{ type: 'payload', payload }],
+          });
+        }
+        continue;
+      }
+
+      const urlReady = isSinglePositionalDynamicUrlSendReady(
+        classified.buttons,
+        parameterFormat,
+        hasMediaHeader ? 'IMAGE' : null,
+      );
+      if (!urlReady) {
         throw makeEngineError(
           'build_buttons_unsupported',
           'buildGraphComponents: BUTTONS type not enabled for send',
         );
       }
 
-      const identity = resolveTemplateIdentity(options);
-      if (!identity) {
-        throw makeEngineError(
-          'build_qr_identity_missing',
-          'buildGraphComponents: templateIdentity required for QUICK_REPLY',
-        );
-      }
-
       for (const btn of classified.buttons) {
-        const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
-        if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+        const urlValues = parameterValues?.url;
+        const suffix = urlValues != null && typeof urlValues === 'object' && !Array.isArray(urlValues)
+          ? urlValues[String(btn.index)]
+          : undefined;
+        if (typeof suffix !== 'string') {
           throw makeEngineError(
-            'build_qr_payload_too_long',
-            'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+            'build_buttons_unsupported',
+            'buildGraphComponents: BUTTONS type not enabled for send',
           );
         }
         result.push({
           type:       'button',
-          sub_type:   'quick_reply',
+          sub_type:   'url',
           index:      String(btn.index),
-          parameters: [{ type: 'payload', payload }],
+          parameters: [{ type: 'text', text: suffix }],
         });
       }
       continue;

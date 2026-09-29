@@ -2896,3 +2896,146 @@ describe('4C2B-SEND | persistência existente após QR send', () => {
     expect(chatInsert.mock.calls[0][0].media_asset_id).toBeNull();
   });
 });
+
+// =============================================================================
+// MVP4C.3B — URL dynamic backend send (engine mockado; Graph mockado)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_URL = {
+  id: 'tpl-url-dyn',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Esta é uma mensagem de teste do botão URL dinâmico.' },
+    {
+      type: 'BUTTONS',
+      buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }],
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_URL = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Esta é uma mensagem de teste do botão URL dinâmico.',
+  headerMediaFormat: null,
+  buttons: [{
+    index: 0, type: 'URL', text: 'Abrir teste',
+    url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+  }],
+};
+
+const FAKE_COMPONENTS_URL = [
+  {
+    type: 'button',
+    sub_type: 'url',
+    index: '0',
+    parameters: [{ type: 'text', text: '12345' }],
+  },
+];
+
+describe('4C3B-SEND | URL dynamic chega ao Graph uma vez', () => {
+  it('sendTemplateMessage exatamente 1; suffix only; validate recebe analysis', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const pv = { body: {}, url: { '0': '12345' } };
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: pv,
+        components: [{ type: 'button', url: 'https://evil.example/forged' }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    expect(mockValidateParameterValues).toHaveBeenCalledWith(
+      FAKE_ANALYSIS_URL.parameters,
+      pv,
+      {
+        buttons: FAKE_ANALYSIS_URL.buttons,
+        parameterFormat: 'POSITIONAL',
+        headerMediaFormat: null,
+      },
+    );
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_URL);
+    expect(JSON.stringify(tpl.components)).not.toContain('https://example.com/test/12345');
+    expect(JSON.stringify(tpl)).not.toContain('https://evil.example/forged');
+    expect(tpl.components[0].parameters[0].text).toBe('12345');
+  });
+});
+
+describe('4C3B-SEND | mismatch url → zero Graph WRITE / persist', () => {
+  it('template_params_mismatch → 422; send 0; insert 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_URL);
+    mockValidateParameterValues.mockReturnValue({ valid: false, error: 'template_params_mismatch' });
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {} } },
+    }), res);
+
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_params_mismatch');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+    expect(mockInterpolateBody).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('4C3B-SEND | static unsupported → zero Graph WRITE', () => {
+  it('supported=false → 422 template_unsupported; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL,
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS type URL not supported',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Veja',
+      headerMediaFormat: null,
+      buttons: [{ index: 0, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' }],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockValidateParameterValues).not.toHaveBeenCalled();
+  });
+});
+
+describe('4C3B-SEND | QR regression continua 1 Graph send', () => {
+  it('QUICK_REPLY-only → sendTemplateMessage exatamente 1', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage.mock.calls[0][3].components).toEqual(FAKE_COMPONENTS_QR);
+  });
+});

@@ -1656,7 +1656,7 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
     }]);
   });
 
-  it('4C2A-03 | URL POSITIONAL dynamic {{1}} → url_kind=dynamic; supported=false', () => {
+  it('4C2A-03 | URL POSITIONAL dynamic {{1}} no FINAL → url_kind=dynamic; supported=true (4C.3B)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -1667,8 +1667,8 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
         },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons).toEqual([{
       index: 0, type: 'URL', text: 'Rastrear',
       url: 'https://example.com/p/{{1}}', url_kind: 'dynamic',
@@ -2154,6 +2154,353 @@ describe('analyzeTemplate / buildGraphComponents — MVP4C.2B QUICK_REPLY send',
       throw new Error('should_have_thrown');
     } catch (err) {
       expect(err.code).toBe('build_qr_payload_too_long');
+    }
+  });
+
+});
+
+// =============================================================================
+// MVP4C.3B — 1 URL POSITIONAL dynamic ({{1}} no FINAL)
+// =============================================================================
+
+const URL_FIXTURE_COMPS = [
+  { type: 'BODY', text: 'Esta é uma mensagem de teste do botão URL dinâmico.' },
+  {
+    type: 'BUTTONS',
+    buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }],
+  },
+];
+
+const URL_CTX = {
+  buttons: [{
+    index: 0, type: 'URL', text: 'Abrir teste',
+    url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+  }],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+const URL_GRAPH = {
+  type: 'button',
+  sub_type: 'url',
+  index: '0',
+  parameters: [{ type: 'text', text: '12345' }],
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
+
+  it('4C3B-01 | fixture-equivalent → supported=true; url_kind=dynamic', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: URL_FIXTURE_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameter_format).toBe('POSITIONAL');
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameters).toEqual([]);
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Abrir teste',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    }]);
+  });
+
+  it('4C3B-02 | static → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.buttons[0].url_kind).toBe('static');
+  });
+
+  it('4C3B-03 | {{1}} no meio → url_kind=dynamic; supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/{{1}}/test' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons[0].url_kind).toBe('dynamic');
+  });
+
+  it('4C3B-04 | {{2}} → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/test/{{2}}' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons[0].url_kind).toBe('unknown');
+  });
+
+  it('4C3B-05 | dois placeholders → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/{{1}}/{{2}}' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons[0].url_kind).toBe('unknown');
+  });
+
+  it('4C3B-06 | NAMED → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/p/{{order_id}}' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons[0].url_kind).toBe('dynamic');
+  });
+
+  it('4C3B-07 | 2 URL buttons → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'A', url: 'https://example.com/a/{{1}}' },
+            { type: 'URL', text: 'B', url: 'https://example.com/b/{{1}}' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C3B-08 | URL + QR → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C3B-09 | URL + PHONE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C3B-10 | IMAGE + URL dynamic → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.buttons[0].url_kind).toBe('dynamic');
+  });
+
+  it('4C3B-V01 | suffix 12345 → valid; valor com espaços laterais aceito', () => {
+    const ok = validateParameterValues([], { body: {}, url: { '0': '12345' } }, URL_CTX);
+    expect(ok).toEqual({ valid: true });
+    const spaced = validateParameterValues([], { body: {}, url: { '0': ' 12345 ' } }, URL_CTX);
+    expect(spaced).toEqual({ valid: true });
+  });
+
+  it('4C3B-V02 | missing url → mismatch', () => {
+    const r = validateParameterValues([], { body: {} }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V03 | missing index 0 → mismatch', () => {
+    const r = validateParameterValues([], { body: {}, url: {} }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V04 | extra index → mismatch', () => {
+    const r = validateParameterValues([], { body: {}, url: { '0': '12345', '1': 'x' } }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V05 | empty → mismatch', () => {
+    const r = validateParameterValues([], { body: {}, url: { '0': '' } }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V06 | whitespace-only → mismatch', () => {
+    const r = validateParameterValues([], { body: {}, url: { '0': '   ' } }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V07 | non-string → mismatch', () => {
+    const r = validateParameterValues([], { body: {}, url: { '0': 12345 } }, URL_CTX);
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V08 | url em QR → mismatch', () => {
+    const r = validateParameterValues(
+      [],
+      { body: {}, url: { '0': '12345' } },
+      { buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }], parameterFormat: 'POSITIONAL', headerMediaFormat: null },
+    );
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V09 | url em text-only → mismatch', () => {
+    const r = validateParameterValues(
+      [],
+      { body: {}, url: { '0': '12345' } },
+      { buttons: [], parameterFormat: 'POSITIONAL', headerMediaFormat: null },
+    );
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-V10 | buttons continua rejeitado no slice URL', () => {
+    const r = validateParameterValues(
+      [],
+      { body: {}, url: { '0': '12345' }, buttons: { '0': 'x' } },
+      URL_CTX,
+    );
+    expect(r).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C3B-B01 | Graph component exato; sem URL completa; sem templateIdentity', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': '12345' } },
+    );
+    expect(r).toEqual([URL_GRAPH]);
+    expect(JSON.stringify(r)).not.toContain('https://example.com/test/12345');
+    expect(JSON.stringify(r)).not.toContain('example.com/test/{{1}}');
+    expect(JSON.stringify(r)).not.toContain('lovoo:qr:v1');
+  });
+
+  it('4C3B-B02 | suffix com espaços laterais enviado sem trim', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': ' 12345 ' } },
+    );
+    expect(r[0].parameters[0].text).toBe(' 12345 ');
+  });
+
+  it('4C3B-B03 | QR payload idêntico após 4C.3B', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C3B-B04 | text-only e media+QR inalterados', () => {
+    const text = buildGraphComponents(
+      [{ type: 'BODY', text: 'Olá {{1}}' }, { type: 'FOOTER', text: 'Rodapé' }],
+      'POSITIONAL',
+      { body: { '1': 'Ana' } },
+    );
+    expect(text).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+
+    const mediaQr = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      {
+        headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' },
+        templateIdentity: { name: 'promo', language: 'pt_BR' },
+      },
+    );
+    expect(mediaQr).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'mid-1' } }] },
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:promo:pt_BR:0' }],
+      },
+    ]);
+  });
+
+  it('4C3B-B05 | BODY {{1}} + URL → body + button url', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Pedido {{1}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Rastrear', url: 'https://example.com/p/{{1}}' }] },
+      ],
+      'POSITIONAL',
+      { body: { '1': '99' }, url: { '0': '99' } },
+    );
+    expect(r).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: '99' }] },
+      {
+        type: 'button',
+        sub_type: 'url',
+        index: '0',
+        parameters: [{ type: 'text', text: '99' }],
+      },
+    ]);
+  });
+
+  it('4C3B-B06 | {{1}} no meio → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Veja' },
+          { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/{{1}}/test' }] },
+        ],
+        'POSITIONAL',
+        { body: {}, url: { '0': '12345' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
     }
   });
 

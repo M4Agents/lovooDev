@@ -2285,3 +2285,103 @@ describe('GET — MVP4C.2C analysis.supported', () => {
   });
 
 });
+
+// =============================================================================
+// MVP4C.3B — GET reflete analysis.supported para URL dynamic send-ready
+// =============================================================================
+
+describe('GET — MVP4C.3B dynamic URL', () => {
+
+  it('4C3B-GET-01 | fixture-equivalent → supported=true; url_kind=dynamic', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c3b-url-dyn',
+      name: 'lovoo_e2e_url_dynamic',
+      language: 'en',
+      components: [
+        { type: 'BODY', text: 'Esta é uma mensagem de teste do botão URL dinâmico.', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }],
+        },
+      ],
+    };
+    const engine = analyzeTemplate(raw);
+    expect(engine.supported).toBe(true);
+    expect(engine.unsupported_reason).toBeNull();
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
+    expect(dto.parameter_format).toBe('POSITIONAL');
+    expect(dto.header_media_format).toBeNull();
+    expect(dto.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Abrir teste',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    }]);
+    expect(JSON.stringify(dto.buttons)).not.toContain('12345');
+    expect(JSON.stringify(dto.buttons)).not.toContain('sub_type');
+  });
+
+  it('4C3B-GET-02 | IMAGE + dynamic URL → supported=false', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c3b-img-url',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' }],
+        },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(false);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(false);
+    expect(res._body.templates[0].unsupported_reason).toBeTruthy();
+    expect(res._body.templates[0].header_media_format).toBe('IMAGE');
+    expect(res._body.templates[0].buttons[0].url_kind).toBe('dynamic');
+  });
+
+  it('4C3B-GET-03 | static URL continua supported=false; QR continua true', async () => {
+    const staticTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c3b-static',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    };
+    const qrTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c3b-qr',
+      components: [
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    };
+    expect(analyzeTemplate(staticTpl).supported).toBe(false);
+    expect(analyzeTemplate(qrTpl).supported).toBe(true);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([staticTpl, qrTpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const staticDto = res._body.templates.find(t => t.id === 'tpl-4c3b-static');
+    const qrDto = res._body.templates.find(t => t.id === 'tpl-4c3b-qr');
+    expect(staticDto.supported).toBe(false);
+    expect(staticDto.buttons[0].url_kind).toBe('static');
+    expect(qrDto.supported).toBe(true);
+    expect(qrDto.unsupported_reason).toBeNull();
+  });
+
+});

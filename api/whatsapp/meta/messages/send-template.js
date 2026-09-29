@@ -339,7 +339,12 @@ export default async function handler(req, res) {
   }
 
   // ── 15. Validar parameter_values ──────────────────────────────────────────
-  const pvValidation = validateParameterValues(analysis.parameters, parameterValues);
+  // Contexto vem exclusivamente de analysis (rawTemplate relido) — nunca do body.
+  const pvValidation = validateParameterValues(analysis.parameters, parameterValues, {
+    buttons:            analysis.buttons,
+    parameterFormat:    analysis.parameter_format,
+    headerMediaFormat:  analysis.headerMediaFormat,
+  });
   if (!pvValidation.valid) {
     const status = pvValidation.error === 'invalid_request' ? 400 : 422;
     return res.status(status).json({ error: pvValidation.error });
