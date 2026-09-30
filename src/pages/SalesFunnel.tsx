@@ -10,6 +10,8 @@ import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon, Calendar, ChevronDown } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
+import { FunnelListView } from '../components/SalesFunnel/FunnelListView'
+import { FunnelViewToggle } from '../components/SalesFunnel/FunnelViewToggle'
 import { FunnelSelector } from '../components/SalesFunnel/FunnelSelector'
 import { CreateFunnelWizard } from '../components/SalesFunnel/CreateFunnelWizard'
 import { EditFunnelModal } from '../components/SalesFunnel/EditFunnelModal'
@@ -35,6 +37,7 @@ import {
   type FunnelFilterSnapshot,
   DEFAULT_FILTER_SNAPSHOT,
 } from '../hooks/useFunnelFilterPreferences'
+import { useFunnelViewMode } from '../hooks/useFunnelViewMode'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -94,6 +97,7 @@ export default function SalesFunnel() {
   const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
   const [selectedCycleState, setSelectedCycleState] = useState<ContactAttemptsState | null>(null)
 
+  const { viewMode, setViewMode } = useFunnelViewMode(companyId, user?.id)
   const { canViewContactCycles }  = useAccessControl()
   // Visibilidade condicional — integração Nuvemshop (UX apenas; segurança no backend)
   const { hasNuvemshopEver }      = useCompanyIntegration()
@@ -509,6 +513,7 @@ export default function SalesFunnel() {
           </div>
 
           <div className="flex items-center gap-2">
+            <FunnelViewToggle viewMode={viewMode} onChange={setViewMode} />
             <button
               onClick={handleToggleFilters}
               className={`
@@ -900,27 +905,44 @@ export default function SalesFunnel() {
         )}
       </div>
 
-      {/* Board Kanban */}
+      {/* Board Kanban ou Lista */}
       <div className="flex-1 overflow-hidden p-6">
         {selectedFunnel ? (
-          <FunnelBoard
-            funnelId={selectedFunnel.id}
-            funnelName={selectedFunnel.name}
-            funnelRequireWonItems={selectedFunnel.require_won_items ?? false}
-            funnelRequireWonSaleType={selectedFunnel.require_won_sale_type ?? false}
-            funnelRequireLostLossType={selectedFunnel.require_lost_loss_type ?? false}
-            onLeadClick={handleLeadClick}
-            visibleFields={visibleFields}
-            searchTerm={debouncedSearch}
-            selectedOrigin={selectedOrigin}
-            selectedPeriod={selectedPeriod}
-            selectedDateField={selectedDateField}
-            selectedTags={selectedTags}
-            selectedTagsMode={selectedTagsMode}
-            globalSort={globalSort}
-            selectedOwner={selectedOwner || undefined}
-            selectedCycleState={selectedCycleState}
-          />
+          viewMode === 'list' ? (
+            <FunnelListView
+              funnelId={selectedFunnel.id}
+              onLeadClick={handleLeadClick}
+              searchTerm={debouncedSearch}
+              selectedOrigin={selectedOrigin}
+              selectedPeriod={selectedPeriod}
+              selectedDateField={selectedDateField}
+              selectedTags={selectedTags}
+              selectedTagsMode={selectedTagsMode}
+              globalSort={globalSort}
+              selectedOwner={selectedOwner || undefined}
+              selectedCycleState={selectedCycleState}
+              showCycleColumn={showCycleFilter}
+            />
+          ) : (
+            <FunnelBoard
+              funnelId={selectedFunnel.id}
+              funnelName={selectedFunnel.name}
+              funnelRequireWonItems={selectedFunnel.require_won_items ?? false}
+              funnelRequireWonSaleType={selectedFunnel.require_won_sale_type ?? false}
+              funnelRequireLostLossType={selectedFunnel.require_lost_loss_type ?? false}
+              onLeadClick={handleLeadClick}
+              visibleFields={visibleFields}
+              searchTerm={debouncedSearch}
+              selectedOrigin={selectedOrigin}
+              selectedPeriod={selectedPeriod}
+              selectedDateField={selectedDateField}
+              selectedTags={selectedTags}
+              selectedTagsMode={selectedTagsMode}
+              globalSort={globalSort}
+              selectedOwner={selectedOwner || undefined}
+              selectedCycleState={selectedCycleState}
+            />
+          )
         ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md">

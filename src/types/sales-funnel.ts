@@ -877,6 +877,9 @@ export interface StageStats {
 // CONSTANTES
 // =====================================================
 
+/** Modo de visualização da página do funil. Default: kanban. */
+export type FunnelViewMode = 'kanban' | 'list'
+
 export const FUNNEL_CONSTANTS = {
   DEFAULT_COLORS: {
     leadNovo: '#FCD34D',      // Amarelo - Novo lead
