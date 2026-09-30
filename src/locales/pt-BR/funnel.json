@@ -67,7 +67,10 @@
     "periodAll": "Todo período",
     "periodToday": "Hoje",
     "periodWeek": "Esta semana",
-    "periodMonth": "Este mês"
+    "periodMonth": "Este mês",
+    "ownerLabel": "Responsável",
+    "ownerAll": "Todos os responsáveis",
+    "ownerUnassigned": "Sem responsável"
   },
   "states": {
     "companyNotFound": "Empresa não encontrada",

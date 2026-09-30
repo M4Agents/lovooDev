@@ -67,7 +67,10 @@
     "periodAll": "All time",
     "periodToday": "Today",
     "periodWeek": "This week",
-    "periodMonth": "This month"
+    "periodMonth": "This month",
+    "ownerLabel": "Lead assignee",
+    "ownerAll": "All lead assignees",
+    "ownerUnassigned": "Unassigned"
   },
   "states": {
     "companyNotFound": "Company not found",

@@ -1,0 +1,30 @@
+-- Export somente leitura. Não é migration. Não aplicar.
+-- Fonte: supabase_migrations.schema_migrations no projeto etzdsywunlpbgxkphuil
+-- created_by em ambos: m4.agents.ia@gmail.com
+-- rollback: NULL   idempotency_key: NULL
+
+======== 20260930173216 name=create_funnel_assignee_rpcs statements_chars=5635 ========
+-- MCP apply_migration: sem BEGIN/COMMIT (runner registra e envolve a transação).
+-- Baseline 2026-09-30, projeto etzdsywunlpbgxkphuil.
+
+CREATE TEMP TABLE funnel_assignee_old_baseline ( ... 6 linhas baseline ... );
+INSERT INTO funnel_assignee_old_baseline ... 6 overloads ...;
+DO $preflight$
+  -- abort se *_assignee existir
+  -- exigir 6 overloads + md5/identity/result/proacl/ACL iguais ao baseline
+END
+$preflight$;
+
+CREATE FUNCTION? NÃO
+REVOKE/GRANT? NÃO
+
+======== 20260930173335 name=create_funnel_assignee_rpc_functions statements_chars=2529 ========
+CREATE TEMP TABLE funnel_assignee_old_baseline ( ... );
+INSERT INTO funnel_assignee_old_baseline ... 6 overloads ...;
+
+CREATE FUNCTION? NÃO
+DO preflight? NÃO
+REVOKE/GRANT? NÃO
+
+======== 20260930150000 ========
+AUSENTE

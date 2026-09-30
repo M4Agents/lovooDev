@@ -64,6 +64,7 @@ import type {
   LeadCardData
 } from '../../types/sales-funnel'
 import { isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
+import { toAssigneeFilter } from '../../utils/funnelAssigneeFilter'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../../types/analytics'
 import type { BulkMoveRequest } from './FunnelColumn'
@@ -242,7 +243,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     tags:                    selectedTags.length ? selectedTags : undefined,
     tags_mode:               selectedTags.length ? selectedTagsMode : undefined,
     sort_by:                 globalSort,
-    owner_user_id:           selectedOwner || undefined,
+    ...toAssigneeFilter(selectedOwner),
     contact_attempts_state:  selectedCycleState || undefined,
   }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState])
 

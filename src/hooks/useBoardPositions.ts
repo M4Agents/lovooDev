@@ -111,6 +111,7 @@ export function useBoardPositions(
             // Override por etapa tem precedência sobre o sort global (filter.sort_by)
             sort_by:                 sortByStage?.get(stageId) ?? filter.sort_by,
             owner_user_id:           filter.owner_user_id,
+            unassigned_responsible:  filter.unassigned_responsible,
             contact_attempts_state:  filter.contact_attempts_state
           },
           pageSize,

@@ -48,6 +48,7 @@ export function useStageCounts(
         tags:                    filter.tags,
         tags_mode:               filter.tags_mode,
         owner_user_id:           filter.owner_user_id,
+        unassigned_responsible:  filter.unassigned_responsible,
         contact_attempts_state:  filter.contact_attempts_state
       })
 

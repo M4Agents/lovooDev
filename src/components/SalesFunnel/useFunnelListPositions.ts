@@ -51,7 +51,7 @@ function mergeUnique(
 }
 
 /**
- * RPC get_stage_positions_paged usa LIMIT p_limit sem teto (20260909235000).
+ * RPC get_stage_positions_paged_assignee usa LIMIT p_limit sem teto.
  * getStagePositionsPaged só repassa limit/offset — sem truncar no cliente.
  */
 function refreshLimit(state: ListStageState): number {
@@ -120,6 +120,7 @@ export function useFunnelListPositions(
           tags_mode: f.tags_mode,
           sort_by: f.sort_by,
           owner_user_id: f.owner_user_id,
+          unassigned_responsible: f.unassigned_responsible,
           contact_attempts_state: f.contact_attempts_state,
         },
         limit,

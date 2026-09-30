@@ -29,6 +29,7 @@ import type {
 } from '../../types/sales-funnel'
 import type { PeriodFilter } from '../../types/analytics'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
+import { toAssigneeFilter } from '../../utils/funnelAssigneeFilter'
 
 const FUNNEL_REALTIME_ENABLED = true
 const MAX_BULK_LEADS = 200
@@ -94,7 +95,7 @@ export function FunnelListView({
     tags: selectedTags.length ? selectedTags : undefined,
     tags_mode: selectedTags.length ? selectedTagsMode : undefined,
     sort_by: globalSort,
-    owner_user_id: selectedOwner || undefined,
+    ...toAssigneeFilter(selectedOwner),
     contact_attempts_state: selectedCycleState || undefined,
   }), [
     funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField,

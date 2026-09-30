@@ -1,0 +1,75 @@
+{
+  "captured_at": "2026-09-30",
+  "recaptured_immediately_before_apply": "2026-09-30T17:19:00Z",
+  "recapture_result": "MATCH — 6 overloads, md5/identity_args/result_type/proacl/ACL iguais ao baseline; *_assignee=0; 20260930150000 ausente",
+  "project_ref": "etzdsywunlpbgxkphuil",
+  "project_name": "M4_Digital",
+  "database": "shared Dev/production",
+  "note": "Se md5, identity_args, result_type ou ACL divergirem antes do apply, parar. PUBLIC = aclexplode grantee 0 + entrada =X/postgres no proacl. Não usar has_function_privilege('PUBLIC').",
+  "public_acl_audit": {
+    "method": "aclexplode(proacl) WHERE grantee = 0 AND privilege_type = 'EXECUTE'",
+    "null_proacl_means": "default FUNCTION ACL grants EXECUTE to PUBLIC",
+    "old_public_execute": true
+  },
+  "old_acl_effective": {
+    "public_execute_aclexplode": true,
+    "anon_execute": true,
+    "authenticated_execute": true,
+    "service_role_execute": true
+  },
+  "old_proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+  "old_functions": [
+    {
+      "proname": "get_funnel_stage_counts",
+      "pronargs": 5,
+      "def_md5": "f21f9c6aef73eb366d19d8421d0d47ec",
+      "identity_args": "p_funnel_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer",
+      "result_type": "jsonb"
+    },
+    {
+      "proname": "get_funnel_stage_counts",
+      "pronargs": 7,
+      "def_md5": "8db0e910d0dc77b638e27f879bb43dfb",
+      "identity_args": "p_funnel_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer, p_tag_ids uuid[], p_tag_mode text",
+      "result_type": "jsonb"
+    },
+    {
+      "proname": "get_funnel_stage_counts",
+      "pronargs": 12,
+      "def_md5": "b2e0e4610ae1bcf08540489826382bf1",
+      "identity_args": "p_funnel_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer, p_tag_ids uuid[], p_tag_mode text, p_start_date timestamp with time zone, p_end_date timestamp with time zone, p_owner_user_id uuid, p_contact_attempts_state text, p_date_field text",
+      "result_type": "jsonb"
+    },
+    {
+      "proname": "get_stage_positions_paged",
+      "pronargs": 8,
+      "def_md5": "09cf8fe178a9c0013abc19339c48d5dc",
+      "identity_args": "p_funnel_id uuid, p_stage_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer, p_limit integer, p_offset integer",
+      "result_type": "jsonb"
+    },
+    {
+      "proname": "get_stage_positions_paged",
+      "pronargs": 10,
+      "def_md5": "e62e5c46450354bbdb4f2c3a72e8e272",
+      "identity_args": "p_funnel_id uuid, p_stage_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer, p_limit integer, p_offset integer, p_tag_ids uuid[], p_tag_mode text",
+      "result_type": "jsonb"
+    },
+    {
+      "proname": "get_stage_positions_paged",
+      "pronargs": 16,
+      "def_md5": "db8ea35e7e4a3e2ff6c56ba58381c28a",
+      "identity_args": "p_funnel_id uuid, p_stage_id uuid, p_company_id uuid, p_search text, p_origin text, p_period_days integer, p_limit integer, p_offset integer, p_tag_ids uuid[], p_tag_mode text, p_start_date timestamp with time zone, p_end_date timestamp with time zone, p_sort_by text, p_owner_user_id uuid, p_contact_attempts_state text, p_date_field text",
+      "result_type": "jsonb"
+    }
+  ],
+  "new_functions_absent_at_capture": [
+    "get_stage_positions_paged_assignee",
+    "get_funnel_stage_counts_assignee"
+  ],
+  "manual_registration": {
+    "version": "20260930150000",
+    "file": "supabase/pending/REGISTER_FUNNEL_ASSIGNEE.sql",
+    "keep_sql_in": "supabase/pending/",
+    "do_not": ["supabase db push", "migration up", "apply other files in supabase/migrations/"]
+  }
+}

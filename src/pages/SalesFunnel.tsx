@@ -38,6 +38,7 @@ import {
   DEFAULT_FILTER_SNAPSHOT,
 } from '../hooks/useFunnelFilterPreferences'
 import { useFunnelViewMode } from '../hooks/useFunnelViewMode'
+import { UNASSIGNED_ASSIGNEE, isValidAssigneeSelection } from '../utils/funnelAssigneeFilter'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -171,7 +172,10 @@ export default function SalesFunnel() {
   // limpa silenciosamente sem bloquear a restauração dos demais filtros.
   useEffect(() => {
     if (ownerOptions.length === 0 || !selectedOwner) return
-    const isValid = ownerOptions.some(o => o.user_id === selectedOwner)
+    const isValid = isValidAssigneeSelection(
+      selectedOwner,
+      ownerOptions.map(o => o.user_id),
+    )
     if (!isValid) setSelectedOwner('')
   }, [ownerOptions, selectedOwner])
 
@@ -796,14 +800,15 @@ export default function SalesFunnel() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Responsável
+                  {t('filters.ownerLabel')}
                 </label>
                 <select
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Todos os responsáveis</option>
+                  <option value="">{t('filters.ownerAll')}</option>
+                  <option value={UNASSIGNED_ASSIGNEE}>{t('filters.ownerUnassigned')}</option>
                   {ownerOptions.map(u => (
                     <option key={u.user_id} value={u.user_id}>
                       {u.display_name}
