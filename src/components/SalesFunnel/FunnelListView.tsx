@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { BulkAssignModal } from '../BulkAssignModal'
 import { BulkTagModal } from '../BulkTagModal'
 import { OpportunityDetailModal } from './OpportunityDetailModal'
-import { FunnelListTable, type FunnelListRow } from './FunnelListTable'
+import { FunnelListTable, type FunnelListGroup } from './FunnelListTable'
 import { FunnelListBulkBar } from './FunnelListBulkBar'
 import { useFunnelListPositions } from './useFunnelListPositions'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
@@ -104,8 +104,8 @@ export function FunnelListView({
   const {
     stageMap,
     initialLoading,
-    loadMoreInFlight,
-    loadMore,
+    loadMoreStage,
+    retryStage,
     refreshStages,
   } = useFunnelListPositions(funnelId, stages, companyId, filter)
 
@@ -183,24 +183,69 @@ export function FunnelListView({
     [stages],
   )
 
-  const rows: FunnelListRow[] = useMemo(() => {
-    const list: FunnelListRow[] = []
-    for (const stage of visibleStages) {
+  const groups: FunnelListGroup[] = useMemo(() => {
+    const countsReady = !countsLoading && visibleStages.length > 0 && visibleStages.every(s => counts[s.id] !== undefined)
+    return visibleStages.map((stage) => {
       const state = stageMap.get(stage.id)
-      if (!state) continue
-      for (const position of state.positions) {
-        list.push({ position, stage })
+      return {
+        stage,
+        positions: state?.positions ?? [],
+        loadedCount: state?.positions.length ?? 0,
+        totalCount: countsReady ? (counts[stage.id]?.count ?? 0) : null,
+        hasMore: state?.hasMore ?? false,
+        loading: state?.loading ?? false,
+        error: state?.error ?? null,
+      }
+    })
+  }, [visibleStages, stageMap, counts, countsLoading])
+
+  const loadedByPositionId = useMemo(() => {
+    const map = new Map<string, SelectedOpportunity>()
+    for (const group of groups) {
+      for (const position of group.positions) {
+        const leadId = position.lead_id || position.opportunity?.lead_id || position.lead?.id
+        if (!leadId) continue
+        map.set(position.id, {
+          leadId,
+          opportunityId: position.opportunity_id,
+          stageId: position.stage_id,
+        })
       }
     }
-    return list
-  }, [visibleStages, stageMap])
+    return map
+  }, [groups])
 
-  const loadedCount = rows.length
+  const loadedCount = groups.reduce((sum, group) => sum + group.loadedCount, 0)
   const countsReady = !countsLoading && visibleStages.length > 0 && visibleStages.every(s => counts[s.id] !== undefined)
   const totalCount = countsReady
     ? visibleStages.reduce((sum, s) => sum + (counts[s.id]?.count ?? 0), 0)
     : null
-  const hasMore = visibleStages.some(s => stageMap.get(s.id)?.hasMore)
+
+  useEffect(() => {
+    setSelectedMap((prev) => {
+      if (prev.size === 0) return prev
+      let changed = false
+      const next = new Map<string, SelectedOpportunity>()
+      for (const [id, item] of prev) {
+        const current = loadedByPositionId.get(id)
+        if (!current) {
+          changed = true
+          continue
+        }
+        if (
+          current.leadId !== item.leadId
+          || current.opportunityId !== item.opportunityId
+          || current.stageId !== item.stageId
+        ) {
+          next.set(id, current)
+          changed = true
+        } else {
+          next.set(id, item)
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [loadedByPositionId])
 
   const selectedPositionIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap])
   const selectedLeadIds = useMemo(
@@ -223,32 +268,28 @@ export function FunnelListView({
   }, [])
 
   const selectLoaded = useCallback(() => {
-    setSelectedMap(() => {
-      const next = new Map<string, SelectedOpportunity>()
-      for (const { position } of rows) {
-        const leadId = position.lead_id || position.opportunity?.lead_id || position.lead?.id
-        if (!leadId) continue
-        next.set(position.id, {
-          leadId,
-          opportunityId: position.opportunity_id,
-          stageId: position.stage_id,
-        })
-      }
-      return next
-    })
-  }, [rows])
+    setSelectedMap(new Map(loadedByPositionId))
+  }, [loadedByPositionId])
 
   const clearSelection = useCallback(() => {
     setSelectedMap(new Map())
   }, [])
 
-  const handleLoadMore = useCallback(async () => {
+  const handleLoadMoreStage = useCallback(async (stageId: string) => {
     try {
-      await loadMore()
+      await loadMoreStage(stageId)
     } catch {
       toast.error(t('list.loadMoreError'))
     }
-  }, [loadMore, t])
+  }, [loadMoreStage, t])
+
+  const handleRetryStage = useCallback(async (stageId: string) => {
+    try {
+      await retryStage(stageId)
+    } catch {
+      toast.error(t('list.stageError'))
+    }
+  }, [retryStage, t])
 
   const refreshAfterMutation = useCallback(() => {
     refreshStages()
@@ -377,27 +418,17 @@ export function FunnelListView({
 
   return (
     <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+      <div className="flex items-center px-4 py-2 border-b border-gray-100">
         <p className="text-sm text-gray-600">
           {totalCount != null
             ? t('list.loadedOfTotal', { loaded: loadedCount, total: totalCount })
             : t('list.loadedCount', { loaded: loadedCount })}
         </p>
-        {hasMore && (
-          <button
-            type="button"
-            onClick={() => { void handleLoadMore() }}
-            disabled={loadMoreInFlight}
-            className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loadMoreInFlight ? t('list.loadMoreLoading') : t('list.loadMore')}
-          </button>
-        )}
       </div>
 
       <div className="flex-1 overflow-hidden">
         <FunnelListTable
-          rows={rows}
+          groups={groups}
           canSelect={canSelectOpportunities}
           selectedPositionIds={selectedPositionIds}
           onToggleSelect={toggleSelect}
@@ -405,6 +436,8 @@ export function FunnelListView({
           onClearSelection={clearSelection}
           onRowClick={setDetailOpportunityId}
           onChatClick={onLeadClick}
+          onLoadMoreStage={(stageId) => { void handleLoadMoreStage(stageId) }}
+          onRetryStage={(stageId) => { void handleRetryStage(stageId) }}
           userById={userById}
           showCycleColumn={showCycleColumn}
         />

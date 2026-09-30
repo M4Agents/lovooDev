@@ -1,8 +1,8 @@
 // =====================================================
 // Carga explícita por etapa da visão em lista.
-// Não usa useBoardPositions / loadMore. Token de geração
-// descarta respostas atrasadas ao trocar filtros/funil/empresa.
-// Paginação avança só após sucesso; retry reenvia a mesma página.
+// Paginação por nextOffset (intervalo efetivamente retornado).
+// loadMore e refresh da mesma etapa não correm em paralelo:
+// realtime durante loadMore fica pendente e roda depois.
 // =====================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -15,19 +15,23 @@ import type {
 
 export const LIST_PAGE_SIZE = 20
 
+export type ListStageError = 'initial' | 'loadMore' | null
+
 export interface ListStageState {
   positions: OpportunityFunnelPosition[]
-  /** Última página 0-based carregada com sucesso. -1 = nenhuma. */
-  page: number
+  /** Próximo offset da API, recalculado pelo que realmente veio. */
+  nextOffset: number
   hasMore: boolean
   loading: boolean
+  error: ListStageError
 }
 
 const EMPTY_STAGE: ListStageState = {
   positions: [],
-  page: -1,
+  nextOffset: 0,
   hasMore: false,
   loading: false,
+  error: null,
 }
 
 function mergeUnique(
@@ -46,38 +50,30 @@ function mergeUnique(
   return next
 }
 
-function applyPageResult(
-  cur: ListStageState,
-  requestedPage: number,
+/**
+ * RPC get_stage_positions_paged usa LIMIT p_limit sem teto (20260909235000).
+ * getStagePositionsPaged só repassa limit/offset — sem truncar no cliente.
+ */
+function refreshLimit(state: ListStageState): number {
+  return Math.max(state.positions.length, state.nextOffset, LIST_PAGE_SIZE)
+}
+
+function applyReturnedWindow(
   incoming: OpportunityFunnelPosition[],
-  append: boolean,
-): ListStageState {
-  if (!Array.isArray(incoming)) {
-    return { ...cur, loading: false }
-  }
-
-  if (incoming.length === 0) {
-    return {
-      positions: append ? cur.positions : [],
-      page: append ? cur.page : 0,
-      hasMore: false,
-      loading: false,
-    }
-  }
-
+  requestedLimit: number,
+): Pick<ListStageState, 'positions' | 'nextOffset' | 'hasMore'> {
   return {
-    positions: append ? mergeUnique(cur.positions, incoming) : incoming,
-    page: requestedPage,
-    hasMore: incoming.length === LIST_PAGE_SIZE,
-    loading: false,
+    positions: incoming,
+    nextOffset: incoming.length,
+    hasMore: incoming.length > 0 && incoming.length === requestedLimit,
   }
 }
 
 export interface UseFunnelListPositionsReturn {
   stageMap: Map<string, ListStageState>
   initialLoading: boolean
-  loadMoreInFlight: boolean
-  loadMore: () => Promise<void>
+  loadMoreStage: (stageId: string) => Promise<void>
+  retryStage: (stageId: string) => Promise<void>
   refreshStages: (stageIds?: string[]) => void
 }
 
@@ -89,14 +85,13 @@ export function useFunnelListPositions(
 ): UseFunnelListPositionsReturn {
   const [stageMap, setStageMap] = useState<Map<string, ListStageState>>(new Map())
   const [initialLoading, setInitialLoading] = useState(true)
-  const [loadMoreInFlight, setLoadMoreInFlight] = useState(false)
 
   const stageMapRef = useRef(stageMap)
   stageMapRef.current = stageMap
 
   const generationRef = useRef(0)
-  const queueTokenRef = useRef(0)
-  const loadMoreInFlightRef = useRef(false)
+  const inFlightRef = useRef<Set<string>>(new Set())
+  const pendingRefreshRef = useRef<Set<string>>(new Set())
   const stagesRef = useRef(stages)
   stagesRef.current = stages
   const filterRef = useRef(filter)
@@ -107,8 +102,8 @@ export function useFunnelListPositions(
     [],
   )
 
-  const fetchPage = useCallback(
-    async (stageId: string, page: number): Promise<OpportunityFunnelPosition[]> => {
+  const fetchSlice = useCallback(
+    async (stageId: string, limit: number, offset: number): Promise<OpportunityFunnelPosition[]> => {
       if (!companyId || !funnelId) return []
       const f = filterRef.current
       return funnelApi.getStagePositionsPaged(
@@ -127,65 +122,115 @@ export function useFunnelListPositions(
           owner_user_id: f.owner_user_id,
           contact_attempts_state: f.contact_attempts_state,
         },
-        LIST_PAGE_SIZE,
-        page * LIST_PAGE_SIZE,
+        limit,
+        offset,
       )
     },
     [companyId, funnelId],
   )
 
-  const cancelQueue = useCallback(() => {
-    queueTokenRef.current += 1
-    loadMoreInFlightRef.current = false
-    setLoadMoreInFlight(false)
+  const patchStage = useCallback((stageId: string, updater: (cur: ListStageState) => ListStageState) => {
+    setStageMap(prev => {
+      const next = new Map(prev)
+      next.set(stageId, updater(next.get(stageId) ?? { ...EMPTY_STAGE }))
+      return next
+    })
   }, [])
+
+  const beginStage = useCallback((stageId: string): boolean => {
+    if (inFlightRef.current.has(stageId)) return false
+    inFlightRef.current.add(stageId)
+    return true
+  }, [])
+
+  const resetFlight = useCallback(() => {
+    inFlightRef.current.clear()
+    pendingRefreshRef.current.clear()
+  }, [])
+
+  const runRefreshStage = useCallback(async (stageId: string, generation: number) => {
+    const limit = refreshLimit(stageMapRef.current.get(stageId) ?? { ...EMPTY_STAGE })
+    patchStage(stageId, prev => ({ ...prev, loading: true, error: null }))
+
+    try {
+      const incoming = await fetchSlice(stageId, limit, 0)
+      if (generationRef.current !== generation) return
+      if (!Array.isArray(incoming)) throw new Error('Resposta inesperada ao atualizar etapa')
+
+      patchStage(stageId, () => ({
+        ...applyReturnedWindow(incoming, limit),
+        loading: false,
+        error: null,
+      }))
+    } catch (err) {
+      console.error(`[FunnelList] erro ao atualizar etapa ${stageId}:`, err)
+      if (generationRef.current !== generation) return
+      patchStage(stageId, prev => ({
+        ...prev,
+        loading: false,
+        error: prev.positions.length === 0 ? 'initial' : prev.error,
+      }))
+    }
+  }, [fetchSlice, patchStage])
+
+  const releaseStage = useCallback((stageId: string, generation: number) => {
+    inFlightRef.current.delete(stageId)
+    if (generationRef.current !== generation) return
+    if (!pendingRefreshRef.current.has(stageId)) return
+    pendingRefreshRef.current.delete(stageId)
+    if (!beginStage(stageId)) {
+      pendingRefreshRef.current.add(stageId)
+      return
+    }
+    void runRefreshStage(stageId, generation).finally(() => {
+      releaseStage(stageId, generation)
+    })
+  }, [beginStage, runRefreshStage])
 
   const loadInitial = useCallback(async () => {
     if (!companyId || !funnelId) return
 
     const generation = ++generationRef.current
-    cancelQueue()
+    resetFlight()
 
     const ids = visibleStageIds()
     setInitialLoading(true)
-    setStageMap(prev => {
-      const next = new Map(prev)
+    setStageMap(() => {
+      const next = new Map<string, ListStageState>()
       for (const id of ids) {
-        const cur = next.get(id) ?? { ...EMPTY_STAGE }
-        next.set(id, { ...cur, loading: true })
+        next.set(id, { ...EMPTY_STAGE, loading: true })
       }
       return next
     })
 
     await Promise.all(ids.map(async (stageId) => {
+      if (!beginStage(stageId)) return
       try {
-        const incoming = await fetchPage(stageId, 0)
+        const incoming = await fetchSlice(stageId, LIST_PAGE_SIZE, 0)
         if (generationRef.current !== generation) return
-        if (!Array.isArray(incoming)) {
-          throw new Error('Resposta inesperada ao carregar etapa')
-        }
-        setStageMap(prev => {
-          const next = new Map(prev)
-          const cur = next.get(stageId) ?? { ...EMPTY_STAGE }
-          next.set(stageId, applyPageResult(cur, 0, incoming, false))
-          return next
-        })
+        if (!Array.isArray(incoming)) throw new Error('Resposta inesperada ao carregar etapa')
+        patchStage(stageId, () => ({
+          ...applyReturnedWindow(incoming, LIST_PAGE_SIZE),
+          loading: false,
+          error: null,
+        }))
       } catch (err) {
         console.error(`[FunnelList] erro ao carregar etapa ${stageId}:`, err)
         if (generationRef.current !== generation) return
-        setStageMap(prev => {
-          const next = new Map(prev)
-          const cur = next.get(stageId) ?? { ...EMPTY_STAGE }
-          next.set(stageId, { ...cur, loading: false })
-          return next
-        })
+        patchStage(stageId, () => ({
+          ...EMPTY_STAGE,
+          loading: false,
+          error: 'initial',
+        }))
+      } finally {
+        releaseStage(stageId, generation)
       }
     }))
 
     if (generationRef.current === generation) {
       setInitialLoading(false)
     }
-  }, [companyId, funnelId, fetchPage, cancelQueue, visibleStageIds])
+  }, [companyId, funnelId, fetchSlice, beginStage, resetFlight, releaseStage, visibleStageIds, patchStage])
 
   useEffect(() => {
     if (!companyId || !funnelId || stages.length === 0) {
@@ -196,131 +241,93 @@ export function useFunnelListPositions(
     void loadInitial()
     return () => {
       generationRef.current += 1
-      queueTokenRef.current += 1
+      resetFlight()
     }
-  }, [companyId, funnelId, stages, filter, loadInitial])
+  }, [companyId, funnelId, stages, filter, loadInitial, resetFlight])
 
   const refreshStages = useCallback((stageIds?: string[]) => {
     if (!companyId || !funnelId) return
-
     const generation = generationRef.current
-    cancelQueue()
-
     const ids = stageIds?.length
       ? stageIds.filter(id => visibleStageIds().includes(id))
       : visibleStageIds()
 
-    if (ids.length === 0) return
-
-    setStageMap(prev => {
-      const next = new Map(prev)
-      for (const id of ids) {
-        const cur = next.get(id) ?? { ...EMPTY_STAGE }
-        next.set(id, { ...cur, loading: true })
+    for (const stageId of ids) {
+      if (inFlightRef.current.has(stageId) || !beginStage(stageId)) {
+        pendingRefreshRef.current.add(stageId)
+        continue
       }
-      return next
-    })
+      void runRefreshStage(stageId, generation).finally(() => {
+        releaseStage(stageId, generation)
+      })
+    }
+  }, [companyId, funnelId, visibleStageIds, beginStage, runRefreshStage, releaseStage])
 
-    void Promise.all(ids.map(async (stageId) => {
-      try {
-        const incoming = await fetchPage(stageId, 0)
-        if (generationRef.current !== generation) return
-        if (!Array.isArray(incoming)) {
-          throw new Error('Resposta inesperada ao atualizar etapa')
-        }
-        setStageMap(prev => {
-          const next = new Map(prev)
-          const cur = next.get(stageId) ?? { ...EMPTY_STAGE }
-          next.set(stageId, applyPageResult(cur, 0, incoming, false))
-          return next
-        })
-      } catch (err) {
-        console.error(`[FunnelList] erro ao atualizar etapa ${stageId}:`, err)
-        if (generationRef.current !== generation) return
-        setStageMap(prev => {
-          const next = new Map(prev)
-          const cur = next.get(stageId) ?? { ...EMPTY_STAGE }
-          next.set(stageId, { ...cur, loading: false })
-          return next
-        })
-      }
-    }))
-  }, [companyId, funnelId, fetchPage, cancelQueue, visibleStageIds])
-
-  const loadMore = useCallback(async () => {
-    if (loadMoreInFlightRef.current) return
-
-    const queueToken = queueTokenRef.current
+  const loadMoreStage = useCallback(async (stageId: string) => {
     const generation = generationRef.current
-    const pending = visibleStageIds().filter((id) => {
-      const cur = stageMapRef.current.get(id)
-      return !!cur && cur.hasMore && !cur.loading
-    })
+    const cur = stageMapRef.current.get(stageId)
+    if (!cur || !cur.hasMore || cur.loading) return
+    if (!beginStage(stageId)) return
 
-    if (pending.length === 0) return
-
-    loadMoreInFlightRef.current = true
-    setLoadMoreInFlight(true)
+    const offset = cur.nextOffset
+    patchStage(stageId, prev => ({ ...prev, loading: true, error: null }))
 
     try {
-      for (const stageId of pending) {
-        if (queueTokenRef.current !== queueToken) return
-        if (generationRef.current !== generation) return
+      const incoming = await fetchSlice(stageId, LIST_PAGE_SIZE, offset)
+      if (generationRef.current !== generation) return
+      if (!Array.isArray(incoming)) throw new Error('Resposta inesperada ao carregar mais')
 
-        const cur = stageMapRef.current.get(stageId)
-        if (!cur || !cur.hasMore || cur.loading) continue
-
-        const requestedPage = cur.page + 1
-        if (requestedPage < 0) continue
-
-        setStageMap(prev => {
-          const next = new Map(prev)
-          const latest = next.get(stageId) ?? cur
-          next.set(stageId, { ...latest, loading: true })
-          return next
-        })
-
-        try {
-          const incoming = await fetchPage(stageId, requestedPage)
-          if (queueTokenRef.current !== queueToken) return
-          if (generationRef.current !== generation) return
-
-          if (!Array.isArray(incoming)) {
-            throw new Error('Resposta inesperada ao carregar mais')
-          }
-
-          setStageMap(prev => {
-            const next = new Map(prev)
-            const latest = next.get(stageId) ?? { ...EMPTY_STAGE }
-            next.set(stageId, applyPageResult(latest, requestedPage, incoming, true))
-            return next
-          })
-        } catch (err) {
-          console.error(`[FunnelList] erro ao carregar mais da etapa ${stageId}:`, err)
-          if (queueTokenRef.current !== queueToken) return
-          if (generationRef.current !== generation) return
-          setStageMap(prev => {
-            const next = new Map(prev)
-            const latest = next.get(stageId) ?? { ...EMPTY_STAGE }
-            next.set(stageId, { ...latest, loading: false })
-            return next
-          })
-          throw err
+      patchStage(stageId, prev => {
+        if (incoming.length === 0) {
+          return { ...prev, hasMore: false, loading: false, error: null }
         }
-      }
+        return {
+          positions: mergeUnique(prev.positions, incoming),
+          nextOffset: prev.nextOffset + incoming.length,
+          hasMore: incoming.length === LIST_PAGE_SIZE,
+          loading: false,
+          error: null,
+        }
+      })
+    } catch (err) {
+      console.error(`[FunnelList] erro ao carregar mais da etapa ${stageId}:`, err)
+      if (generationRef.current !== generation) return
+      patchStage(stageId, prev => ({ ...prev, loading: false, error: 'loadMore' }))
+      throw err
     } finally {
-      if (queueTokenRef.current === queueToken) {
-        loadMoreInFlightRef.current = false
-        setLoadMoreInFlight(false)
-      }
+      releaseStage(stageId, generation)
     }
-  }, [fetchPage, visibleStageIds])
+  }, [beginStage, releaseStage, fetchSlice, patchStage])
+
+  const retryStage = useCallback(async (stageId: string) => {
+    const generation = generationRef.current
+    if (!beginStage(stageId)) return
+    patchStage(stageId, prev => ({ ...prev, loading: true, error: null }))
+
+    try {
+      const incoming = await fetchSlice(stageId, LIST_PAGE_SIZE, 0)
+      if (generationRef.current !== generation) return
+      if (!Array.isArray(incoming)) throw new Error('Resposta inesperada ao recarregar etapa')
+      patchStage(stageId, () => ({
+        ...applyReturnedWindow(incoming, LIST_PAGE_SIZE),
+        loading: false,
+        error: null,
+      }))
+    } catch (err) {
+      console.error(`[FunnelList] erro ao recarregar etapa ${stageId}:`, err)
+      if (generationRef.current !== generation) return
+      patchStage(stageId, prev => ({ ...prev, loading: false, error: 'initial' }))
+      throw err
+    } finally {
+      releaseStage(stageId, generation)
+    }
+  }, [beginStage, releaseStage, fetchSlice, patchStage])
 
   return {
     stageMap,
     initialLoading,
-    loadMoreInFlight,
-    loadMore,
+    loadMoreStage,
+    retryStage,
     refreshStages,
   }
 }
