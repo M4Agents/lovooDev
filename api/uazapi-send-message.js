@@ -8,6 +8,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { isRestrictionError, recordRestriction } from './lib/uazapi/restrictions.js';
 import { canonicalizeBrMobilePhone } from './lib/phone/canonicalizeBrMobile.js';
+import { isPlaceholderName } from './lib/webhook/contactNameResolver.js';
+import { refreshPlaceholderLeadNameAfterSend } from './lib/webhook/leadNameRefresh.js';
 
 // =====================================================
 // CONFIGURAÇÕES SUPABASE
@@ -149,6 +151,23 @@ export default async function handler(req, res) {
 
       if (updateError) {
         console.error('⚠️ Erro ao atualizar status (mensagem enviada):', updateError);
+      }
+
+      // Depois do send o chat existe no cache da uazapi (docs: /chat/details).
+      // Só tenta se o nome da conversa ainda for placeholder — não atrasa envio com nome real.
+      if (isPlaceholderName(messageData.contact_name)) {
+        try {
+          await refreshPlaceholderLeadNameAfterSend({
+            companyId: company_id,
+            phone: messageData.phone,
+            token: messageData.provider_token,
+            baseUrl: UAZAPI_CONFIG.BASE_URL,
+            seenContactName: messageData.contact_name,
+            messageId: message_id,
+          });
+        } catch (refreshErr) {
+          console.warn('[send-message] refresh nome apos envio (non-fatal):', refreshErr?.message);
+        }
       }
 
       res.status(200).json({

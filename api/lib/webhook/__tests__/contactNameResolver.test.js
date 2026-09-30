@@ -18,7 +18,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isPlaceholderName,
   isValidContactName,
+  pickResolvedContactName,
   fetchContactNameFromUazapi,
+  fetchContactNameFromChatDetails,
 } from '../contactNameResolver.js';
 
 // ---------------------------------------------------------------------------
@@ -47,6 +49,65 @@ describe('isValidContactName', () => {
   it('"" → false', () => expect(isValidContactName('')).toBe(false));
   it('null → false', () => expect(isValidContactName(null)).toBe(false));
   it('"Médico André" → true (letras acentuadas)', () => expect(isValidContactName('Médico André')).toBe(true));
+});
+
+describe('pickResolvedContactName', () => {
+  it('prioriza name sobre wa_name', () => {
+    expect(pickResolvedContactName('João Silva', 'Outro', 'Agenda')).toBe('João Silva');
+  });
+
+  it('pula placeholder "." e usa o próximo válido', () => {
+    expect(pickResolvedContactName('.', '', 'Maria')).toBe('Maria');
+  });
+
+  it('todos placeholder → null', () => {
+    expect(pickResolvedContactName('.', 'Lead WhatsApp', '')).toBeNull();
+  });
+});
+
+describe('fetchContactNameFromChatDetails', () => {
+  let fetchMock;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('token ou phone ausente → null sem fetch', async () => {
+    expect(await fetchContactNameFromChatDetails({ token: '', phoneNumber: '5511' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('POST /chat/details e lê name consolidado', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ name: 'João Silva', wa_name: '.', wa_contactName: '' }),
+    });
+
+    const result = await fetchContactNameFromChatDetails({
+      token: 'tk',
+      phoneNumber: '5511999999999',
+      baseUrl: 'https://lovoo.uazapi.com',
+    });
+
+    expect(result).toBe('João Silva');
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://lovoo.uazapi.com/chat/details');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers.token).toBe('tk');
+  });
+
+  it('HTTP não-ok → null', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+    const result = await fetchContactNameFromChatDetails({ token: 'tk', phoneNumber: '5511' });
+    expect(result).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

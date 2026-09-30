@@ -36,7 +36,7 @@ import { resumeFromNode, resumeClaimedExecution } from './lib/automation/executo
 import { acquireLock, releaseLock }               from './lib/automation/executionLock.js';
 import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
-import { fetchContactNameFromUazapi } from './lib/webhook/contactNameResolver.js';
+import { fetchContactNameFromUazapi, isValidContactName } from './lib/webhook/contactNameResolver.js';
 
 // =====================================================
 // EXTRAÇÃO DE REPLY ID DO PAYLOAD UAZAPI
@@ -378,14 +378,18 @@ async function processMessage(payload) {
       /^Contato \d+$/.test(name) ||
       _isInstanceOwnName(name);
 
-    // pushName real do contato: senderName do UAZAPI, desde que não seja nome da instância
-    // nem um placeholder gerado pelo sistema (ex: ".").
-    const _whatsAppName =
-      (message.senderName &&
-       !_isInstanceOwnName(message.senderName) &&
-       !_isPlaceholderName(message.senderName))
-        ? message.senderName
-        : null;
+    // pushName real: payload da mensagem ou campos do chat (docs: name > wa_name > wa_contactName).
+    const _whatsAppName = [
+      message.senderName,
+      payload.chat?.name,
+      payload.chat?.wa_name,
+      payload.chat?.wa_contactName,
+    ].find((n) =>
+      n &&
+      !_isInstanceOwnName(n) &&
+      !_isPlaceholderName(n) &&
+      isValidContactName(n)
+    ) || null;
 
     // #region agent log
     fetch('http://127.0.0.1:7824/ingest/c7c9ded9-54a3-4071-a103-7e7846ef9215',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0cf0d9'},body:JSON.stringify({sessionId:'0cf0d9',runId:'post-fix',hypothesisId:'H2',location:'uazapi-webhook-final.js:instance-resolved',message:'instance_ok_before_name_detection',data:{direction,instanceId:instance?.id,hasInstanceName:Boolean(instance?.instance_name),hasProfileName:Boolean(instance?.profile_name),companyId:company?.id},timestamp:Date.now()})}).catch(()=>{});
@@ -462,7 +466,7 @@ async function processMessage(payload) {
 
     // Corrigir lead existente com placeholder quando temos nome válido agora.
     // Await real + trava de concorrência: só atualiza se o nome ainda for o placeholder observado.
-    if (direction === 'inbound' && existingLead?.id && !_isPlaceholderName(senderName) && _isPlaceholderName(_placeholderVisto)) {
+    if (existingLead?.id && !_isPlaceholderName(senderName) && _isPlaceholderName(_placeholderVisto)) {
       const { data: updated, error: nameUpdateError } = await getSupabaseAdmin()
         .from('leads')
         .update({ name: senderName, updated_at: new Date().toISOString() })

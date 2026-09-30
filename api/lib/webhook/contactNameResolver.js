@@ -33,6 +33,62 @@ export function isValidContactName(str) {
 }
 
 /**
+ * Primeiro candidato que não é placeholder e contém letra.
+ * Ordem dos argumentos = prioridade (docs uazapi: name > wa_name > wa_contactName).
+ */
+export function pickResolvedContactName(...candidates) {
+  for (const raw of candidates) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (isPlaceholderName(trimmed)) continue;
+    if (!isValidContactName(trimmed)) continue;
+    return trimmed;
+  }
+  return null;
+}
+
+/**
+ * Consulta oficial POST /chat/details depois que o chat já existe no servidor.
+ * Docs: https://docs.uazapi.com/reference/getChatDetails.md
+ * Header: token. Não loga nome, telefone, token nem o body.
+ */
+export async function fetchContactNameFromChatDetails({ token, phoneNumber, baseUrl }) {
+  if (!token || !phoneNumber) return null;
+
+  const apiBase = (baseUrl || 'https://api.uazapi.com').replace(/\/$/, '');
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 2000);
+
+  try {
+    const res = await fetch(`${apiBase}/chat/details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token },
+      body: JSON.stringify({ number: phoneNumber, preview: true }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      console.warn('[fetchContactName] details HTTP', res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    const chat = data?.data && typeof data.data === 'object' ? data.data : data;
+    return pickResolvedContactName(
+      chat?.name,
+      chat?.wa_name,
+      chat?.wa_contactName,
+    );
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'timeout_2s' : err.message;
+    console.warn('[fetchContactName] details falhou:', reason);
+    return null;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+/**
  * Consulta a API uazapi para obter o nome do contato.
  * Chamada aguardada, timeout 2s — falha nunca impede o processamento.
  *
