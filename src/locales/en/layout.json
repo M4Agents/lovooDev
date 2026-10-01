@@ -24,6 +24,12 @@
   "profile": {
     "avatarFallbackName": "User"
   },
+  "companySwitcher": {
+    "label": "Company",
+    "changeAriaLabel": "Switch company. Current: {{name}}",
+    "listAriaLabel": "Available companies",
+    "collapsedAriaLabel": "Switch company"
+  },
   "actions": {
     "signOut": "Sign out"
   },

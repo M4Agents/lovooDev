@@ -26,6 +26,7 @@ import { Avatar } from './Avatar';
 import { ActivityNotifications } from './ActivityNotifications';
 import { ActivityNotificationButton } from './ActivityNotificationButton';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { CompanySwitcher } from './CompanySwitcher';
 import { LowCreditAlert } from './LowCreditAlert';
 
 type ModernLayoutProps = {
@@ -265,9 +266,10 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
 
               {/* Empresa e Email */}
               <div className="space-y-1 pt-2 border-t border-slate-700/50">
-                <p className="text-xs font-medium text-slate-300 truncate">
-                  {company?.name}
-                </p>
+                <CompanySwitcher
+                  variant="expanded"
+                  onAfterSwitch={() => setMobileMenuOpen(false)}
+                />
                 <p className="text-xs text-slate-400 truncate">
                   {user?.email}
                 </p>
@@ -295,6 +297,10 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
                   <Crown className="absolute -bottom-1 -right-1 w-3 h-3 text-yellow-400 bg-slate-900 rounded-full" />
                 )}
               </div>
+              <CompanySwitcher
+                variant="collapsed"
+                onAfterSwitch={() => setMobileMenuOpen(false)}
+              />
               <ActivityNotifications />
               <LanguageSwitcher variant="collapsed" />
             </div>
@@ -334,7 +340,9 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
               canPurchase={canPurchaseAiCredits}
             />
           )}
-          {children}
+          <div key={company?.id ?? 'no-company'}>
+            {children}
+          </div>
         </main>
       </div>
 

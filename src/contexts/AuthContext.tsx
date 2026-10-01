@@ -821,13 +821,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchCompany = (companyId: string) => {
     const targetCompany = availableCompanies.find(comp => comp.id === companyId);
-    if (targetCompany) {
-      console.log('AuthContext: Switching to company:', targetCompany);
-      setCompany(targetCompany);
-      setCompanyTimezone(targetCompany.timezone || 'America/Sao_Paulo');
-      
-      // Sincronizar currentCompanyId no localStorage para analytics
-      localStorage.setItem('currentCompanyId', targetCompany.id);
+    if (!targetCompany) return;
+
+    setCompany(targetCompany);
+    setCompanyTimezone(targetCompany.timezone || 'America/Sao_Paulo');
+    localStorage.setItem('currentCompanyId', targetCompany.id);
+
+    const companyRole = userRoles.find(role => role.company_id === targetCompany.id);
+    if (companyRole) {
+      setCurrentRole(companyRole.role as UserRole);
+      setUserPermissions(companyRole.permissions);
+    } else {
+      setCurrentRole(null);
+      setUserPermissions(null);
     }
   };
 
