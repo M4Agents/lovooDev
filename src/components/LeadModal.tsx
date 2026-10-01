@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLeadPermissions } from '../hooks/useLeadPermissions';
 import { api } from '../services/api';
@@ -71,6 +71,26 @@ interface LeadModalProps {
   onSave: () => void;
 }
 
+function buildLeadModalSnapshot(
+  formData: Record<string, unknown>,
+  socialData: Record<string, unknown>,
+  addressData: Record<string, unknown>,
+  adData: Record<string, unknown>,
+  companyData: Record<string, unknown>,
+  customFieldValues: Record<string, unknown>,
+  tags: TagType[]
+) {
+  return JSON.stringify({
+    formData,
+    socialData,
+    addressData,
+    adData,
+    companyData,
+    customFieldValues,
+    tagIds: tags.map((tag) => tag.id).sort(),
+  });
+}
+
 export const LeadModal: React.FC<LeadModalProps> = ({
   isOpen,
   onClose,
@@ -140,6 +160,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [cepLoading, setCepLoading] = useState(false);
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
 
   // ── Seleção de Funil (apenas em criação) ───────────────────────────────
   const [funnels, setFunnels] = useState<SalesFunnel[]>([]);
@@ -161,16 +182,20 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   // Lead ativo: prioriza modo edição interno (duplicata confirmada) sobre prop externa
   const activeLead = internalEditLead ?? lead;
 
-  // Função para carregar tags do lead
-  const loadLeadTags = async (leadId: number) => {
-    try {
-      const tags = await tagsApi.getLeadTags(leadId);
-      setSelectedTags(tags);
-    } catch (error) {
-      console.error('Error loading lead tags:', error);
-      setSelectedTags([]);
-    }
-  };
+  const currentSnapshot = useMemo(
+    () => buildLeadModalSnapshot(
+      formData,
+      socialData,
+      addressData,
+      adData,
+      companyData,
+      customFieldValues,
+      selectedTags
+    ),
+    [formData, socialData, addressData, adData, companyData, customFieldValues, selectedTags]
+  );
+  const isDirty = formBaseline !== null && currentSnapshot !== formBaseline;
+  const showSaveButton = !activeLead?.id || isDirty || loading;
 
   // Função para carregar usuários da empresa
   const loadCompanyUsers = async () => {
@@ -191,12 +216,17 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && company?.id) {
+    if (!isOpen || !company?.id) return;
+
+    let cancelled = false;
+
+    const hydrate = async () => {
       loadCustomFields();
       loadCompanyUsers();
+      setFormBaseline(null);
+
       if (lead) {
-        // Edição - preencher dados existentes
-        setFormData({
+        const nextForm = {
           name: lead.name || '',
           email: lead.email || '',
           phone: formatPhoneForDisplay(lead.phone || ''),
@@ -206,25 +236,16 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           responsible_user_id: lead.responsible_user_id || '',
           visitor_id: lead.visitor_id || '',
           record_type: lead.record_type || 'Lead'
-        });
-
-        // Carregar tags do lead
-        if (lead.id) {
-          loadLeadTags(lead.id);
-        }
-
-        // NOVO: Preencher dados sociais e profissionais
-        setSocialData({
+        };
+        const nextSocial = {
           instagram: extractInstagramUsername(lead.instagram || ''),
           linkedin: extractLinkedInUsername(lead.linkedin || ''),
           tiktok: extractTikTokUsername(lead.tiktok || ''),
           cargo: lead.cargo || '',
           poder_investimento: lead.poder_investimento || '',
           data_nascimento: lead.data_nascimento || ''
-        });
-
-        // NOVO: Preencher dados de endereço
-        setAddressData({
+        };
+        const nextAddress = {
           cep: lead.cep || '',
           estado: lead.estado || '',
           cidade: lead.cidade || '',
@@ -232,17 +253,13 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           numero: lead.numero || '',
           bairro: lead.bairro || '',
           complemento: lead.complemento || ''
-        });
-
-        // NOVO: Preencher dados de anúncios
-        setAdData({
+        };
+        const nextAd = {
           campanha: lead.campanha || '',
           conjunto_anuncio: lead.conjunto_anuncio || '',
           anuncio: lead.anuncio || ''
-        });
-
-        // Preencher dados da empresa
-        setCompanyData({
+        };
+        const nextCompany = {
           company_name: lead.company_name || '',
           company_cnpj: lead.company_cnpj || '',
           company_razao_social: lead.company_razao_social || '',
@@ -254,17 +271,41 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           company_telefone: lead.company_telefone || '',
           company_email: lead.company_email || '',
           company_site: lead.company_site || ''
-        });
-
-        // Preencher valores dos campos personalizados
+        };
         const customValues: Record<string, any> = {};
         lead.lead_custom_values?.forEach(value => {
           customValues[value.field_id] = value.value;
         });
+
+        let tags: TagType[] = [];
+        if (lead.id) {
+          try {
+            tags = await tagsApi.getLeadTags(lead.id);
+          } catch {
+            tags = [];
+          }
+        }
+
+        if (cancelled) return;
+
+        setFormData(nextForm);
+        setSocialData(nextSocial);
+        setAddressData(nextAddress);
+        setAdData(nextAd);
+        setCompanyData(nextCompany);
         setCustomFieldValues(customValues);
+        setSelectedTags(tags);
+        setFormBaseline(buildLeadModalSnapshot(
+          nextForm,
+          nextSocial,
+          nextAddress,
+          nextAd,
+          nextCompany,
+          customValues,
+          tags
+        ));
       } else {
-        // Criação - limpar formulário
-        setFormData({
+        const nextForm = {
           name: '',
           email: '',
           phone: '',
@@ -274,23 +315,16 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           responsible_user_id: '',
           visitor_id: '',
           record_type: 'Lead'
-        });
-        
-        // Limpar tags para novo lead
-        setSelectedTags([]);
-        
-        // NOVO: Limpar dados sociais e profissionais
-        setSocialData({
+        };
+        const nextSocial = {
           instagram: '',
           linkedin: '',
           tiktok: '',
           cargo: '',
           poder_investimento: '',
           data_nascimento: ''
-        });
-        
-        // NOVO: Limpar dados de endereço
-        setAddressData({
+        };
+        const nextAddress = {
           cep: '',
           estado: '',
           cidade: '',
@@ -298,16 +332,13 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           numero: '',
           bairro: '',
           complemento: ''
-        });
-        
-        // NOVO: Limpar dados de anúncios
-        setAdData({
+        };
+        const nextAd = {
           campanha: '',
           conjunto_anuncio: '',
           anuncio: ''
-        });
-        
-        setCompanyData({
+        };
+        const nextCompany = {
           company_name: '',
           company_cnpj: '',
           company_razao_social: '',
@@ -319,11 +350,34 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           company_telefone: '',
           company_email: '',
           company_site: ''
-        });
+        };
+
+        if (cancelled) return;
+
+        setFormData(nextForm);
+        setSocialData(nextSocial);
+        setAddressData(nextAddress);
+        setAdData(nextAd);
+        setCompanyData(nextCompany);
         setCustomFieldValues({});
+        setSelectedTags([]);
+        setFormBaseline(buildLeadModalSnapshot(
+          nextForm,
+          nextSocial,
+          nextAddress,
+          nextAd,
+          nextCompany,
+          {},
+          []
+        ));
       }
       setValidationErrors({});
-    }
+    };
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, lead, company?.id]);
 
   // Auto-assignment: preenche responsible_user_id com currentUserId para novos leads.
@@ -333,10 +387,21 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   // já definido no estado antes do currentUserId carregar.
   useEffect(() => {
     if (!isOpen || activeLead || !currentUserId) return;
-    setFormData(prev => ({
-      ...prev,
-      responsible_user_id: prev.responsible_user_id || currentUserId,
-    }));
+    setFormData(prev => {
+      if (prev.responsible_user_id) return prev;
+      return { ...prev, responsible_user_id: currentUserId };
+    });
+    setFormBaseline(prev => {
+      if (!prev) return prev;
+      try {
+        const parsed = JSON.parse(prev);
+        if (parsed.formData?.responsible_user_id) return prev;
+        parsed.formData = { ...parsed.formData, responsible_user_id: currentUserId };
+        return JSON.stringify(parsed);
+      } catch {
+        return prev;
+      }
+    });
   }, [isOpen, activeLead, currentUserId]);
 
   // Limpar estados de duplicata ao fechar o modal
@@ -348,6 +413,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       setFunnels([]);
       setSelectedFunnelId('');
       setDefaultFunnelId(null);
+      setFormBaseline(null);
     }
   }, [isOpen]);
 
@@ -527,7 +593,66 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         customValues[v.field_id] = v.value;
       });
       setCustomFieldValues(customValues);
-      if (fullLead.id) loadLeadTags(fullLead.id);
+
+      let tags: TagType[] = [];
+      if (fullLead.id) {
+        try {
+          tags = await tagsApi.getLeadTags(fullLead.id);
+        } catch {
+          tags = [];
+        }
+      }
+      setSelectedTags(tags);
+      setFormBaseline(buildLeadModalSnapshot(
+        {
+          name: fullLead.name || '',
+          email: fullLead.email || '',
+          phone: formatPhoneForDisplay(fullLead.phone || ''),
+          origin: fullLead.origin || 'manual',
+          status: fullLead.status || 'novo',
+          interest: fullLead.interest || '',
+          responsible_user_id: fullLead.responsible_user_id || '',
+          visitor_id: fullLead.visitor_id || '',
+          record_type: fullLead.record_type || 'Lead',
+        },
+        {
+          instagram: extractInstagramUsername(fullLead.instagram || ''),
+          linkedin: extractLinkedInUsername(fullLead.linkedin || ''),
+          tiktok: extractTikTokUsername(fullLead.tiktok || ''),
+          cargo: fullLead.cargo || '',
+          poder_investimento: fullLead.poder_investimento || '',
+          data_nascimento: fullLead.data_nascimento || '',
+        },
+        {
+          cep: fullLead.cep || '',
+          estado: fullLead.estado || '',
+          cidade: fullLead.cidade || '',
+          endereco: fullLead.endereco || '',
+          numero: fullLead.numero || '',
+          bairro: fullLead.bairro || '',
+          complemento: fullLead.complemento || '',
+        },
+        {
+          campanha: fullLead.campanha || '',
+          conjunto_anuncio: fullLead.conjunto_anuncio || '',
+          anuncio: fullLead.anuncio || '',
+        },
+        {
+          company_name: fullLead.company_name || '',
+          company_cnpj: fullLead.company_cnpj || '',
+          company_razao_social: fullLead.company_razao_social || '',
+          company_nome_fantasia: fullLead.company_nome_fantasia || '',
+          company_cep: fullLead.company_cep || '',
+          company_cidade: fullLead.company_cidade || '',
+          company_estado: fullLead.company_estado || '',
+          company_endereco: fullLead.company_endereco || '',
+          company_telefone: fullLead.company_telefone || '',
+          company_email: fullLead.company_email || '',
+          company_site: fullLead.company_site || '',
+        },
+        customValues,
+        tags
+      ));
 
       setInternalEditLead(fullLead as Lead);
       setDuplicateAlert(null);
@@ -936,8 +1061,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   return (
     <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-xl font-semibold text-gray-900">
             {activeLead?.id ? 'Editar Lead' : 'Novo Lead'}
           </h2>
@@ -949,7 +1074,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Sistema de Abas */}
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
@@ -1796,8 +1922,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
 
-          {/* Botões */}
-          <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+          </div>
+
+          <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-gray-200 bg-white flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -1805,14 +1932,16 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             >
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {loading ? 'Salvando...' : 'Salvar Lead'}
-            </button>
+            {showSaveButton && (
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {loading ? 'Salvando...' : 'Salvar Lead'}
+              </button>
+            )}
           </div>
         </form>
       </div>
