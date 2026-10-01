@@ -5,6 +5,7 @@
 // NÃO MODIFICA api.ts existente
 
 import { supabase } from '../../lib/supabase'
+import { brMobilePhoneLookupValues } from '../../lib/phone/canonicalizeBrMobile'
 import type {
   ChatConversation,
   ChatMessage,
@@ -1233,39 +1234,51 @@ export class ChatApi {
     companyId: string
   ): Promise<string | null> {
     try {
-      // 1. Buscar telefone do lead
-      const { data: lead, error: leadError } = await supabase
-        .from('leads')
-        .select('phone')
-        .eq('id', leadId)
-        .eq('company_id', companyId)
-        .single()
-
-      if (leadError || !lead?.phone) {
-        return null
-      }
-
-      // Limpar telefone (remover caracteres especiais)
-      const cleanPhone = lead.phone.replace(/\D/g, '')
-
-      // 2. Buscar conversa diretamente via telefone (chat_conversations usa contact_phone)
-      // Ordena por updated_at DESC para priorizar a conversa com atividade mais recente,
-      // evitando que conversas recém-criadas (mas inativas) sobreponham conversas com histórico.
-      const { data: conversation, error: conversationError } = await supabase
+      const { data: byLead } = await supabase
         .from('chat_conversations')
         .select('id')
-        .eq('contact_phone', cleanPhone)
+        .eq('lead_id', leadId)
         .eq('company_id', companyId)
         .eq('status', 'active')
         .order('updated_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (conversationError || !conversation) {
+      if (byLead?.id) {
+        return byLead.id
+      }
+
+      const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('phone, phone_normalized')
+        .eq('id', leadId)
+        .eq('company_id', companyId)
+        .maybeSingle()
+
+      if (leadError || !lead) {
         return null
       }
 
-      return conversation.id
+      const phones = [...new Set([
+        ...brMobilePhoneLookupValues(lead.phone),
+        ...brMobilePhoneLookupValues(lead.phone_normalized),
+      ])]
+
+      if (phones.length === 0) {
+        return null
+      }
+
+      const { data: conversation } = await supabase
+        .from('chat_conversations')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .in('contact_phone', phones)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      return conversation?.id ?? null
     } catch (error) {
       console.error('Erro ao buscar conversationId:', error)
       return null

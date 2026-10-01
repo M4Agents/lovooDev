@@ -25,3 +25,31 @@ export function canonicalizeBrMobilePhone(
 
   return digits;
 }
+
+/**
+ * Variantes usadas no lookup de conversa/lead:
+ * dígitos crus, forma canônica (com 9º) e JID WhatsApp (sem 9º).
+ */
+export function brMobilePhoneLookupValues(
+  phone: string | null | undefined
+): string[] {
+  const values = new Set<string>();
+  if (phone == null) return [];
+
+  const clean = String(phone).replace(/\D/g, '');
+  if (clean) values.add(clean);
+
+  const canonical = canonicalizeBrMobilePhone(phone);
+  if (canonical) values.add(canonical);
+
+  if (
+    canonical &&
+    canonical.length === 13 &&
+    canonical.startsWith('55') &&
+    canonical.charAt(4) === '9'
+  ) {
+    values.add(canonical.slice(0, 4) + canonical.slice(5));
+  }
+
+  return [...values];
+}
