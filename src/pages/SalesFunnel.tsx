@@ -916,6 +916,7 @@ export default function SalesFunnel() {
           viewMode === 'list' ? (
             <FunnelListView
               funnelId={selectedFunnel.id}
+              funnelName={selectedFunnel.name}
               onLeadClick={handleLeadClick}
               searchTerm={debouncedSearch}
               selectedOrigin={selectedOrigin}

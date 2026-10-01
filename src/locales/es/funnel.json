@@ -48,6 +48,11 @@
     "selectedSummary": "{{opportunities}} oportunidad(es) seleccionada(s) · {{leads}} lead(s) afectados",
     "assignLeadResponsible": "Asignar responsable del lead",
     "assignTags": "Asignar etiquetas",
+    "moveToFunnel": "Mover al embudo",
+    "moveToFunnelDisabledTitle": "Seleccione oportunidades de la misma etapa para mover en masa",
+    "moveSuccess": "{{count}} oportunidad(es) movida(s).",
+    "movePartial": "{{moved}} de {{requested}} oportunidades fueron movidas. La lista se actualizó.",
+    "moveNone": "Ninguna oportunidad fue movida. La lista se actualizó.",
     "leadChangeWarning": "El cambio en el lead aplica a todas las oportunidades de ese lead.",
     "bulkLimit": "Seleccione como máximo 200 leads para esta acción."
   },

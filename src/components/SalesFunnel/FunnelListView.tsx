@@ -1,6 +1,6 @@
 // =====================================================
 // Visão em lista do funil — carga explícita, sem DnD.
-// Bulk: somente tags aditivas e responsável do lead.
+// Bulk: tags aditivas, responsável do lead e mover para funil (byIds).
 // =====================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -9,8 +9,10 @@ import toast from 'react-hot-toast'
 import { BulkAssignModal } from '../BulkAssignModal'
 import { BulkTagModal } from '../BulkTagModal'
 import { OpportunityDetailModal } from './OpportunityDetailModal'
+import { BulkMoveOpportunitiesModal } from './BulkMoveOpportunitiesModal'
 import { FunnelListTable, type FunnelListGroup } from './FunnelListTable'
 import { FunnelListBulkBar } from './FunnelListBulkBar'
+import type { BulkMoveRequest } from './FunnelColumn'
 import { useFunnelListPositions } from './useFunnelListPositions'
 import { useFunnelStages } from '../../hooks/useFunnelStages'
 import { useStageCounts } from '../../hooks/useStageCounts'
@@ -42,6 +44,7 @@ interface SelectedOpportunity {
 
 interface FunnelListViewProps {
   funnelId: string
+  funnelName?: string
   onLeadClick?: (leadId: number) => void
   searchTerm?: string
   selectedOrigin?: string
@@ -57,6 +60,7 @@ interface FunnelListViewProps {
 
 export function FunnelListView({
   funnelId,
+  funnelName,
   onLeadClick,
   searchTerm = '',
   selectedOrigin = '',
@@ -78,6 +82,7 @@ export function FunnelListView({
 
   const [assignableUsers, setAssignableUsers] = useState<{ user_id: string; display_name: string }[]>([])
   const [selectedMap, setSelectedMap] = useState<Map<string, SelectedOpportunity>>(new Map())
+  const [bulkMoveRequest, setBulkMoveRequest] = useState<BulkMoveRequest | null>(null)
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false)
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false)
   const [showBulkTagModal, setShowBulkTagModal] = useState(false)
@@ -114,6 +119,9 @@ export function FunnelListView({
 
   useEffect(() => {
     setSelectedMap(new Map())
+    setBulkMoveRequest(null)
+    setShowBulkAssignModal(false)
+    setShowBulkTagModal(false)
   }, [funnelId, companyId, filter])
 
   useEffect(() => {
@@ -253,6 +261,11 @@ export function FunnelListView({
     () => [...new Set(Array.from(selectedMap.values()).map(item => item.leadId))],
     [selectedMap],
   )
+  const isSelectionSameStage = useMemo(() => {
+    if (selectedMap.size === 0) return false
+    const stageIds = new Set(Array.from(selectedMap.values()).map(item => item.stageId))
+    return stageIds.size === 1
+  }, [selectedMap])
 
   const toggleSelect = useCallback((
     positionId: string,
@@ -296,6 +309,44 @@ export function FunnelListView({
     refreshStages()
     refreshCounts()
   }, [refreshStages, refreshCounts])
+
+  const handleBulkMoveSelectionToFunnel = useCallback(() => {
+    if (selectedMap.size === 0 || !isSelectionSameStage) return
+
+    const entries = Array.from(selectedMap.values())
+    const fromStageId = entries[0].stageId
+    const fromStage = stages.find(s => s.id === fromStageId)
+    if (!fromStage) return
+
+    const opportunityIds = [...new Set(entries.map(item => item.opportunityId))]
+    if (opportunityIds.length === 0) return
+
+    setBulkMoveRequest({
+      fromFunnelId: funnelId,
+      fromFunnelName: funnelName ?? '',
+      fromStageId: fromStage.id,
+      fromStageName: fromStage.name,
+      fromStageType: fromStage.stage_type as 'active' | 'won' | 'lost',
+      opportunityIds,
+    })
+  }, [selectedMap, isSelectionSameStage, stages, funnelId, funnelName])
+
+  const handleBulkMoveSuccess = useCallback((movedCount: number) => {
+    const requestedCount = bulkMoveRequest?.opportunityIds?.length ?? 0
+    setBulkMoveRequest(null)
+    setSelectedMap(new Map())
+    refreshAfterMutation()
+
+    if (requestedCount > 0 && movedCount === requestedCount) {
+      toast.success(t('list.moveSuccess', { count: movedCount }))
+      return
+    }
+    if (movedCount > 0) {
+      toast(t('list.movePartial', { moved: movedCount, requested: requestedCount }), { icon: '⚠️' })
+      return
+    }
+    toast.error(t('list.moveNone'))
+  }, [bulkMoveRequest, refreshAfterMutation, t])
 
   const handleBulkAssign = useCallback(async (responsibleUserId: string | null) => {
     if (!companyId) return
@@ -448,8 +499,10 @@ export function FunnelListView({
         <FunnelListBulkBar
           opportunityCount={selectedMap.size}
           leadCount={selectedLeadIds.length}
+          canMoveToFunnel={isSelectionSameStage}
           canBulkAssign={canBulkAssignLeads}
           canBulkTag={canBulkTagLeads}
+          onMoveToFunnel={handleBulkMoveSelectionToFunnel}
           onAssign={() => {
             if (selectedLeadIds.length > MAX_BULK_LEADS) {
               toast.error(t('list.bulkLimit'))
@@ -459,6 +512,21 @@ export function FunnelListView({
           }}
           onTag={handleOpenBulkTagModal}
           onClear={clearSelection}
+        />
+      )}
+
+      {bulkMoveRequest && companyId && (
+        <BulkMoveOpportunitiesModal
+          isOpen={true}
+          onClose={() => setBulkMoveRequest(null)}
+          onSuccess={handleBulkMoveSuccess}
+          companyId={companyId}
+          fromFunnelId={bulkMoveRequest.fromFunnelId}
+          fromFunnelName={bulkMoveRequest.fromFunnelName}
+          fromStageId={bulkMoveRequest.fromStageId}
+          fromStageName={bulkMoveRequest.fromStageName}
+          fromStageType={bulkMoveRequest.fromStageType}
+          opportunityIds={bulkMoveRequest.opportunityIds}
         />
       )}
 

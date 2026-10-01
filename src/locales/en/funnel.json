@@ -48,6 +48,11 @@
     "selectedSummary": "{{opportunities}} opportunity(ies) selected · {{leads}} lead(s) affected",
     "assignLeadResponsible": "Assign lead owner",
     "assignTags": "Assign tags",
+    "moveToFunnel": "Move to funnel",
+    "moveToFunnelDisabledTitle": "Select opportunities from the same stage to move in bulk",
+    "moveSuccess": "{{count}} opportunity(ies) moved.",
+    "movePartial": "{{moved}} of {{requested}} opportunities were moved. The list was updated.",
+    "moveNone": "No opportunities were moved. The list was updated.",
     "leadChangeWarning": "Changes to the lead apply to all of that lead's opportunities.",
     "bulkLimit": "Select at most 200 leads for this action."
   },
