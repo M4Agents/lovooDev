@@ -939,7 +939,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {activeLead ? 'Editar Lead' : 'Novo Lead'}
+            {activeLead?.id ? 'Editar Lead' : 'Novo Lead'}
           </h2>
           <button
             onClick={onClose}

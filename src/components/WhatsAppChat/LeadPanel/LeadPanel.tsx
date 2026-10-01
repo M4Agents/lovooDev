@@ -14,6 +14,7 @@ import { InstanceSelector } from '../InstanceSelector'
 import { UserSelector } from '../UserSelector'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../lib/supabase'
+import { brMobilePhoneLookupValues } from '../../../lib/phone/canonicalizeBrMobile'
 import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
@@ -94,6 +95,48 @@ const convertChatContactToLead = (
     lead_custom_values: []
   };
 };
+
+const ASSOCIATED_LEAD_SELECT = 'id, name, phone, email, responsible_user_id'
+
+async function resolveAssociatedLead(
+  companyId: string,
+  conversation: { lead_id?: number | null; contact_phone?: string | null }
+) {
+  if (conversation.lead_id) {
+    const { data } = await supabase
+      .from('leads')
+      .select(ASSOCIATED_LEAD_SELECT)
+      .eq('id', conversation.lead_id)
+      .eq('company_id', companyId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (data) return data
+  }
+
+  const phones = brMobilePhoneLookupValues(conversation.contact_phone)
+  if (phones.length === 0) return null
+
+  const { data: byNormalized } = await supabase
+    .from('leads')
+    .select(ASSOCIATED_LEAD_SELECT)
+    .eq('company_id', companyId)
+    .is('deleted_at', null)
+    .in('phone_normalized', phones)
+    .limit(1)
+    .maybeSingle()
+  if (byNormalized) return byNormalized
+
+  const { data: byPhone } = await supabase
+    .from('leads')
+    .select(ASSOCIATED_LEAD_SELECT)
+    .eq('company_id', companyId)
+    .is('deleted_at', null)
+    .in('phone', phones)
+    .limit(1)
+    .maybeSingle()
+
+  return byPhone ?? null
+}
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -208,21 +251,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         const contactData = await chatApi.getContactInfo(companyId, conv.contact_phone)
         setContact(contactData)
         
-        // Buscar lead associado ao telefone do contato
         try {
-          const { data: leadData, error: leadError } = await supabase
-            .from('leads')
-            .select('id, name, phone, email, responsible_user_id')
-            .eq('company_id', companyId)
-            .eq('phone', conv.contact_phone)
-            .is('deleted_at', null)
-            .single()
-          
-          if (!leadError && leadData) {
-            setAssociatedLead(leadData)
-          } else {
-            setAssociatedLead(null)
-          }
+          const leadData = await resolveAssociatedLead(companyId, conv)
+          setAssociatedLead(leadData)
         } catch (error) {
           console.error('Erro ao buscar lead associado:', error)
           setAssociatedLead(null)
