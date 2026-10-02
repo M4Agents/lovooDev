@@ -754,12 +754,11 @@ export default function SalesFunnel() {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="min-w-0">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('filters.periodLabel')}
-                  </label>
-                  <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('filters.periodLabel')}
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
                     {(
                       [
                         { value: 'created_at',      label: 'Data de criação' },
@@ -782,10 +781,9 @@ export default function SalesFunnel() {
                         {opt.label}
                       </button>
                     ))}
-                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full lg:w-72 lg:flex-shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-56 sm:flex-shrink-0">
                   {selectedPeriod === null ? (
                     <button
                       type="button"
