@@ -7,6 +7,7 @@
 
 import React, { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../../contexts/AuthContext'
 import { Draggable } from '@hello-pangea/dnd'
 import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle, Check, UserCheck } from 'lucide-react'
 import { Avatar } from '../Avatar'
@@ -75,6 +76,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   selectedCount = 0,
 }) => {
   const { t } = useTranslation('funnel')
+  const { companyTimezone } = useAuth()
   const opportunity = position.opportunity
   const lead = opportunity?.lead
   const ownerUser = opportunity?.owner_user_id
@@ -325,7 +327,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 <span>
                   {t('leadCard.lastContact', {
-                    date: new Date(lead.last_contact_at).toLocaleDateString('pt-BR'),
+                    date: new Intl.DateTimeFormat('pt-BR', {
+                      timeZone: companyTimezone || 'America/Sao_Paulo',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }).format(new Date(lead.last_contact_at)),
                     interpolation: { escapeValue: false },
                   })}
                 </span>
