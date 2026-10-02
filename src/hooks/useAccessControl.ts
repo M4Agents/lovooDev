@@ -161,6 +161,10 @@ export function useAccessControl() {
     currentRole === 'super_admin'  ||
     isImpersonating
 
+  // Mesma matriz da RPC update_instance_default_funnel
+  // (super_admin, system_admin, admin, manager). seller/partner não editam.
+  const canManageWhatsAppInstanceFunnel = canManageWhatsAppAssignedUser
+
   // ── Integração Instagram ───────────────────────────────────
   // Ver aba: admin, manager, super_admin, system_admin, impersonando
   const canManageInstagramIntegration =
@@ -445,6 +449,9 @@ export function useAccessControl() {
 
     // Instâncias WhatsApp — responsável automático
     canManageWhatsAppAssignedUser,
+
+    // Instâncias WhatsApp — destino de funil (mesma matriz da RPC)
+    canManageWhatsAppInstanceFunnel,
 
     // Integração Instagram
     canManageInstagramIntegration,

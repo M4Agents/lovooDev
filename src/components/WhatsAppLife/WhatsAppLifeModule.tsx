@@ -13,6 +13,8 @@ import { supabase } from '../../lib/supabase';
 import { AddInstanceModal } from './AddInstanceModal';
 import { QRCodeModal } from './QRCodeModal';
 import { InstanceCard } from './InstanceCard';
+import { funnelApi } from '../../services/funnelApi';
+import type { SalesFunnel } from '../../types/sales-funnel';
 
 // =====================================================
 // COMPONENTE PRINCIPAL (VERSÃO FUNCIONAL)
@@ -46,13 +48,19 @@ export const WhatsAppLifeModule: React.FC = () => {
     syncProfileData,
     updateAssignedUser,
     updateAvailableToAll,
+    updateInstanceDefaultFunnel,
   } = useWhatsAppInstancesWebhook100(company?.id);
 
-  const { canManageWhatsAppAssignedUser } = useAccessControl();
+  const {
+    canManageWhatsAppAssignedUser,
+    canManageWhatsAppInstanceFunnel,
+  } = useAccessControl();
 
   // Usuários disponíveis para seleção de responsável — carregados uma única vez no módulo
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [companyFunnels, setCompanyFunnels] = useState<SalesFunnel[]>([]);
+  const [loadingFunnels, setLoadingFunnels] = useState(false);
   
   const { 
     planLimits, 
@@ -291,6 +299,28 @@ export const WhatsAppLifeModule: React.FC = () => {
     loadUsers();
   }, [company?.id, canManageWhatsAppAssignedUser]);
 
+  useEffect(() => {
+    if (!company?.id || !canManageWhatsAppInstanceFunnel) return;
+
+    const loadFunnels = async () => {
+      setLoadingFunnels(true);
+      try {
+        const rows = await funnelApi.getFunnels(company.id, {
+          company_id: company.id,
+          is_active: true,
+        });
+        setCompanyFunnels(rows);
+      } catch (err) {
+        console.error('[WhatsAppLifeModule] Erro ao carregar funis:', err);
+        setCompanyFunnels([]);
+      } finally {
+        setLoadingFunnels(false);
+      }
+    };
+
+    loadFunnels();
+  }, [company?.id, canManageWhatsAppInstanceFunnel]);
+
   // =====================================================
   // HANDLER: ATUALIZAR RESPONSÁVEL DA INSTÂNCIA
   // =====================================================
@@ -310,6 +340,15 @@ export const WhatsAppLifeModule: React.FC = () => {
   ) => {
     return await updateAvailableToAll(instanceId, value);
   }, [updateAvailableToAll]);
+
+  const handleDefaultFunnelChange = useCallback(async (
+    instanceId: string,
+    funnelId: string | null,
+    stageId: string | null,
+    enabled: boolean
+  ) => {
+    return await updateInstanceDefaultFunnel(instanceId, funnelId, stageId, enabled);
+  }, [updateInstanceDefaultFunnel]);
 
   // Função para iniciar polling de instância temporária
   const startTempInstancePolling = useCallback((tempInstanceId: string, isReconnect: boolean = false) => {
@@ -675,8 +714,12 @@ export const WhatsAppLifeModule: React.FC = () => {
                   companyUsers={companyUsers}
                   loadingUsers={loadingUsers}
                   canManageWhatsAppAssignedUser={canManageWhatsAppAssignedUser}
+                  canManageWhatsAppInstanceFunnel={canManageWhatsAppInstanceFunnel}
+                  funnels={companyFunnels}
+                  loadingFunnels={loadingFunnels}
                   onAssignedUserChange={handleAssignedUserChange}
                   onAvailableToAllChange={handleAvailableToAllChange}
+                  onDefaultFunnelChange={handleDefaultFunnelChange}
                   onSyncProfile={handleSyncProfile}
                   onEdit={handleEditInstance}
                   onDelete={handleDeleteInstance}

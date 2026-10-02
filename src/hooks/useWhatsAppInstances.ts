@@ -412,6 +412,38 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
     await fetchInstances();
   }, [fetchInstances]);
 
+  const updateInstanceDefaultFunnel = useCallback(async (
+    instanceId: string,
+    funnelId: string | null,
+    stageId: string | null,
+    enabled: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!companyId) return { success: false, error: 'Company ID não disponível' };
+
+    try {
+      const { data, error } = await supabase.rpc('update_instance_default_funnel', {
+        p_instance_id: instanceId,
+        p_company_id: companyId,
+        p_funnel_id: funnelId,
+        p_stage_id: stageId,
+        p_enabled: enabled,
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao atualizar destino do funil');
+      }
+
+      await fetchInstances();
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao atualizar destino do funil',
+      };
+    }
+  }, [companyId, fetchInstances]);
+
   // =====================================================
   // EFFECT: CARREGAR INSTÂNCIAS
   // =====================================================
@@ -455,5 +487,6 @@ export const useWhatsAppInstances = (companyId?: string): UseInstancesReturn => 
     getQRCode,
     deleteInstance,
     updateInstance,
+    updateInstanceDefaultFunnel,
   };
 };

@@ -9,6 +9,8 @@ import { User, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { WhatsAppLifeInstance } from '../../types/whatsapp-life';
 import { InstanceAvatar } from './InstanceAvatar';
 import { UserSelector } from '../WhatsAppChat/UserSelector';
+import { InstanceFunnelConfigPanel } from './InstanceFunnelConfigPanel';
+import type { SalesFunnel } from '../../types/sales-funnel';
 
 // =====================================================
 // TIPOS
@@ -19,6 +21,9 @@ interface InstanceCardProps {
   companyUsers: any[];
   loadingUsers: boolean;
   canManageWhatsAppAssignedUser: boolean;
+  canManageWhatsAppInstanceFunnel: boolean;
+  funnels: SalesFunnel[];
+  loadingFunnels: boolean;
   onAssignedUserChange: (
     instanceId: string,
     assignedUserId: string | null
@@ -26,6 +31,12 @@ interface InstanceCardProps {
   onAvailableToAllChange?: (
     instanceId: string,
     value: boolean
+  ) => Promise<{ success: boolean; error?: string }>;
+  onDefaultFunnelChange: (
+    instanceId: string,
+    funnelId: string | null,
+    stageId: string | null,
+    enabled: boolean
   ) => Promise<{ success: boolean; error?: string }>;
   onSyncProfile: (instance: WhatsAppLifeInstance) => void;
   onEdit: (instance: WhatsAppLifeInstance) => void;
@@ -41,8 +52,12 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   companyUsers,
   loadingUsers,
   canManageWhatsAppAssignedUser,
+  canManageWhatsAppInstanceFunnel,
+  funnels,
+  loadingFunnels,
   onAssignedUserChange,
   onAvailableToAllChange,
+  onDefaultFunnelChange,
   onSyncProfile,
   onEdit,
   onDelete,
@@ -197,6 +212,15 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               )}
             </div>
           </div>
+
+          {canManageWhatsAppInstanceFunnel && (
+            <InstanceFunnelConfigPanel
+              instance={instance}
+              funnels={funnels}
+              loadingFunnels={loadingFunnels}
+              onSave={onDefaultFunnelChange}
+            />
+          )}
 
           {/* Toggle: Disponível para todos os usuários (FASE 5ZE) */}
           <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between gap-3">

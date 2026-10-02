@@ -46,6 +46,12 @@ export interface WhatsAppLifeInstance {
   // FASE 5ZE: instância compartilhada — disponível no seletor de todos os sellers
   // A visibilidade da conversa continua definida por chat_conversations.assigned_to
   available_to_all?: boolean;
+
+  // Destino de funil para leads novos criados por esta instância (Uazapi).
+  // Escrita somente via RPC update_instance_default_funnel.
+  default_funnel_id?: string | null;
+  default_stage_id?: string | null;
+  lead_funnel_override_enabled?: boolean;
 }
 
 export type WhatsAppInstanceStatus = 
@@ -272,6 +278,15 @@ export interface UseInstancesReturn {
     error?: string;
   }>;
   updateAvailableToAll: (instanceId: string, availableToAll: boolean) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  updateInstanceDefaultFunnel: (
+    instanceId: string,
+    funnelId: string | null,
+    stageId: string | null,
+    enabled: boolean
+  ) => Promise<{
     success: boolean;
     error?: string;
   }>;
