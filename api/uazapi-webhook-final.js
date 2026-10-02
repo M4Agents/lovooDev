@@ -1167,32 +1167,129 @@ async function processMessage(payload) {
     // lead_id resolvido do bloco inbound — acessível após o bloco para o dispatch de message.received
     let inboundLeadId = null;
 
-    // 🎯 CRIAÇÃO AUTOMÁTICA DE LEAD PARA NOVOS CONTATOS - CORREÇÃO CRÍTICA 2026-02-20
-    // USANDO SECURITY DEFINER PARA MANTER RLS ATIVO
+    function isDeadlockLeadFailure(leadError, leadResult) {
+      // v9: JSON explícito error_code=40P01 / error=deadlock_detected.
+      // v8: NÃO alterar. EXCEPTION WHEN OTHERS devolve
+      // {success:false, error: SQLERRM} sem SQLSTATE. O cliente Supabase
+      // recebe data (leadError nulo). SQLERRM de 40P01 = "deadlock detected".
+      const code = String(leadError?.code || leadResult?.error_code || '');
+      if (code === '40P01') return true;
+      const msg = String(leadError?.message || leadResult?.error || '');
+      if (msg === 'deadlock_detected') return true;
+      return /deadlock detected/i.test(msg);
+    }
+
+    function sleepMs(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
     if (direction === 'inbound') {
       try {
-        console.log('🎯 CRIANDO LEAD AUTOMATICAMENTE VIA SECURITY DEFINER...');
-        
-        // Usar service_role para garantir que a RPC encontre leads de qualquer formato de telefone
         const supabaseAdminForLead = getSupabaseAdmin();
-        const { data: leadResult, error: leadError } = await supabaseAdminForLead
-          .rpc('create_lead_from_whatsapp_safe', {
-            p_company_id: company.id,
-            p_phone: phoneNumber,
-            p_name: senderName,
-            p_instance_id: instance.id  // v7: atribuição automática de responsável por instância
+
+        let useV9 = false;
+        try {
+          const { data: flagRow, error: flagErr } = await supabaseAdminForLead
+            .from('whatsapp_life_instances')
+            .select('lead_funnel_override_enabled')
+            .eq('id', instance.id)
+            .eq('company_id', company.id)
+            .maybeSingle();
+
+          if (flagErr) {
+            console.error('[webhook] instance funnel flag unavailable; using v8');
+            useV9 = false;
+          } else {
+            useV9 = flagRow?.lead_funnel_override_enabled === true;
+          }
+        } catch (_flagException) {
+          console.error('[webhook] instance funnel flag exception; using v8');
+          useV9 = false;
+        }
+
+        const leadRpcName = useV9
+          ? 'create_lead_from_whatsapp_safe_v9'
+          : 'create_lead_from_whatsapp_safe';
+
+        // 3 tentativas, waits 0 / 80ms / 200ms. Só 40P01.
+        const deadlockWaits = [0, 80, 200];
+        let leadResult = null;
+        let leadError = null;
+        let deadlockAttempts = 0;
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          if (deadlockWaits[attempt - 1] > 0) {
+            await sleepMs(deadlockWaits[attempt - 1]);
+          }
+
+          ({ data: leadResult, error: leadError } = await supabaseAdminForLead
+            .rpc(leadRpcName, {
+              p_company_id: company.id,
+              p_phone: phoneNumber,
+              p_name: senderName,
+              p_instance_id: instance.id
+            }));
+
+          const rpcFailed = Boolean(leadError) || leadResult?.success === false;
+          if (!rpcFailed) {
+            break;
+          }
+
+          if (!isDeadlockLeadFailure(leadError, leadResult)) {
+            break;
+          }
+
+          deadlockAttempts = attempt;
+          console.error('[webhook] lead create deadlock', {
+            attempt,
+            error_code: '40P01',
+            rpc: leadRpcName,
           });
-        
+        }
+
         if (leadError) {
-          console.error('❌ ERRO NA RPC create_lead_from_whatsapp_safe:', leadError);
-        } else if (leadResult && leadResult.success) {
-          if (leadResult.created) {
-            console.log('✅ LEAD CRIADO AUTOMATICAMENTE:', leadResult.lead_id, '-', senderName);
+          console.error('❌ ERRO NA RPC', leadRpcName, leadError);
+        } else if (leadResult && leadResult.success === false) {
+          // success=false: NÃO é created=false. Sem reentry, sem lead.created.
+          if (isDeadlockLeadFailure(null, leadResult) && deadlockAttempts >= 3) {
+            console.error('[webhook] lead create failed after deadlock retries', {
+              error_code: '40P01',
+              attempts: deadlockAttempts,
+              rpc: leadRpcName,
+            });
+          } else {
+            console.error('❌ RPC retornou erro:', {
+              error: leadResult.error || null,
+              error_code: leadResult.error_code || null,
+            });
+          }
+        } else if (leadResult && leadResult.success === true) {
+          if (leadResult.created === true) {
+            if (leadResult.funnel_applied === 'none') {
+              console.warn('[webhook] lead created with partial funnel', {
+                lead_id: leadResult.lead_id,
+                funnel_applied: 'none',
+                fallback_reason: leadResult.fallback_reason || null,
+                opportunity_id: leadResult.opportunity_id || null,
+                funnel_id: leadResult.funnel_id || null,
+                stage_id: leadResult.stage_id || null,
+              });
+            } else if (useV9) {
+              console.log('[webhook] lead created', {
+                lead_id: leadResult.lead_id,
+                funnel_applied: leadResult.funnel_applied,
+                opportunity_id: leadResult.opportunity_id || null,
+                funnel_id: leadResult.funnel_id || null,
+                stage_id: leadResult.stage_id || null,
+              });
+            } else {
+              console.log('✅ LEAD CRIADO AUTOMATICAMENTE:', leadResult.lead_id, '-', senderName);
+            }
+
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId: leadResult.lead_id, source: 'whatsapp' })
               .catch(err => console.error('[uazapi-webhook-final] automation trigger failed:', err));
-          } else {
+          } else if (leadResult.created === false) {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
-            // Registrar reentrada via WhatsApp — await garante execução completa
             const supabaseAdmin = getSupabaseAdmin();
             try {
               await handleLeadReentry({
@@ -1209,12 +1306,11 @@ async function processMessage(payload) {
               console.error('[uazapi-webhook-final] handleLeadReentry failed:', err);
             }
           }
-          
+
           if (leadResult.lead_id && conversationId) {
             await supabase.from('chat_conversations').update({ lead_id: leadResult.lead_id }).eq('id', conversationId);
 
-            // Fase 3c: sincronizar assigned_to na conversa quando lead novo veio com responsável da instância
-            if (leadResult.created && leadResult.responsible_user_id) {
+            if (leadResult.created === true && leadResult.responsible_user_id) {
               try {
                 const { data: syncCount, error: syncError } = await supabaseAdminForLead
                   .rpc('sync_lead_responsible_to_conversations', {
@@ -1224,21 +1320,21 @@ async function processMessage(payload) {
                 if (syncError) {
                   console.error('[webhook] chat-sync assigned_to error:', syncError.message);
                 } else {
-                  console.log('[webhook] chat-sync assigned_to ok:', { lead_id: leadResult.lead_id, responsible: leadResult.responsible_user_id, updated: syncCount ?? 0 });
+                  console.log('[webhook] chat-sync assigned_to ok:', {
+                    lead_id: leadResult.lead_id,
+                    responsible: leadResult.responsible_user_id,
+                    updated: syncCount ?? 0,
+                  });
                 }
               } catch (syncErr) {
                 console.error('[webhook] chat-sync assigned_to exception:', syncErr?.message);
               }
             }
           }
-          // Expor para uso no dispatch de message.received
           inboundLeadId = leadResult.lead_id || null;
-        } else {
-          console.error('❌ RPC retornou erro:', leadResult);
         }
       } catch (leadCreationError) {
         console.error('❌ EXCEPTION na criação automática de lead:', leadCreationError);
-        // Não falhar o webhook por causa disso - apenas log
       }
 
       // Motor de Ciclos: fechar ciclo aberto quando cliente responder via inbound
