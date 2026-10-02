@@ -96,21 +96,24 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   // Carregar tipos de atividade dinâmicos (custom + sistema)
   useEffect(() => {
     if (!company?.id) return
-    fetch(`/api/activity-types?company_id=${company.id}`)
+    const params = new URLSearchParams({ company_id: company.id })
+    if (activity?.activity_type) params.set('current_id', activity.activity_type)
+    fetch(`/api/activity-types?${params.toString()}`)
       .then(res => res.json())
       .then((data: CustomActivityType[]) => {
         if (Array.isArray(data) && data.length > 0) {
           setActivityTypes(data)
-          // Para nova atividade sem tipo definido, usar o primeiro tipo disponível
+          // Para nova atividade sem tipo definido, usar o primeiro tipo visível
           if (!activity) {
-            setFormData(prev => ({ ...prev, activity_type: data[0].id }))
+            const visible = data.find(type => !type.is_hidden) ?? data[0]
+            setFormData(prev => ({ ...prev, activity_type: visible.id }))
           }
         }
       })
       .catch(() => {
         // Silencioso: fallback para lista estática no render
       })
-  }, [company?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [company?.id, activity?.activity_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Buscar usuários da empresa
   useEffect(() => {
@@ -445,7 +448,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                 <>
                   {activityTypes.map(type => (
                     <option key={type.id} value={type.id}>
-                      {type.icon} {type.name}
+                      {type.icon} {type.name}{type.is_hidden ? ' (oculto)' : ''}
                     </option>
                   ))}
                   {/* Fallback: se o valor atual é um tipo legado não presente na lista dinâmica */}

@@ -310,6 +310,7 @@ export interface CustomActivityType {
   display_order: number
   is_active: boolean
   is_system: boolean
+  is_hidden?: boolean
   created_by?: string
   created_at?: Date
   updated_at?: Date

@@ -15,13 +15,35 @@ export default async function handler(req, res) {
 
   try {
     switch (method) {
-      case 'GET':
-        // Listar tipos de atividades da empresa
-        const { data: types, error: getError } = await supabase
+      case 'GET': {
+        // Lista operacional omite tipos ocultos.
+        // include_hidden=1 só para admin da empresa ou admin da empresa pai.
+        // current_id devolve um tipo já usado numa atividade, mesmo oculto.
+        const includeHidden = String(req.query.include_hidden || '') === '1'
+        const currentId = typeof req.query.current_id === 'string' && UUID_RE.test(req.query.current_id)
+          ? req.query.current_id
+          : null
+
+        if (includeHidden) {
+          const allowed = await callerIsActivityTypeAdmin(req, company_id)
+          if (!allowed) {
+            return res.status(403).json({ error: 'Apenas admin pode ver tipos ocultos' })
+          }
+        }
+
+        let query = supabase
           .from('custom_activity_types')
           .select('*')
           .eq('company_id', company_id)
           .eq('is_active', true)
+
+        if (!includeHidden) {
+          query = currentId
+            ? query.or(`is_hidden.eq.false,id.eq.${currentId}`)
+            : query.eq('is_hidden', false)
+        }
+
+        const { data: types, error: getError } = await query
           .order('display_order', { ascending: true })
 
         if (getError) {
@@ -30,6 +52,7 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json(types || [])
+      }
 
       case 'POST':
         // Criar novo tipo de atividade
@@ -100,4 +123,53 @@ export default async function handler(req, res) {
     console.error('Activity types API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const COMPANY_ADMIN_ROLES = ['admin', 'super_admin', 'system_admin']
+
+async function callerIsActivityTypeAdmin(req, companyId) {
+  const header = req.headers?.authorization || req.headers?.Authorization
+  if (!header || !header.startsWith('Bearer ') || !supabaseServiceKey) return false
+
+  const token = header.slice(7).trim()
+  const url = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || supabaseUrl
+  const anon = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon || !token) return false
+
+  const caller = createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data: { user } } = await caller.auth.getUser()
+  if (!user) return false
+
+  const { data: direct } = await supabase
+    .from('company_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (direct && COMPANY_ADMIN_ROLES.includes(direct.role)) return true
+
+  const { data: company } = await supabase
+    .from('companies')
+    .select('parent_company_id')
+    .eq('id', companyId)
+    .maybeSingle()
+
+  if (!company?.parent_company_id) return false
+
+  const { data: parentMember } = await supabase
+    .from('company_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('company_id', company.parent_company_id)
+    .eq('is_active', true)
+    .in('role', ['super_admin', 'system_admin'])
+    .maybeSingle()
+
+  return !!parentMember
 }

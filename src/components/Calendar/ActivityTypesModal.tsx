@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react'
-import { X, Plus, Trash2 } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { X, Plus, Trash2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAccessControl } from '../../hooks/useAccessControl'
+import { supabase } from '../../lib/supabase'
 import type { CustomActivityType } from '../../types/calendar'
 import { AVAILABLE_ICONS } from '../../types/calendar'
 
@@ -11,21 +13,38 @@ interface ActivityTypesModalProps {
 
 export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose, onSave }) => {
   const { company } = useAuth()
+  const { canManageActivityTypes } = useAccessControl()
   const [activityTypes, setActivityTypes] = useState<CustomActivityType[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [newTypeName, setNewTypeName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('')
   const [showIconPicker, setShowIconPicker] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  const loadTypes = useCallback(async () => {
+    if (!company?.id) return
+    const params = new URLSearchParams({ company_id: company.id })
+    const headers: Record<string, string> = {}
+    if (canManageActivityTypes) {
+      params.set('include_hidden', '1')
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (token) headers.Authorization = `Bearer ${token}`
+    }
+    let res = await fetch(`/api/activity-types?${params.toString()}`, { headers })
+    if (!res.ok && canManageActivityTypes) {
+      params.delete('include_hidden')
+      res = await fetch(`/api/activity-types?${params.toString()}`)
+    }
+    const data = await res.json()
+    setActivityTypes(Array.isArray(data) ? data : [])
+    setLoading(false)
+  }, [company?.id, canManageActivityTypes])
 
   useEffect(() => {
-    if (company?.id) {
-      fetch(`/api/activity-types?company_id=${company.id}`)
-        .then(res => res.json())
-        .then(data => { setActivityTypes(data); setLoading(false) })
-        .catch(() => setLoading(false))
-    }
-  }, [company?.id])
+    loadTypes().catch(() => setLoading(false))
+  }, [loadTypes])
 
   const handleSave = async () => {
     if (!newTypeName.trim() || !selectedIcon || !company?.id) return
@@ -35,8 +54,7 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
       body: JSON.stringify({ name: newTypeName.trim(), icon: selectedIcon, color: 'blue' })
     })
     if (res.ok) {
-      const data = await fetch(`/api/activity-types?company_id=${company.id}`).then(r => r.json())
-      setActivityTypes(data)
+      await loadTypes()
       setNewTypeName('')
       setSelectedIcon('')
       setIsCreating(false)
@@ -51,8 +69,21 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
     })
-    const data = await fetch(`/api/activity-types?company_id=${company.id}`).then(r => r.json())
-    setActivityTypes(data)
+    await loadTypes()
+    onSave()
+  }
+
+  const handleToggleHidden = async (type: CustomActivityType) => {
+    if (!company?.id || togglingId) return
+    setTogglingId(type.id)
+    const { error } = await supabase.rpc('set_activity_type_hidden', {
+      p_company_id: company.id,
+      p_type_id: type.id,
+      p_is_hidden: !type.is_hidden,
+    })
+    setTogglingId(null)
+    if (error) return
+    await loadTypes()
     onSave()
   }
 
@@ -75,17 +106,37 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
             <>
               <div className="space-y-2">
                 {activityTypes.map(type => (
-                  <div key={type.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div
+                    key={type.id}
+                    className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 ${
+                      type.is_hidden ? 'border-gray-100 opacity-60' : 'border-gray-200'
+                    }`}
+                  >
                     <div className="w-8 h-8 flex items-center justify-center bg-blue-50 rounded">
                       <span className="text-blue-600 text-lg">{type.icon}</span>
                     </div>
                     <span className="flex-1 text-sm font-medium text-gray-900">{type.name}</span>
-                    {!type.is_system ? (
+                    {type.is_system && (
+                      <span className="text-xs text-gray-400 px-2 py-1 bg-gray-100 rounded">Sistema</span>
+                    )}
+                    {type.is_hidden && (
+                      <span className="text-xs text-amber-700 px-2 py-1 bg-amber-50 rounded">Oculto</span>
+                    )}
+                    {canManageActivityTypes && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleHidden(type)}
+                        disabled={togglingId === type.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 hover:text-amber-700 hover:bg-amber-50 rounded disabled:opacity-40"
+                      >
+                        {type.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        {type.is_hidden ? 'Exibir' : 'Ocultar'}
+                      </button>
+                    )}
+                    {!type.is_system && (
                       <button onClick={() => handleDelete(type.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    ) : (
-                      <span className="text-xs text-gray-400 px-2 py-1 bg-gray-100 rounded">Sistema</span>
                     )}
                   </div>
                 ))}

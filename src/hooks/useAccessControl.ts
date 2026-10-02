@@ -370,6 +370,15 @@ export function useAccessControl() {
   const canViewFunnelFlow        = canViewTeamDashboard
   const canViewLeadOrigins       = canViewTeamDashboard
 
+  // Cadastro de tipos de atividade: ocultar/exibir.
+  // Admin da empresa, system_admin, super_admin e admin da pai em impersonação.
+  // Partner, manager e seller não entram. O banco confirma na RPC.
+  const canManageActivityTypes =
+    currentRole === 'admin'        ||
+    currentRole === 'system_admin' ||
+    currentRole === 'super_admin'  ||
+    isImpersonating
+
   // Configuração de alertas: admin+ e impersonação
   const canViewDashboardSettings =
     currentRole === 'admin'        ||
@@ -473,6 +482,7 @@ export function useAccessControl() {
     canViewFunnelFlow,
     canViewLeadOrigins,
     canViewDashboardSettings,
+    canManageActivityTypes,
 
     // Abas de Configurações — acesso por role (seller/partner bloqueados)
     canAccessUsersTab,

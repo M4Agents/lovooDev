@@ -18,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .select('*')
           .eq('company_id', company_id)
           .eq('is_active', true)
+          .eq('is_hidden', false)
           .order('display_order', { ascending: true })
 
         if (getError) {

@@ -95,7 +95,10 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
       trigger?.type === 'calendar.activity_overdue'
     if (!isOpen || !isCalendarTrigger || !company?.id) return
 
-    fetch(`/api/activity-types?company_id=${company.id}`)
+    const params = new URLSearchParams({ company_id: company.id })
+    const savedType = trigger?.config?.activity_type
+    if (typeof savedType === 'string' && savedType) params.set('current_id', savedType)
+    fetch(`/api/activity-types?${params.toString()}`)
       .then(res => res.json())
       .then((data: CustomActivityType[]) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -103,7 +106,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
         }
       })
       .catch(() => {})
-  }, [isOpen, trigger?.type, company?.id])
+  }, [isOpen, trigger?.type, trigger?.config?.activity_type, company?.id])
 
   if (!isOpen || !trigger) return null
 
@@ -834,7 +837,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 {activityTypes.length > 0 ? (
                   activityTypes.map(type => (
                     <option key={type.id} value={type.id}>
-                      {type.icon} {type.name}
+                      {type.icon} {type.name}{type.is_hidden ? ' (oculto)' : ''}
                     </option>
                   ))
                 ) : (
@@ -969,7 +972,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 {activityTypes.length > 0 ? (
                   activityTypes.map(type => (
                     <option key={type.id} value={type.id}>
-                      {type.icon} {type.name}
+                      {type.icon} {type.name}{type.is_hidden ? ' (oculto)' : ''}
                     </option>
                   ))
                 ) : (
@@ -1108,7 +1111,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                 {activityTypes.length > 0 ? (
                   activityTypes.map(type => (
                     <option key={type.id} value={type.id}>
-                      {type.icon} {type.name}
+                      {type.icon} {type.name}{type.is_hidden ? ' (oculto)' : ''}
                     </option>
                   ))
                 ) : (
