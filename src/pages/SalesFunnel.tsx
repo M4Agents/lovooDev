@@ -4,11 +4,11 @@
 // Objetivo: Página principal do funil de vendas
 // =====================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon, Calendar, ChevronDown } from 'lucide-react'
+import { Filter, Download, Plus, Sliders, MoreVertical, Edit2, X, Tag as TagIcon, ChevronUp } from 'lucide-react'
 import { FunnelBoard } from '../components/SalesFunnel/FunnelBoard'
 import { FunnelListView } from '../components/SalesFunnel/FunnelListView'
 import { FunnelViewToggle } from '../components/SalesFunnel/FunnelViewToggle'
@@ -31,7 +31,6 @@ import type { CreateFunnelForm, FunnelStage, SortOption, DateField, CustomFieldD
 import { FUNNEL_CONSTANTS } from '../types/sales-funnel'
 import type { ContactAttemptsState } from '../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../types/analytics'
-import { PREDEFINED_PERIODS } from '../types/analytics'
 import {
   useFunnelFilterPreferences,
   type FunnelFilterSnapshot,
@@ -74,7 +73,6 @@ export default function SalesFunnel() {
   } = useFunnelFilterPreferences(companyId, user?.id, selectedFunnel?.id)
 
   const [showFilters, setShowFilters] = useState(false)
-  const [showSaveBanner, setShowSaveBanner] = useState(false)
   const [hasSavedFilters, setHasSavedFilters] = useState(false)
   const hasRestoredRef = useRef<string | null>(null)
 
@@ -138,7 +136,6 @@ export default function SalesFunnel() {
     if (hasRestoredRef.current === selectedFunnel.id) return
 
     hasRestoredRef.current = selectedFunnel.id
-    setShowSaveBanner(false)
 
     if (!savedFilters) {
       setSearchTerm(DEFAULT_FILTER_SNAPSHOT.searchTerm)
@@ -272,35 +269,119 @@ export default function SalesFunnel() {
     selectedCycleState,
   }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, selectedDateField, globalSort, selectedOwner, selectedCycleState])
 
-  // ─── Controle do painel de filtros ──────────────────────────────────────────
-  // Ao tentar fechar, verifica se há alterações não salvas. Se houver, mantém
-  // o painel aberto e exibe o banner de decisão.
   const handleToggleFilters = useCallback(() => {
-    if (showFilters) {
-      if (hasUnsavedChanges(buildCurrentSnapshot())) {
-        setShowSaveBanner(true)
-      } else {
-        setShowFilters(false)
-        setShowSaveBanner(false)
-      }
-    } else {
-      setShowFilters(true)
-      setShowSaveBanner(false)
-    }
-  }, [showFilters, hasUnsavedChanges, buildCurrentSnapshot])
+    setShowFilters(prev => !prev)
+  }, [])
 
-  const handleSaveBannerSave = useCallback(() => {
+  const handleSavePreference = useCallback(() => {
     if (!selectedFunnel?.id) return
     saveFilters(buildCurrentSnapshot())
     setHasSavedFilters(true)
-    setShowSaveBanner(false)
-    setShowFilters(false)
   }, [selectedFunnel?.id, saveFilters, buildCurrentSnapshot])
 
-  const handleSaveBannerDismiss = useCallback(() => {
-    setShowSaveBanner(false)
-    setShowFilters(false)
+  const allPeriodDisplay = useMemo<PeriodFilterType>(
+    () => ({ type: 'all', label: t('filters.periodAll') }),
+    [t],
+  )
+
+  const handlePeriodChange = useCallback((period: PeriodFilterType) => {
+    setSelectedPeriod(period.type === 'all' ? null : period)
   }, [])
+
+  const activeFilterChips = useMemo(() => {
+    const chips: { id: string; label: string; onClear: () => void }[] = []
+
+    if (searchTerm.trim()) {
+      chips.push({
+        id: 'search',
+        label: `${t('filters.searchLabel')}: ${searchTerm.trim()}`,
+        onClear: () => setSearchTerm(''),
+      })
+    }
+
+    for (const tagId of selectedTags) {
+      const tag = availableTags.find(item => item.id === tagId)
+      chips.push({
+        id: `tag-${tagId}`,
+        label: tag?.name ?? tagId,
+        onClear: () => removeTag(tagId),
+      })
+    }
+
+    if (selectedOrigin) {
+      const originLabels: Record<string, string> = {
+        whatsapp: t('filters.originWhatsapp'),
+        site: t('filters.originSite'),
+        indicacao: t('filters.originReferral'),
+        nuvemshop: 'Nuvemshop',
+        nuvemshop_abandoned: 'Carrinho Abandonado (NS)',
+      }
+      chips.push({
+        id: 'origin',
+        label: `${t('filters.originLabel')}: ${originLabels[selectedOrigin] ?? selectedOrigin}`,
+        onClear: () => setSelectedOrigin(''),
+      })
+    }
+
+    if (selectedOwner) {
+      const ownerName = selectedOwner === UNASSIGNED_ASSIGNEE
+        ? t('filters.ownerUnassigned')
+        : (ownerOptions.find(userOption => userOption.user_id === selectedOwner)?.display_name ?? t('filters.ownerLabel'))
+      chips.push({
+        id: 'owner',
+        label: `${t('filters.ownerLabel')}: ${ownerName}`,
+        onClear: () => setSelectedOwner(''),
+      })
+    }
+
+    if (selectedPeriod) {
+      const dateFieldLabel = selectedDateField === 'closed_at'
+        ? t('filters.dateFieldClosed')
+        : selectedDateField === 'last_contact_at'
+          ? t('filters.dateFieldLastContact')
+          : t('filters.dateFieldCreated')
+      chips.push({
+        id: 'period',
+        label: `${dateFieldLabel}: ${selectedPeriod.label || t('filters.periodLabel')}`,
+        onClear: () => setSelectedPeriod(null),
+      })
+    }
+
+    if (selectedCycleState) {
+      const cycleLabels: Record<ContactAttemptsState, string> = {
+        none: t('contactCycle.filterAll'),
+        cycle_open: t('contactCycle.filterCycleOpen'),
+        waiting: t('contactCycle.filterWaiting'),
+        eligible: t('contactCycle.filterEligible'),
+      }
+      chips.push({
+        id: 'cycle',
+        label: cycleLabels[selectedCycleState] ?? selectedCycleState,
+        onClear: () => setSelectedCycleState(null),
+      })
+    }
+
+    if (globalSort) {
+      const sortLabels: Record<SortOption, string> = {
+        entered_stage_at: t('filters.sortEnteredStage'),
+        entered_funnel_at: t('filters.sortEnteredFunnel'),
+        lead_created_at: t('filters.sortLeadCreated'),
+        last_interaction_at: t('filters.sortLastInteraction'),
+      }
+      chips.push({
+        id: 'sort',
+        label: `${t('filters.sortLabel')}: ${sortLabels[globalSort]}`,
+        onClear: () => setGlobalSort(undefined),
+      })
+    }
+
+    return chips
+  }, [
+    searchTerm, selectedTags, availableTags, selectedOrigin, selectedOwner, ownerOptions,
+    selectedPeriod, selectedDateField, selectedCycleState, globalSort, t,
+  ])
+
+  const filtersHaveUnsavedChanges = hasUnsavedChanges(buildCurrentSnapshot())
 
   const handleClearSavedFilters = useCallback(() => {
     clearFilters()
@@ -314,7 +395,6 @@ export default function SalesFunnel() {
     setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
     setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
     setHasSavedFilters(false)
-    setShowSaveBanner(false)
   }, [clearFilters])
 
   const handleLeadClick = (leadId: number) => {
@@ -522,16 +602,21 @@ export default function SalesFunnel() {
               onClick={handleToggleFilters}
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg transition-colors
-                ${showFilters 
-                  ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                ${showFilters || activeFilterChips.length > 0
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
                   : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                 }
               `}
+              title={showFilters ? t('filters.minimize') : t('filters.expand')}
             >
               <Filter className="w-4 h-4" />
-              <span className="text-sm font-medium">{t('actions.filters')}</span>
-              {hasSavedFilters && !showFilters && (
-                <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Filtros salvos aplicados" />
+              <span className="text-sm font-medium">
+                {activeFilterChips.length > 0
+                  ? t('filters.activeCount', { count: activeFilterChips.length })
+                  : t('actions.filters')}
+              </span>
+              {(hasSavedFilters || activeFilterChips.length > 0) && !showFilters && (
+                <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
               )}
             </button>
 
@@ -596,25 +681,62 @@ export default function SalesFunnel() {
           </div>
         </div>
 
-        {/* Indicador de filtros salvos aplicados */}
-        {hasSavedFilters && !showFilters && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-blue-600 font-medium">Filtros salvos aplicados</span>
-            <button
-              onClick={handleClearSavedFilters}
-              className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
-            >
-              Limpar
-            </button>
+        {!showFilters && (activeFilterChips.length > 0 || hasSavedFilters) && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            {activeFilterChips.map(chip => (
+              <span
+                key={chip.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+              >
+                {chip.label}
+                <button
+                  type="button"
+                  onClick={chip.onClear}
+                  className="hover:opacity-70 transition-opacity"
+                  title={t('filters.clearChip')}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {hasSavedFilters && (
+              <button
+                type="button"
+                onClick={handleClearSavedFilters}
+                className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
+              >
+                {t('filters.clearSaved')}
+              </button>
+            )}
           </div>
         )}
 
-        {/* Filtros (quando ativo) */}
         {showFilters && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+            <div className="flex items-center justify-end gap-2">
+              {filtersHaveUnsavedChanges && (
+                <button
+                  type="button"
+                  onClick={handleSavePreference}
+                  className="px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                >
+                  {t('filters.savePreference')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowFilters(false)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-300 bg-white rounded-md hover:bg-gray-50 transition-colors"
+                title={t('filters.minimize')}
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+                {t('filters.minimize')}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   {t('filters.searchLabel')}
                 </label>
                 <input
@@ -622,39 +744,37 @@ export default function SalesFunnel() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder={t('filters.searchPlaceholder')}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              
+
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-xs font-medium text-gray-700">
                     {t('filters.tagsLabel')}
                   </label>
                   {selectedTags.length > 1 && (
                     <div className="flex rounded border border-gray-300 overflow-hidden text-xs">
                       <button
+                        type="button"
                         onClick={() => setSelectedTagsMode('or')}
                         className={`px-2 py-0.5 transition-colors ${selectedTagsMode === 'or' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                        title="Qualquer tag selecionada"
                       >
                         Qualquer
                       </button>
                       <button
+                        type="button"
                         onClick={() => setSelectedTagsMode('and')}
                         className={`px-2 py-0.5 border-l border-gray-300 transition-colors ${selectedTagsMode === 'and' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                        title="Todas as tags selecionadas"
                       >
                         Todas
                       </button>
                     </div>
                   )}
                 </div>
-
-                {/* Chips das tags selecionadas */}
-                <div className="flex flex-wrap items-center gap-1 min-h-[38px] px-2 py-1.5 border border-gray-300 rounded-lg bg-white">
+                <div className="flex flex-wrap items-center gap-1 min-h-[34px] px-2 py-1 border border-gray-300 rounded-lg bg-white">
                   {selectedTags.map(tagId => {
-                    const tag = availableTags.find(t => t.id === tagId)
+                    const tag = availableTags.find(item => item.id === tagId)
                     if (!tag) return null
                     return (
                       <span
@@ -664,34 +784,33 @@ export default function SalesFunnel() {
                       >
                         {tag.name}
                         <button
+                          type="button"
                           onClick={() => removeTag(tagId)}
                           className="hover:opacity-70 transition-opacity"
-                          title={`Remover ${tag.name}`}
                         >
                           <X className="w-3 h-3" />
                         </button>
                       </span>
                     )
                   })}
-
-                  {/* Botão para abrir dropdown de seleção */}
-                  {availableTags.some(t => !selectedTags.includes(t.id)) && (
+                  {availableTags.some(item => !selectedTags.includes(item.id)) && (
                     <div className="relative" ref={tagDropdownRef}>
                       <button
+                        type="button"
                         onClick={() => setTagDropdownOpen(prev => !prev)}
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs border border-dashed border-gray-300 rounded-full text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
                       >
                         <TagIcon className="w-3 h-3" />
-                        {selectedTags.length === 0 ? 'Filtrar por tag' : 'Adicionar'}
+                        {selectedTags.length === 0 ? t('filters.filterByTag') : t('filters.addTag')}
                       </button>
-
                       {tagDropdownOpen && (
                         <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] max-h-48 overflow-y-auto">
                           {availableTags
-                            .filter(t => !selectedTags.includes(t.id))
+                            .filter(item => !selectedTags.includes(item.id))
                             .map(tag => (
                               <button
                                 key={tag.id}
+                                type="button"
                                 onClick={() => addTag(tag.id)}
                                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
                               >
@@ -703,27 +822,22 @@ export default function SalesFunnel() {
                       )}
                     </div>
                   )}
-
-                  {selectedTags.length === 0 && availableTags.length === 0 && (
-                    <span className="text-xs text-gray-400">Nenhuma tag cadastrada</span>
-                  )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   {t('filters.originLabel')}
                 </label>
-                <select 
+                <select
                   value={selectedOrigin}
                   onChange={(e) => setSelectedOrigin(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">{t('filters.originAll')}</option>
                   <option value="whatsapp">{t('filters.originWhatsapp')}</option>
                   <option value="site">{t('filters.originSite')}</option>
                   <option value="indicacao">{t('filters.originReferral')}</option>
-                  {/* Opções Nuvemshop: exibidas apenas para empresas que já conectaram */}
                   {hasNuvemshopEver && (
                     <>
                       <option value="nuvemshop">Nuvemshop</option>
@@ -734,13 +848,13 @@ export default function SalesFunnel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   {t('filters.ownerLabel')}
                 </label>
                 <select
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">{t('filters.ownerAll')}</option>
                   <option value={UNASSIGNED_ASSIGNEE}>{t('filters.ownerUnassigned')}</option>
@@ -753,168 +867,102 @@ export default function SalesFunnel() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-gray-200">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('filters.periodLabel')}
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
-                    {(
-                      [
-                        { value: 'created_at',      label: 'Data de criação' },
-                        { value: 'closed_at',       label: 'Data da venda'   },
-                        { value: 'last_contact_at', label: 'Último contato'  },
-                      ] as { value: DateField; label: string }[]
-                    ).map((opt, index) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setSelectedDateField(opt.value)}
-                        className={`px-3 py-2 text-sm font-medium transition-colors ${
-                          index > 0 ? 'border-l border-gray-300' : ''
-                        } ${
-                          selectedDateField === opt.value
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-56 sm:flex-shrink-0">
-                  {selectedPeriod === null ? (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPeriod({ ...PREDEFINED_PERIODS['30days'], startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), endDate: new Date(new Date().setHours(23, 59, 59, 999)) })}
-                      className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full"
-                    >
-                      <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                      <span className="text-sm font-medium text-gray-700">{t('filters.periodAll')}</span>
-                      <ChevronDown className="w-4 h-4 text-gray-500 ml-auto" />
-                    </button>
-                  ) : (
-                    <>
-                      <PeriodFilter
-                        selectedPeriod={selectedPeriod}
-                        onPeriodChange={setSelectedPeriod}
-                        className="flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPeriod(null)}
-                        className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0"
-                        title={t('filters.periodAll')}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:flex-wrap">
+              <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
+                {([
+                  { value: 'created_at' as DateField, label: t('filters.dateFieldCreated') },
+                  { value: 'closed_at' as DateField, label: t('filters.dateFieldClosed') },
+                  { value: 'last_contact_at' as DateField, label: t('filters.dateFieldLastContact') },
+                ]).map((opt, index) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setSelectedDateField(opt.value)}
+                    className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      index > 0 ? 'border-l border-gray-300' : ''
+                    } ${
+                      selectedDateField === opt.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
 
-              {selectedPeriod !== null && selectedDateField === 'closed_at' && (
-                <p className="mt-2 text-xs text-amber-700">
-                  Filtrando por data da venda. Etapas ativas podem aparecer vazias.
-                </p>
-              )}
-              {selectedPeriod !== null && selectedDateField === 'last_contact_at' && (
-                <p className="mt-2 text-xs text-amber-700">
-                  Cards sem último contato ficam de fora do período.
-                </p>
-              )}
-            </div>
-
-            {/* Filtro por Estado do Ciclo de Contato (Fase 10) */}
-            {showCycleFilter && (
-              <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-sm font-medium text-gray-700 flex-shrink-0">
-                    {t('contactCycle.filterLabel')}
-                  </span>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {([
-                      { value: null,          label: t('contactCycle.filterAll')       },
-                      { value: 'cycle_open',  label: t('contactCycle.filterCycleOpen') },
-                      { value: 'waiting',     label: t('contactCycle.filterWaiting')   },
-                      { value: 'eligible',    label: t('contactCycle.filterEligible')  },
-                    ] as { value: ContactAttemptsState | null; label: string }[]).map(opt => (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => setSelectedCycleState(opt.value)}
-                        className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                          selectedCycleState === opt.value
-                            ? 'bg-purple-600 text-white border-purple-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex items-center gap-2 w-full sm:w-56 sm:flex-shrink-0">
+                <PeriodFilter
+                  selectedPeriod={selectedPeriod ?? allPeriodDisplay}
+                  onPeriodChange={handlePeriodChange}
+                  showAll
+                  className="flex-1"
+                />
+                {selectedPeriod !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPeriod(null)}
+                    className="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                    title={t('filters.periodAll')}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            )}
 
-            {/* Seção Ordenação Global */}
-            <div className="pt-4 border-t border-gray-200">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex-shrink-0">
-                  <p className="text-sm font-medium text-gray-700">
-                    Ordenação global
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Aplica-se a todas as etapas. Cada etapa ainda pode ter a sua.
-                  </p>
-                </div>
+              {showCycleFilter && (
                 <div className="flex items-center gap-1 flex-wrap">
                   {([
-                    { value: undefined,              label: 'Padrão'            },
-                    { value: 'entered_stage_at',     label: 'Entrada na Etapa'  },
-                    { value: 'entered_funnel_at',    label: 'Entrada no Funil'  },
-                    { value: 'lead_created_at',      label: 'Cadastro do Lead'  },
-                    { value: 'last_interaction_at',  label: 'Última Interação'  },
-                  ] as { value: SortOption | undefined; label: string }[]).map(opt => (
+                    { value: null, label: t('contactCycle.filterAll') },
+                    { value: 'cycle_open' as ContactAttemptsState, label: t('contactCycle.filterCycleOpen') },
+                    { value: 'waiting' as ContactAttemptsState, label: t('contactCycle.filterWaiting') },
+                    { value: 'eligible' as ContactAttemptsState, label: t('contactCycle.filterEligible') },
+                  ]).map(opt => (
                     <button
                       key={opt.label}
                       type="button"
-                      onClick={() => setGlobalSort(opt.value)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                        globalSort === opt.value
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700'
+                      onClick={() => setSelectedCycleState(opt.value)}
+                      className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                        selectedCycleState === opt.value
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
                       }`}
                     >
                       {opt.label}
                     </button>
                   ))}
                 </div>
+              )}
+
+              <div className="flex items-center gap-1 flex-wrap">
+                {([
+                  { value: undefined, label: t('filters.sortDefault') },
+                  { value: 'entered_stage_at' as SortOption, label: t('filters.sortEnteredStage') },
+                  { value: 'entered_funnel_at' as SortOption, label: t('filters.sortEnteredFunnel') },
+                  { value: 'lead_created_at' as SortOption, label: t('filters.sortLeadCreated') },
+                  { value: 'last_interaction_at' as SortOption, label: t('filters.sortLastInteraction') },
+                ]).map(opt => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setGlobalSort(opt.value)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      globalSort === opt.value
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Banner de decisão: exibido ao tentar fechar com alterações não salvas */}
-            {showSaveBanner && (
-              <div className="mt-3 pt-3 border-t border-blue-200 flex items-center justify-between gap-4 bg-blue-50 rounded-lg px-4 py-3">
-                <span className="text-sm text-blue-700">
-                  Salvar estes filtros como preferência para este funil?
-                </span>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={handleSaveBannerSave}
-                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Salvar
-                  </button>
-                  <button
-                    onClick={handleSaveBannerDismiss}
-                    className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Não salvar
-                  </button>
-                </div>
-              </div>
+            {selectedPeriod !== null && selectedDateField === 'closed_at' && (
+              <p className="text-xs text-amber-700">{t('filters.closedAtHint')}</p>
+            )}
+            {selectedPeriod !== null && selectedDateField === 'last_contact_at' && (
+              <p className="text-xs text-amber-700">{t('filters.lastContactHint')}</p>
             )}
           </div>
         )}

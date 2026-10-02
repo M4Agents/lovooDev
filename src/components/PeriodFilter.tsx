@@ -25,6 +25,8 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const dateFieldFocusedRef = useRef(false)
+  const dateBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const periodLabel = useCallback(
     (type: PeriodType) => t(`periods.${type}`),
@@ -55,6 +57,9 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (dateFieldFocusedRef.current) return
+      const active = document.activeElement
+      if (active instanceof HTMLInputElement && active.type === 'date') return
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
@@ -63,6 +68,23 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (dateBlurTimerRef.current) clearTimeout(dateBlurTimerRef.current)
+    }
+  }, [])
+
+  const handleDateFieldFocus = () => {
+    if (dateBlurTimerRef.current) clearTimeout(dateBlurTimerRef.current)
+    dateFieldFocusedRef.current = true
+  }
+
+  const handleDateFieldBlur = () => {
+    dateBlurTimerRef.current = setTimeout(() => {
+      dateFieldFocusedRef.current = false
+    }, 300)
+  }
 
   const handlePredefinedPeriodSelect = (periodType: PeriodType) => {
     if (periodType === 'all') {
@@ -137,35 +159,54 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
     setIsOpen(false)
   }
 
-  const handleCustomPeriodApply = () => {
-    if (!customStartDate || !customEndDate) return
+  const formatDateForInput = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
-    // Usar split manual para criar datas em horário LOCAL — evita o bug do JS onde
-    // new Date("YYYY-MM-DD") interpreta a string como UTC midnight, gerando um
-    // deslocamento de 3h para o fuso de Sao Paulo e uma janela errada de apenas 3h.
-    const [sy, sm, sd] = customStartDate.split('-').map(Number)
-    const [ey, em, ed] = customEndDate.split('-').map(Number)
+  const parseLocalDateRange = (startStr: string, endStr: string) => {
+    if (!startStr || !endStr) return null
+    const [sy, sm, sd] = startStr.split('-').map(Number)
+    const [ey, em, ed] = endStr.split('-').map(Number)
     const startDate = new Date(sy, sm - 1, sd, 0, 0, 0)
-    const endDate   = new Date(ey, em - 1, ed, 23, 59, 59)
+    const endDate = new Date(ey, em - 1, ed, 23, 59, 59)
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null
+    if (startDate > endDate) return null
+    return { startDate, endDate }
+  }
 
-    if (startDate > endDate) {
-      alert(t('validation.startBeforeEnd'))
+  const applyCustomPeriod = (startStr: string, endStr: string, closeDropdown: boolean) => {
+    const range = parseLocalDateRange(startStr, endStr)
+    if (!range) {
+      if (closeDropdown && startStr && endStr) {
+        alert(t('validation.startBeforeEnd'))
+      }
       return
     }
 
-    const newPeriod: PeriodFilterType = {
+    onPeriodChange({
       ...PREDEFINED_PERIODS.custom,
       label: periodLabel('custom'),
-      startDate,
-      endDate,
-    }
-
-    onPeriodChange(newPeriod)
-    setIsOpen(false)
+      startDate: range.startDate,
+      endDate: range.endDate,
+    })
+    if (closeDropdown) setIsOpen(false)
   }
 
-  const formatDateForInput = (date: Date) => {
-    return date.toISOString().split('T')[0]
+  const handleCustomPeriodApply = () => {
+    applyCustomPeriod(customStartDate, customEndDate, true)
+  }
+
+  const handleCustomStartChange = (value: string) => {
+    setCustomStartDate(value)
+    applyCustomPeriod(value, customEndDate, false)
+  }
+
+  const handleCustomEndChange = (value: string) => {
+    setCustomEndDate(value)
+    applyCustomPeriod(customStartDate, value, false)
   }
 
   useEffect(() => {
@@ -243,7 +284,9 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
                       id="period-filter-start"
                       type="date"
                       value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      onChange={(e) => handleCustomStartChange(e.target.value)}
+                      onFocus={handleDateFieldFocus}
+                      onBlur={handleDateFieldBlur}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder={t('custom.placeholder')}
                     />
@@ -256,7 +299,9 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
                       id="period-filter-end"
                       type="date"
                       value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      onChange={(e) => handleCustomEndChange(e.target.value)}
+                      onFocus={handleDateFieldFocus}
+                      onBlur={handleDateFieldBlur}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder={t('custom.placeholder')}
                     />
