@@ -611,8 +611,8 @@ export default function SalesFunnel() {
 
         {/* Filtros (quando ativo) */}
         {showFilters && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="grid grid-cols-4 gap-4">
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('filters.searchLabel')}
@@ -622,7 +622,7 @@ export default function SalesFunnel() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder={t('filters.searchPlaceholder')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               
@@ -717,7 +717,7 @@ export default function SalesFunnel() {
                 <select 
                   value={selectedOrigin}
                   onChange={(e) => setSelectedOrigin(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">{t('filters.originAll')}</option>
                   <option value="whatsapp">{t('filters.originWhatsapp')}</option>
@@ -735,46 +735,57 @@ export default function SalesFunnel() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('filters.periodLabel')}
+                  {t('filters.ownerLabel')}
                 </label>
-
-                {/* Seletor de campo de data */}
-                <div className="flex items-center gap-1 mb-2">
-                  {(
-                    [
-                      { value: 'created_at',      label: 'Data de criação' },
-                      { value: 'closed_at',       label: 'Data da venda'   },
-                      { value: 'last_contact_at', label: 'Último contato'  },
-                    ] as { value: DateField; label: string }[]
-                  ).map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setSelectedDateField(opt.value)}
-                      className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                        selectedDateField === opt.value
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
+                <select
+                  value={selectedOwner}
+                  onChange={(e) => setSelectedOwner(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">{t('filters.ownerAll')}</option>
+                  <option value={UNASSIGNED_ASSIGNEE}>{t('filters.ownerUnassigned')}</option>
+                  {ownerOptions.map(u => (
+                    <option key={u.user_id} value={u.user_id}>
+                      {u.display_name}
+                    </option>
                   ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('filters.periodLabel')}
+                  </label>
+                  <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
+                    {(
+                      [
+                        { value: 'created_at',      label: 'Data de criação' },
+                        { value: 'closed_at',       label: 'Data da venda'   },
+                        { value: 'last_contact_at', label: 'Último contato'  },
+                      ] as { value: DateField; label: string }[]
+                    ).map((opt, index) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setSelectedDateField(opt.value)}
+                        className={`px-3 py-2 text-sm font-medium transition-colors ${
+                          index > 0 ? 'border-l border-gray-300' : ''
+                        } ${
+                          selectedDateField === opt.value
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Aviso quando filtrar por data da venda */}
-                {selectedDateField === 'closed_at' && (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
-                    Filtrando por data da venda. Etapas ativas podem aparecer vazias.
-                  </p>
-                )}
-                {selectedDateField === 'last_contact_at' && (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
-                    Cards sem último contato ficam de fora do período.
-                  </p>
-                )}
-
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full lg:w-72 lg:flex-shrink-0">
                   {selectedPeriod === null ? (
                     <button
                       type="button"
@@ -804,29 +815,22 @@ export default function SalesFunnel() {
                   )}
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('filters.ownerLabel')}
-                </label>
-                <select
-                  value={selectedOwner}
-                  onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">{t('filters.ownerAll')}</option>
-                  <option value={UNASSIGNED_ASSIGNEE}>{t('filters.ownerUnassigned')}</option>
-                  {ownerOptions.map(u => (
-                    <option key={u.user_id} value={u.user_id}>
-                      {u.display_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+              {selectedPeriod !== null && selectedDateField === 'closed_at' && (
+                <p className="mt-2 text-xs text-amber-700">
+                  Filtrando por data da venda. Etapas ativas podem aparecer vazias.
+                </p>
+              )}
+              {selectedPeriod !== null && selectedDateField === 'last_contact_at' && (
+                <p className="mt-2 text-xs text-amber-700">
+                  Cards sem último contato ficam de fora do período.
+                </p>
+              )}
             </div>
 
             {/* Filtro por Estado do Ciclo de Contato (Fase 10) */}
             {showCycleFilter && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-sm font-medium text-gray-700 flex-shrink-0">
                     {t('contactCycle.filterLabel')}
@@ -857,14 +861,16 @@ export default function SalesFunnel() {
             )}
 
             {/* Seção Ordenação Global */}
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm font-medium text-gray-700 flex-shrink-0">
-                  Ordenação global:
-                </span>
-                <p className="text-xs text-gray-400 flex-shrink-0">
-                  Aplica-se a todas as etapas (pode ser sobrescrita por etapa individualmente)
-                </p>
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-shrink-0">
+                  <p className="text-sm font-medium text-gray-700">
+                    Ordenação global
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Aplica-se a todas as etapas. Cada etapa ainda pode ter a sua.
+                  </p>
+                </div>
                 <div className="flex items-center gap-1 flex-wrap">
                   {([
                     { value: undefined,              label: 'Padrão'            },
