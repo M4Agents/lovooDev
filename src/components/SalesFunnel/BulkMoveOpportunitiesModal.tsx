@@ -41,6 +41,7 @@ interface BulkMoveOpportunitiesModalProps {
     origin?: string
     period_start?: string
     period_end?: string
+    date_field?: 'created_at' | 'closed_at' | 'last_contact_at'
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }
@@ -143,6 +144,7 @@ export function BulkMoveOpportunitiesModal({
           origin:        filters?.origin       ?? null,
           period_start:  filters?.period_start ?? null,
           period_end:    filters?.period_end   ?? null,
+          date_field:    filters?.date_field   ?? 'created_at',
           tag_ids:       filters?.tags?.length ? filters.tags : null,
           tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
         }),
@@ -217,6 +219,7 @@ export function BulkMoveOpportunitiesModal({
                 origin:        filters?.origin       ?? null,
                 period_start:  filters?.period_start ?? null,
                 period_end:    filters?.period_end   ?? null,
+                date_field:    filters?.date_field   ?? 'created_at',
                 tag_ids:       filters?.tags?.length ? filters.tags : null,
                 tag_mode:      filters?.tags?.length ? (filters.tags_mode ?? 'or') : null,
               }

@@ -136,6 +136,7 @@ export default async function handler(req, res) {
     origin,
     period_start,
     period_end,
+    date_field,
     tag_ids,
     tag_mode,
   } = req.body ?? {}
@@ -258,6 +259,9 @@ export default async function handler(req, res) {
       p_period_days: null,
       p_start_date:  period_start ?? null,
       p_end_date:    period_end   ?? null,
+      p_date_field:  ['created_at', 'closed_at', 'last_contact_at'].includes(date_field)
+        ? date_field
+        : 'created_at',
       p_tag_ids:     Array.isArray(tag_ids) && tag_ids.length > 0 ? tag_ids : null,
       p_tag_mode:    Array.isArray(tag_ids) && tag_ids.length > 0 ? (tag_mode ?? 'or') : 'or',
     })

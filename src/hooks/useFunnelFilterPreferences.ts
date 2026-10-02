@@ -91,7 +91,7 @@ const VALID_CYCLE_STATES = new Set<string>([
   'none', 'cycle_open', 'waiting', 'eligible',
 ])
 
-const VALID_DATE_FIELDS = new Set<string>(['created_at', 'closed_at'])
+const VALID_DATE_FIELDS = new Set<string>(['created_at', 'closed_at', 'last_contact_at'])
 
 export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   version: 1,

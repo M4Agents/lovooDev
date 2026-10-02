@@ -753,10 +753,11 @@ export type SortOption =
 
 /**
  * Campo de data usado no filtro de período do Kanban.
- *   'created_at' → data de criação da oportunidade (padrão)
- *   'closed_at'  → data da venda (quando movida para ganhou/perdeu)
+ *   'created_at'      → data de criação da oportunidade (padrão)
+ *   'closed_at'       → data da venda (quando movida para ganhou/perdeu)
+ *   'last_contact_at' → último contato real do chat WhatsApp
  */
-export type DateField = 'created_at' | 'closed_at'
+export type DateField = 'created_at' | 'closed_at' | 'last_contact_at'
 
 export interface LeadPositionFilter {
   funnel_id: string
@@ -769,8 +770,9 @@ export interface LeadPositionFilter {
   period_end?: string
   /**
    * Campo de data a ser aplicado no filtro de período.
-   * 'created_at' = data de criação (padrão).
-   * 'closed_at'  = data da venda (fechado - ganhou/perdeu).
+   * 'created_at'      = data de criação (padrão).
+   * 'closed_at'       = data da venda (fechado - ganhou/perdeu).
+   * 'last_contact_at' = último contato do chat WhatsApp.
    */
   date_field?: DateField
   tags?: string[]

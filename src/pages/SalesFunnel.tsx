@@ -742,8 +742,9 @@ export default function SalesFunnel() {
                 <div className="flex items-center gap-1 mb-2">
                   {(
                     [
-                      { value: 'created_at', label: 'Data de criação' },
-                      { value: 'closed_at',  label: 'Data da venda'   },
+                      { value: 'created_at',      label: 'Data de criação' },
+                      { value: 'closed_at',       label: 'Data da venda'   },
+                      { value: 'last_contact_at', label: 'Último contato'  },
                     ] as { value: DateField; label: string }[]
                   ).map(opt => (
                     <button
@@ -765,6 +766,11 @@ export default function SalesFunnel() {
                 {selectedDateField === 'closed_at' && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
                     Filtrando por data da venda. Etapas ativas podem aparecer vazias.
+                  </p>
+                )}
+                {selectedDateField === 'last_contact_at' && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
+                    Cards sem último contato ficam de fora do período.
                   </p>
                 )}
 

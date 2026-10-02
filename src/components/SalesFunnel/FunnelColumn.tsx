@@ -40,6 +40,7 @@ export interface BulkMoveRequest {
     origin?: string
     period_start?: string
     period_end?: string
+    date_field?: 'created_at' | 'closed_at' | 'last_contact_at'
     tags?: string[]
     tags_mode?: 'or' | 'and'
   }
