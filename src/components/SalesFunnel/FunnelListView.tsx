@@ -24,11 +24,15 @@ import { api } from '../../services/api'
 import { supabase } from '../../lib/supabase'
 import { funnelApi } from '../../services/funnelApi'
 import type {
+  CustomFieldDefinition,
+  CustomFieldValueEntry,
   DateField,
   LeadPositionFilter,
   Opportunity,
   SortOption,
 } from '../../types/sales-funnel'
+import { FUNNEL_CONSTANTS } from '../../types/sales-funnel'
+import { fromCustomFieldKey, isCustomFieldKey } from '../../utils/customFieldUtils'
 import type { PeriodFilter } from '../../types/analytics'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
 import { toAssigneeFilter } from '../../utils/funnelAssigneeFilter'
@@ -56,6 +60,8 @@ interface FunnelListViewProps {
   selectedOwner?: string
   selectedCycleState?: ContactAttemptsState | null
   showCycleColumn?: boolean
+  visibleFields?: string[]
+  customFields?: CustomFieldDefinition[]
 }
 
 export function FunnelListView({
@@ -72,6 +78,8 @@ export function FunnelListView({
   selectedOwner,
   selectedCycleState = null,
   showCycleColumn = false,
+  visibleFields = [...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS],
+  customFields = [],
 }: FunnelListViewProps) {
   const { t } = useTranslation('funnel')
   const { company } = useAuth()
@@ -207,6 +215,59 @@ export function FunnelListView({
       }
     })
   }, [visibleStages, stageMap, counts, countsLoading])
+
+  const [customFieldValuesMap, setCustomFieldValuesMap] = useState<Record<number, CustomFieldValueEntry[]>>({})
+
+  const visibleCustomFieldIds = useMemo(
+    () => visibleFields.filter(isCustomFieldKey).map(fromCustomFieldKey),
+    [visibleFields],
+  )
+
+  const allLeadIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const group of groups) {
+      for (const position of group.positions) {
+        const leadId = position.lead_id || position.opportunity?.lead_id || position.lead?.id
+        if (typeof leadId === 'number') ids.add(leadId)
+      }
+    }
+    return Array.from(ids)
+  }, [groups])
+
+  const customFieldIdsKey = visibleCustomFieldIds.join(',')
+  const leadIdsKey = allLeadIds.join(',')
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (visibleCustomFieldIds.length === 0 || allLeadIds.length === 0) {
+      setCustomFieldValuesMap({})
+      return () => { cancelled = true }
+    }
+
+    funnelApi.getCustomFieldValuesForLeads(allLeadIds, visibleCustomFieldIds)
+      .then((rows) => {
+        if (cancelled) return
+        const map: Record<number, CustomFieldValueEntry[]> = {}
+        for (const row of rows) {
+          const entry: CustomFieldValueEntry = {
+            field_id: row.field_id,
+            field_label: row.lead_custom_fields.field_label,
+            field_type: row.lead_custom_fields.field_type,
+            value: row.value,
+          }
+          if (!map[row.lead_id]) map[row.lead_id] = []
+          map[row.lead_id].push(entry)
+        }
+        setCustomFieldValuesMap(map)
+      })
+      .catch(() => {
+        if (!cancelled) setCustomFieldValuesMap({})
+      })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customFieldIdsKey, leadIdsKey])
 
   const loadedByPositionId = useMemo(() => {
     const map = new Map<string, SelectedOpportunity>()
@@ -492,6 +553,9 @@ export function FunnelListView({
           onRetryStage={(stageId) => { void handleRetryStage(stageId) }}
           userById={userById}
           showCycleColumn={showCycleColumn}
+          visibleFields={visibleFields}
+          customFields={customFields}
+          customFieldValuesMap={customFieldValuesMap}
         />
       </div>
 

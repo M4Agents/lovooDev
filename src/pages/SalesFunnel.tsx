@@ -986,6 +986,8 @@ export default function SalesFunnel() {
               selectedOwner={selectedOwner || undefined}
               selectedCycleState={selectedCycleState}
               showCycleColumn={showCycleFilter}
+              visibleFields={visibleFields}
+              customFields={customFields}
             />
           ) : (
             <FunnelBoard

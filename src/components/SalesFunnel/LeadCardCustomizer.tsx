@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react'
 import { X, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { FUNNEL_CONSTANTS } from '../../types/sales-funnel'
 import type { CustomFieldDefinition } from '../../types/sales-funnel'
-import { toCustomFieldKey, isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
+import { toCustomFieldKey, isCustomFieldKey } from '../../utils/customFieldUtils'
 
 interface LeadCardCustomizerProps {
   isOpen: boolean
@@ -133,10 +133,10 @@ export const LeadCardCustomizer: React.FC<LeadCardCustomizerProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              Personalizar Cards dos Leads
+              Personalizar campos visíveis
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              Escolha quais informações exibir nos cards do Kanban
+              Escolha quais informações exibir nos cards do Kanban e nas colunas da Lista
             </p>
           </div>
           <button
