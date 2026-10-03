@@ -9,7 +9,7 @@ import React, { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../contexts/AuthContext'
 import { Draggable } from '@hello-pangea/dnd'
-import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, TrendingUp, Plus, Info, MessageCircle, Check, UserCheck } from 'lucide-react'
+import { Phone, Building2, Tag, DollarSign, Calendar, Briefcase, Plus, Info, Check, UserCheck } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { TagSelectorPopover } from '../TagSelectorPopover'
 import type { OpportunityFunnelPosition, CustomFieldValueEntry } from '../../types/sales-funnel'
@@ -19,6 +19,15 @@ import { resolvePhotoUrl } from '../../utils/imageUtils'
 import { CycleStatusBadge } from './CycleStatusBadge'
 import { LeadCardCustomFieldRows } from './LeadCardCustomFieldRows'
 import { isCustomFieldKey } from '../../utils/customFieldUtils'
+import { getProbabilityTextClass } from '../../utils/probabilityColor'
+
+function ProbabilityLabel({ value }: { value: number }) {
+  return (
+    <span className={`shrink-0 text-xs font-semibold tabular-nums ${getProbabilityTextClass(value)}`}>
+      {value}%
+    </span>
+  )
+}
 
 function getOwnerInitials(user?: CompanyUser): string {
   const name = user?.display_name || user?.email || ''
@@ -33,8 +42,6 @@ interface LeadCardProps {
   visibleFields?: string[]
   /** Clique no corpo do card (ex.: abrir chat). */
   onClick?: (leadId: number) => void
-  /** Ícone de mensagem: abre o chat do lead. */
-  onChatClick?: (leadId: number) => void
   /** Necessário para TagSelectorPopover (multi-tenant). */
   companyId?: string
   /** Abre o modal de detalhes/jornada da oportunidade. */
@@ -64,7 +71,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
   onClick,
-  onChatClick,
   companyId,
   onDetailClick,
   companyUsers = [],
@@ -187,11 +193,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             )}
 
-            <div className="flex-1 min-w-0 pr-6">
+            <div className="flex-1 min-w-0">
               {/* Título da Oportunidade */}
-              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <div className="flex items-center gap-1.5 mb-1 min-w-0 pr-6">
                 <Briefcase className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
-                <h3 className="font-semibold text-gray-900 truncate text-sm">
+                <h3 className="font-semibold text-gray-900 truncate text-sm min-w-0 flex-1">
                   {opportunity.title}
                 </h3>
                 {isFieldVisible('opportunity_number') && opportunity.opportunity_number != null && (
@@ -204,18 +210,29 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     Reengajado ({position.reentry_count})
                   </span>
                 )}
+                {!isFieldVisible('name') && showProbability && (
+                  <ProbabilityLabel value={opportunity.probability} />
+                )}
               </div>
 
-              {/* Nome do Lead */}
+              {/* Nome do Lead + probabilidade à direita */}
               {isFieldVisible('name') && (
-                <p className="text-xs text-gray-600 truncate flex items-center gap-1.5">
-                  👤 {lead.name}
-                  {lead.is_over_plan && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600 flex-shrink-0">
-                      Restrito
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="shrink-0" aria-hidden>👤</span>
+                    <span className="text-xs text-gray-600 truncate" title={lead.name}>
+                      {lead.name}
                     </span>
+                    {lead.is_over_plan && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600 flex-shrink-0">
+                        Restrito
+                      </span>
+                    )}
+                  </div>
+                  {showProbability && (
+                    <ProbabilityLabel value={opportunity.probability} />
                   )}
-                </p>
+                </div>
               )}
 
               {isFieldVisible('email') && lead.email && !lead.is_over_plan && (
@@ -225,36 +242,20 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               )}
             </div>
 
-            <div className="absolute top-0 right-0 flex items-center gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-              {onChatClick && (
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onChatClick(lead.id)
-                  }}
-                  className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md"
-                  title={t('leadCard.chatTooltip')}
-                >
-                  <MessageCircle className="w-4 h-4" />
-                </button>
-              )}
-              {onDetailClick && (
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDetailClick(position.opportunity_id)
-                  }}
-                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
-                  title={t('leadCard.detailTooltip')}
-                >
-                  <Info className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+            {onDetailClick && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDetailClick(position.opportunity_id)
+                }}
+                className="absolute top-0 right-0 p-1 rounded-md text-gray-500 bg-gray-100 hover:text-blue-600 hover:bg-blue-50"
+                title={t('leadCard.detailTooltip')}
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Informações do lead */}
@@ -297,20 +298,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               )
             })()}
 
-            {(showDealValue || showProbability) && (
-              <div className="flex items-center gap-2 text-xs">
-                {showDealValue && (
-                  <div className="flex items-center gap-2 font-semibold text-green-600">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    <span>{formatCurrency(opportunity.value, opportunity.currency)}</span>
-                  </div>
-                )}
-                {showProbability && (
-                  <div className="flex items-center gap-1 text-blue-600">
-                    <TrendingUp className="w-3 h-3" />
-                    <span className="font-medium">{opportunity.probability}%</span>
-                  </div>
-                )}
+            {showDealValue && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-green-600">
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>{formatCurrency(opportunity.value, opportunity.currency)}</span>
               </div>
             )}
 

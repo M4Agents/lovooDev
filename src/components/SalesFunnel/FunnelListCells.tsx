@@ -6,6 +6,7 @@ import { formatCurrency, formatDaysInStage } from '../../types/sales-funnel'
 import type { CustomFieldValueEntry, FunnelStage, OpportunityFunnelPosition } from '../../types/sales-funnel'
 import { formatCustomFieldValue, fromCustomFieldKey, isCustomFieldKey } from '../../utils/customFieldUtils'
 import { resolvePhotoUrl } from '../../utils/imageUtils'
+import { getProbabilityTextClass } from '../../utils/probabilityColor'
 import type { FunnelListColumn, FunnelListColumnConfig } from '../../utils/funnelListVisibleColumns'
 
 interface AssignableUser {
@@ -255,9 +256,14 @@ export function FunnelListBodyCell({
   }
 
   if (column.id === 'probability') {
+    const probability = opportunity?.probability
     return (
       <td className={`${cellClass(column, selected)} whitespace-nowrap`}>
-        {opportunity?.probability != null ? `${opportunity.probability}%` : '—'}
+        {probability != null ? (
+          <span className={`font-medium ${getProbabilityTextClass(probability)}`}>
+            {probability}%
+          </span>
+        ) : '—'}
       </td>
     )
   }

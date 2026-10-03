@@ -25,6 +25,7 @@ import type {
   ConversationItem,
 } from '../../../types/dashboard'
 import { trackEvent } from '../../../lib/analytics/trackEvent'
+import { getProbabilityBadgeClass } from '../../../utils/probabilityColor'
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
@@ -100,12 +101,6 @@ function aiStateLabel(state: string): string {
   return labels[state] ?? state
 }
 
-function probabilityBadge(probability: number): string {
-  if (probability >= 70) return 'bg-green-100 text-green-700'
-  if (probability >= 40) return 'bg-yellow-100 text-yellow-700'
-  return 'bg-red-100 text-red-700'
-}
-
 // ---------------------------------------------------------------------------
 // Skeleton de item
 // ---------------------------------------------------------------------------
@@ -170,7 +165,7 @@ function OpportunitiesTable({
               </span>
             </td>
             <td className="py-3 pr-3">
-              <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${probabilityBadge(item.probability)}`}>
+              <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${getProbabilityBadgeClass(item.probability)}`}>
                 {item.probability}%
               </span>
             </td>

@@ -12,6 +12,7 @@ import React, { useMemo, useEffect } from 'react'
 import { MessageCircle, Eye, AlertCircle } from 'lucide-react'
 import { useEntityList, type EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { InsightItem, OpportunityItem, ConversationItem, DashboardFilters } from '../../../services/dashboardApi'
+import { getProbabilityTextClass } from '../../../utils/probabilityColor'
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -84,11 +85,7 @@ function OpportunityRow({
   onOpenOpportunity: (item: OpportunityItem) => void
 }) {
   const interactionDate = item.last_interaction_at ?? item.updated_at
-  const probColor = item.probability >= 70
-    ? 'text-green-600'
-    : item.probability >= 40
-      ? 'text-yellow-600'
-      : 'text-red-500'
+  const probColor = getProbabilityTextClass(item.probability)
 
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-current/5 transition-colors">
