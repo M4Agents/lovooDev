@@ -98,6 +98,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   }
 
   const isFieldVisible = (field: string) => visibleFields.includes(field)
+  const showDealValue = isFieldVisible('deal_value') && opportunity.value > 0
+  const showProbability = isFieldVisible('probability') && opportunity.probability != null
 
   const visibleCustomKeys = visibleFields.filter(isCustomFieldKey)
 
@@ -295,12 +297,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               )
             })()}
 
-            {/* Valor da Oportunidade com Probabilidade */}
-            {isFieldVisible('deal_value') && opportunity.value > 0 && (
-              <div className="flex items-center gap-2 text-xs font-semibold text-green-600">
-                <DollarSign className="w-3.5 h-3.5" />
-                <span>{formatCurrency(opportunity.value, opportunity.currency)}</span>
-                {isFieldVisible('probability') && opportunity.probability && (
+            {(showDealValue || showProbability) && (
+              <div className="flex items-center gap-2 text-xs">
+                {showDealValue && (
+                  <div className="flex items-center gap-2 font-semibold text-green-600">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>{formatCurrency(opportunity.value, opportunity.currency)}</span>
+                  </div>
+                )}
+                {showProbability && (
                   <div className="flex items-center gap-1 text-blue-600">
                     <TrendingUp className="w-3 h-3" />
                     <span className="font-medium">{opportunity.probability}%</span>
