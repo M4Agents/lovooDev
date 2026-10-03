@@ -84,3 +84,6 @@ supabase/.temp/
 .snapshots/
 
 .env*
+
+# Sessões locais do PostgREST (JWT — nunca versionar)
+.cursor-tmp/auth-sessions.json

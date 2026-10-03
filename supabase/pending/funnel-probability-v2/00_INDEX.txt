@@ -1,0 +1,20 @@
+PACOTE v2 — filtro de probabilidade
+
+Banco (já aplicado neste projeto)
+- SNAPSHOT_LIVE_20261003.txt
+- PREFLIGHT.sql
+- APPLY_V2.DO_NOT_RUN.sql
+- ASSERTIONS.sql
+- FIXTURE_NULL_ROLLBACK.sql
+- ROLLBACK_NOTES.txt
+- HISTORY_RECONCILE.txt          arquivo 20261003120000 ↔ MCP 20261003111146
+- REGISTER_20261003120000.DO_NOT_APPLY.sql
+  (não executar até autorização; evita reapply do CLI)
+
+Frontend (esta etapa)
+- Flag local FUNNEL_PROBABILITY_RANGE_RPC_ENABLED=true
+- POSTGREST_V2.sh                contrato HTTP; exit 2 se não houver sessão
+
+Não fazer nesta pasta
+- db push / migrate geral
+- commit/push/deploy sem aprovação

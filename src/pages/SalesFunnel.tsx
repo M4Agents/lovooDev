@@ -24,7 +24,7 @@ import { useAvailableTags } from '../hooks/useAvailableTags'
 import { useAccessControl } from '../hooks/useAccessControl'
 import { useContactCycleConfig }   from '../hooks/useContactCycleConfig'
 import { useCompanyIntegration }   from '../hooks/useCompanyIntegration'
-import { funnelApi } from '../services/funnelApi'
+import { funnelApi, FUNNEL_PROBABILITY_RANGE_RPC_ENABLED } from '../services/funnelApi'
 import { api } from '../services/api'
 import { supabase } from '../lib/supabase'
 import type { CreateFunnelForm, FunnelStage, SortOption, DateField, CustomFieldDefinition } from '../types/sales-funnel'
@@ -38,6 +38,15 @@ import {
 } from '../hooks/useFunnelFilterPreferences'
 import { useFunnelViewMode } from '../hooks/useFunnelViewMode'
 import { UNASSIGNED_ASSIGNEE, isValidAssigneeSelection } from '../utils/funnelAssigneeFilter'
+import { ProbabilityRangeFilter } from '../components/SalesFunnel/ProbabilityRangeFilter'
+import {
+  EMPTY_PROBABILITY_RANGE,
+  commitProbabilityDraft,
+  formatProbabilityRangeLabel,
+  getEffectiveProbabilityRange,
+  probabilityRangeToDraftTexts,
+  type ProbabilityRange,
+} from '../utils/funnelProbabilityFilter'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -95,6 +104,18 @@ export default function SalesFunnel() {
   const [selectedOwner, setSelectedOwner] = useState<string>('')
   const [ownerOptions, setOwnerOptions] = useState<{ user_id: string; display_name: string }[]>([])
   const [selectedCycleState, setSelectedCycleState] = useState<ContactAttemptsState | null>(null)
+  const [probabilityMinText, setProbabilityMinText] = useState('')
+  const [probabilityMaxText, setProbabilityMaxText] = useState('')
+  const [probabilityDraftError, setProbabilityDraftError] = useState<string | null>(null)
+  const [appliedProbability, setAppliedProbability] = useState<ProbabilityRange>(EMPTY_PROBABILITY_RANGE)
+
+  const applyProbabilityRange = useCallback((range: ProbabilityRange) => {
+    const texts = probabilityRangeToDraftTexts(range)
+    setProbabilityMinText(texts.minText)
+    setProbabilityMaxText(texts.maxText)
+    setAppliedProbability(range)
+    setProbabilityDraftError(null)
+  }, [])
 
   const { viewMode, setViewMode } = useFunnelViewMode(companyId, user?.id)
   const { canViewContactCycles }  = useAccessControl()
@@ -147,6 +168,7 @@ export default function SalesFunnel() {
       setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
       setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
       setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
+      applyProbabilityRange(EMPTY_PROBABILITY_RANGE)
       setHasSavedFilters(false)
       return
     }
@@ -161,8 +183,12 @@ export default function SalesFunnel() {
     // selectedOwner é restaurado aqui e revalidado quando ownerOptions carregar
     setSelectedOwner(savedFilters.selectedOwner)
     setSelectedCycleState(savedFilters.selectedCycleState ?? null)
+    applyProbabilityRange({
+      min: savedFilters.probabilityMin,
+      max: savedFilters.probabilityMax,
+    })
     setHasSavedFilters(true)
-  }, [filtersLoaded, filtersLoadedForFunnelId, companyId, user?.id, selectedFunnel?.id, savedFilters])
+  }, [filtersLoaded, filtersLoadedForFunnelId, companyId, user?.id, selectedFunnel?.id, savedFilters, applyProbabilityRange])
 
   // ─── Validação de selectedOwner contra ownerOptions ─────────────────────────
   // Só atua quando ownerOptions já carregou. Se o owner salvo não existir mais,
@@ -267,7 +293,13 @@ export default function SalesFunnel() {
     globalSort,
     selectedOwner,
     selectedCycleState,
-  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, selectedDateField, globalSort, selectedOwner, selectedCycleState])
+    probabilityMin: FUNNEL_PROBABILITY_RANGE_RPC_ENABLED
+      ? appliedProbability.min
+      : (savedFilters?.probabilityMin ?? appliedProbability.min),
+    probabilityMax: FUNNEL_PROBABILITY_RANGE_RPC_ENABLED
+      ? appliedProbability.max
+      : (savedFilters?.probabilityMax ?? appliedProbability.max),
+  }), [searchTerm, selectedTags, selectedTagsMode, selectedOrigin, selectedPeriod, selectedDateField, globalSort, selectedOwner, selectedCycleState, appliedProbability, savedFilters])
 
   const handleToggleFilters = useCallback(() => {
     setShowFilters(prev => !prev)
@@ -361,6 +393,17 @@ export default function SalesFunnel() {
       })
     }
 
+    const probabilityLabel = FUNNEL_PROBABILITY_RANGE_RPC_ENABLED
+      ? formatProbabilityRangeLabel(appliedProbability)
+      : null
+    if (probabilityLabel) {
+      chips.push({
+        id: 'probability',
+        label: `${t('filters.probabilityLabel')}: ${probabilityLabel}`,
+        onClear: () => applyProbabilityRange(EMPTY_PROBABILITY_RANGE),
+      })
+    }
+
     if (globalSort) {
       const sortLabels: Record<SortOption, string> = {
         entered_stage_at: t('filters.sortEnteredStage'),
@@ -378,8 +421,13 @@ export default function SalesFunnel() {
     return chips
   }, [
     searchTerm, selectedTags, availableTags, selectedOrigin, selectedOwner, ownerOptions,
-    selectedPeriod, selectedDateField, selectedCycleState, globalSort, t,
+    selectedPeriod, selectedDateField, selectedCycleState, appliedProbability, globalSort, applyProbabilityRange, t,
   ])
+
+  const effectiveProbability = getEffectiveProbabilityRange(
+    appliedProbability,
+    FUNNEL_PROBABILITY_RANGE_RPC_ENABLED,
+  )
 
   const filtersHaveUnsavedChanges = hasUnsavedChanges(buildCurrentSnapshot())
 
@@ -394,8 +442,9 @@ export default function SalesFunnel() {
     setGlobalSort(DEFAULT_FILTER_SNAPSHOT.globalSort)
     setSelectedOwner(DEFAULT_FILTER_SNAPSHOT.selectedOwner)
     setSelectedCycleState(DEFAULT_FILTER_SNAPSHOT.selectedCycleState)
+    applyProbabilityRange(EMPTY_PROBABILITY_RANGE)
     setHasSavedFilters(false)
-  }, [clearFilters])
+  }, [clearFilters, applyProbabilityRange])
 
   const handleLeadClick = (leadId: number) => {
     setSelectedLeadId(leadId)
@@ -865,6 +914,46 @@ export default function SalesFunnel() {
                   ))}
                 </select>
               </div>
+
+              {FUNNEL_PROBABILITY_RANGE_RPC_ENABLED && (
+                <div className="sm:col-span-2">
+                  <ProbabilityRangeFilter
+                    minText={probabilityMinText}
+                    maxText={probabilityMaxText}
+                    error={probabilityDraftError}
+                    applied={appliedProbability}
+                    onMinChange={(value) => {
+                      setProbabilityMinText(value)
+                      setProbabilityDraftError(null)
+                    }}
+                    onMaxChange={(value) => {
+                      setProbabilityMaxText(value)
+                      setProbabilityDraftError(null)
+                    }}
+                    onApply={() => {
+                      const committed = commitProbabilityDraft(
+                        appliedProbability,
+                        probabilityMinText,
+                        probabilityMaxText,
+                      )
+                      if (committed.status === 'invalid_number') {
+                        setProbabilityDraftError(t('filters.probabilityInvalidNumber'))
+                        return
+                      }
+                      if (committed.status === 'out_of_range') {
+                        setProbabilityDraftError(t('filters.probabilityOutOfRange'))
+                        return
+                      }
+                      if (committed.status === 'min_gt_max') {
+                        setProbabilityDraftError(t('filters.probabilityMinGtMax'))
+                        return
+                      }
+                      applyProbabilityRange(committed.applied)
+                    }}
+                    onPreset={applyProbabilityRange}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:flex-wrap">
@@ -988,6 +1077,8 @@ export default function SalesFunnel() {
               showCycleColumn={showCycleFilter}
               visibleFields={visibleFields}
               customFields={customFields}
+              probabilityMin={effectiveProbability.min}
+              probabilityMax={effectiveProbability.max}
             />
           ) : (
             <FunnelBoard
@@ -1007,6 +1098,8 @@ export default function SalesFunnel() {
               globalSort={globalSort}
               selectedOwner={selectedOwner || undefined}
               selectedCycleState={selectedCycleState}
+              probabilityMin={effectiveProbability.min}
+              probabilityMax={effectiveProbability.max}
             />
           )
         ) : (

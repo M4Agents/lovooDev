@@ -104,7 +104,17 @@
     "sortLeadCreated": "Lead created",
     "sortLastInteraction": "Last interaction",
     "closedAtHint": "Filtering by sale date. Active stages may appear empty.",
-    "lastContactHint": "Cards without last contact are left out of the period."
+    "lastContactHint": "Cards without last contact are left out of the period.",
+    "probabilityLabel": "Probability",
+    "probabilityFrom": "From",
+    "probabilityTo": "To",
+    "probabilityApply": "Apply",
+    "probabilityInvalidNumber": "Use whole numbers from 0 to 100.",
+    "probabilityOutOfRange": "Probability must be between 0 and 100.",
+    "probabilityMinGtMax": "Minimum cannot be greater than maximum.",
+    "probabilityPreset_low": "0–39%",
+    "probabilityPreset_medium": "40–69%",
+    "probabilityPreset_high": "70–100%"
   },
   "states": {
     "companyNotFound": "Company not found",

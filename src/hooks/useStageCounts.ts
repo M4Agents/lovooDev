@@ -16,7 +16,7 @@
 //   counts[stageId]?.total_value // soma dos valores
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { funnelApi } from '../services/funnelApi'
 import type { LeadPositionFilter, StageCount } from '../types/sales-funnel'
 
@@ -33,10 +33,12 @@ export function useStageCounts(
 ): UseStageCounts {
   const [counts, setCounts] = useState<Record<string, StageCount>>({})
   const [loading, setLoading] = useState(false)
+  const requestIdRef = useRef(0)
 
   const fetchCounts = useCallback(async () => {
     if (!funnelId || !companyId) return
 
+    const requestId = ++requestIdRef.current
     setLoading(true)
     try {
       const data = await funnelApi.getStageCounts(funnelId, companyId, {
@@ -49,18 +51,22 @@ export function useStageCounts(
         tags_mode:               filter.tags_mode,
         owner_user_id:           filter.owner_user_id,
         unassigned_responsible:  filter.unassigned_responsible,
-        contact_attempts_state:  filter.contact_attempts_state
+        contact_attempts_state:  filter.contact_attempts_state,
+        probability_min:         filter.probability_min,
+        probability_max:         filter.probability_max,
       })
 
+      if (requestId !== requestIdRef.current) return
       const map: Record<string, StageCount> = {}
       data.forEach(sc => {
         map[sc.stage_id] = sc
       })
       setCounts(map)
     } catch (err) {
+      if (requestId !== requestIdRef.current) return
       console.error('Error fetching stage counts:', err)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [funnelId, companyId, filter])
 

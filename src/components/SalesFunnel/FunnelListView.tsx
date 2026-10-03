@@ -62,6 +62,8 @@ interface FunnelListViewProps {
   showCycleColumn?: boolean
   visibleFields?: string[]
   customFields?: CustomFieldDefinition[]
+  probabilityMin?: number | null
+  probabilityMax?: number | null
 }
 
 export function FunnelListView({
@@ -80,6 +82,8 @@ export function FunnelListView({
   showCycleColumn = false,
   visibleFields = [...FUNNEL_CONSTANTS.DEFAULT_VISIBLE_FIELDS],
   customFields = [],
+  probabilityMin = null,
+  probabilityMax = null,
 }: FunnelListViewProps) {
   const { t } = useTranslation('funnel')
   const { company } = useAuth()
@@ -110,9 +114,12 @@ export function FunnelListView({
     sort_by: globalSort,
     ...toAssigneeFilter(selectedOwner),
     contact_attempts_state: selectedCycleState || undefined,
+    probability_min: probabilityMin ?? undefined,
+    probability_max: probabilityMax ?? undefined,
   }), [
     funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField,
     selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState,
+    probabilityMin, probabilityMax,
   ])
 
   const {

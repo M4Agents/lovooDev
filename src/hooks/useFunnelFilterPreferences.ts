@@ -24,6 +24,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { SortOption, DateField } from '../types/sales-funnel'
 import type { PeriodFilter as PeriodFilterType, PeriodType } from '../types/analytics'
 import type { ContactAttemptsState } from '../types/contact-cycles'
+import { sanitizeStoredProbabilityRange } from '../utils/funnelProbabilityFilter'
 
 // =====================================================
 // Tipos públicos
@@ -41,6 +42,9 @@ export interface FunnelFilterSnapshot {
   globalSort: SortOption | undefined
   selectedOwner: string
   selectedCycleState: ContactAttemptsState | null
+  /** Faixa aplicada válida. Ausente em snapshots antigos = sem filtro. */
+  probabilityMin: number | null
+  probabilityMax: number | null
 }
 
 // =====================================================
@@ -65,6 +69,8 @@ interface StoredSnapshot {
   globalSort?: SortOption
   selectedOwner: string
   selectedCycleState?: ContactAttemptsState
+  probabilityMin?: number | null
+  probabilityMax?: number | null
 }
 
 // =====================================================
@@ -104,6 +110,8 @@ export const DEFAULT_FILTER_SNAPSHOT: FunnelFilterSnapshot = {
   globalSort: undefined,
   selectedOwner: '',
   selectedCycleState: null,
+  probabilityMin: null,
+  probabilityMax: null,
 }
 
 // =====================================================
@@ -203,6 +211,8 @@ export function normalizeForStorage(s: FunnelFilterSnapshot): FunnelFilterSnapsh
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
     selectedCycleState: s.selectedCycleState ?? null,
+    probabilityMin: s.probabilityMin ?? null,
+    probabilityMax: s.probabilityMax ?? null,
   }
 }
 
@@ -231,6 +241,8 @@ export function normalizeForCompare(s: FunnelFilterSnapshot): string {
     globalSort: s.globalSort ?? undefined,
     selectedOwner: s.selectedOwner ?? '',
     selectedCycleState: s.selectedCycleState ?? null,
+    probabilityMin: s.probabilityMin ?? null,
+    probabilityMax: s.probabilityMax ?? null,
   }
   return JSON.stringify(comparable)
 }
@@ -262,6 +274,11 @@ function readFromStorage(key: string | null): FunnelFilterSnapshot | null {
       return null
     }
 
+    const probabilityRange = sanitizeStoredProbabilityRange(
+      parsed.probabilityMin,
+      parsed.probabilityMax,
+    )
+
     return {
       version: 1,
       searchTerm: parsed.searchTerm,
@@ -273,6 +290,8 @@ function readFromStorage(key: string | null): FunnelFilterSnapshot | null {
       globalSort: parsed.globalSort,
       selectedOwner: parsed.selectedOwner,
       selectedCycleState: parsed.selectedCycleState ?? null,
+      probabilityMin: probabilityRange.min,
+      probabilityMax: probabilityRange.max,
     }
   } catch {
     try { localStorage.removeItem(key) } catch { /* quota ou bloqueio — ignora */ }
@@ -297,6 +316,8 @@ function writeToStorage(key: string, snapshot: FunnelFilterSnapshot): void {
     globalSort: normalized.globalSort,
     selectedOwner: normalized.selectedOwner,
     ...(normalized.selectedCycleState ? { selectedCycleState: normalized.selectedCycleState } : {}),
+    ...(normalized.probabilityMin != null ? { probabilityMin: normalized.probabilityMin } : {}),
+    ...(normalized.probabilityMax != null ? { probabilityMax: normalized.probabilityMax } : {}),
   }
   try {
     localStorage.setItem(key, JSON.stringify(stored))

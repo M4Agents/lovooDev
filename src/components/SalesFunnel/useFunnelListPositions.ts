@@ -122,6 +122,8 @@ export function useFunnelListPositions(
           owner_user_id: f.owner_user_id,
           unassigned_responsible: f.unassigned_responsible,
           contact_attempts_state: f.contact_attempts_state,
+          probability_min: f.probability_min,
+          probability_max: f.probability_max,
         },
         limit,
         offset,

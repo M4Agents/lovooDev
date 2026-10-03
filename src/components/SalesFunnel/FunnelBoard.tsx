@@ -101,6 +101,8 @@ interface FunnelBoardProps {
   selectedCycleState?: ContactAttemptsState | null
   /** Campo de data usado no filtro de período. Default: 'created_at'. */
   selectedDateField?: DateField
+  probabilityMin?: number | null
+  probabilityMax?: number | null
 }
 
 export const FunnelBoard: React.FC<FunnelBoardProps> = ({
@@ -120,6 +122,8 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   selectedOwner,
   selectedCycleState = null,
   selectedDateField = 'created_at',
+  probabilityMin = null,
+  probabilityMax = null,
 }) => {
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
@@ -245,7 +249,9 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
     sort_by:                 globalSort,
     ...toAssigneeFilter(selectedOwner),
     contact_attempts_state:  selectedCycleState || undefined,
-  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState])
+    probability_min:         probabilityMin ?? undefined,
+    probability_max:         probabilityMax ?? undefined,
+  }), [funnelId, searchTerm, selectedOrigin, selectedPeriod, selectedDateField, selectedTags, selectedTagsMode, globalSort, selectedOwner, selectedCycleState, probabilityMin, probabilityMax])
 
   // =====================================================
   // FASE 3B — HOOKS DE DADOS POR COLUNA

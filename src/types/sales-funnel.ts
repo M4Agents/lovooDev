@@ -788,6 +788,9 @@ export interface LeadPositionFilter {
   unassigned_responsible?: boolean
   /** Estado do ciclo de contato. NULL = sem filtro. Fase 10. */
   contact_attempts_state?: ContactAttemptsState | null
+  /** Faixa inclusiva de opportunities.probability. Sem valor = sem filtro. */
+  probability_min?: number
+  probability_max?: number
 }
 
 // =====================================================

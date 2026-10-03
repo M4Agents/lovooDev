@@ -33,6 +33,12 @@ import type {
 } from '../types/sales-funnel'
 import { normalizeOpportunityManualValue } from '../utils/opportunityCompositionErrors'
 
+/**
+ * Liga o filtro de probabilidade (UI + RPCs v2).
+ * RPCs v2 já existem no banco compartilhado (MCP 20261003111146).
+ */
+export const FUNNEL_PROBABILITY_RANGE_RPC_ENABLED = true
+
 // =====================================================
 // SUPABASE CLIENT
 // =====================================================
@@ -1059,12 +1065,15 @@ class FunnelApiService {
     funnelId: string,
     stageId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id' | 'unassigned_responsible' | 'contact_attempts_state'>,
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'sort_by' | 'owner_user_id' | 'unassigned_responsible' | 'contact_attempts_state' | 'probability_min' | 'probability_max'>,
     limit = 20,
     offset = 0
   ): Promise<OpportunityFunnelPosition[]> {
     try {
-      const { data, error } = await supabase.rpc('get_stage_positions_paged_assignee', {
+      const useProbabilityRpc = FUNNEL_PROBABILITY_RANGE_RPC_ENABLED
+      const { data, error } = await supabase.rpc(
+        useProbabilityRpc ? 'get_stage_positions_paged_assignee_v2' : 'get_stage_positions_paged_assignee',
+        {
         p_funnel_id:                funnelId,
         p_stage_id:                 stageId,
         p_company_id:               companyId,
@@ -1081,7 +1090,11 @@ class FunnelApiService {
         p_owner_user_id:            filter?.owner_user_id                  ?? null,
         p_unassigned_responsible:   filter?.unassigned_responsible === true,
         p_contact_attempts_state:   filter?.contact_attempts_state         ?? null,
-        p_date_field:               filter?.date_field                     ?? 'created_at'
+        p_date_field:               filter?.date_field                     ?? 'created_at',
+        ...(useProbabilityRpc ? {
+          p_probability_min: filter?.probability_min ?? null,
+          p_probability_max: filter?.probability_max ?? null,
+        } : {}),
       })
 
       if (error) throw error
@@ -1105,10 +1118,13 @@ class FunnelApiService {
   async getStageCounts(
     funnelId: string,
     companyId: string,
-    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'owner_user_id' | 'unassigned_responsible' | 'contact_attempts_state'>
+    filter?: Pick<LeadPositionFilter, 'search' | 'origin' | 'period_start' | 'period_end' | 'date_field' | 'tags' | 'tags_mode' | 'owner_user_id' | 'unassigned_responsible' | 'contact_attempts_state' | 'probability_min' | 'probability_max'>
   ): Promise<StageCount[]> {
     try {
-      const { data, error } = await supabase.rpc('get_funnel_stage_counts_assignee', {
+      const useProbabilityRpc = FUNNEL_PROBABILITY_RANGE_RPC_ENABLED
+      const { data, error } = await supabase.rpc(
+        useProbabilityRpc ? 'get_funnel_stage_counts_assignee_v2' : 'get_funnel_stage_counts_assignee',
+        {
         p_funnel_id:                funnelId,
         p_company_id:               companyId,
         p_search:                   filter?.search                          ?? null,
@@ -1121,7 +1137,11 @@ class FunnelApiService {
         p_owner_user_id:            filter?.owner_user_id                  ?? null,
         p_unassigned_responsible:   filter?.unassigned_responsible === true,
         p_contact_attempts_state:   filter?.contact_attempts_state         ?? null,
-        p_date_field:               filter?.date_field                     ?? 'created_at'
+        p_date_field:               filter?.date_field                     ?? 'created_at',
+        ...(useProbabilityRpc ? {
+          p_probability_min: filter?.probability_min ?? null,
+          p_probability_max: filter?.probability_max ?? null,
+        } : {}),
       })
 
       if (error) throw error

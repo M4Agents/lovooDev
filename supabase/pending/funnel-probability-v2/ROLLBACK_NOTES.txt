@@ -1,0 +1,20 @@
+Rollback desta entrega
+
+Banco
+- Não remover as RPCs v2 enquanto o frontend puder chamá-las
+  (flag true, cache de bundle, aba antiga).
+- As RPCs atuais permanecem; rollback de banco não é necessário
+  para restaurar o funil atual.
+- Só DROP das v2 depois de confirmar zero callers e flag=false
+  publicada.
+
+Frontend (etapa posterior)
+- Voltar FUNNEL_PROBABILITY_RANGE_RPC_ENABLED para false.
+- UI some; preferência salva de faixa é preservada e não aplicada.
+- Demais filtros não mudam.
+
+Índice
+- Nenhum índice novo nesta entrega.
+- Já existem idx_opportunities_company_open_prob e
+  idx_opportunities_company_status_prob. Avaliar EXPLAIN após apply
+  no carregamento inicial (limit 20 offset 0) e na página 2.

@@ -1,0 +1,29 @@
+Correspondência da migration de probabilidade v2
+Projeto etzdsywunlpbgxkphuil. Sem alteração de schema_migrations nesta etapa.
+Sem reexecução de SQL.
+
+Arquivo no repositório
+  supabase/migrations/20261003120000_create_funnel_assignee_probability_range_v2.sql
+
+Versão aplicada pelo MCP (2026-10-03)
+  version = 20261003111146
+  name    = create_funnel_assignee_probability_range_v2
+  statements = 1 (SET LOCAL lock_timeout/statement_timeout + CREATE OR REPLACE das duas v2)
+
+Ausente no histórico
+  20261003120000
+
+Risco
+  supabase db push / migration up neste projeto veria 20261003120000
+  como pendente e tentaria reaplicar CREATE OR REPLACE.
+  Não rodar migrate geral até o REGISTER autorizado.
+
+Conciliação preparada (não executar agora)
+  REGISTER_20261003120000.DO_NOT_APPLY.sql
+  — insere 20261003120000 em supabase_migrations.schema_migrations
+  — exige as duas v2 e o record MCP 20261003111146
+  — não faz DDL e não apaga 20261003111146
+
+Manter
+  Record MCP 20261003111146 como evidência do apply real.
+  Arquivo 20261003120000 como fonte no repositório.

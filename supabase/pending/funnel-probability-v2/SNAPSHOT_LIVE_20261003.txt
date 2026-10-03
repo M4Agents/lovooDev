@@ -1,0 +1,58 @@
+SNAPSHOT VIVO — 2026-10-03 (leitura MCP, sem DDL)
+
+get_stage_positions_paged_assignee
+  oid: 492047
+  result: jsonb
+  security_definer: true
+  search_path: public
+  owner: postgres
+  acl: {postgres=X/postgres,authenticated=X/postgres}
+  EXECUTE: authenticated=true postgres=true anon=false service_role=false
+  src_md5: 55ebcc6aa4b3c60f646101a91592a7dd
+  src_sha256: 3105bed88016b8f0e977906a98118663ef5832af687572f8722fb38f2342b868
+  src_len: 9407
+  args: p_funnel_id uuid, p_stage_id uuid, p_company_id uuid, p_search text,
+        p_origin text, p_period_days integer, p_limit integer, p_offset integer,
+        p_tag_ids uuid[], p_tag_mode text, p_start_date timestamptz,
+        p_end_date timestamptz, p_sort_by text, p_owner_user_id uuid,
+        p_contact_attempts_state text, p_date_field text,
+        p_unassigned_responsible boolean
+  filtro probability: NÃO (campo só no JSON)
+
+get_funnel_stage_counts_assignee
+  oid: 492051
+  result: jsonb
+  security_definer: true
+  search_path: public
+  owner: postgres
+  acl: {postgres=X/postgres,authenticated=X/postgres}
+  EXECUTE: authenticated=true postgres=true anon=false service_role=false
+  src_md5: 9f54201a6b253f08a2baedf2a9c18af8
+  src_sha256: 23cb0e74edc0c520c1446aec4f72fc502309b976235f4857ffa01ba0608128a7
+  src_len: 3751
+  args: p_funnel_id uuid, p_company_id uuid, p_search text, p_origin text,
+        p_period_days integer, p_tag_ids uuid[], p_tag_mode text,
+        p_start_date timestamptz, p_end_date timestamptz, p_owner_user_id uuid,
+        p_contact_attempts_state text, p_date_field text,
+        p_unassigned_responsible boolean
+  filtro probability: NÃO
+
+v2
+  get_stage_positions_paged_assignee_v2: AUSENTE
+  get_funnel_stage_counts_assignee_v2: AUSENTE
+
+opportunities.probability
+  int4 nullable, default 50, check 0–100
+  24889 linhas, 0 NULL, min 0, max 100
+  16 iguais a 0, 13 iguais a 100, 24804 entre 50 e 60
+
+índices já existentes (não criar outro agora)
+  idx_opportunities_company_open_prob (company_id, probability, last_interaction_at) WHERE status=open
+  idx_opportunities_company_status_prob (company_id, status, probability DESC)
+  idx_opp_positions_funnel_stage (funnel_id, stage_id)
+
+Conferência de corpo v2 vs vivo
+  Autorização, joins, ordenação, LIMIT/OFFSET, JSON e filtros atuais idênticos.
+  Únicas inclusões: params integer min/max, validação 0–100 e min<=max,
+  e predicado inclusivo excluindo NULL quando há limite.
+  Predicado igual em carga e contadores. Um único ramo WHERE em cada função.

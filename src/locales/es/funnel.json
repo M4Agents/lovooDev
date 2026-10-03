@@ -104,7 +104,17 @@
     "sortLeadCreated": "Alta del lead",
     "sortLastInteraction": "Última interacción",
     "closedAtHint": "Filtrando por fecha de venta. Las etapas activas pueden aparecer vacías.",
-    "lastContactHint": "Las tarjetas sin último contacto quedan fuera del período."
+    "lastContactHint": "Las tarjetas sin último contacto quedan fuera del período.",
+    "probabilityLabel": "Probabilidad",
+    "probabilityFrom": "Desde",
+    "probabilityTo": "Hasta",
+    "probabilityApply": "Aplicar",
+    "probabilityInvalidNumber": "Usa solo números enteros de 0 a 100.",
+    "probabilityOutOfRange": "La probabilidad debe estar entre 0 y 100.",
+    "probabilityMinGtMax": "El mínimo no puede ser mayor que el máximo.",
+    "probabilityPreset_low": "0–39%",
+    "probabilityPreset_medium": "40–69%",
+    "probabilityPreset_high": "70–100%"
   },
   "states": {
     "companyNotFound": "Empresa no encontrada",

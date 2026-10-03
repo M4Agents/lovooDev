@@ -79,6 +79,7 @@ export function useBoardPositions(
   // Ref mantido sincronizado para leituras em callbacks sem stale closure
   const stageMapRef = useRef(stageMap)
   stageMapRef.current = stageMap
+  const fetchGenerationRef = useRef(0)
 
   // --------------------------------------------------
   // FETCH: carrega uma página de uma etapa
@@ -94,6 +95,7 @@ export function useBoardPositions(
         return next
       })
 
+      const generation = fetchGenerationRef.current
       try {
         const offset = page * pageSize
         const positions = await funnelApi.getStagePositionsPaged(
@@ -112,11 +114,15 @@ export function useBoardPositions(
             sort_by:                 sortByStage?.get(stageId) ?? filter.sort_by,
             owner_user_id:           filter.owner_user_id,
             unassigned_responsible:  filter.unassigned_responsible,
-            contact_attempts_state:  filter.contact_attempts_state
+            contact_attempts_state:  filter.contact_attempts_state,
+            probability_min:         filter.probability_min,
+            probability_max:         filter.probability_max,
           },
           pageSize,
           offset
         )
+
+        if (generation !== fetchGenerationRef.current) return
 
         setStageMap(prev => {
           const next = new Map(prev)
@@ -131,6 +137,7 @@ export function useBoardPositions(
         })
       } catch (err) {
         console.error(`Error fetching stage ${stageId}:`, err)
+        if (generation !== fetchGenerationRef.current) return
         setStageMap(prev => {
           const next = new Map(prev)
           const cur = next.get(stageId) ?? { ...EMPTY_STATE }
@@ -150,8 +157,15 @@ export function useBoardPositions(
   useEffect(() => {
     if (!companyId || !funnelId || stages.length === 0) return
 
-    // Carregar todas as etapas visíveis em paralelo, sempre da página 0
+    fetchGenerationRef.current += 1
     const visibleStages = stages.filter(s => !s.is_hidden)
+    setStageMap(() => {
+      const next = new Map<string, StagePositionState>()
+      for (const stage of visibleStages) {
+        next.set(stage.id, { ...EMPTY_STATE, loading: true })
+      }
+      return next
+    })
     Promise.all(visibleStages.map(s => fetchStage(s.id, 0, false)))
   }, [stages, fetchStage, companyId, funnelId])
   // fetchStage já captura filter/companyId/funnelId, mas listamos

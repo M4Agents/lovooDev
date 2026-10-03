@@ -1,0 +1,61 @@
+SNAPSHOT VIVO — 2026-10-03
+Banco compartilhado (dev + produção). NÃO APLICAR.
+
+opportunities.probability
+  tipo: integer (int4)
+  nullable: YES
+  default: 50
+  check: valid_probability (probability >= 0 AND probability <= 100)
+  amostra atual: 24888 linhas, 0 NULL, min 0, max 100
+
+get_stage_positions_paged_assignee
+  result: jsonb
+  security_definer: true
+  search_path: public
+  owner: postgres
+  grants: authenticated=EXECUTE, postgres=EXECUTE; anon e service_role SEM execute
+  args: p_funnel_id uuid, p_stage_id uuid, p_company_id uuid, p_search text,
+        p_origin text, p_period_days integer, p_limit integer, p_offset integer,
+        p_tag_ids uuid[], p_tag_mode text, p_start_date timestamptz,
+        p_end_date timestamptz, p_sort_by text, p_owner_user_id uuid,
+        p_contact_attempts_state text, p_date_field text,
+        p_unassigned_responsible boolean
+  last_contact_at: SIM
+  filtro probability: NÃO (só devolve o campo no JSON)
+
+get_funnel_stage_counts_assignee
+  result: jsonb
+  security_definer: true
+  search_path: public
+  owner: postgres
+  grants: authenticated=EXECUTE, postgres=EXECUTE; anon e service_role SEM execute
+  args: p_funnel_id uuid, p_company_id uuid, p_search text, p_origin text,
+        p_period_days integer, p_tag_ids uuid[], p_tag_mode text,
+        p_start_date timestamptz, p_end_date timestamptz, p_owner_user_id uuid,
+        p_contact_attempts_state text, p_date_field text,
+        p_unassigned_responsible boolean
+  last_contact_at: SIM
+  filtro probability: NÃO
+
+Callers atuais no repo
+  src/services/funnelApi.ts → getStagePositionsPaged / getStageCounts
+  (únicos callers de runtime)
+
+Esta entrega cria funções NOVAS:
+  get_stage_positions_paged_assignee_v2
+  get_funnel_stage_counts_assignee_v2
+As funções atuais NÃO são dropadas nem alteradas.
+
+Cores dos cards (integer): >=70 verde, >=40 amarelo, resto vermelho
+Atalhos 0–39 / 40–69 / 70–100 batem com a escala. Coluna é int4; sem conflito decimal.
+
+Pacote operacional: supabase/pending/funnel-probability-v2/
+
+SEQUÊNCIA (ainda NÃO autorizada)
+1. PREFLIGHT.sql (leitura)
+2. APPLY_V2 + migration 20261003120000 (só v2)
+3. ASSERTIONS.sql
+4. Frontend e flag em etapa posterior
+5. Rollback de frontend: flag false; manter v2 enquanto houver callers
+
+NÃO criar índice nesta entrega. Avaliar EXPLAIN após apply autorizado.
