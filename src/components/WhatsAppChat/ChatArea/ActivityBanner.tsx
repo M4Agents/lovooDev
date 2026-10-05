@@ -19,12 +19,14 @@ interface Activity {
 interface ActivityBannerProps {
   leadId: number
   companyId: string
+  refreshToken?: number
   onViewDetails?: (activity: Activity) => void
 }
 
 export const ActivityBanner: React.FC<ActivityBannerProps> = ({
   leadId,
   companyId,
+  refreshToken = 0,
   onViewDetails
 }) => {
   const { t } = useTranslation('chat')
@@ -33,12 +35,17 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    fetchUrgentActivity()
+    fetchUrgentActivity(true)
   }, [leadId, companyId])
 
-  const fetchUrgentActivity = async () => {
+  useEffect(() => {
+    if (refreshToken === 0) return
+    fetchUrgentActivity(false)
+  }, [refreshToken])
+
+  const fetchUrgentActivity = async (showLoading: boolean) => {
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       const response = await fetch(`/api/activities/lead/${leadId}`, {
         headers: {
           'x-company-id': companyId

@@ -19,12 +19,14 @@ interface Activity {
 interface ActivityBadgeProps {
   leadId: number
   companyId: string
+  refreshToken?: number
   onActivityClick?: (activity: Activity) => void
 }
 
 export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
   leadId,
   companyId,
+  refreshToken = 0,
   onActivityClick
 }) => {
   const { t } = useTranslation('chat')
@@ -33,12 +35,17 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
   const [showTooltip, setShowTooltip] = useState(false)
 
   useEffect(() => {
-    fetchActivities()
+    fetchActivities(true)
   }, [leadId, companyId])
 
-  const fetchActivities = async () => {
+  useEffect(() => {
+    if (refreshToken === 0) return
+    fetchActivities(false)
+  }, [refreshToken])
+
+  const fetchActivities = async (showLoading: boolean) => {
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       const response = await fetch(`/api/activities/lead/${leadId}`, {
         headers: {
           'x-company-id': companyId

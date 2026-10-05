@@ -66,6 +66,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Estados para modal de atividades
   const [showActivityModal, setShowActivityModal] = useState(false)
   const [selectedActivity, setSelectedActivity] = useState<any>(null)
+  const [activityListVersion, setActivityListVersion] = useState(0)
   // 🚨 EMERGÊNCIA: Cache desabilitado temporariamente para resolver tela branca
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
 
@@ -1182,6 +1183,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <ActivityBadge
                 leadId={leadId}
                 companyId={companyId}
+                refreshToken={activityListVersion}
                 onActivityClick={handleOpenActivity}
               />
             )}
@@ -1339,6 +1341,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <ActivityBanner
           leadId={leadId}
           companyId={companyId}
+          refreshToken={activityListVersion}
           onViewDetails={handleOpenActivity}
         />
       )}
@@ -1628,7 +1631,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onClose={() => setShowActivityModal(false)}
           onSave={() => {
             setShowActivityModal(false)
-            // Recarregar atividades se necessário
+            setSelectedActivity(null)
+            setActivityListVersion(version => version + 1)
           }}
         />
       )}
