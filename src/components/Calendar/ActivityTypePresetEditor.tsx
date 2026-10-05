@@ -31,6 +31,7 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
   const [reminder, setReminder] = useState(numberValue(type.preset_reminder_minutes))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
 
   const parseOptional = (value: string): number | null => {
     const trimmed = value.trim()
@@ -42,11 +43,13 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
     const offsetError = presetOffsetValidationError(parseOptional(hours), parseOptional(minutes))
     if (offsetError) {
       setError(offsetError)
+      setSavedMessage('')
       return
     }
 
     setSaving(true)
     setError('')
+    setSavedMessage('')
     const { error: rpcError } = await supabase.rpc('set_activity_type_preset', {
       p_company_id: companyId,
       p_type_id: type.id,
@@ -62,7 +65,12 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
       setError(rpcError.message || 'Não foi possível salvar a regra.')
       return
     }
+    setSavedMessage('Regra salva com sucesso.')
     await onSaved()
+  }
+
+  const clearSavedMessage = () => {
+    if (savedMessage) setSavedMessage('')
   }
 
   return (
@@ -70,13 +78,19 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
       <p className="text-xs text-slate-500">Campo vazio não entra no formulário. Zero é um valor.</p>
       <input
         value={title}
-        onChange={(event) => setTitle(event.target.value)}
+        onChange={(event) => {
+          setTitle(event.target.value)
+          clearSavedMessage()
+        }}
         placeholder="Título"
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
       />
       <textarea
         value={description}
-        onChange={(event) => setDescription(event.target.value)}
+        onChange={(event) => {
+          setDescription(event.target.value)
+          clearSavedMessage()
+        }}
         placeholder="Descrição"
         rows={2}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -84,14 +98,20 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
       <div className="grid grid-cols-2 gap-2">
         <input
           value={hours}
-          onChange={(event) => setHours(event.target.value)}
+          onChange={(event) => {
+            setHours(event.target.value)
+            clearSavedMessage()
+          }}
           inputMode="numeric"
           placeholder="Horas do prazo"
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
         />
         <input
           value={minutes}
-          onChange={(event) => setMinutes(event.target.value)}
+          onChange={(event) => {
+            setMinutes(event.target.value)
+            clearSavedMessage()
+          }}
           inputMode="numeric"
           placeholder="Minutos do prazo"
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -100,7 +120,10 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
       <div className="grid grid-cols-2 gap-2">
         <select
           value={duration}
-          onChange={(event) => setDuration(event.target.value)}
+          onChange={(event) => {
+            setDuration(event.target.value)
+            clearSavedMessage()
+          }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
         >
           <option value="">Duração: não preencher</option>
@@ -110,7 +133,10 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
         </select>
         <select
           value={reminder}
-          onChange={(event) => setReminder(event.target.value)}
+          onChange={(event) => {
+            setReminder(event.target.value)
+            clearSavedMessage()
+          }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
         >
           <option value="">Lembrete: não preencher</option>
@@ -120,6 +146,7 @@ export const ActivityTypePresetEditor: React.FC<ActivityTypePresetEditorProps> =
         </select>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
+      {savedMessage && <p className="text-xs text-green-700">{savedMessage}</p>}
       <button
         type="button"
         onClick={handleSave}
