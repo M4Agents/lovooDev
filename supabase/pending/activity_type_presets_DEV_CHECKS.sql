@@ -1,0 +1,41 @@
+-- Roteiro da migration já aplicada no banco: 20261005184138_activity_type_presets_and_utc_schedule.
+-- Este arquivo não reaplica o SQL e não altera o histórico.
+-- Os ensaios abaixo continuam comentados.
+-- Rode dentro de uma transação e termine com ROLLBACK se for só ensaio.
+
+-- 1. Privilégios: presets sem INSERT/UPDATE para anon, authenticated e service_role.
+-- SELECT has_column_privilege('authenticated', 'public.custom_activity_types', 'preset_title', 'UPDATE');
+-- SELECT has_column_privilege('service_role', 'public.custom_activity_types', 'preset_title', 'INSERT');
+-- Esperado: false.
+-- SELECT has_column_privilege('service_role', 'public.custom_activity_types', 'is_active', 'UPDATE');
+-- SELECT has_column_privilege('service_role', 'public.custom_activity_types', 'name', 'INSERT');
+-- Esperado: true.
+
+-- 2. EXECUTE só para authenticated.
+-- SELECT has_function_privilege('anon', 'public.set_activity_type_preset(uuid,uuid,text,text,integer,integer,integer,integer)', 'EXECUTE');
+-- SELECT has_function_privilege('service_role', 'public.set_activity_type_preset(uuid,uuid,text,text,integer,integer,integer,integer)', 'EXECUTE');
+-- Esperado: false.
+-- SELECT has_function_privilege('authenticated', 'public.set_activity_type_preset(uuid,uuid,text,text,integer,integer,integer,integer)', 'EXECUTE');
+-- Esperado: true.
+
+-- 3. Expressão do gatilho contém AT TIME ZONE 'UTC' e não ::timestamptz.
+-- SELECT pg_get_functiondef('public.sync_scheduled_datetime()'::regprocedure);
+
+-- 4. Ensaio de gravação, sempre com ROLLBACK:
+-- BEGIN;
+-- UPDATE de is_active pelo service_role deve continuar válido.
+-- UPDATE direto de preset_title deve falhar por falta de privilégio.
+-- INSERT nomeando preset_title deve falhar.
+-- Chamada da função sem auth.uid() deve falhar com UNAUTHORIZED.
+-- Chamada com company_id de outra empresa deve falhar com ACTIVITY_TYPE_NOT_FOUND ou FORBIDDEN.
+-- Valor de duração 0 deve falhar. Lembrete 0 deve gravar.
+-- Horas 8760 e minutos 0 devem gravar.
+-- Horas 8759 e minutos 59 devem gravar.
+-- Horas 8760 e minutos 1 devem falhar.
+-- Horas ou minutos negativos devem falhar.
+-- Minutos 60 devem falhar.
+-- Horas e minutos ambos NULL devem gravar e não significam prazo zero na aplicação.
+-- Texto vazio deve gravar NULL.
+-- INSERT de lead_activities com scheduled_date/scheduled_time UTC deve gerar
+-- scheduled_datetime igual a esse instante com offset +00, sem alterar linhas antigas.
+-- ROLLBACK;

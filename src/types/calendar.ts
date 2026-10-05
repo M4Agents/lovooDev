@@ -197,6 +197,8 @@ export interface UpdateSettingsForm {
 export interface ActivityFilter {
   start_date?: Date
   end_date?: Date
+  scheduled_date_from?: string
+  scheduled_date_to?: string
   status?: ActivityStatus | ActivityStatus[]
   activity_type?: ActivityType | ActivityType[]
   priority?: ActivityPriority | ActivityPriority[]
@@ -311,6 +313,12 @@ export interface CustomActivityType {
   is_active: boolean
   is_system: boolean
   is_hidden?: boolean
+  preset_title?: string | null
+  preset_description?: string | null
+  preset_offset_hours?: number | null
+  preset_offset_minutes?: number | null
+  preset_duration_minutes?: number | null
+  preset_reminder_minutes?: number | null
   created_by?: string
   created_at?: Date
   updated_at?: Date

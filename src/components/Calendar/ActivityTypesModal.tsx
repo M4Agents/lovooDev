@@ -5,6 +5,7 @@ import { useAccessControl } from '../../hooks/useAccessControl'
 import { supabase } from '../../lib/supabase'
 import type { CustomActivityType } from '../../types/calendar'
 import { AVAILABLE_ICONS } from '../../types/calendar'
+import { ActivityTypePresetEditor } from './ActivityTypePresetEditor'
 
 interface ActivityTypesModalProps {
   onClose: () => void
@@ -21,6 +22,7 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
   const [selectedIcon, setSelectedIcon] = useState('')
   const [showIconPicker, setShowIconPicker] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [openRuleId, setOpenRuleId] = useState<string | null>(null)
 
   const loadTypes = useCallback(async () => {
     if (!company?.id) return
@@ -108,10 +110,11 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
                 {activityTypes.map(type => (
                   <div
                     key={type.id}
-                    className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 ${
+                    className={`p-3 border rounded-lg ${
                       type.is_hidden ? 'border-gray-100 opacity-60' : 'border-gray-200'
                     }`}
                   >
+                    <div className="flex items-center gap-3">
                     <div className="w-8 h-8 flex items-center justify-center bg-blue-50 rounded">
                       <span className="text-blue-600 text-lg">{type.icon}</span>
                     </div>
@@ -121,6 +124,15 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
                     )}
                     {type.is_hidden && (
                       <span className="text-xs text-amber-700 px-2 py-1 bg-amber-50 rounded">Oculto</span>
+                    )}
+                    {canManageActivityTypes && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenRuleId(openRuleId === type.id ? null : type.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 rounded"
+                      >
+                        Regra
+                      </button>
                     )}
                     {canManageActivityTypes && (
                       <button
@@ -137,6 +149,17 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
                       <button onClick={() => handleDelete(type.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
                         <Trash2 className="w-4 h-4" />
                       </button>
+                    )}
+                    </div>
+                    {canManageActivityTypes && openRuleId === type.id && company?.id && (
+                      <ActivityTypePresetEditor
+                        companyId={company.id}
+                        type={type}
+                        onSaved={async () => {
+                          await loadTypes()
+                          onSave()
+                        }}
+                      />
                     )}
                   </div>
                 ))}

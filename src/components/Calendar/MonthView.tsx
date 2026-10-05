@@ -1,13 +1,19 @@
 import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
 import { useAuth } from '../../contexts/AuthContext'
+import {
+  activityCompanyDate,
+  activityCompanyTime,
+  companyWallFromInstant,
+  daysInCivilMonth,
+} from '../../utils/companyTime'
 
 interface MonthViewProps {
   currentDate: Date
   activities: LeadActivity[]
   availableCalendars: CalendarUser[]
   onEditActivity: (activity: LeadActivity) => void
-  onViewDay?: (day: number) => void
+  onViewDay?: (date: string) => void
   onCreateActivity?: (date: string) => void
 }
 
@@ -20,38 +26,12 @@ export const MonthView: React.FC<MonthViewProps> = ({
   onCreateActivity
 }) => {
   const { companyTimezone } = useAuth()
-  const year = currentDate.getFullYear()
-  const month = currentDate.getMonth()
+  const anchor = companyWallFromInstant(currentDate, companyTimezone)
+  const [year, month] = anchor.date.split('-').map(Number)
+  const today = companyWallFromInstant(new Date(), companyTimezone).date
 
-  // Função para parse de data sem conversão de timezone
-  const parseLocalDate = (dateString: string): Date => {
-    const [year, month, day] = dateString.split('-').map(Number)
-    return new Date(year, month - 1, day)
-  }
-
-  // Função para converter horário UTC para timezone da empresa
-  const convertUTCToLocal = (date: string, time: string): string => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      return utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-    } catch (error) {
-      console.error('Error converting time:', error)
-      return time.slice(0, 5)
-    }
-  }
-
-  // Primeiro dia do mês
-  const firstDay = new Date(year, month, 1)
-  const firstDayOfWeek = firstDay.getDay() // 0 = Domingo
-
-  // Último dia do mês
-  const lastDay = new Date(year, month + 1, 0)
-  const daysInMonth = lastDay.getDate()
+  const firstDayOfWeek = new Date(Date.UTC(year, month - 1, 1)).getUTCDay()
+  const daysInMonth = daysInCivilMonth(year, month)
 
   // Dias da semana
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -71,24 +51,21 @@ export const MonthView: React.FC<MonthViewProps> = ({
 
   // Agrupar atividades por dia
   const activitiesByDay = activities.reduce((acc, activity) => {
-    const activityDate = parseLocalDate(activity.scheduled_date)
-    const day = activityDate.getDate()
-    
-    if (activityDate.getMonth() === month && activityDate.getFullYear() === year) {
-      if (!acc[day]) acc[day] = []
-      acc[day].push(activity)
+    const activityDate = activityCompanyDate(activity, companyTimezone)
+    const [activityYear, activityMonth, activityDay] = activityDate.split('-').map(Number)
+
+    if (activityYear === year && activityMonth === month) {
+      if (!acc[activityDay]) acc[activityDay] = []
+      acc[activityDay].push(activity)
     }
     
     return acc
   }, {} as Record<number, LeadActivity[]>)
 
   const isToday = (day: number) => {
-    const today = new Date()
-    return (
-      today.getDate() === day &&
-      today.getMonth() === month &&
-      today.getFullYear() === year
-    )
+    const dayText = String(day).padStart(2, '0')
+    const monthText = String(month).padStart(2, '0')
+    return today === `${year}-${monthText}-${dayText}`
   }
 
   const getActivityColor = (activity: LeadActivity) => {
@@ -139,7 +116,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
               }`}
               onClick={() => {
                 if (day && onCreateActivity) {
-                  const selectedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                  const selectedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                   onCreateActivity(selectedDate)
                 }
               }}
@@ -186,7 +163,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                             )}
                           </div>
                           <p className="text-[10px] text-gray-600">
-                            {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)}
+                            {activityCompanyTime(activity, companyTimezone)}
                           </p>
                         </button>
                       )
@@ -196,7 +173,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          onViewDay?.(day)
+                          onViewDay?.(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
                         }}
                         className="w-full text-xs font-medium text-blue-600 text-center py-1 hover:bg-gray-50 transition-colors"
                       >

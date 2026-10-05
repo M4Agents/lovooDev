@@ -4,6 +4,14 @@ import { calendarApi } from '../services/calendarApi'
 import { supabase } from '../lib/supabase'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, Settings, Users, Tag } from 'lucide-react'
 import type { LeadActivity, CalendarUser, ActivityFilter, CalendarView } from '../types/calendar'
+import {
+  addCalendarDays,
+  companyMonthBounds,
+  companyWallFromInstant,
+  companyWallToUtc,
+  companyWeekDates,
+  shiftMonth,
+} from '../utils/companyTime'
 import { ActivityModal } from '../components/Calendar/ActivityModal'
 import { MonthView } from '../components/Calendar/MonthView'
 import { WeekView } from '../components/Calendar/WeekView'
@@ -15,7 +23,7 @@ import { ActivityTypesModal } from '../components/Calendar/ActivityTypesModal'
 import { GoogleCalendarSettings } from '../components/Calendar/GoogleCalendarSettings'
 
 export const Calendar: React.FC = () => {
-  const { user, company } = useAuth()
+  const { user, company, companyTimezone } = useAuth()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [currentView, setCurrentView] = useState<CalendarView>('month')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
@@ -98,12 +106,16 @@ export const Calendar: React.FC = () => {
       try {
         setLoading(true)
         
-        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+        const anchor = companyWallFromInstant(currentDate, companyTimezone).date
+        const bounds = currentView === 'week'
+          ? { start: companyWeekDates(anchor)[0], end: companyWeekDates(anchor)[6] }
+          : currentView === 'day'
+            ? { start: anchor, end: anchor }
+            : companyMonthBounds(anchor)
 
         const filter: ActivityFilter = {
-          start_date: startOfMonth,
-          end_date: endOfMonth
+          scheduled_date_from: addCalendarDays(bounds.start, -1),
+          scheduled_date_to: addCalendarDays(bounds.end, 1)
         }
 
         const data = await calendarApi.getActivities(company.id, filter)
@@ -132,7 +144,7 @@ export const Calendar: React.FC = () => {
     }
 
     fetchActivities()
-  }, [company?.id, currentDate, selectedUserId, selectedCalendars])
+  }, [company?.id, currentDate, currentView, companyTimezone, selectedUserId, selectedCalendars])
 
   // Buscar contagem de atividades de hoje do usuário selecionado
   useEffect(() => {
@@ -140,7 +152,7 @@ export const Calendar: React.FC = () => {
       if (!company?.id || !selectedUserId) return
 
       try {
-        const count = await calendarApi.getTodayActivitiesCount(company.id, selectedUserId)
+        const count = await calendarApi.getTodayActivitiesCount(company.id, selectedUserId, companyTimezone)
         setTodayCount(count)
       } catch (error) {
         console.error('Error fetching today count:', error)
@@ -148,39 +160,33 @@ export const Calendar: React.FC = () => {
     }
 
     fetchTodayCount()
-  }, [company?.id, selectedUserId])
+  }, [company?.id, selectedUserId, companyTimezone])
+
+  const moveAnchor = (nextDate: string) => {
+    const instant = companyWallToUtc(nextDate, '12:00', companyTimezone)
+    if (instant.ok) setCurrentDate(instant.instant)
+  }
 
   const handlePrevious = () => {
-    const newDate = new Date(currentDate)
-    if (currentView === 'month') {
-      newDate.setMonth(newDate.getMonth() - 1)
-    } else if (currentView === 'week') {
-      newDate.setDate(newDate.getDate() - 7)
-    } else {
-      newDate.setDate(newDate.getDate() - 1)
-    }
-    setCurrentDate(newDate)
+    const anchor = companyWallFromInstant(currentDate, companyTimezone).date
+    if (currentView === 'month') moveAnchor(shiftMonth(anchor, -1))
+    else if (currentView === 'week') moveAnchor(addCalendarDays(anchor, -7))
+    else moveAnchor(addCalendarDays(anchor, -1))
   }
 
   const handleNext = () => {
-    const newDate = new Date(currentDate)
-    if (currentView === 'month') {
-      newDate.setMonth(newDate.getMonth() + 1)
-    } else if (currentView === 'week') {
-      newDate.setDate(newDate.getDate() + 7)
-    } else {
-      newDate.setDate(newDate.getDate() + 1)
-    }
-    setCurrentDate(newDate)
+    const anchor = companyWallFromInstant(currentDate, companyTimezone).date
+    if (currentView === 'month') moveAnchor(shiftMonth(anchor, 1))
+    else if (currentView === 'week') moveAnchor(addCalendarDays(anchor, 7))
+    else moveAnchor(addCalendarDays(anchor, 1))
   }
 
   const handleToday = () => {
     setCurrentDate(new Date())
   }
 
-  const handleViewDay = (day: number) => {
-    const selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-    setCurrentDate(selectedDate)
+  const handleViewDay = (date: string) => {
+    moveAnchor(date)
     setCurrentView('day')
   }
 
@@ -218,18 +224,23 @@ export const Calendar: React.FC = () => {
   }
 
   const getNavigationLabel = () => {
-    if (currentView === 'month') {
-      return currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-    } else if (currentView === 'week') {
-      const startOfWeek = new Date(currentDate)
-      const day = startOfWeek.getDay()
-      startOfWeek.setDate(startOfWeek.getDate() - day)
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(endOfWeek.getDate() + 6)
-      return `${startOfWeek.getDate()} - ${endOfWeek.getDate()} de ${startOfWeek.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
-    } else {
-      return currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    const anchor = companyWallFromInstant(currentDate, companyTimezone).date
+    const formatInCompany = (date: string, options: Intl.DateTimeFormatOptions) => {
+      const noon = companyWallToUtc(date, '12:00', companyTimezone)
+      if (!noon.ok) return date
+      return noon.instant.toLocaleDateString('pt-BR', { ...options, timeZone: companyTimezone })
     }
+
+    if (currentView === 'month') {
+      return formatInCompany(anchor, { month: 'long', year: 'numeric' })
+    }
+    if (currentView === 'week') {
+      const days = companyWeekDates(anchor)
+      const startLabel = formatInCompany(days[0], { day: 'numeric' })
+      const endLabel = formatInCompany(days[6], { day: 'numeric', month: 'long', year: 'numeric' })
+      return `${startLabel} - ${endLabel}`
+    }
+    return formatInCompany(anchor, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   }
 
   if (!user || !company) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { calendarApi } from '../../services/calendarApi'
@@ -6,6 +6,8 @@ import { supabase } from '../../lib/supabase'
 import type { LeadActivity, CreateActivityForm } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES, DURATION_OPTIONS, REMINDER_OPTIONS } from '../../types/calendar'
 import type { CustomActivityType } from '../../types/calendar'
+import { applyActivityTypePreset, typeHasPreset } from '../../utils/applyActivityTypePreset'
+import { companyWallFromInstant, companyWallToUtc, activityInstant } from '../../utils/companyTime'
 import ChatModalSimple from '../SalesFunnel/ChatModalSimple'
 
 interface ActivityModalProps {
@@ -56,6 +58,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [showChatModal, setShowChatModal] = useState(false)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [completionNotes, setCompletionNotes] = useState('')
+  const fieldsTouchedRef = useRef(false)
+  const userChangedTypeRef = useRef(false)
+  const initialPresetAppliedRef = useRef(false)
+  const bootstrappedNewRef = useRef(false)
+  const loadedActivityIdRef = useRef<string | null>(null)
+  const originalScheduleRef = useRef<{ date: string; time: string } | null>(null)
+  const syncTouchedRef = useRef(false)
+  const markManual = () => {
+    fieldsTouchedRef.current = true
+  }
   
   const [formData, setFormData] = useState<CreateActivityForm>({
     title: '',
@@ -96,24 +108,32 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   // Carregar tipos de atividade dinâmicos (custom + sistema)
   useEffect(() => {
     if (!company?.id) return
+    let cancelled = false
     const params = new URLSearchParams({ company_id: company.id })
     if (activity?.activity_type) params.set('current_id', activity.activity_type)
     fetch(`/api/activity-types?${params.toString()}`)
       .then(res => res.json())
       .then((data: CustomActivityType[]) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setActivityTypes(data)
-          // Para nova atividade sem tipo definido, usar o primeiro tipo visível
-          if (!activity) {
-            const visible = data.find(type => !type.is_hidden) ?? data[0]
-            setFormData(prev => ({ ...prev, activity_type: visible.id }))
+        if (cancelled || !Array.isArray(data) || data.length === 0) return
+        setActivityTypes(data)
+        if (activity || initialPresetAppliedRef.current) return
+        initialPresetAppliedRef.current = true
+        const visible = data.find(type => !type.is_hidden) ?? data[0]
+        if (fieldsTouchedRef.current || userChangedTypeRef.current) {
+          if (!userChangedTypeRef.current) {
+            setFormData(prev => ({ ...prev, activity_type: visible.id as CreateActivityForm['activity_type'] }))
           }
+          return
         }
+        setFormData(prev => applyActivityTypePreset(prev, visible, companyTimezone))
       })
       .catch(() => {
         // Silencioso: fallback para lista estática no render
       })
-  }, [company?.id, activity?.activity_type]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true
+    }
+  }, [company?.id, activity?.activity_type, activity, companyTimezone])
 
   // Buscar usuários da empresa
   useEffect(() => {
@@ -136,84 +156,72 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     fetchCompanyUsers()
   }, [company?.id])
 
-  // Carregar dados da atividade se estiver editando
+  // Carregar a atividade uma vez. Recarga de usuários não recoloca data nem hora.
   useEffect(() => {
     if (activity) {
-      // Converter UTC para timezone local do usuário
-      const utcDateTime = new Date(`${activity.scheduled_date}T${activity.scheduled_time}Z`)
-      const localDate = utcDateTime.toLocaleDateString('en-CA') // YYYY-MM-DD
-      const localTime = utcDateTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) // HH:mm
-      
-      setFormData({
-        lead_id: activity.lead_id,
-        title: activity.title,
-        description: activity.description || '',
-        activity_type: activity.activity_type,
-        scheduled_date: localDate,
-        scheduled_time: localTime,
-        duration_minutes: activity.duration_minutes,
-        assigned_to: activity.assigned_to,
-        reminder_minutes: activity.reminder_minutes,
-        priority: activity.priority,
-        visibility: activity.visibility
-      })
-      
-      if (activity.lead) {
-        setSelectedLead({
-          id: activity.lead.id,
-          name: activity.lead.name,
-          phone: activity.lead.phone,
-          email: activity.lead.email
+      if (loadedActivityIdRef.current !== activity.id) {
+        loadedActivityIdRef.current = activity.id
+        fieldsTouchedRef.current = false
+        const wall = companyWallFromInstant(activityInstant(activity), companyTimezone)
+        originalScheduleRef.current = { date: wall.date, time: wall.time }
+        setFormData({
+          lead_id: activity.lead_id,
+          title: activity.title,
+          description: activity.description || '',
+          activity_type: activity.activity_type,
+          scheduled_date: wall.date,
+          scheduled_time: wall.time,
+          duration_minutes: activity.duration_minutes,
+          assigned_to: activity.assigned_to,
+          reminder_minutes: activity.reminder_minutes,
+          priority: activity.priority,
+          visibility: activity.visibility
         })
+        if (activity.lead) {
+          setSelectedLead({
+            id: activity.lead.id,
+            name: activity.lead.name,
+            phone: activity.lead.phone,
+            email: activity.lead.email
+          })
+        }
       }
-      
-      // Selecionar usuário responsável se existir
+
       if (activity.assigned_to && companyUsers.length > 0) {
         const responsible = companyUsers.find(u => u.user_id === activity.assigned_to)
-        if (responsible) {
-          setSelectedResponsible(responsible)
-        }
+        if (responsible) setSelectedResponsible(responsible)
       }
-    } else {
-      // Definir data/hora mínima como agora ou usar data pré-selecionada
-      const now = new Date()
-      const minDate = preSelectedDate || now.toISOString().split('T')[0]
-      
-      // DATETIME.2C: Usar preSelectedTime se fornecido, caso contrário hora atual
-      let minTime: string
-      if (preSelectedTime) {
-        minTime = preSelectedTime
-      } else {
-        // Obter hora atual no timezone da empresa
-        minTime = now.toLocaleTimeString('pt-BR', { 
-          timeZone: companyTimezone,
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false 
-        })
-      }
-      
+      return
+    }
+
+    if (!bootstrappedNewRef.current) {
+      bootstrappedNewRef.current = true
+      const nowWall = companyWallFromInstant(new Date(), companyTimezone)
       setFormData(prev => ({
         ...prev,
-        scheduled_date: minDate,
-        scheduled_time: minTime,
-        sync_to_google: hasGoogleConnection // Marcar por padrão se houver conexão
+        scheduled_date: preSelectedDate || nowWall.date,
+        scheduled_time: preSelectedTime || nowWall.time,
+        sync_to_google: hasGoogleConnection
       }))
-      
-      // Pré-selecionar lead se fornecido (integração com Chat)
-      if (preSelectedLead && !activity) {
-        setSelectedLead(preSelectedLead)
-      }
-      
-      // Selecionar usuário logado como responsável padrão
-      if (user?.id && companyUsers.length > 0) {
-        const currentUser = companyUsers.find(u => u.user_id === user.id)
-        if (currentUser) {
-          setSelectedResponsible(currentUser)
-        }
-      }
+    } else if (!fieldsTouchedRef.current && !initialPresetAppliedRef.current && !userChangedTypeRef.current) {
+      const nowWall = companyWallFromInstant(new Date(), companyTimezone)
+      setFormData(prev => ({
+        ...prev,
+        scheduled_date: preSelectedDate || nowWall.date,
+        scheduled_time: preSelectedTime || nowWall.time
+      }))
     }
-  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, preSelectedTime, hasGoogleConnection, companyTimezone])
+
+    if (!activity && hasGoogleConnection && !syncTouchedRef.current) {
+      setFormData(prev => (prev.sync_to_google ? prev : { ...prev, sync_to_google: true }))
+    }
+
+    if (preSelectedLead) setSelectedLead(preSelectedLead)
+    if (user?.id && companyUsers.length > 0 && !selectedResponsible) {
+      const currentUser = companyUsers.find(u => u.user_id === user.id)
+      if (currentUser) setSelectedResponsible(currentUser)
+    }
+  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, preSelectedTime, hasGoogleConnection, companyTimezone, selectedResponsible])
 
   // Buscar leads
   useEffect(() => {
@@ -249,20 +257,35 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       return
     }
 
-    // Validar data/hora não pode ser no passado (em horário local)
-    const localDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
-    if (localDateTime < new Date()) {
-      alert('A data e hora não podem ser no passado')
-      return
+    const scheduleUnchanged = Boolean(
+      activity
+      && originalScheduleRef.current
+      && formData.scheduled_date === originalScheduleRef.current.date
+      && formData.scheduled_time.slice(0, 5) === originalScheduleRef.current.time
+    )
+
+    let utcDate = formData.scheduled_date
+    let utcTime = formData.scheduled_time
+    if (!scheduleUnchanged) {
+      const converted = companyWallToUtc(formData.scheduled_date, formData.scheduled_time, companyTimezone)
+      if (!converted.ok) {
+        alert(converted.reason === 'nonexistent'
+          ? 'Esse horário não existe no fuso da empresa.'
+          : 'Data ou hora inválida')
+        return
+      }
+      if (converted.instant.getTime() < Date.now()) {
+        alert('A data e hora não podem ser no passado')
+        return
+      }
+      utcDate = converted.utcDate
+      utcTime = converted.utcTime
     }
 
     try {
       setLoading(true)
 
-      // Converter horário local para UTC antes de salvar
-      const localDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
-      const utcDate = localDateTime.toISOString().split('T')[0] // YYYY-MM-DD em UTC
-      const utcTime = localDateTime.toISOString().split('T')[1].substring(0, 8) // HH:mm:ss em UTC
+      const scheduleChanged = Boolean(activity) && !scheduleUnchanged
 
       const dataToSave = {
         ...formData,
@@ -273,13 +296,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       }
 
       if (activity) {
-        // ── Detectar mudança real de data/hora (comparação UTC vs UTC) ──────
-        // activity.scheduled_date e activity.scheduled_time estão em UTC (como armazenados)
-        // utcDate e utcTime são os novos valores convertidos para UTC
-        const scheduleChanged =
-          utcDate !== activity.scheduled_date ||
-          utcTime.substring(0, 5) !== activity.scheduled_time.substring(0, 5)
-
+        // scheduled_date e scheduled_time saem do PATCH.
+        // /reschedule só entra quando a data ou a hora exibidas mudaram.
         // ── Separar campos de agenda dos demais ──────────────────────────────
         // scheduled_date e scheduled_time foram removidos do PATCH whitelist:
         // qualquer mudança de agenda passa obrigatoriamente pelo /reschedule.
@@ -440,7 +458,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             </label>
             <select
               value={formData.activity_type}
-              onChange={(e) => setFormData({ ...formData, activity_type: e.target.value as any })}
+              onChange={(e) => {
+                const nextId = e.target.value
+                userChangedTypeRef.current = true
+                const selected = activityTypes.find(type => type.id === nextId)
+                setFormData(prev => applyActivityTypePreset(
+                  { ...prev, activity_type: nextId as CreateActivityForm['activity_type'] },
+                  selected,
+                  companyTimezone
+                ))
+              }}
               className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               required
             >
@@ -469,6 +496,19 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                 ))
               )}
             </select>
+            {activity && (
+              <button
+                type="button"
+                disabled={!typeHasPreset(activityTypes.find(type => type.id === formData.activity_type))}
+                onClick={() => {
+                  const selected = activityTypes.find(type => type.id === formData.activity_type)
+                  setFormData(prev => applyActivityTypePreset(prev, selected, companyTimezone))
+                }}
+                className="mt-2 text-xs font-medium text-indigo-700 hover:text-indigo-900 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
+                Aplicar regra do tipo
+              </button>
+            )}
           </div>
 
           {/* Lead */}
@@ -600,7 +640,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             <input
               type="text"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => { markManual(); setFormData({ ...formData, title: e.target.value }) }}
               placeholder="Ex: Follow-up sobre proposta"
               className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               required
@@ -615,7 +655,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             </label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => { markManual(); setFormData({ ...formData, description: e.target.value }) }}
               placeholder="Detalhes da atividade..."
               rows={2}
               className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors resize-none"
@@ -632,8 +672,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               <input
                 type="date"
                 value={formData.scheduled_date}
-                onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
-                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => { markManual(); setFormData({ ...formData, scheduled_date: e.target.value }) }}
+                min={companyWallFromInstant(new Date(), companyTimezone).date}
                 className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 required
               />
@@ -646,7 +686,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               <input
                 type="time"
                 value={formData.scheduled_time}
-                onChange={(e) => setFormData({ ...formData, scheduled_time: e.target.value })}
+                onChange={(e) => { markManual(); setFormData({ ...formData, scheduled_time: e.target.value }) }}
                 className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
                 required
               />
@@ -661,7 +701,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             </label>
             <select
               value={formData.duration_minutes}
-              onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
+              onChange={(e) => { markManual(); setFormData({ ...formData, duration_minutes: Number(e.target.value) }) }}
               className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
             >
               {DURATION_OPTIONS.map(opt => (
@@ -679,7 +719,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               </label>
               <select
                 value={formData.reminder_minutes}
-                onChange={(e) => setFormData({ ...formData, reminder_minutes: Number(e.target.value) })}
+                onChange={(e) => { markManual(); setFormData({ ...formData, reminder_minutes: Number(e.target.value) }) }}
                 className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
               >
                 {REMINDER_OPTIONS.map(opt => (
@@ -734,7 +774,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               <input
                 type="checkbox"
                 checked={formData.sync_to_google || false}
-                onChange={(e) => setFormData({ ...formData, sync_to_google: e.target.checked })}
+                onChange={(e) => { syncTouchedRef.current = true; setFormData({ ...formData, sync_to_google: e.target.checked }) }}
                 disabled={!hasGoogleConnection}
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               />

@@ -1,7 +1,13 @@
 import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
-import { ACTIVITY_TYPES, PRIORITIES } from '../../types/calendar'
+import { ACTIVITY_TYPES } from '../../types/calendar'
 import { useAuth } from '../../contexts/AuthContext'
+import {
+  activityCompanyDate,
+  activityCompanyTime,
+  companyWallFromInstant,
+  companyWeekDates,
+} from '../../utils/companyTime'
 
 interface WeekViewProps {
   currentDate: Date
@@ -17,95 +23,19 @@ export const WeekView: React.FC<WeekViewProps> = ({
   onEditActivity
 }) => {
   const { companyTimezone } = useAuth()
-  
-  // Função para parse de data sem conversão de timezone
-  const parseLocalDate = (dateString: string): Date => {
-    const [year, month, day] = dateString.split('-').map(Number)
-    return new Date(year, month - 1, day)
-  }
-
-  // Função para converter horário UTC para timezone da empresa
-  const convertUTCToLocal = (date: string, time: string): string => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      return utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-    } catch (error) {
-      console.error('Error converting time:', error)
-      return time.slice(0, 5)
-    }
-  }
-
-  // Função para obter hora local para posicionamento
-  const getLocalHour = (date: string, time: string): number => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-      const [hours] = localTimeStr.split(':').map(Number)
-      return hours
-    } catch (error) {
-      const [hours] = time.split(':').map(Number)
-      return hours
-    }
-  }
-
-  // Função para obter minutos locais para posicionamento
-  const getLocalMinutes = (date: string, time: string): number => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-      const [, minutes] = localTimeStr.split(':').map(Number)
-      return minutes
-    } catch (error) {
-      const [, minutes] = time.split(':').map(Number)
-      return minutes
-    }
-  }
-
-  // Calcular início da semana (domingo)
-  const startOfWeek = new Date(currentDate)
-  const day = startOfWeek.getDay()
-  startOfWeek.setDate(startOfWeek.getDate() - day)
-  startOfWeek.setHours(0, 0, 0, 0)
-
-  // Gerar array de 7 dias da semana
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(startOfWeek)
-    date.setDate(date.getDate() + i)
-    return date
-  })
+  const anchor = companyWallFromInstant(currentDate, companyTimezone).date
+  const today = companyWallFromInstant(new Date(), companyTimezone).date
+  const weekDays = companyWeekDates(anchor)
 
   // Horários (8h às 20h)
   const hours = Array.from({ length: 13 }, (_, i) => i + 8)
 
   // Agrupar atividades por dia
   const activitiesByDay = weekDays.map(day => {
-    const dayStr = day.toISOString().split('T')[0]
-    return activities.filter(activity => activity.scheduled_date === dayStr)
+    return activities.filter(activity => activityCompanyDate(activity, companyTimezone) === day)
   })
 
-  const isToday = (date: Date) => {
-    const today = new Date()
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    )
-  }
+  const isToday = (date: string) => date === today
 
   const getActivityColor = (activity: LeadActivity) => {
     const activityUserId = activity.assigned_to || activity.owner_user_id
@@ -119,10 +49,9 @@ export const WeekView: React.FC<WeekViewProps> = ({
   }
 
   const getActivityPosition = (activity: LeadActivity) => {
-    const hours = getLocalHour(activity.scheduled_date, activity.scheduled_time)
-    const minutes = getLocalMinutes(activity.scheduled_date, activity.scheduled_time)
+    const [hours, minutes] = activityCompanyTime(activity, companyTimezone).split(':').map(Number)
     const totalMinutes = (hours - 8) * 60 + minutes
-    const top = (totalMinutes / 60) * 60 // 60px por hora
+    const top = (totalMinutes / 60) * 60
     const height = (activity.duration_minutes / 60) * 60
     return { top, height }
   }
@@ -138,7 +67,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
         </div>
         {weekDays.map((day, index) => (
           <div
-            key={day.toISOString()}
+            key={day}
             className={`p-3 text-center border-l border-gray-200/30 ${
               isToday(day) ? 'bg-blue-100/50' : ''
             }`}
@@ -153,7 +82,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                 ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-blue-500/40'
                 : 'text-gray-900'
             }`}>
-              {day.getDate()}
+              {Number(day.slice(8, 10))}
             </div>
           </div>
         ))}
@@ -177,7 +106,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
           {/* Colunas de dias */}
           {weekDays.map((day, dayIndex) => (
             <div
-              key={day.toISOString()}
+              key={day}
               className={`relative border-l border-gray-200/30 ${
                 isToday(day) ? 'bg-blue-50/20' : ''
               }`}
@@ -220,7 +149,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
                               {activity.title}
                             </p>
                             <p className="text-gray-600 truncate text-[10px] mt-0.5">
-                              {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)}
+                              {activityCompanyTime(activity, companyTimezone)}
                             </p>
                           </div>
                         </div>

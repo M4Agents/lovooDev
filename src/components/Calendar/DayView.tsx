@@ -2,6 +2,7 @@ import React from 'react'
 import type { LeadActivity, CalendarUser } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES } from '../../types/calendar'
 import { useAuth } from '../../contexts/AuthContext'
+import { activityCompanyDate, activityCompanyTime, companyWallFromInstant, companyWallToUtc } from '../../utils/companyTime'
 
 interface DayViewProps {
   currentDate: Date
@@ -17,68 +18,10 @@ export const DayView: React.FC<DayViewProps> = ({
   onEditActivity
 }) => {
   const { companyTimezone } = useAuth()
-  
-  // Função para parse de data sem conversão de timezone
-  const parseLocalDate = (dateString: string): Date => {
-    const [year, month, day] = dateString.split('-').map(Number)
-    return new Date(year, month - 1, day)
-  }
-
-  // Função para converter horário UTC para timezone da empresa
-  const convertUTCToLocal = (date: string, time: string): string => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      return utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-    } catch (error) {
-      console.error('Error converting time:', error)
-      return time.slice(0, 5)
-    }
-  }
-
-  // Função para obter hora local para posicionamento
-  const getLocalHour = (date: string, time: string): number => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-      const [hours] = localTimeStr.split(':').map(Number)
-      return hours
-    } catch (error) {
-      const [hours] = time.split(':').map(Number)
-      return hours
-    }
-  }
-
-  // Função para obter minutos locais para posicionamento
-  const getLocalMinutes = (date: string, time: string): number => {
-    try {
-      const utcDateTime = new Date(`${date}T${time}Z`)
-      const localTimeStr = utcDateTime.toLocaleTimeString('pt-BR', {
-        timeZone: companyTimezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-      const [, minutes] = localTimeStr.split(':').map(Number)
-      return minutes
-    } catch (error) {
-      const [, minutes] = time.split(':').map(Number)
-      return minutes
-    }
-  }
+  const anchor = companyWallFromInstant(currentDate, companyTimezone).date
 
   // Filtrar atividades do dia
-  const dayStr = currentDate.toISOString().split('T')[0]
-  const dayActivities = activities.filter(activity => activity.scheduled_date === dayStr)
+  const dayActivities = activities.filter(activity => activityCompanyDate(activity, companyTimezone) === anchor)
 
   // Horários (8h às 20h, intervalos de 30min)
   const timeSlots = Array.from({ length: 25 }, (_, i) => {
@@ -104,18 +47,20 @@ export const DayView: React.FC<DayViewProps> = ({
   }
 
   const getActivityPosition = (activity: LeadActivity) => {
-    const hours = getLocalHour(activity.scheduled_date, activity.scheduled_time)
-    const minutes = getLocalMinutes(activity.scheduled_date, activity.scheduled_time)
+    const [hours, minutes] = activityCompanyTime(activity, companyTimezone).split(':').map(Number)
     const totalMinutes = (hours - 8) * 60 + minutes
     const top = (totalMinutes / 30) * 50 // 50px por slot de 30min
     const height = (activity.duration_minutes / 30) * 50
     return { top, height }
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('pt-BR', { 
-      weekday: 'long', 
-      day: 'numeric', 
+  const formatDate = (date: string) => {
+    const noon = companyWallToUtc(date, '12:00', companyTimezone)
+    if (!noon.ok) return date
+    return noon.instant.toLocaleDateString('pt-BR', {
+      timeZone: companyTimezone,
+      weekday: 'long',
+      day: 'numeric',
       month: 'long',
       year: 'numeric'
     })
@@ -126,7 +71,7 @@ export const DayView: React.FC<DayViewProps> = ({
       {/* Header com data */}
       <div className="p-4 border-b border-gray-200/50 bg-gradient-to-r from-slate-50 via-blue-50/30 to-slate-50">
         <h3 className="text-lg font-bold text-gray-900 capitalize text-center">
-          {formatDate(currentDate)}
+          {formatDate(anchor)}
         </h3>
         {dayActivities.length > 0 && (
           <p className="text-sm text-center text-gray-600 mt-1">
@@ -195,7 +140,7 @@ export const DayView: React.FC<DayViewProps> = ({
                           {activity.title}
                         </p>
                         <p className="text-gray-600 text-xs mt-1">
-                          {convertUTCToLocal(activity.scheduled_date, activity.scheduled_time)} - {activity.duration_minutes} min
+                          {activityCompanyTime(activity, companyTimezone)} - {activity.duration_minutes} min
                         </p>
                         {activity.lead && (
                           <p className="text-gray-500 text-xs mt-1 truncate">

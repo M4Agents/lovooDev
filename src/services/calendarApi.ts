@@ -18,6 +18,7 @@
 // =====================================================
 
 import { supabase } from '../lib/supabase'
+import { activityCompanyDate, addCalendarDays, companyWallFromInstant, startOfCompanyDayUtc } from '../utils/companyTime'
 import type {
   LeadActivity,
   CalendarPermission,
@@ -173,10 +174,14 @@ export class CalendarApi {
         .eq('company_id', companyId)
 
       // Filtros de data
-      if (filter?.start_date) {
+      if (filter?.scheduled_date_from) {
+        query = query.gte('scheduled_date', filter.scheduled_date_from)
+      } else if (filter?.start_date) {
         query = query.gte('scheduled_date', filter.start_date.toISOString().split('T')[0])
       }
-      if (filter?.end_date) {
+      if (filter?.scheduled_date_to) {
+        query = query.lte('scheduled_date', filter.scheduled_date_to)
+      } else if (filter?.end_date) {
         query = query.lte('scheduled_date', filter.end_date.toISOString().split('T')[0])
       }
 
@@ -812,20 +817,16 @@ export class CalendarApi {
    */
   static async getTodayActivities(
     companyId: string,
-    userId: string
+    userId: string,
+    timeZone: string
   ): Promise<LeadActivity[]> {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
+    const today = companyWallFromInstant(new Date(), timeZone).date
     return this.getActivities(companyId, {
-      start_date: today,
-      end_date: tomorrow,
+      scheduled_date_from: addCalendarDays(today, -1),
+      scheduled_date_to: addCalendarDays(today, 1),
       owner_user_id: userId,
       status: 'pending'
-    })
+    }).then(activities => activities.filter(activity => activityCompanyDate(activity, timeZone) === today))
   }
 
   /**
@@ -833,18 +834,22 @@ export class CalendarApi {
    */
   static async getTodayActivitiesCount(
     companyId: string,
-    userId: string
+    userId: string,
+    timeZone: string
   ): Promise<number> {
     try {
-      const today = new Date()
-      const todayStr = today.toISOString().split('T')[0]
+      const today = companyWallFromInstant(new Date(), timeZone).date
+      const start = startOfCompanyDayUtc(today, timeZone)
+      const end = startOfCompanyDayUtc(addCalendarDays(today, 1), timeZone)
+      if (!start || !end) return 0
 
       const { count, error } = await supabase
         .from('lead_activities')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', companyId)
         .eq('owner_user_id', userId)
-        .eq('scheduled_date', todayStr)
+        .gte('scheduled_datetime', start.toISOString())
+        .lt('scheduled_datetime', end.toISOString())
         .eq('status', 'pending')
 
       if (error) throw error
