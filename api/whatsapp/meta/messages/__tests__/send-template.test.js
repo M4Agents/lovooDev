@@ -1782,6 +1782,7 @@ describe('PERS-02 chat com campos de template corretos', () => {
     expect(insertArg.company_id).toBe(FAKE_COMPANY_ID);
     expect(insertArg.conversation_id).toBe(FAKE_CONVERSATION_ID);
     expect(insertArg.meta_message_id).toBe(FAKE_WAMID);
+    expect(insertArg.template_buttons).toBeNull();
   });
 });
 
@@ -2490,6 +2491,7 @@ describe('PMED-01 IMAGE → meta_messages.media_asset_id = assetId', () => {
     const insertArg = insertSpy.mock.calls[0][0];
     expect(insertArg.media_asset_id).toBe(FAKE_ASSET_ID);
     expect(insertArg.message_type).toBe('template');
+    expect(insertArg.template_buttons).toBeNull();
   });
 });
 
@@ -2739,6 +2741,7 @@ describe('TEXT-04 media_asset_id persistido como null para template textual', ()
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(insertSpy.mock.calls[0][0].media_asset_id).toBeNull();
+    expect(insertSpy.mock.calls[0][0].template_buttons).toBeNull();
   });
 });
 
@@ -3037,5 +3040,84 @@ describe('4C3B-SEND | QR regression continua 1 Graph send', () => {
     expect(res._status).toBe(200);
     expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
     expect(mockSendTemplateMessage.mock.calls[0][3].components).toEqual(FAKE_COMPONENTS_QR);
+  });
+});
+
+// =============================================================================
+// MVP4C.4B — snapshot histórico de botões no insert de chat
+// =============================================================================
+
+describe('4C4B-SEND | QR persist snapshot sanitizado', () => {
+  it('Graph 1x; chat insert tem v1 type/index/text; sem payload', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
+    expect(insertArg).not.toHaveProperty('parameter_values');
+  });
+});
+
+describe('4C4B-SEND | URL persist href; Graph continua suffix-only', () => {
+  it('Graph 1x suffix; chat insert href final; sem suffix isolado', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const pv = { body: {}, url: { '0': '12345' } };
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: pv } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components[0].parameters[0].text).toBe('12345');
+    expect(JSON.stringify(tpl.components)).not.toContain('https://example.com/test/12345');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL',
+        index: 0,
+        text: 'Abrir teste',
+        href: 'https://example.com/test/12345',
+      }],
+    });
+    expect(insertArg.template_buttons).not.toHaveProperty('suffix');
+    expect(JSON.stringify(insertArg)).not.toContain('"parameter_values"');
+  });
+});
+
+describe('4C4B-SEND | Graph fail → zero chat insert', () => {
+  it('send_template_failed → nenhum INSERT', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+    mockSendTemplateMessage.mockRejectedValue(
+      Object.assign(new Error('fail'), { code: 'send_template_failed' }),
+    );
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(502);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
   });
 });

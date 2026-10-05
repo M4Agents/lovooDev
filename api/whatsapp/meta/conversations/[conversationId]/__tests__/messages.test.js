@@ -102,10 +102,10 @@ const FAKE_MSG_OLDEST = {
   created_at:         '2026-09-21T13:00:00.000Z',
 };
 
-// Shape esperado no DTO final — media:null para mensagens sem media_asset_id.
-const FAKE_MSG_NEWEST_DTO = { ...FAKE_MSG_NEWEST, media: null };
-const FAKE_MSG_MIDDLE_DTO = { ...FAKE_MSG_MIDDLE, media: null };
-const FAKE_MSG_OLDEST_DTO = { ...FAKE_MSG_OLDEST, media: null };
+// Shape esperado no DTO final — media:null e template_buttons:null sem snapshot.
+const FAKE_MSG_NEWEST_DTO = { ...FAKE_MSG_NEWEST, media: null, template_buttons: null };
+const FAKE_MSG_MIDDLE_DTO = { ...FAKE_MSG_MIDDLE, media: null, template_buttons: null };
+const FAKE_MSG_OLDEST_DTO = { ...FAKE_MSG_OLDEST, media: null, template_buttons: null };
 const FAKE_MSGS_DESC_DTO  = [FAKE_MSG_NEWEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_OLDEST_DTO];
 const FAKE_MSGS_ASC_DTO   = [FAKE_MSG_OLDEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_NEWEST_DTO];
 
@@ -692,6 +692,7 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
     const selectArg = msgChain.select.mock.calls[0][0];
     expect(selectArg).toContain('template_name');
     expect(selectArg).toContain('template_language');
+    expect(selectArg).toContain('template_buttons');
   });
 
   it('MSG-22b: mensagem de texto — template_name e template_language preservados como null', async () => {
@@ -728,6 +729,7 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
     expect(msg.body).toBe('Olá, João! Seu código é 12345.');
     expect(msg.template_name).toBe('hello_world');
     expect(msg.template_language).toBe('pt_BR');
+    expect(msg.template_buttons).toBeNull();
   });
 
   it('MSG-22d: template message NÃO expõe company_id mesmo com campos de template presentes', async () => {
@@ -1125,5 +1127,102 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     // Asset query tem boundary correta
     const assetEqCalls = assetChain.eq.mock.calls;
     expect(assetEqCalls.find(c => c[0] === 'company_id' && c[1] === FAKE_COMPANY_ID)).toBeDefined();
+  });
+});
+
+// =============================================================================
+// MVP4C.4B — template_buttons sanitizado no GET
+// =============================================================================
+
+describe('GET messages — template_buttons snapshot (MVP4C.4B)', () => {
+  it('MSG-23a: SELECT inclui template_buttons e nunca company_id/wamid', async () => {
+    const msgChain = makeMsgChain([FAKE_MSG_OLDEST]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(msgChain);
+
+    await handler(makeReq(), makeRes());
+    const selectArg = msgChain.select.mock.calls[0][0];
+    expect(selectArg).toContain('template_buttons');
+    expect(selectArg).not.toContain('company_id');
+    expect(selectArg).not.toContain('meta_message_id');
+  });
+
+  it('MSG-23b: DB NULL/ausente → DTO null', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([{ ...FAKE_MSG_OLDEST, template_buttons: null }]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.messages[0].template_buttons).toBeNull();
+  });
+
+  it('MSG-23c: QR v1 → array sanitizado sem payload/v', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([{
+        ...FAKE_MSG_OLDEST,
+        message_type: 'template',
+        template_buttons: {
+          v: 1,
+          buttons: [{
+            type: 'QUICK_REPLY', index: 0, text: 'Sim',
+            extra: 'drop-me',
+          }],
+        },
+      }]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.messages[0].template_buttons).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+    ]);
+    expect(JSON.stringify(res._body.messages[0].template_buttons)).not.toContain('"v"');
+    expect(JSON.stringify(res._body)).not.toContain('extra');
+  });
+
+  it('MSG-23d: URL v1 → href sanitizado', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([{
+        ...FAKE_MSG_OLDEST,
+        message_type: 'template',
+        template_buttons: {
+          v: 1,
+          buttons: [{
+            type: 'URL', index: 0, text: 'Abrir teste',
+            href: 'https://example.com/test/12345',
+            suffix: '12345',
+          }],
+        },
+      }]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.messages[0].template_buttons).toEqual([{
+      type: 'URL', index: 0, text: 'Abrir teste',
+      href: 'https://example.com/test/12345',
+    }]);
+    expect(JSON.stringify(res._body)).not.toContain('suffix');
+  });
+
+  it('MSG-23e: wrapper inválido / QR payload / unsafe href → null', async () => {
+    const cases = [
+      { v: 2, buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }] },
+      { v: 1, buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim', payload: 'lovoo:qr:v1:x' }] },
+      { v: 1, buttons: [{ type: 'URL', index: 0, text: 'A', href: 'javascript:alert(1)' }] },
+    ];
+
+    for (const raw of cases) {
+      mockSvc.from
+        .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+        .mockReturnValueOnce(makeMsgChain([{ ...FAKE_MSG_OLDEST, template_buttons: raw }]));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._body.messages[0].template_buttons).toBeNull();
+      expect(JSON.stringify(res._body)).not.toContain('lovoo:qr:v1');
+      expect(JSON.stringify(res._body)).not.toContain('javascript:');
+    }
   });
 });

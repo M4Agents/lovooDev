@@ -46,6 +46,7 @@
 
 import { getSupabaseAdmin }                   from '../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
+import { sanitizeTemplateButtonsSnapshot }    from '../../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
 
 // UUID v4 básico — rejeita inputs obviamente inválidos antes de qualquer query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -75,6 +76,7 @@ const MSG_FIELDS = [
   'template_name',
   'template_language',
   'media_asset_id',       // MVP4B.6C — interno; removido do DTO antes de retornar
+  'template_buttons',     // MVP4C.4B — sanitizado no DTO; nunca JSONB cru
 ].join(', ');
 
 // Campos retornados de company_media_library para enriquecimento do DTO de mídia.
@@ -222,7 +224,7 @@ export default async function handler(req, res) {
   }
 
   // Enriquecer DTO: adicionar media; remover media_asset_id do shape público.
-  const messages = rawMessages.map(({ media_asset_id, ...msg }) => {
+  const messages = rawMessages.map(({ media_asset_id, template_buttons, ...msg }) => {
     let media = null;
     if (media_asset_id) {
       const asset = assetMap.get(media_asset_id);
@@ -236,7 +238,11 @@ export default async function handler(req, res) {
         };
       }
     }
-    return { ...msg, media };
+    return {
+      ...msg,
+      media,
+      template_buttons: sanitizeTemplateButtonsSnapshot(template_buttons),
+    };
   });
 
   return res.status(200).json({ messages });

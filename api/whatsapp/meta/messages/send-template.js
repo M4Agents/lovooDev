@@ -82,6 +82,7 @@ import { analyzeTemplate,
          validateParameterValues,
          buildGraphComponents,
          interpolateBody }                     from '../../../lib/meta-whatsapp/templateEngine.js';
+import { buildTemplateButtonsSnapshot }        from '../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
 import { validateMediaAsset }                  from '../../../lib/meta-whatsapp/mediaAsset.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
@@ -359,6 +360,13 @@ export default async function handler(req, res) {
     parameterValues.body,
   );
 
+  // Snapshot histórico sanitizado — puro, pré-Graph. null para text/media
+  // e para qualquer shape não reconhecido. Nunca bloqueia o send.
+  const templateButtonsSnapshot = buildTemplateButtonsSnapshot({
+    analysis,
+    parameterValues,
+  });
+
   // ── 17A–17B. Validar asset + WRITE 1 (somente para template media) ─────────
   // validateMediaAsset: lookup tenant-safe + download + MIME real. NÃO é Graph WRITE.
   // uploadMedia: WRITE 1 — exatamente 1 fetch, sem retry.
@@ -511,6 +519,7 @@ export default async function handler(req, res) {
       template_language:  templateLanguage,
       provider_timestamp: new Date().toISOString(),
       media_asset_id:     assetId,
+      template_buttons:   templateButtonsSnapshot,
     });
 
   if (insertChatErr) {
