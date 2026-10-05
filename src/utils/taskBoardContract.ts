@@ -1,4 +1,4 @@
-import { addCalendarDays, companyWallFromInstant, startOfCompanyDayUtc } from './companyTime'
+import { addCalendarDays, companyWallFromInstant, startOfCompanyDayUtc } from './companyTime.js'
 
 /**
  * Limites da busca.
