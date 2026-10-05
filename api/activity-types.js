@@ -115,8 +115,66 @@ export default async function handler(req, res) {
 
         return res.status(200).json({ success: true })
 
+      case 'PATCH': {
+        const allowed = await callerIsActivityTypeAdmin(req, company_id)
+        if (!allowed) {
+          return res.status(403).json({ error: 'Apenas admin pode ordenar os tipos' })
+        }
+
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids : null
+        const idsAreValid = !!ids
+          && ids.length > 0
+          && ids.every(id => typeof id === 'string' && UUID_RE.test(id))
+          && new Set(ids).size === ids.length
+        if (!idsAreValid) {
+          return res.status(400).json({ error: 'Lista de tipos inválida' })
+        }
+
+        const { data: current, error: currentError } = await supabase
+          .from('custom_activity_types')
+          .select('id, display_order')
+          .eq('company_id', company_id)
+          .eq('is_active', true)
+
+        if (currentError) {
+          console.error('Error reading activity types for reorder:', currentError)
+          return res.status(500).json({ error: currentError.message })
+        }
+
+        const currentRows = current || []
+        const currentIds = new Set(currentRows.map(row => row.id))
+        const sameSet = currentIds.size === ids.length && ids.every(id => currentIds.has(id))
+        if (!sameSet) {
+          return res.status(409).json({ error: 'A lista de tipos mudou. Atualize e tente de novo.' })
+        }
+
+        const previousOrder = new Map(currentRows.map(row => [row.id, row.display_order]))
+        for (let index = 0; index < ids.length; index += 1) {
+          const { error: updateError } = await supabase
+            .from('custom_activity_types')
+            .update({ display_order: index + 1 })
+            .eq('id', ids[index])
+            .eq('company_id', company_id)
+            .eq('is_active', true)
+
+          if (updateError) {
+            console.error('Error reordering activity types:', updateError)
+            for (const [id, order] of previousOrder) {
+              await supabase
+                .from('custom_activity_types')
+                .update({ display_order: order })
+                .eq('id', id)
+                .eq('company_id', company_id)
+            }
+            return res.status(500).json({ error: 'Não foi possível salvar a ordem' })
+          }
+        }
+
+        return res.status(200).json({ success: true })
+      }
+
       default:
-        res.setHeader('Allow', ['GET', 'POST', 'DELETE'])
+        res.setHeader('Allow', ['GET', 'POST', 'PATCH', 'DELETE'])
         return res.status(405).end(`Method ${method} Not Allowed`)
     }
   } catch (error) {

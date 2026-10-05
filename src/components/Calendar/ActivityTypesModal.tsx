@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { X, Plus, Trash2, Eye, EyeOff } from 'lucide-react'
+import { X, Plus, Trash2, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import { supabase } from '../../lib/supabase'
@@ -23,6 +23,9 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
   const [showIconPicker, setShowIconPicker] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [openRuleId, setOpenRuleId] = useState<string | null>(null)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [reorderError, setReorderError] = useState('')
 
   const loadTypes = useCallback(async () => {
     if (!company?.id) return
@@ -89,6 +92,50 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
     onSave()
   }
 
+  const handleDropType = async (dropIndex: number) => {
+    if (!canManageActivityTypes || dragIndex == null || dragIndex === dropIndex || !company?.id) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const previous = activityTypes
+    const next = [...activityTypes]
+    const [moved] = next.splice(dragIndex, 1)
+    next.splice(dropIndex, 0, moved)
+    const ordered = next.map((type, index) => ({ ...type, display_order: index + 1 }))
+    setActivityTypes(ordered)
+    setDragIndex(null)
+    setDragOverIndex(null)
+    setReorderError('')
+
+    const { data: session } = await supabase.auth.getSession()
+    const token = session.session?.access_token
+    if (!token) {
+      setActivityTypes(previous)
+      setReorderError('Não foi possível salvar a ordem.')
+      return
+    }
+
+    const res = await fetch(`/api/activity-types?company_id=${company.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ids: ordered.map(type => type.id) }),
+    })
+
+    if (!res.ok) {
+      setActivityTypes(previous)
+      setReorderError('Não foi possível salvar a ordem.')
+      await loadTypes()
+      return
+    }
+
+    onSave()
+  }
+
   return (
     <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[85vh] overflow-hidden">
@@ -106,15 +153,46 @@ export const ActivityTypesModal: React.FC<ActivityTypesModalProps> = ({ onClose,
             </div>
           ) : (
             <>
+              {reorderError && <p className="mb-2 text-xs text-red-600">{reorderError}</p>}
               <div className="space-y-2">
-                {activityTypes.map(type => (
+                {activityTypes.map((type, index) => (
                   <div
                     key={type.id}
+                    onDragOver={(event) => {
+                      if (!canManageActivityTypes || dragIndex == null) return
+                      event.preventDefault()
+                      setDragOverIndex(index)
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      handleDropType(index)
+                    }}
                     className={`p-3 border rounded-lg ${
-                      type.is_hidden ? 'border-gray-100 opacity-60' : 'border-gray-200'
-                    }`}
+                      dragOverIndex === index && dragIndex !== index
+                        ? 'border-blue-400 bg-blue-50'
+                        : type.is_hidden ? 'border-gray-100 opacity-60' : 'border-gray-200'
+                    } ${dragIndex === index ? 'opacity-50' : ''}`}
                   >
                     <div className="flex items-center gap-3">
+                    {canManageActivityTypes && (
+                      <span
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move'
+                          event.dataTransfer.setData('text/plain', type.id)
+                          setDragIndex(index)
+                        }}
+                        onDragEnd={() => {
+                          setDragIndex(null)
+                          setDragOverIndex(null)
+                        }}
+                        className="cursor-grab text-gray-400 active:cursor-grabbing"
+                        title="Arrastar para ordenar"
+                        aria-label="Arrastar para ordenar"
+                      >
+                        <GripVertical className="w-4 h-4" />
+                      </span>
+                    )}
                     <div className="w-8 h-8 flex items-center justify-center bg-blue-50 rounded">
                       <span className="text-blue-600 text-lg">{type.icon}</span>
                     </div>
