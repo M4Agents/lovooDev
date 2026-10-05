@@ -1,12 +1,12 @@
 // =====================================================
 // DashboardTabs — navegação entre abas do dashboard.
-// Renderiza [ Operação ] [ Ativação Comercial ].
+// Renderiza [ Operação ] [ Ativação Comercial ] [ Tarefas ].
 // Isolado: não conhece o conteúdo de nenhuma aba.
 // =====================================================
 
 import React from 'react'
 
-export type DashboardTab = 'operation' | 'activation'
+export type DashboardTab = 'operation' | 'activation' | 'tasks'
 
 interface Tab {
   id:    DashboardTab
@@ -16,6 +16,7 @@ interface Tab {
 const TABS: Tab[] = [
   { id: 'operation',  label: 'Operação'            },
   { id: 'activation', label: 'Ativação Comercial'  },
+  { id: 'tasks',      label: 'Tarefas'             },
 ]
 
 interface DashboardTabsProps {

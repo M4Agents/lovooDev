@@ -19,6 +19,7 @@ import { SlaAlertsPanel }             from '../components/Dashboard/sections/Sla
 import { LeadOriginsSection }         from '../components/Dashboard/sections/LeadOriginsSection'
 import { ActivationSection }          from '../components/Dashboard/sections/ActivationSection'
 import { DashboardTabs }              from '../components/Dashboard/navigation/DashboardTabs'
+import { TaskBoard }                  from '../components/Dashboard/tasks/TaskBoard'
 import { useDashboardFilters }        from '../hooks/dashboard/useDashboardFilters'
 import { useDashboardSummary }        from '../hooks/dashboard/useDashboardSummary'
 import { useDashboardInsights }       from '../hooks/dashboard/useDashboardInsights'
@@ -256,13 +257,15 @@ export const NewDashboard: React.FC = () => {
         <div className="flex flex-col gap-2">
           <h1 className="text-xl font-bold text-gray-900">Painel Comercial</h1>
           <p className="text-sm text-gray-500">
-            No período: <span className="font-medium text-gray-700">{periodLabel}</span>
+            {activeTab === 'tasks'
+              ? 'Tarefas em aberto'
+              : <>No período: <span className="font-medium text-gray-700">{periodLabel}</span></>}
           </p>
           <DashboardTabs activeTab={activeTab} onChange={setActiveTab} />
         </div>
 
         {/* Filtros: Período + Funil + Vendedor + Toggle histórico */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className={activeTab === 'tasks' ? 'hidden' : 'flex items-center gap-3 flex-wrap'}>
           <PeriodFilter
             selectedPeriod={period}
             onPeriodChange={setPeriod}
@@ -514,6 +517,10 @@ export const NewDashboard: React.FC = () => {
           error={activation.error}
           onRetry={activation.refetch}
         />
+      )}
+
+      {activeTab === 'tasks' && (
+        <TaskBoard users={dashboardUsers} />
       )}
       {/* ══ fim aba Ativação Comercial ════════════════════════════════════ */}
 
