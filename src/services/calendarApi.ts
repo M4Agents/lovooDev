@@ -212,14 +212,19 @@ export class CalendarApi {
         }
       }
 
-      // Filtro de responsável
-      if (filter?.assigned_to) {
-        query = query.eq('assigned_to', filter.assigned_to)
-      }
-
-      // Filtro de dono
-      if (filter?.owner_user_id) {
-        query = query.eq('owner_user_id', filter.owner_user_id)
+      const calendarUserIds = (filter?.calendar_user_ids ?? []).filter(id =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      )
+      if (calendarUserIds.length > 0) {
+        const list = calendarUserIds.join(',')
+        query = query.or(`assigned_to.in.(${list}),owner_user_id.in.(${list})`)
+      } else {
+        if (filter?.assigned_to) {
+          query = query.eq('assigned_to', filter.assigned_to)
+        }
+        if (filter?.owner_user_id) {
+          query = query.eq('owner_user_id', filter.owner_user_id)
+        }
       }
 
       // Filtro de lead

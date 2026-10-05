@@ -5,12 +5,14 @@ interface UserAvatarProps {
   user: CalendarUser
   isActive: boolean
   onClick: () => void
+  decorative?: boolean
 }
 
 export const UserAvatar: React.FC<UserAvatarProps> = ({
   user,
   isActive,
-  onClick
+  onClick,
+  decorative = false
 }) => {
   // Gerar iniciais do nome
   const getInitials = (name: string) => {
@@ -55,14 +57,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     ? 'Você' 
     : `${displayName} - ${getPermissionLabel()}`
 
-  return (
-    <button
-      onClick={onClick}
-      title={tooltipText}
-      className={`relative transition-all duration-200 hover:z-[999] ${
-        isActive ? 'z-50' : 'z-auto'
-      }`}
-    >
+  const frameClass = `relative transition-all duration-200 hover:z-[999] ${isActive ? 'z-50' : 'z-auto'}`
+  const frame = (
+    <span className={frameClass}>
       {/* Avatar */}
       <div
         className="w-8 h-8 rounded-full overflow-hidden transition-all duration-200"
@@ -97,6 +94,14 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           {user.permission === 'manage' && '⚙️'}
         </div>
       )}
+    </span>
+  )
+
+  if (decorative) return frame
+
+  return (
+    <button type="button" onClick={onClick} title={tooltipText} className="relative">
+      {frame}
     </button>
   )
 }

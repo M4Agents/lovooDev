@@ -204,6 +204,7 @@ export interface ActivityFilter {
   priority?: ActivityPriority | ActivityPriority[]
   assigned_to?: string
   owner_user_id?: string
+  calendar_user_ids?: string[]
   lead_id?: number
   search?: string
 }

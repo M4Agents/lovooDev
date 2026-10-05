@@ -45,7 +45,7 @@ export const Calendar: React.FC = () => {
       setSelectedUserId(user.id)
       setSelectedCalendars([user.id])
     }
-  }, [user?.id])
+  }, [user?.id, company?.id])
 
   // Buscar todos usuários da empresa usando RPC (mesma implementação do sistema de responsáveis)
   useEffect(() => {
@@ -101,7 +101,7 @@ export const Calendar: React.FC = () => {
   // Buscar atividades do período atual
   useEffect(() => {
     const fetchActivities = async () => {
-      if (!company?.id || !selectedUserId) return
+      if (!company?.id || selectedCalendars.length === 0) return
 
       try {
         setLoading(true)
@@ -115,27 +115,15 @@ export const Calendar: React.FC = () => {
 
         const filter: ActivityFilter = {
           scheduled_date_from: addCalendarDays(bounds.start, -1),
-          scheduled_date_to: addCalendarDays(bounds.end, 1)
+          scheduled_date_to: addCalendarDays(bounds.end, 1),
+          calendar_user_ids: selectedCalendars,
         }
 
         const data = await calendarApi.getActivities(company.id, filter)
-        
-        // Filtrar por usuário selecionado na barra de avatares
-        // Usa assigned_to (responsável) ou owner_user_id (criador) como fallback
-        let filtered = data.filter(activity => 
-          (activity.assigned_to || activity.owner_user_id) === selectedUserId
-        )
-        
-        // Se sidebar tem outros calendários selecionados, adicionar atividades deles também
-        if (selectedCalendars.length > 1) {
-          const additionalActivities = data.filter(activity => {
-            const activityUserId = activity.assigned_to || activity.owner_user_id
-            return selectedCalendars.includes(activityUserId) && activityUserId !== selectedUserId
-          })
-          filtered = [...filtered, ...additionalActivities]
-        }
-        
-        setActivities(filtered)
+        const allowed = new Set(selectedCalendars)
+        setActivities(data.filter(activity =>
+          allowed.has(activity.assigned_to || activity.owner_user_id)
+        ))
       } catch (error) {
         console.error('Error fetching activities:', error)
       } finally {
@@ -216,11 +204,24 @@ export const Calendar: React.FC = () => {
   }
 
   const handleToggleCalendar = (userId: string) => {
-    setSelectedCalendars(prev => 
-      prev.includes(userId)
+    setSelectedCalendars(prev => {
+      const next = prev.includes(userId)
         ? prev.filter(id => id !== userId)
         : [...prev, userId]
-    )
+      if (next.length > 0 && !next.includes(selectedUserId)) {
+        setSelectedUserId(next[0])
+      }
+      return next
+    })
+  }
+
+  const handleSelectCalendarUser = (userId: string) => {
+    setSelectedUserId(userId)
+    setSelectedCalendars([userId])
+  }
+
+  const handleSelectAllCalendars = () => {
+    setSelectedCalendars(availableCalendars.map(calendar => calendar.id))
   }
 
   const getNavigationLabel = () => {
@@ -251,6 +252,14 @@ export const Calendar: React.FC = () => {
     )
   }
 
+  const viewingAllCalendars = availableCalendars.length > 1 && selectedCalendars.length === availableCalendars.length
+  const selectedProfile = availableCalendars.find(calendar => calendar.id === selectedUserId)
+  const agendaLabel = selectedCalendars.length === 1 && selectedProfile && !selectedProfile.is_own
+    ? `Agenda de ${(selectedProfile.display_name || 'usuário').split(' ')[0]}`
+    : selectedCalendars.length > 1
+      ? `${selectedCalendars.length} agendas`
+      : 'Sua agenda'
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
       {/* Header Premium */}
@@ -263,13 +272,15 @@ export const Calendar: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent tracking-tight">Calendário</h1>
               <p className="text-sm text-gray-600">
-                {todayCount > 0 ? (
+                {viewingAllCalendars ? (
+                  <span className="text-gray-500">Todas as agendas</span>
+                ) : selectedCalendars.length === 1 && todayCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium text-xs animate-pulse">
                     <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                     {todayCount} {todayCount === 1 ? 'atividade' : 'atividades'} hoje
                   </span>
                 ) : (
-                  <span className="text-gray-500">Gerencie suas atividades</span>
+                  <span className="text-gray-500">{agendaLabel}</span>
                 )}
               </p>
             </div>
@@ -328,7 +339,9 @@ export const Calendar: React.FC = () => {
                   currentUser={availableCalendars.find(cal => cal.is_own) || availableCalendars[0]}
                   availableCalendars={availableCalendars}
                   selectedUserId={selectedUserId}
-                  onSelectUser={setSelectedUserId}
+                  allSelected={viewingAllCalendars}
+                  onSelectUser={handleSelectCalendarUser}
+                  onSelectAll={handleSelectAllCalendars}
                 />
               )}
 
