@@ -205,6 +205,7 @@ function makeMsg(
     provider_timestamp: ts,
     created_at:         '2026-09-21T15:00:00.000Z',
     media,
+    template_buttons:   null,
   }
 }
 
@@ -1829,6 +1830,7 @@ describe('MetaChatArea — INBOUND IMAGE render', () => {
         type: 'document', url: 'https://example.com/contrato.pdf',
         filename: 'contrato.pdf', mime_type: 'application/pdf', file_size: 102400,
       },
+      template_buttons: null,
     }
     mockIdle({ messages: [doc] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
@@ -1930,6 +1932,7 @@ describe('MetaChatArea — INBOUND VIDEO render', () => {
         type: 'image', url: 'https://example.com/inbound.jpg',
         filename: 'inbound.jpg', mime_type: 'image/jpeg', file_size: 20480,
       },
+      template_buttons: null,
     }
     mockIdle({ messages: [img] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
@@ -1952,6 +1955,7 @@ describe('MetaChatArea — INBOUND VIDEO render', () => {
         type: 'document', url: 'https://example.com/contrato.pdf',
         filename: 'contrato.pdf', mime_type: 'application/pdf', file_size: 102400,
       },
+      template_buttons: null,
     }
     mockIdle({ messages: [doc] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
@@ -1959,5 +1963,138 @@ describe('MetaChatArea — INBOUND VIDEO render', () => {
     expect(link.tagName.toLowerCase()).toBe('a')
     expect(link.href).toContain('contrato.pdf')
     expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+})
+
+// =============================================================================
+// MVP4C.4C — historical template buttons
+// =============================================================================
+
+describe('MetaChatArea — historical template buttons', () => {
+  it('HB-01: template sem snapshot → body igual hoje; zero botões históricos', () => {
+    const tmplMsg = makeMsg('msg-tpl-nosnap', 'outbound', 'template', 'Olá, João! Código: 12345.')
+    mockIdle({ messages: [tmplMsg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Olá, João! Código: 12345.')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('HB-02: QR → labels na ordem de index; span read-only; nenhum send', () => {
+    const msg: MetaChatMessage = {
+      ...makeMsg('msg-qr-hist', 'outbound', 'template', 'Confirma?'),
+      template_buttons: [
+        { type: 'QUICK_REPLY', index: 2, text: 'Talvez' },
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        { type: 'QUICK_REPLY', index: 1, text: 'Não' },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Confirma?')).toBeTruthy()
+    const row = screen.getByTestId('hist-template-buttons')
+    const chips = row.querySelectorAll('[data-testid^="hist-qr-"]')
+    expect(chips).toHaveLength(3)
+    expect(chips[0].textContent).toBe('Sim')
+    expect(chips[1].textContent).toBe('Não')
+    expect(chips[2].textContent).toBe('Talvez')
+    expect(chips[0].tagName.toLowerCase()).toBe('span')
+    expect(chips[0].getAttribute('href')).toBeNull()
+
+    fireEvent.click(chips[0])
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(mockSendTemplate).not.toHaveBeenCalled()
+  })
+
+  it('HB-03: URL → label, href original, target blank, rel seguro', () => {
+    const href = 'https://example.com/test/12345'
+    const msg: MetaChatMessage = {
+      ...makeMsg('msg-url-hist', 'outbound', 'template', 'Link de teste'),
+      template_buttons: [
+        { type: 'URL', index: 0, text: 'Abrir teste', href },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    const link = screen.getByTestId('hist-url-0') as HTMLAnchorElement
+    expect(link.textContent).toBe('Abrir teste')
+    expect(link.getAttribute('href')).toBe(href)
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toContain('noopener')
+    expect(link.rel).toContain('noreferrer')
+  })
+
+  it('HB-04: unsafe href → sem link clicável', () => {
+    const msg: MetaChatMessage = {
+      ...makeMsg('msg-url-unsafe', 'outbound', 'template', 'Body seguro'),
+      template_buttons: [
+        { type: 'URL', index: 0, text: 'Exploit', href: 'javascript:alert(1)' },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Body seguro')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+    expect(screen.queryByTestId('hist-url-0')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Exploit' })).toBeNull()
+  })
+
+  it('HB-05: template_buttons null → zero historical buttons', () => {
+    const msg = makeMsg('msg-null-btns', 'inbound', 'text', 'Olá')
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Olá')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+    expect(screen.queryByTestId('hist-qr-0')).toBeNull()
+    expect(screen.queryByTestId('hist-url-0')).toBeNull()
+  })
+
+  it('HB-06: IMAGE + QR → media permanece e QR aparece', () => {
+    const msg: MetaChatMessage = {
+      ...makeMsg(
+        'msg-img-qr',
+        'outbound',
+        'template',
+        'Veja a imagem',
+        '2026-09-21T15:30:00.000Z',
+        {
+          type: 'image',
+          url: 'https://example.com/promo.jpg',
+          filename: 'promo.jpg',
+          mime_type: 'image/jpeg',
+          file_size: 20480,
+        },
+      ),
+      template_buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Quero' },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    const img = screen.getByTestId('msg-media-image') as HTMLImageElement
+    expect(img.src).toContain('promo.jpg')
+    expect(screen.getByText('Veja a imagem')).toBeTruthy()
+    expect(screen.getByTestId('hist-qr-0').textContent).toBe('Quero')
+  })
+
+  it('HB-07: histórico antigo (QR/URL sem snapshot) → body-only', () => {
+    const qrOld = makeMsg('msg-old-qr', 'outbound', 'template', 'Você confirma o horário?')
+    mockIdle({ messages: [qrOld] })
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
+    )
+    expect(screen.getByText('Você confirma o horário?')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+
+    const urlOld = makeMsg('msg-old-url', 'outbound', 'template', 'Segue o link combinado.')
+    mockIdle({ messages: [urlOld] })
+    rerender(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Segue o link combinado.')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+    expect(screen.queryByTestId('hist-url-0')).toBeNull()
   })
 })

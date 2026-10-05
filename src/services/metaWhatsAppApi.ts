@@ -30,6 +30,7 @@
 // =============================================================================
 
 import { supabase } from '../lib/supabase'
+import { sanitizeHistoricalTemplateButtons } from '../utils/historicalTemplateButtons'
 import type {
   CompleteResult,
   GetMetaConversationsResponse,
@@ -362,7 +363,12 @@ export const metaWhatsAppApi = {
       throw new Error(data.error ?? 'Erro ao carregar mensagens Meta WhatsApp')
     }
 
-    return Array.isArray(data.messages) ? data.messages : []
+    if (!Array.isArray(data.messages)) return []
+
+    return data.messages.map((message) => ({
+      ...message,
+      template_buttons: sanitizeHistoricalTemplateButtons(message.template_buttons),
+    }))
   },
 
   /**

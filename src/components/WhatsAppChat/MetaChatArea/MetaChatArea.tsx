@@ -34,9 +34,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
 import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
+import { isSafeHistoricalHref } from '../../../utils/historicalTemplateButtons'
 import type {
   MetaChatConversation,
   MetaChatMessage,
+  MetaHistoricalTemplateButton,
   MetaWhatsAppTemplate,
   MetaTemplateParameterValues,
 } from '../../../types/meta-whatsapp'
@@ -222,6 +224,61 @@ function MetaChatHeader({ conversation }: MetaChatHeaderProps) {
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
+function HistoricalTemplateButtons({
+  buttons,
+  inbound,
+}: {
+  buttons: MetaHistoricalTemplateButton[] | null
+  inbound: boolean
+}) {
+  if (!buttons || buttons.length === 0) return null
+
+  const ordered = [...buttons].sort((a, b) => a.index - b.index)
+  const visible = ordered.filter((button) =>
+    button.type === 'QUICK_REPLY' ||
+    (button.type === 'URL' && isSafeHistoricalHref(button.href)),
+  )
+  if (visible.length === 0) return null
+
+  const chipClass = inbound
+    ? 'border-slate-200 bg-slate-50 text-slate-700'
+    : 'border-white/30 bg-white/15 text-white'
+  const linkClass = inbound
+    ? 'border-slate-200 bg-white text-blue-700 underline'
+    : 'border-white/40 bg-white/20 text-white underline'
+
+  return (
+    <div data-testid="hist-template-buttons" className="mt-2 flex flex-wrap gap-1.5">
+      {visible.map((button, pos) => {
+        const key = `hist-${button.type}-${button.index}-${pos}`
+        if (button.type === 'QUICK_REPLY') {
+          return (
+            <span
+              key={key}
+              data-testid={`hist-qr-${button.index}`}
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs cursor-default ${chipClass}`}
+            >
+              {button.text}
+            </span>
+          )
+        }
+        return (
+          <a
+            key={key}
+            data-testid={`hist-url-${button.index}`}
+            href={button.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs ${linkClass}`}
+          >
+            {button.text}
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
 interface MetaMessageBubbleProps {
   message: MetaChatMessage
 }
@@ -350,6 +407,10 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
             {message.body}
           </p>
         ) : null}
+        <HistoricalTemplateButtons
+          buttons={message.template_buttons}
+          inbound={isInbound}
+        />
         {time && (
           <p className={`text-[10px] mt-1 text-right leading-none ${
             isInbound ? 'text-slate-400' : 'text-blue-100'

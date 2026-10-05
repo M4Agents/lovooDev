@@ -194,6 +194,22 @@ export interface MetaMessageMedia {
   file_size: number | null
 }
 
+// MVP4C.4C — botão histórico sanitizado do GET messages.
+// Distinto de MetaTemplateButton (definição do picker: url / url_kind).
+// Nunca inclui payload, parameter_values, wrapper v, nem components Graph.
+export type MetaHistoricalTemplateButton =
+  | {
+      type:  'QUICK_REPLY'
+      index: number
+      text:  string
+    }
+  | {
+      type:  'URL'
+      index: number
+      text:  string
+      href:  string
+    }
+
 export interface MetaChatMessage {
   id:                 string
   conversation_id:    string
@@ -208,6 +224,8 @@ export interface MetaChatMessage {
   template_language?: string | null
   // MVP4B.6C — mídia de header de template; null para mensagens sem mídia
   media:              MetaMessageMedia | null
+  // MVP4C.4C — snapshot histórico; null em mensagens antigas ou sem botões
+  template_buttons:   MetaHistoricalTemplateButton[] | null
 }
 
 // ── Response shapes ───────────────────────────────────────────────────────────

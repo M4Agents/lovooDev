@@ -163,6 +163,7 @@ function makeMsg(id: string, direction: 'inbound' | 'outbound' = 'inbound'): Met
     provider_timestamp: '2026-09-21T12:00:00.000Z',
     created_at:         '2026-09-21T12:00:00.000Z',
     media:              null,   // MVP4B.6C — required; null para mensagens sem mídia
+    template_buttons:   null,   // MVP4C.4C — required nullable
   }
 }
 

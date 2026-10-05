@@ -145,6 +145,7 @@ const FAKE_MESSAGE: MetaChatMessage = {
   provider_timestamp: '2026-09-21T12:00:00.000Z',
   created_at:         '2026-09-21T12:00:00.001Z',
   media:              null,   // MVP4B.6C — required; null para mensagens sem mídia
+  template_buttons:   null,   // MVP4C.4C — required nullable
 }
 
 // =============================================================================
@@ -347,6 +348,159 @@ describe('metaWhatsAppApi.getMessages', () => {
     mockFetch({})
     const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
     expect(result).toEqual([])
+  })
+
+  it('GM-4C4C-01: template_buttons null → null; demais campos intactos', async () => {
+    mockFetch({ messages: [{ ...FAKE_MESSAGE, template_buttons: null }] })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toBeNull()
+    expect(result[0].id).toBe(FAKE_MESSAGE.id)
+    expect(result[0].body).toBe(FAKE_MESSAGE.body)
+    expect(result[0].media).toBeNull()
+  })
+
+  it('GM-4C4C-02: QR válido → whitelist type/index/text', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [
+          { type: 'QUICK_REPLY', index: 0, text: 'Sim', extra: true },
+        ],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+    ])
+  })
+
+  it('GM-4C4C-03: URL válida → href original', async () => {
+    const href = 'https://example.com/test/12345'
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [
+          { type: 'URL', index: 0, text: 'Abrir teste', href, extra: 'no' },
+        ],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toEqual([
+      { type: 'URL', index: 0, text: 'Abrir teste', href },
+    ])
+  })
+
+  it('GM-4C4C-04: unknown type dropado; só QR válido permanece', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [
+          { type: 'PHONE_NUMBER', index: 0, text: 'Ligar' },
+          { type: 'QUICK_REPLY', index: 1, text: 'Ok' },
+        ],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toEqual([
+      { type: 'QUICK_REPLY', index: 1, text: 'Ok' },
+    ])
+  })
+
+  it('GM-4C4C-05: malformed / wrapper → null', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: { v: 1, buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }] },
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toBeNull()
+    expect(result[0].id).toBe(FAKE_MESSAGE.id)
+  })
+
+  it('GM-4C4C-06: unsafe href → drop / null', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [
+          { type: 'URL', index: 0, text: 'X', href: 'javascript:alert(1)' },
+        ],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toBeNull()
+  })
+
+  it('GM-4C4C-07: extras não saem no DTO', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [{
+          type: 'URL',
+          index: 0,
+          text: 'Abrir',
+          href: 'https://example.com/a',
+          payload: 'should-not-copy',
+          parameter_values: { url: { '0': 'x' } },
+          components: [{ type: 'BUTTON' }],
+        }],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toEqual([
+      { type: 'URL', index: 0, text: 'Abrir', href: 'https://example.com/a' },
+    ])
+    expect(JSON.stringify(result[0].template_buttons)).not.toContain('payload')
+    expect(JSON.stringify(result[0].template_buttons)).not.toContain('parameter_values')
+    expect(JSON.stringify(result[0].template_buttons)).not.toContain('components')
+  })
+
+  it('GM-4C4C-08: QR com payload próprio → drop', async () => {
+    mockFetch({
+      messages: [{
+        ...FAKE_MESSAGE,
+        template_buttons: [{
+          type: 'QUICK_REPLY',
+          index: 0,
+          text: 'Sim',
+          payload: 'lovoo:qr:v1:name:pt_BR:0',
+        }],
+      }],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result[0].template_buttons).toBeNull()
+  })
+
+  it('GM-4C4C-09: mensagem ruim não quebra as outras', async () => {
+    mockFetch({
+      messages: [
+        {
+          ...FAKE_MESSAGE,
+          id: 'msg-good',
+          template_buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+        },
+        {
+          ...FAKE_MESSAGE,
+          id: 'msg-bad',
+          template_buttons: { v: 1, buttons: [] },
+        },
+        {
+          ...FAKE_MESSAGE,
+          id: 'msg-ok-null',
+          template_buttons: null,
+        },
+      ],
+    })
+    const result = await metaWhatsAppApi.getMessages(COMPANY_ID, CONV_ID)
+    expect(result).toHaveLength(3)
+    expect(result[0].id).toBe('msg-good')
+    expect(result[0].template_buttons).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+    ])
+    expect(result[1].id).toBe('msg-bad')
+    expect(result[1].template_buttons).toBeNull()
+    expect(result[2].id).toBe('msg-ok-null')
+    expect(result[2].template_buttons).toBeNull()
   })
 })
 
