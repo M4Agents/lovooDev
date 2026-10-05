@@ -113,6 +113,8 @@ export function TaskBoard({ users }: Props) {
         <TaskBoardList
           activities={board.data.activities}
           timezone={board.data.timezone}
+          asOf={board.data.as_of}
+          windowMinutes={board.controls.windowMinutes}
           users={users}
           types={types}
           showResponsible={showResponsible}
@@ -128,6 +130,8 @@ export function TaskBoard({ users }: Props) {
         <TaskReadPanel
           activity={reading}
           timezone={board.data.timezone}
+          asOf={board.data.as_of}
+          windowMinutes={board.controls.windowMinutes}
           users={users}
           types={types}
           showResponsible={showResponsible}

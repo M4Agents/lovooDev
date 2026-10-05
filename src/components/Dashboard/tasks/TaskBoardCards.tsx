@@ -1,4 +1,5 @@
 import type { TaskCard, WindowMinutes } from '../../../utils/taskBoardContract'
+import { cardChrome, cardCountClass, cardStripeClass } from './taskDeadlineStyle'
 
 interface Counts {
   open: number
@@ -30,12 +31,13 @@ export function TaskBoardCards({ counts, card, windowMinutes, onSelect }: Props)
           type="button"
           onClick={() => onSelect(item.id)}
           className={[
-            'rounded-xl border px-4 py-3 text-left transition-colors',
-            card === item.id ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300',
+            'relative overflow-hidden rounded-xl border px-4 py-3 text-left transition-colors',
+            cardChrome(item.id, card === item.id),
           ].join(' ')}
         >
+          <span className={['absolute inset-x-0 top-0 h-1', cardStripeClass(item.id)].join(' ')} />
           <p className="text-sm font-semibold text-gray-900">{item.title}</p>
-          <p className="mt-1 text-2xl font-semibold text-gray-900">{item.value ?? '—'}</p>
+          <p className={['mt-1 text-2xl font-semibold', cardCountClass(item.id)].join(' ')}>{item.value ?? '—'}</p>
           <p className="mt-1 text-xs text-gray-500">{item.hint}</p>
         </button>
       ))}

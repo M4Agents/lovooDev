@@ -201,6 +201,38 @@ export function resolveCardBounds(
   return { kind: 'between', start: asOf.toISOString(), end: tomorrowStart.toISOString() }
 }
 
+export type TaskDeadlineTone = 'overdue' | 'due' | 'on_time' | 'undated'
+
+const DEADLINE_LABEL: Record<TaskDeadlineTone, string> = {
+  overdue: 'Atraso',
+  due: 'A vencer',
+  on_time: 'Dentro do prazo',
+  undated: 'Sem data',
+}
+
+export function taskDeadlineLabel(tone: TaskDeadlineTone): string {
+  return DEADLINE_LABEL[tone]
+}
+
+export function taskDeadlineTone(
+  scheduledDatetime: string | null,
+  asOfIso: string,
+  timeZone: string,
+  windowMinutes: WindowMinutes,
+): TaskDeadlineTone {
+  if (!scheduledDatetime) return 'undated'
+  const instant = new Date(scheduledDatetime)
+  const asOf = new Date(asOfIso)
+  if (Number.isNaN(instant.getTime()) || Number.isNaN(asOf.getTime())) return 'undated'
+  if (instant < asOf) return 'overdue'
+  const windowEnd = asOf.getTime() + windowMinutes * 60_000
+  if (instant.getTime() < windowEnd) return 'due'
+  const today = companyWallFromInstant(asOf, timeZone).date
+  const tomorrowStart = startOfCompanyDayUtc(addCalendarDays(today, 1), timeZone)
+  if (tomorrowStart && instant < tomorrowStart) return 'due'
+  return 'on_time'
+}
+
 export function compareTasks(
   a: { id: string; scheduled_datetime: string | null },
   b: { id: string; scheduled_datetime: string | null },

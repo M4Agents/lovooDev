@@ -16,6 +16,8 @@ import {
   readWindowMinutes,
   resolveCardBounds,
   resolveDateBounds,
+  taskDeadlineLabel,
+  taskDeadlineTone,
   resolveTaskScope,
   searchTimedOut,
   shouldPoll,
@@ -177,6 +179,32 @@ describe('datas no fuso da empresa', () => {
     }
     const hours = (Date.parse(bounds.end) - Date.parse(bounds.start)) / 3_600_000
     expect(hours).toBe(25)
+  })
+})
+
+describe('cor do prazo', () => {
+  const asOf = '2026-10-05T21:26:00.000Z'
+
+  it('atraso, a vencer hoje e dentro do prazo usam o fuso e a janela', () => {
+    expect(taskDeadlineTone('2026-10-05T21:00:00.000Z', asOf, SP, 15)).toBe('overdue')
+    expect(taskDeadlineTone('2026-10-05T21:30:00.000Z', asOf, SP, 15)).toBe('due')
+    expect(taskDeadlineTone('2026-10-05T22:00:00.000Z', asOf, SP, 15)).toBe('due')
+    expect(taskDeadlineTone('2026-10-06T13:00:00.000Z', asOf, SP, 15)).toBe('on_time')
+    expect(taskDeadlineTone(null, asOf, SP, 15)).toBe('undated')
+    expect(taskDeadlineTone(asOf, asOf, SP, 15)).toBe('due')
+  })
+
+  it('a janela que passa da meia-noite continua amarela', () => {
+    const late = '2026-10-06T02:30:00.000Z'
+    expect(taskDeadlineTone('2026-10-06T03:20:00.000Z', late, SP, 60)).toBe('due')
+    expect(taskDeadlineTone('2026-10-06T03:40:00.000Z', late, SP, 60)).toBe('on_time')
+  })
+
+  it('o texto acompanha a cor', () => {
+    expect(taskDeadlineLabel('overdue')).toBe('Atraso')
+    expect(taskDeadlineLabel('due')).toBe('A vencer')
+    expect(taskDeadlineLabel('on_time')).toBe('Dentro do prazo')
+    expect(taskDeadlineLabel('undated')).toBe('Sem data')
   })
 })
 

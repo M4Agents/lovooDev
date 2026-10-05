@@ -1,12 +1,15 @@
 import { PRIORITIES, ACTIVITY_TYPES, type CustomActivityType } from '../../../types/calendar'
 import type { DashboardUser } from '../../../types/dashboard'
 import { activityCompanyDate, activityCompanyTime } from '../../../utils/companyTime'
-import { effectiveAssignee } from '../../../utils/taskBoardContract'
+import { effectiveAssignee, taskDeadlineLabel, taskDeadlineTone, type WindowMinutes } from '../../../utils/taskBoardContract'
 import type { TaskBoardActivity } from '../../../services/taskBoardApi'
+import { deadlineBadgeClass, deadlineBarClass } from './taskDeadlineStyle'
 
 interface Props {
   activities: TaskBoardActivity[]
   timezone: string
+  asOf: string
+  windowMinutes: WindowMinutes
   users: DashboardUser[]
   types: CustomActivityType[]
   showResponsible: boolean
@@ -18,7 +21,7 @@ interface Props {
 }
 
 export function TaskBoardList({
-  activities, timezone, users, types, showResponsible, selectedId, onOpen, onChat, onEdit, onComplete,
+  activities, timezone, asOf, windowMinutes, users, types, showResponsible, selectedId, onOpen, onChat, onEdit, onComplete,
 }: Props) {
   return (
     <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -28,6 +31,7 @@ export function TaskBoardList({
         const when = activity.scheduled_datetime
           ? `${activityCompanyDate(activity, timezone)} ${activityCompanyTime(activity, timezone)}`
           : 'Sem data'
+        const tone = taskDeadlineTone(activity.scheduled_datetime, asOf, timezone, windowMinutes)
         return (
           <li key={activity.id}>
             <div
@@ -38,7 +42,8 @@ export function TaskBoardList({
                 if (event.key === 'Enter' || event.key === ' ') onOpen(activity)
               }}
               className={[
-                'flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                'flex flex-col gap-3 border-l-4 px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+                deadlineBarClass(tone),
                 selectedId === activity.id ? 'bg-indigo-50' : 'hover:bg-gray-50',
               ].join(' ')}
             >
@@ -52,7 +57,12 @@ export function TaskBoardList({
                   {activity.lead?.name ?? 'Sem lead'}
                   {showResponsible ? ` · ${responsible?.display_name ?? 'Sem responsável'}` : ''}
                 </p>
-                <p className="mt-1 text-xs text-gray-700">{when}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                  <span>{when}</span>
+                  <span className={['rounded-full border px-2 py-0.5 font-medium', deadlineBadgeClass(tone)].join(' ')}>
+                    {taskDeadlineLabel(tone)}
+                  </span>
+                </p>
               </div>
               <div className="flex shrink-0 gap-2">
                 {activity.lead_id != null && (
