@@ -77,6 +77,39 @@ const FIELD_WHITELIST = new Map([
   ['company_email',       { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
   ['email_empresa',       { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
   ['corporate_email',     { canonical: 'company_email', maxLen: 255, normalize: 'email' }],
+  ['company_razao_social',{ canonical: 'company_razao_social', maxLen: 255, normalize: 'name' }],
+  ['razao_social',        { canonical: 'company_razao_social', maxLen: 255, normalize: 'name' }],
+  ['razao',               { canonical: 'company_razao_social', maxLen: 255, normalize: 'name' }],
+  ['company_nome_fantasia',{ canonical: 'company_nome_fantasia', maxLen: 255, normalize: 'name' }],
+  ['nome_fantasia',       { canonical: 'company_nome_fantasia', maxLen: 255, normalize: 'name' }],
+  ['fantasia',            { canonical: 'company_nome_fantasia', maxLen: 255, normalize: 'name' }],
+  ['company_telefone',    { canonical: 'company_telefone', maxLen: 30, normalize: 'phone' }],
+  ['telefone_empresa',    { canonical: 'company_telefone', maxLen: 30, normalize: 'phone' }],
+  ['company_phone',       { canonical: 'company_telefone', maxLen: 30, normalize: 'phone' }],
+  ['company_site',        { canonical: 'company_site', maxLen: 255 }],
+  ['site',                { canonical: 'company_site', maxLen: 255 }],
+  ['website',             { canonical: 'company_site', maxLen: 255 }],
+  ['url',                 { canonical: 'company_site', maxLen: 255 }],
+  ['company_cep',         { canonical: 'company_cep', maxLen: 9 }],
+  ['company_cidade',      { canonical: 'company_cidade', maxLen: 255, normalize: 'name' }],
+  ['company_estado',      { canonical: 'company_estado', maxLen: 20, normalize: 'uf' }],
+  ['company_endereco',    { canonical: 'company_endereco', maxLen: 255 }],
+
+  // Perfil e endereço do lead (colunas do cadastro)
+  ['cargo',               { canonical: 'cargo', maxLen: 255, normalize: 'name' }],
+  ['instagram',           { canonical: 'instagram', maxLen: 255 }],
+  ['linkedin',            { canonical: 'linkedin', maxLen: 255 }],
+  ['tiktok',              { canonical: 'tiktok', maxLen: 255 }],
+  ['poder_investimento',  { canonical: 'poder_investimento', maxLen: 50 }],
+  ['data_nascimento',     { canonical: 'data_nascimento', maxLen: 10, normalize: 'date' }],
+  ['record_type',         { canonical: 'record_type', maxLen: 50 }],
+  ['cep',                 { canonical: 'cep', maxLen: 10 }],
+  ['estado',              { canonical: 'estado', maxLen: 20, normalize: 'uf' }],
+  ['cidade',              { canonical: 'cidade', maxLen: 255, normalize: 'name' }],
+  ['endereco',            { canonical: 'endereco', maxLen: 255 }],
+  ['numero',              { canonical: 'numero', maxLen: 20 }],
+  ['bairro',              { canonical: 'bairro', maxLen: 255, normalize: 'name' }],
+  ['complemento',         { canonical: 'complemento', maxLen: 255 }],
 
   // Visitor / session
   ['visitor_id',     { canonical: 'visitor_id',       maxLen: 128 }],
@@ -127,7 +160,7 @@ const FIELD_WHITELIST = new Map([
   ['event_id',     { canonical: 'webhook_id', maxLen: 128 }],
 ]);
 
-const MAX_FIELDS     = 50;
+const MAX_FIELDS     = 80;
 const MAX_CUSTOM_IDS = 20;
 const MAX_CUSTOM_ID  = 99_999;
 const MAX_CUSTOM_VAL = 500;
@@ -152,6 +185,21 @@ function normalizeEmail(str) {
 // Telefone: formato canônico BR (55 + DDD + 9 + 8) quando elegível
 function normalizePhone(str) {
   return canonicalizeBrMobilePhone(str) || String(str || '').trim();
+}
+
+// Data: AAAA-MM-DD ou DD/MM/AAAA. Valor inválido é descartado.
+function normalizeBirthDate(str) {
+  const value = String(str || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  return '';
+}
+
+// UF do cadastro: somente 2 letras. Nome de estado por extenso é descartado.
+function normalizeUf(str) {
+  const value = String(str || '').replace(/\s/g, '').toUpperCase();
+  return /^[A-Z]{2}$/.test(value) ? value : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +313,9 @@ function sanitizePayload(rawBody) {
     if (spec.normalize === 'name')  normalized = normalizeName(truncated);
     else if (spec.normalize === 'email') normalized = normalizeEmail(truncated);
     else if (spec.normalize === 'phone') normalized = normalizePhone(truncated);
+    else if (spec.normalize === 'date') normalized = normalizeBirthDate(truncated);
+    else if (spec.normalize === 'uf') normalized = normalizeUf(truncated);
+    if (!normalized) continue;
 
     // 10. Primeiro alias vence (não sobrescrever)
     if (!canonical[spec.canonical]) {
@@ -512,10 +563,32 @@ export default async function handler(req, res) {
         email:            canonical.email            || null,
         phone:            canonical.phone            || null,
         interest:         canonical.interest         || null,
-        company_name:     canonical.company_name     || null,
-        company_cnpj:     canonical.company_cnpj     || null,
-        company_email:    canonical.company_email    || null,
-        visitor_id:       canonical.visitor_id       || null,
+        company_name:          canonical.company_name          || null,
+        company_cnpj:          canonical.company_cnpj          || null,
+        company_email:         canonical.company_email         || null,
+        company_razao_social:  canonical.company_razao_social  || null,
+        company_nome_fantasia: canonical.company_nome_fantasia || null,
+        company_telefone:      canonical.company_telefone ? String(canonical.company_telefone).slice(0, 15) : null,
+        company_site:          canonical.company_site          || null,
+        company_cep:           canonical.company_cep           || null,
+        company_cidade:        canonical.company_cidade        || null,
+        company_estado:        canonical.company_estado        || null,
+        company_endereco:      canonical.company_endereco      || null,
+        cargo:                 canonical.cargo                 || null,
+        instagram:             canonical.instagram             || null,
+        linkedin:              canonical.linkedin              || null,
+        tiktok:                canonical.tiktok                || null,
+        poder_investimento:    canonical.poder_investimento    || null,
+        data_nascimento:       canonical.data_nascimento       || null,
+        record_type:           canonical.record_type           || null,
+        cep:                   canonical.cep                   || null,
+        estado:                canonical.estado                || null,
+        cidade:                canonical.cidade                || null,
+        endereco:              canonical.endereco              || null,
+        numero:                canonical.numero                || null,
+        bairro:                canonical.bairro                || null,
+        complemento:           canonical.complemento           || null,
+        visitor_id:            canonical.visitor_id            || null,
         campanha:         canonical.campanha         || null,
         conjunto_anuncio: canonical.conjunto_anuncio || null,
         anuncio:          canonical.anuncio          || null,

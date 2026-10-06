@@ -1826,12 +1826,24 @@ export const Settings: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {[
-                            ['Nome', 'name, nome, full_name, fullname, cliente', 'Obrigatório (ou email)'],
-                            ['Email', 'email, e-mail, mail', 'Obrigatório (ou nome)'],
+                            ['Nome', 'name, nome, full_name, fullname, cliente', 'Obrigatório (ou e-mail)'],
+                            ['E-mail', 'email, e-mail, mail', 'Obrigatório (ou nome)'],
                             ['Telefone', 'phone, telefone, tel, celular, whatsapp', ''],
                             ['Interesse', 'interest, interesse, subject, assunto, message', ''],
-                            ['Origem', 'origin, origem, source, fonte', 'Ex: landing_page, whatsapp, api'],
-                            ['Status', 'status, situacao', 'Ex: novo, em_qualificacao, convertido'],
+                            ['Cargo', 'cargo', ''],
+                            ['Instagram', 'instagram', ''],
+                            ['LinkedIn', 'linkedin', ''],
+                            ['TikTok', 'tiktok', ''],
+                            ['Poder de investimento', 'poder_investimento', 'Até 50 caracteres'],
+                            ['Data de nascimento', 'data_nascimento', 'AAAA-MM-DD ou DD/MM/AAAA'],
+                            ['Tipo de registro', 'record_type', ''],
+                            ['CEP do lead', 'cep', 'Até 10 caracteres'],
+                            ['Estado do lead', 'estado', 'UF com 2 letras. Ex: SP'],
+                            ['Cidade do lead', 'cidade', ''],
+                            ['Endereço do lead', 'endereco', ''],
+                            ['Número', 'numero', ''],
+                            ['Bairro', 'bairro', ''],
+                            ['Complemento', 'complemento', ''],
                           ].map(([campo, nomes, obs]) => (
                             <tr key={campo} className="hover:bg-slate-50">
                               <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
@@ -1841,6 +1853,11 @@ export const Settings: React.FC = () => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                    <div className="px-4 py-3 bg-blue-50 border-t border-blue-100">
+                      <p className="text-xs text-blue-800">
+                        O lead entra sempre com status <strong>novo</strong> e origem <strong>webhook_ultra_simples</strong>. As chaves <code className="bg-blue-100 px-1 rounded">origin</code>, <code className="bg-blue-100 px-1 rounded">origem</code>, <code className="bg-blue-100 px-1 rounded">source</code> e <code className="bg-blue-100 px-1 rounded">fonte</code> gravam o UTM de origem, não o campo Origem do cadastro.
+                      </p>
                     </div>
                   </div>
 
@@ -1863,13 +1880,13 @@ export const Settings: React.FC = () => {
                             ['CNPJ', 'company_cnpj, cnpj, documento'],
                             ['Razão Social', 'company_razao_social, razao_social, razao'],
                             ['Nome Fantasia', 'company_nome_fantasia, nome_fantasia, fantasia'],
-                            ['Email da empresa', 'company_email, email_empresa'],
-                            ['Telefone da empresa', 'company_phone, company_telefone, telefone_empresa'],
+                            ['E-mail da empresa', 'company_email, email_empresa'],
+                            ['Telefone da empresa', 'company_telefone, telefone_empresa, company_phone'],
                             ['Site', 'company_site, site, website, url'],
-                            ['Cidade', 'company_cidade, cidade, city'],
-                            ['Estado', 'company_estado, estado, uf, state'],
-                            ['CEP', 'company_cep, cep'],
-                            ['Endereço', 'company_endereco, endereco, address'],
+                            ['Cidade da empresa', 'company_cidade'],
+                            ['Estado da empresa', 'company_estado'],
+                            ['CEP da empresa', 'company_cep'],
+                            ['Endereço da empresa', 'company_endereco'],
                           ].map(([campo, nomes]) => (
                             <tr key={campo} className="hover:bg-slate-50">
                               <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
@@ -1916,7 +1933,7 @@ export const Settings: React.FC = () => {
                             ['Conjunto de Anúncio', 'conjunto_anuncio, adset, ad_set, utm_content', 'utm_content'],
                             ['Anúncio', 'anuncio, ad, ad_name, utm_term', 'utm_term'],
                             ['Mídia / Canal', 'utm_medium, medium, midia', 'utm_medium'],
-                            ['Origem', 'origem, utm_source, source, fonte', 'utm_source → campo origin'],
+                            ['Origem do tráfego', 'utm_source, origin, origem, source, fonte', 'coluna utm_source'],
                           ].map(([campo, nomes, equiv]) => (
                             <tr key={campo} className="hover:bg-slate-50">
                               <td className="px-4 py-2 font-medium text-slate-800">{campo}</td>
@@ -1976,6 +1993,10 @@ export const Settings: React.FC = () => {
                     <div className="ml-4"><span className="text-red-400">"nome"</span><span className="text-white">: </span><span className="text-green-300">"João Silva"</span><span className="text-white">,</span></div>
                     <div className="ml-4"><span className="text-red-400">"email"</span><span className="text-white">: </span><span className="text-green-300">"joao@empresa.com"</span><span className="text-white">,</span></div>
                     <div className="ml-4"><span className="text-red-400">"telefone"</span><span className="text-white">: </span><span className="text-green-300">"11999999999"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"cargo"</span><span className="text-white">: </span><span className="text-green-300">"Gerente de Compras"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"cidade"</span><span className="text-white">: </span><span className="text-green-300">"São Paulo"</span><span className="text-white">,</span></div>
+                    <div className="ml-4"><span className="text-red-400">"estado"</span><span className="text-white">: </span><span className="text-green-300">"SP"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// UTM de origem (não altera o campo Origem do cadastro)'}</div>
                     <div className="ml-4"><span className="text-red-400">"origem"</span><span className="text-white">: </span><span className="text-green-300">"landing_page"</span><span className="text-white">,</span></div>
                     <div className="ml-4 mt-1 text-slate-400">{'// Dados da empresa'}</div>
                     <div className="ml-4"><span className="text-red-400">"empresa"</span><span className="text-white">: </span><span className="text-green-300">"Empresa ABC"</span><span className="text-white">,</span></div>

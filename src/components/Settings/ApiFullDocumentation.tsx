@@ -302,9 +302,32 @@ export const ApiFullDocumentation: React.FC = () => {
                   ['E-mail', 'email, e-mail, mail, email_address, user_email', '255 caracteres'],
                   ['Telefone', 'phone, telefone, tel, celular, whatsapp, mobile', '30 caracteres'],
                   ['Interesse', 'interest, interesse, subject, assunto, message, mensagem', '500 caracteres'],
+                  ['Cargo', 'cargo', '255 caracteres'],
+                  ['Instagram', 'instagram', '255 caracteres'],
+                  ['LinkedIn', 'linkedin', '255 caracteres'],
+                  ['TikTok', 'tiktok', '255 caracteres'],
+                  ['Poder de investimento', 'poder_investimento', '50 caracteres'],
+                  ['Data de nascimento', 'data_nascimento', 'AAAA-MM-DD ou DD/MM/AAAA'],
+                  ['Tipo de registro', 'record_type', '50 caracteres'],
+                  ['CEP do lead', 'cep', '10 caracteres'],
+                  ['Estado do lead', 'estado', 'UF com 2 letras'],
+                  ['Cidade do lead', 'cidade', '255 caracteres'],
+                  ['Endereço do lead', 'endereco', '255 caracteres'],
+                  ['Número', 'numero', '20 caracteres'],
+                  ['Bairro', 'bairro', '255 caracteres'],
+                  ['Complemento', 'complemento', '255 caracteres'],
                   ['Empresa do lead', 'company, empresa, company_name, nome_empresa', '255 caracteres'],
                   ['CNPJ', 'cnpj, company_cnpj, documento', '20 caracteres'],
-                  ['Origem', 'utm_source, origin, origem, source, fonte', '255 caracteres'],
+                  ['Razão social', 'company_razao_social, razao_social, razao', '255 caracteres'],
+                  ['Nome fantasia', 'company_nome_fantasia, nome_fantasia, fantasia', '255 caracteres'],
+                  ['E-mail da empresa', 'company_email, email_empresa', '255 caracteres'],
+                  ['Telefone da empresa', 'company_telefone, telefone_empresa, company_phone', '15 caracteres'],
+                  ['Site', 'company_site, site, website, url', '255 caracteres'],
+                  ['CEP da empresa', 'company_cep', '9 caracteres'],
+                  ['Cidade da empresa', 'company_cidade', '255 caracteres'],
+                  ['Estado da empresa', 'company_estado', 'UF com 2 letras'],
+                  ['Endereço da empresa', 'company_endereco', '255 caracteres'],
+                  ['Origem do tráfego', 'utm_source, origin, origem, source, fonte', '255 caracteres. Grava utm_source'],
                   ['Mídia', 'utm_medium, medium, midia', '100 caracteres'],
                   ['Campanha', 'utm_campaign, campanha, campaign', '255 caracteres'],
                   ['Tags', 'tags, tag, etiquetas', 'Array ou string separada por vírgula'],
@@ -321,6 +344,11 @@ export const ApiFullDocumentation: React.FC = () => {
             </table>
           </div>
         </div>
+
+        <p className="text-xs text-slate-500">
+          O lead criado por esta API entra com status <strong>novo</strong> e origem <strong>webhook_ultra_simples</strong>.
+          Data inválida e UF que não tenha 2 letras são descartadas, sem impedir a criação do lead.
+        </p>
 
         <div className="border border-slate-200 rounded-lg overflow-hidden mt-3">
           <div className="bg-orange-50 px-4 py-2 border-b border-slate-200">
@@ -407,6 +435,16 @@ export const ApiFullDocumentation: React.FC = () => {
                 <td className="px-4 py-2 text-slate-600">Remove espaços nas bordas</td>
                 <td className="px-4 py-2 font-mono text-slate-500">" 5511999999999 " → "5511999999999"</td>
               </tr>
+              <tr>
+                <td className="px-4 py-2 font-medium">Data de nascimento</td>
+                <td className="px-4 py-2 text-slate-600">Aceita AAAA-MM-DD ou DD/MM/AAAA. Valor inválido é ignorado</td>
+                <td className="px-4 py-2 font-mono text-slate-500">"06/10/1990" → "1990-10-06"</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 font-medium">Estado</td>
+                <td className="px-4 py-2 text-slate-600">Somente a sigla com 2 letras, em maiúsculas</td>
+                <td className="px-4 py-2 font-mono text-slate-500">"sp" → "SP"</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -447,7 +485,7 @@ export const ApiFullDocumentation: React.FC = () => {
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-green-500" />
-            <span><strong>Limite de campos:</strong> máximo de 50 campos por requisição.</span>
+            <span><strong>Limite de campos:</strong> máximo de 80 campos por requisição.</span>
           </li>
         </ul>
       </Section>

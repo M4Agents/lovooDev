@@ -43,6 +43,9 @@ const STANDARD_FIELDS = new Set([
   'company_endereco', 'company_telefone', 'company_site',
   'campanha', 'conjunto_anuncio', 'anuncio', 'utm_medium', 'utm_source',
   'visitor_id',
+  'cargo', 'instagram', 'linkedin', 'tiktok', 'poder_investimento',
+  'data_nascimento', 'record_type',
+  'cep', 'estado', 'cidade', 'endereco', 'numero', 'bairro', 'complemento',
 ]);
 
 // ── Service client factory ─────────────────────────────────────────────────────
