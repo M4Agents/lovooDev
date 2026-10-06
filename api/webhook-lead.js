@@ -8,6 +8,7 @@ import { dispatchLeadCreatedTrigger } from './lib/automation/dispatchLeadCreated
 import { getSupabaseAdmin } from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload } from './lib/leads/handleLeadReentry.js';
 import { canonicalizeBrMobilePhone } from './lib/phone/canonicalizeBrMobile.js';
+import { triggerAdvancedWebhooks } from './lib/webhook/triggerAdvancedWebhooks.js';
 
 const MAX_PAYLOAD_BYTES = 10_240; // 10 KB por requisição
 
@@ -320,232 +321,6 @@ function sanitizePayload(rawBody) {
   };
 }
 
-// Função para disparar webhooks avançados automaticamente
-// supabase: client passado pelo caller (svcClient) — sem criação interna de credenciais
-async function triggerAdvancedWebhooks(leadData, companyId, supabase) {
-  try {
-    // 1. Buscar configurações ativas de webhook para lead_created
-    const { data: configs, error: configError } = await supabase.rpc('get_webhook_trigger_configs', {
-      p_company_id: companyId
-    });
-    
-    if (configError) {
-      console.error('❌ Erro ao buscar configurações:', configError);
-      return;
-    }
-    
-    // Filtrar configurações ativas para lead_created
-    
-    const activeConfigs = configs?.filter(config => 
-      config.is_active && 
-      config.trigger_events?.includes('lead_created')
-    ) || [];
-    
-    if (activeConfigs.length > 0) {
-      console.log(`📋 Processando ${activeConfigs.length} webhook(s) para lead_created`);
-    }
-    
-    if (activeConfigs.length === 0) {
-      console.log('⚠️ Nenhuma configuração de webhook ativa encontrada');
-      return;
-    }
-    
-    // 2. Disparar cada webhook
-    for (const config of activeConfigs) {
-      console.log(`🎯 Disparando webhook: ${config.name}`);
-      
-      // Construir payload dinâmico baseado nos campos selecionados
-      const defaultLeadFields = ['name', 'email', 'phone', 'status', 'origin'];
-      const selectedLeadFields = config.payload_fields?.lead || defaultLeadFields;
-      
-      // Dados disponíveis do lead (todos os campos da tabela leads)
-      const availableLeadData = {
-        id: leadData.lead_id,
-        name: leadData.name,
-        email: leadData.email,
-        phone: leadData.phone,
-        status: leadData.status || 'new',
-        origin: leadData.origin || 'webhook',
-        interest: leadData.interest,
-        responsible_user_id: leadData.responsible_user_id,
-        created_at: new Date().toISOString(),
-        updated_at: leadData.updated_at,
-        // Campos da empresa do lead
-        company_name: leadData.company_name,
-        company_cnpj: leadData.company_cnpj,
-        company_razao_social: leadData.company_razao_social,
-        company_nome_fantasia: leadData.company_nome_fantasia,
-        company_telefone: leadData.company_telefone,
-        company_email: leadData.company_email,
-        company_site: leadData.company_site,
-        company_cidade: leadData.company_cidade,
-        company_estado: leadData.company_estado,
-        company_cep: leadData.company_cep,
-        company_endereco: leadData.company_endereco
-      };
-      
-      // Construir objeto lead apenas com campos selecionados
-      const leadPayload = { id: availableLeadData.id }; // ID sempre incluído
-      
-      // Adicionar campos do lead selecionados
-      selectedLeadFields.forEach(field => {
-        if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
-          leadPayload[field] = availableLeadData[field];
-        } else {
-          console.log(`⚠️ Campo do lead não disponível: ${field}`);
-        }
-      });
-      
-      // Adicionar campos da empresa do lead selecionados
-      const selectedCompanyFields = config.payload_fields?.empresa || [];
-      
-      selectedCompanyFields.forEach(field => {
-        if (availableLeadData[field] !== undefined && availableLeadData[field] !== null) {
-          leadPayload[field] = availableLeadData[field];
-        }
-      });
-      
-      
-      // Adicionar campos personalizados selecionados - NOVO E SEGURO
-      const selectedCustomFields = config.payload_fields?.custom_fields || [];
-      // Processar campos personalizados selecionados
-      
-      if (selectedCustomFields.length > 0) {
-        try {
-          // CORREÇÃO: Usar dados já processados em vez de buscar no banco
-          // Isso evita o timing issue onde a busca acontece antes do commit
-          const customFieldsFromProcessed = leadData.custom_fields_processed || [];
-          
-          // Converter para formato compatível com a lógica existente
-          const customValues = customFieldsFromProcessed.map(cf => ({
-            field_id: cf.field_id,
-            value: cf.value,
-            lead_custom_fields: {
-              numeric_id: cf.numeric_id,
-              field_name: cf.field_name || `campo_${cf.numeric_id}`,
-              field_label: cf.field_label || `Campo ${cf.numeric_id}`
-            }
-          }));
-          
-          if (customValues && customValues.length > 0) {
-            // Adicionar campos personalizados selecionados ao payload
-            let includedCount = 0;
-            customValues.forEach((customValue) => {
-              const fieldNumericId = customValue.lead_custom_fields?.numeric_id?.toString();
-              const fieldId = customValue.field_id;
-              
-              // Verificar se este campo foi selecionado (por ID numérico ou UUID)
-              if (selectedCustomFields.includes(fieldNumericId) || selectedCustomFields.includes(fieldId)) {
-                const fieldKey = fieldNumericId || fieldId;
-                leadPayload[fieldKey] = customValue.value;
-                includedCount++;
-              }
-            });
-            
-            if (includedCount > 0) {
-              console.log(`✅ ${includedCount} campos personalizados incluídos no payload`);
-            }
-          } else {
-            console.log('ℹ️ Nenhum valor de campo personalizado encontrado para este lead');
-          }
-        } catch (error) {
-          console.error('❌ Erro ao processar campos personalizados:', error);
-          // Falha silenciosa para não quebrar o webhook
-        }
-      }
-      
-      // Construir payload APÓS adicionar todos os campos (incluindo personalizados)
-      const payload = {
-        event: 'lead_created',
-        timestamp: new Date().toISOString(),
-        data: {
-          lead: leadPayload
-        }
-      };
-      
-      // Payload construído com todos os campos (incluindo personalizados)
-      
-      // Fazer requisição HTTP
-      const startTime = Date.now();
-      try {
-        const response = await fetch(config.webhook_url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...config.headers
-          },
-          body: JSON.stringify(payload)
-        });
-        
-        const responseText = await response.text();
-        
-        console.log(`📥 Resposta: ${response.status} ${response.statusText}`);
-        console.log(`📄 Body: ${responseText}`);
-        
-        // Registrar log no banco de dados (MESMO payload enviado)
-        try {
-          const { data: logResult, error: logError } = await supabase
-            .from('webhook_trigger_logs')
-            .insert({
-              config_id: config.id,
-              company_id: companyId,
-              lead_id: leadData.lead_id,
-              event_type: 'lead_created',
-              payload: payload,
-              webhook_url: config.webhook_url,
-              response_status: response.status,
-              response_body: responseText,
-              response_headers: {},
-              error_message: response.ok ? null : `HTTP ${response.status}: ${response.statusText}`,
-              execution_time_ms: Date.now() - startTime
-            });
-          
-          if (logError) {
-            console.error('❌ Erro ao registrar log:', logError);
-          } else {
-            console.log('✅ Log registrado no banco de dados');
-          }
-        } catch (logError) {
-          console.error('❌ Erro ao registrar log:', logError);
-        }
-        
-        if (response.ok) {
-          console.log(`✅ Webhook ${config.name} disparado com sucesso`);
-        } else {
-          console.log(`❌ Webhook ${config.name} falhou: ${response.status}`);
-        }
-        
-      } catch (fetchError) {
-        console.error(`❌ Erro ao disparar webhook ${config.name}:`, fetchError.message);
-        
-        // Registrar erro no log (MESMO payload que tentou enviar)
-        try {
-          await supabase
-            .from('webhook_trigger_logs')
-            .insert({
-              config_id: config.id,
-              company_id: companyId,
-              lead_id: leadData.lead_id,
-              event_type: 'lead_created',
-              payload: payload,
-              webhook_url: config.webhook_url,
-              response_status: null,
-              response_body: null,
-              response_headers: {},
-              error_message: fetchError.message,
-              execution_time_ms: Date.now() - startTime
-            });
-          console.log('✅ Log de erro registrado no banco de dados');
-        } catch (logError) {
-          console.error('❌ Erro ao registrar log de erro:', logError);
-        }
-      }
-    }
-    
-  } catch (error) {
-    console.error('❌ Erro geral ao disparar webhooks:', error);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // callRateLimit — chama a RPC atômica de rate limiting
@@ -847,11 +622,16 @@ export default async function handler(req, res) {
       p_metadata:   logMetadata,
     })).catch(err => console.error('[webhook-lead] Failed to update webhook log result', { message: err?.message }));
 
-    // ── 13. Pipeline assíncrono (fire-and-forget) ─────────────────────────────
-    // Visitor connection, webhooks externos, automações e reentrada rodam em
-    // background. Falhas NUNCA influenciam a resposta HTTP nem os logs.
-    executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields })
-      .catch(err => console.error('[webhook-lead] async pipeline error (non-blocking):', err?.message));
+    // ── 13. Webhook avançado — antes da resposta HTTP ────────────────────────
+    // A função encerra depois de res.json(). O POST externo precisa terminar aqui.
+    // Tags já foram gravadas no bloco crítico, então a leitura encontra a lista.
+    await triggerAdvancedWebhooks({
+      supabase: svcClient,
+      companyId: lead.company_id,
+      leadId: lead.lead_id,
+      event: 'lead_created',
+      customFieldsProcessed,
+    });
 
     return res.status(200).json({ success: true, lead_id: lead.lead_id });
 
@@ -1019,36 +799,6 @@ async function attachVisitorFromConversionSignal(svcClient, companyId, canonical
     visitor_id_prefix: canonical.visitor_id.slice(0, 8),
   });
   return row.signal_id || null;
-}
-
-// ---------------------------------------------------------------------------
-// executeLeadAsyncPipeline — tarefas não essenciais para visualização imediata
-//
-// Executada fire-and-forget após o HTTP 200. Falhas nunca influenciam a resposta.
-// Recebe customFieldsProcessed já processado pelo bloco crítico.
-// ---------------------------------------------------------------------------
-async function executeLeadAsyncPipeline(lead, canonical, customFieldsProcessed, { svcClient, anonClient, requestId, ignoredFields }) {
-  const companyId = lead.company_id;
-
-  // 1. Visitor connection — already handled sync in executeLeadCriticalPostCreate when visitor_id present.
-  //    Keep async only as no-op placeholder for advanced webhooks below.
-
-  // 2. Webhooks avançados — usa customFieldsProcessed já disponível
-  try {
-    await triggerAdvancedWebhooks({
-      lead_id:                 lead.lead_id,
-      name:                    canonical.name  || 'Lead sem nome',
-      email:                   canonical.email || null,
-      phone:                   canonical.phone || null,
-      custom_fields_processed: customFieldsProcessed,
-    }, companyId, svcClient);
-  } catch (err) {
-    console.error('[webhook-lead] Advanced webhooks error', { message: err?.message });
-  }
-
-  // 3. Automação — somente leads novos
-  // Automação e reentrada movidas para executeLeadCriticalPostCreate (bloco
-  // síncrono antes do HTTP 200) pois o Vercel encerra a Lambda após res.json().
 }
 
 // detectFormFields removida na Fase 5 — substituída por sanitizePayload + FIELD_WHITELIST

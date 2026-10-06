@@ -29,6 +29,7 @@ import { formatInstagram, formatLinkedIn, formatTikTok, extractInstagramUsername
 import { LeadTagsField } from './LeadTagsField';
 import { Tag as TagType } from '../types/tags';
 import { tagsApi } from '../services/tagsApi';
+import { scheduleLeadWebhookDispatch } from '../services/leadWebhookDispatch';
 import { LeadEntriesSection }    from './LeadEntriesSection';
 import { NuvemshopLeadTab }      from './Nuvemshop/NuvemshopLeadTab';
 import { useAccessControl }      from '../hooks/useAccessControl';
@@ -770,10 +771,12 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       };
       
       let savedLeadId: number;
+      const previousStatus = activeLead?.status ?? null;
+      const isEdit = Boolean(activeLead?.id);
       
       if (activeLead?.id) {
         // Edição
-        await api.updateLead(activeLead.id, leadData);
+        await api.updateLead(activeLead.id, leadData, { deferWebhook: true });
         savedLeadId = activeLead.id;
 
         // [chat-sync] Fire-and-forget: propagar responsável para conversas do lead.
@@ -796,7 +799,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         }
       } else {
         // Criação
-        const newLead = await api.createLead(leadData);
+        const newLead = await api.createLead(leadData, { deferWebhook: true });
         savedLeadId = newLead.id;
 
         // ── Reposicionar no funil selecionado (se diferente do padrão) ──
@@ -834,7 +837,15 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       // Salvar tags do lead
       if (savedLeadId) {
         const tagIds = selectedTags.map(tag => tag.id);
-        await tagsApi.updateLeadTags(savedLeadId, tagIds);
+        try {
+          await tagsApi.updateLeadTags(savedLeadId, tagIds, { deferWebhook: true });
+        } finally {
+          scheduleLeadWebhookDispatch({
+            leadId: savedLeadId,
+            reason: isEdit ? 'updated' : 'created',
+            previousStatus: isEdit ? previousStatus : null,
+          })
+        }
       }
 
       onSave();

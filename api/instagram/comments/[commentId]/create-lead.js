@@ -18,6 +18,7 @@
 import { getSupabaseAdmin }         from '../../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller }  from '../../../lib/instagram/validateInstagramCaller.js';
 import { dispatchLeadCreatedTrigger } from '../../../lib/automation/dispatchLeadCreatedTrigger.js';
+import { triggerAdvancedWebhooks } from '../../../lib/webhook/triggerAdvancedWebhooks.js';
 import { handleLeadReentry }          from '../../../lib/leads/handleLeadReentry.js';
 
 const UUID_REGEX  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,6 +132,13 @@ export default async function handler(req, res) {
       { companyId: comment.company_id, leadId: lead_id, source: 'instagram' },
       svc,
     ).catch(err => console.error('[ig/comment/create-lead] dispatchLeadCreatedTrigger:', err?.message));
+
+    await triggerAdvancedWebhooks({
+      supabase: svc,
+      companyId: comment.company_id,
+      leadId: lead_id,
+      event: 'lead_created',
+    });
   }
 
   if (action === 'lead_linked') {

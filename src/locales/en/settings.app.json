@@ -262,7 +262,8 @@
           "interest": { "label": "Interest", "desc": "Lead interest" },
           "responsible_user_id": { "label": "Owner", "desc": "Assigned user" },
           "created_at": { "label": "Created at", "desc": "When the lead was created" },
-          "updated_at": { "label": "Last updated", "desc": "Last modification" }
+          "updated_at": { "label": "Last updated", "desc": "Last modification" },
+          "tags": { "label": "Tags", "desc": "Tags linked to the lead" }
         },
         "empresa": {
           "company_name": { "label": "Company name", "desc": "Lead company name" },

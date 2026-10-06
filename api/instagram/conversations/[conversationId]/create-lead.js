@@ -18,6 +18,7 @@ import { validateInstagramCaller }      from '../../../lib/instagram/validateIns
 import { dispatchLeadCreatedTrigger }   from '../../../lib/automation/dispatchLeadCreatedTrigger.js';
 import { handleLeadReentry }            from '../../../lib/leads/handleLeadReentry.js';
 import { getSupabaseAdmin }             from '../../../lib/automation/supabaseAdmin.js';
+import { triggerAdvancedWebhooks }      from '../../../lib/webhook/triggerAdvancedWebhooks.js';
 
 // Campos que nunca devem ser aceitos do payload (retorno 400 se presentes)
 const BLOCKED_FIELDS = new Set([
@@ -175,6 +176,13 @@ export default async function handler(req, res) {
       { companyId, leadId: lead_id, source: 'instagram' },
       svc,
     ).catch(err => console.error('[ig/create-lead] dispatchLeadCreatedTrigger error:', err?.message));
+
+    await triggerAdvancedWebhooks({
+      supabase: svc,
+      companyId,
+      leadId: lead_id,
+      event: 'lead_created',
+    });
   }
 
   if (action === 'lead_linked') {

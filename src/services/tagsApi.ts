@@ -3,6 +3,7 @@
 
 import { supabase } from '../lib/supabase';
 import { Tag, TagFormData } from '../types/tags';
+import { scheduleLeadWebhookDispatch } from './leadWebhookDispatch';
 
 export const tagsApi = {
   // Listar todas as tags da empresa
@@ -176,7 +177,7 @@ export const tagsApi = {
   },
 
   // Atualizar tags de um lead
-  async updateLeadTags(leadId: number, tagIds: string[]): Promise<void> {
+  async updateLeadTags(leadId: number, tagIds: string[], options?: { deferWebhook?: boolean }): Promise<void> {
     
     try {
       // Remover todas as tags existentes do lead
@@ -207,6 +208,10 @@ export const tagsApi = {
         }
       }
 
+      if (!options?.deferWebhook) {
+        scheduleLeadWebhookDispatch({ leadId, reason: 'updated' })
+      }
+
     } catch (error) {
       console.error('Error in updateLeadTags:', error);
       throw error;
@@ -229,6 +234,8 @@ export const tagsApi = {
         throw error;
       }
 
+      scheduleLeadWebhookDispatch({ leadId, reason: 'updated' })
+
     } catch (error) {
       console.error('Error in addTagToLead:', error);
       throw error;
@@ -249,6 +256,8 @@ export const tagsApi = {
         console.error('Error removing tag from lead:', error);
         throw error;
       }
+
+      scheduleLeadWebhookDispatch({ leadId, reason: 'updated' })
 
     } catch (error) {
       console.error('Error in removeTagFromLead:', error);

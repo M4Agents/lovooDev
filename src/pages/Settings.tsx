@@ -707,10 +707,11 @@ export const Settings: React.FC = () => {
       timeout_seconds: config.timeout_seconds || 30,
       retry_attempts: config.retry_attempts || 3,
       headers: config.headers ? JSON.stringify(config.headers, null, 2) : '',
-      payload_fields: config.payload_fields || {
-        lead: ['name', 'email', 'phone', 'status', 'origin'],
-        empresa: [],
-        analytics: []
+      payload_fields: {
+        lead: config.payload_fields?.lead ?? ['name', 'email', 'phone', 'status', 'origin'],
+        empresa: config.payload_fields?.empresa ?? [],
+        analytics: config.payload_fields?.analytics ?? [],
+        custom_fields: config.payload_fields?.custom_fields ?? [],
       }
     });
     
@@ -810,27 +811,49 @@ export const Settings: React.FC = () => {
         }
       }
 
+      const leadSamples: Record<string, string | string[]> = {
+        name: 'Lead de Teste',
+        email: 'teste@exemplo.com',
+        phone: '(11) 99999-9999',
+        status: 'convertido',
+        origin: 'teste',
+        interest: 'Produto X',
+        responsible_user_id: 'usuario-teste',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        tags: ['Quente', 'WhatsApp'],
+      };
+      const companySamples: Record<string, string> = {
+        company_name: 'Empresa do Lead',
+        company_cnpj: '00.000.000/0001-00',
+        company_razao_social: 'Empresa do Lead LTDA',
+        company_nome_fantasia: 'Empresa do Lead',
+        company_telefone: '(11) 3333-3333',
+        company_email: 'contato@empresa.com',
+        company_site: 'https://empresa.com',
+        company_cidade: 'São Paulo',
+        company_estado: 'SP',
+        company_cep: '01000-000',
+        company_endereco: 'Rua Exemplo, 100',
+      };
+
+      const leadPayload: Record<string, unknown> = { id: 12345 };
+      for (const field of webhookConfig.payload_fields.lead) {
+        if (leadSamples[field] !== undefined) leadPayload[field] = leadSamples[field];
+      }
+      for (const field of webhookConfig.payload_fields.empresa) {
+        if (companySamples[field] !== undefined) leadPayload[field] = companySamples[field];
+      }
+      for (const fieldId of webhookConfig.payload_fields.custom_fields) {
+        leadPayload[fieldId] = 'Valor de teste';
+      }
+
       const testPayload = {
         event: webhookConfig.trigger_event,
         timestamp: new Date().toISOString(),
         data: {
-          lead: {
-            name: 'Lead de Teste',
-            email: 'teste@exemplo.com',
-            phone: '(11) 99999-9999',
-            status: 'convertido',
-            origin: 'teste'
-          },
-          empresa: {
-            name: company?.name || 'Empresa Teste',
-            domain: company?.domain || 'teste.com'
-          },
-          analytics: {
-            visitor_id: 'test_visitor_123',
-            session_duration: 180,
-            page_views: 5
-          }
-        }
+          lead: leadPayload,
+        },
       };
 
       const result = await api.testWebhookTrigger(webhookConfig.webhook_url, testPayload, headers);
@@ -2209,7 +2232,7 @@ export const Settings: React.FC = () => {
                             <h4 className="text-sm font-semibold text-slate-900">{t('integrations.webhookAdvanced.form.payloadLeadTitle')}</h4>
                           </div>
                           <div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
-                            {(['name', 'email', 'phone', 'status', 'origin', 'interest', 'responsible_user_id', 'created_at', 'updated_at'] as const).map((key) => (
+                            {(['name', 'email', 'phone', 'status', 'origin', 'interest', 'responsible_user_id', 'created_at', 'updated_at', 'tags'] as const).map((key) => (
                               <label key={key} className="flex items-start gap-2.5 p-2 rounded hover:bg-slate-50 transition-colors cursor-pointer group">
                                 <input
                                   type="checkbox"

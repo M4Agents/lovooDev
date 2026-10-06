@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
+import { triggerAdvancedWebhooks } from '../lib/webhook/triggerAdvancedWebhooks.js';
 import { getPlanLimits, checkLimit } from '../lib/plans/limitChecker.js';
 
 const supabase = createClient(
@@ -181,6 +182,13 @@ export default async function handler(req, res) {
     // Disparar automação backend (fire-and-forget — nunca bloqueia a resposta)
     dispatchLeadCreatedTrigger({ companyId: company.id, leadId: lead.id, source: 'api' })
       .catch(err => console.error('[api/leads/create] automation trigger failed:', err))
+
+    await triggerAdvancedWebhooks({
+      supabase: getServiceClient(),
+      companyId: company.id,
+      leadId: lead.id,
+      event: 'lead_created',
+    })
 
     // Retornar sucesso
     res.status(201).json({

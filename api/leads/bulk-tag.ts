@@ -22,6 +22,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
 import { extractToken, getUserFromToken, assertMembership, jsonError } from '../lib/dashboard/auth.js'
+import { triggerAdvancedWebhooks } from '../lib/webhook/triggerAdvancedWebhooks.js'
 
 const MAX_LEAD_IDS = 200
 const MAX_TAG_IDS  = 50
@@ -153,6 +154,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(
     `[bulk-tag] user=${user.id} company=${companyId} leads=${dedupedLeadIds.length} tags=${dedupedTagIds.length} pairs=${pairs.length}`,
   )
+
+  await Promise.allSettled(dedupedLeadIds.map((id) => triggerAdvancedWebhooks({
+    supabase: svc,
+    companyId,
+    leadId: id,
+    event: 'lead_updated',
+  })))
 
   // ── 11. Resposta ──────────────────────────────────────────────────────────
   // ignoreDuplicates=true não retorna count de linhas afetadas de forma

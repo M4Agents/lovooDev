@@ -22,6 +22,7 @@
 // Sem imports de src/ — usa supabaseAdmin como parâmetro.
 // =====================================================
 
+import { resolveLeadWebhookEvent, triggerAdvancedWebhooks } from '../webhook/triggerAdvancedWebhooks.js'
 import { resolveLeadId, resolveOpportunityId, resolveConversationId } from './contextUtils.js'
 import { dispatchOpportunityStageChangedTrigger }                     from './dispatchOpportunityTrigger.js'
 import { triggerPendingMessage }                                       from '../agents/triggerPendingMessage.js'
@@ -39,6 +40,15 @@ async function validateMembership(userId, companyId, supabase) {
     .eq('is_active', true)
     .maybeSingle()
   return !!data
+}
+
+async function notifyLeadWebhook(supabase, companyId, leadId, event) {
+  await triggerAdvancedWebhooks({
+    supabase,
+    companyId,
+    leadId: Number(leadId),
+    event,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +210,13 @@ async function updateLead(config, context, supabase) {
     }
   }
 
+  const { data: beforeLead } = await supabase
+    .from('leads')
+    .select('status')
+    .eq('id', Number(leadId))
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+
   const { data: updated, error } = await supabase
     .from('leads')
     .update({ ...resolved, updated_at: new Date().toISOString() })
@@ -216,6 +233,15 @@ async function updateLead(config, context, supabase) {
       `update_lead: lead ${leadId} não encontrado ou não pertence à empresa ${context.companyId}`
     )
   }
+
+  const event = resolveLeadWebhookEvent({
+    reason: 'updated',
+    previousStatus: beforeLead?.status ?? null,
+    currentStatus: Object.prototype.hasOwnProperty.call(resolved, 'status')
+      ? resolved.status
+      : beforeLead?.status ?? null,
+  })
+  await notifyLeadWebhook(supabase, context.companyId, leadId, event)
 
   return {
     executed: true,
@@ -264,6 +290,8 @@ async function assignLeadOwner(config, context, supabase) {
   } catch (syncErr) {
     console.warn(`[chat-sync] lead=${leadId} responsible=${ownerId} exception=${syncErr?.message}`)
   }
+
+  await notifyLeadWebhook(supabase, context.companyId, leadId, 'lead_updated')
 
   return { executed: true, action: 'assign_lead_owner', leadId, ownerId }
 }
@@ -381,6 +409,10 @@ async function addTag(config, context, supabase) {
     results.push({ tagId: tag.id, tagName: tag.name })
   }
 
+  if (results.some((item) => !item.alreadyExists)) {
+    await notifyLeadWebhook(supabase, context.companyId, leadId, 'lead_updated')
+  }
+
   return { executed: true, action: 'add_tag', leadId, tags: results }
 }
 
@@ -414,6 +446,7 @@ async function removeTag(config, context, supabase) {
     .eq('tag_id', tag.id)
 
   if (error) throw new Error(`Erro ao remover tag: ${error.message}`)
+  await notifyLeadWebhook(supabase, context.companyId, leadId, 'lead_updated')
   return { executed: true, action: 'remove_tag', leadId, tagName, tagId: tag.id }
 }
 
@@ -597,6 +630,7 @@ async function setCustomField(config, context, supabase) {
       .eq('id', existing.id)
 
     if (error) throw new Error(`Erro ao atualizar campo personalizado: ${error.message}`)
+    await notifyLeadWebhook(supabase, context.companyId, leadId, 'lead_updated')
     return { executed: true, action: 'set_custom_field', leadId, fieldId, value, result: 'updated' }
   }
 
@@ -605,6 +639,7 @@ async function setCustomField(config, context, supabase) {
     .insert({ lead_id: Number(leadId), field_id: fieldId, value: String(value) })
 
   if (error) throw new Error(`Erro ao criar valor de campo personalizado: ${error.message}`)
+  await notifyLeadWebhook(supabase, context.companyId, leadId, 'lead_updated')
   return { executed: true, action: 'set_custom_field', leadId, fieldId, value, result: 'created' }
 }
 

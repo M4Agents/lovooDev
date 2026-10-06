@@ -351,7 +351,8 @@
           "interest": { "label": "Interesse", "desc": "Interesse do lead" },
           "responsible_user_id": { "label": "Responsável", "desc": "Usuário responsável" },
           "created_at": { "label": "Data de Criação", "desc": "Quando o lead foi criado" },
-          "updated_at": { "label": "Última Atualização", "desc": "Última modificação" }
+          "updated_at": { "label": "Última Atualização", "desc": "Última modificação" },
+          "tags": { "label": "Tags", "desc": "Lista de tags vinculadas ao lead" }
         },
         "empresa": {
           "company_name": { "label": "Nome da Empresa", "desc": "Nome da empresa do lead" },

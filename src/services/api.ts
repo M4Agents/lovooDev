@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { normalizeHeatmapCoordinates } from '../utils/normalizeHeatmapCoordinates';
 import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
+import { scheduleLeadWebhookDispatch } from './leadWebhookDispatch';
 // triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 
 // Process tracking queue
@@ -858,7 +859,7 @@ export const api = {
     company_telefone?: string;
     company_email?: string;
     company_site?: string;
-  }) {
+  }, options?: { deferWebhook?: boolean }) {
     console.log('API: createLead called with:', data);
     
     try {
@@ -1011,6 +1012,10 @@ export const api = {
           }),
         }).catch(err => console.error('[api.createLead] automation trigger failed:', err))
       }).catch(() => { /* sem sessão — ignora silenciosamente */ })
+
+      if (!options?.deferWebhook && lead?.id) {
+        scheduleLeadWebhookDispatch({ leadId: lead.id, reason: 'created' })
+      }
 
       return lead;
     } catch (error) {
@@ -1201,9 +1206,16 @@ export const api = {
     company_telefone?: string;
     company_email?: string;
     company_site?: string;
-  }) {
+  }, options?: { deferWebhook?: boolean }) {
     try {
       const { custom_fields, ...leadUpdates } = updates;
+      let previousStatus: string | null = null;
+      const { data: beforeLead } = await supabase
+        .from('leads')
+        .select('status')
+        .eq('id', leadId)
+        .maybeSingle();
+      previousStatus = beforeLead?.status ?? null;
 
       // Limpar campo email vazio para evitar violação da constraint valid_email
       if ((leadUpdates as any).email === '') {
@@ -1258,6 +1270,14 @@ export const api = {
             console.error('❌ ERRO EM CUSTOM FIELDS:', customError);
           }
         }
+      }
+
+      if (!options?.deferWebhook && lead?.id) {
+        scheduleLeadWebhookDispatch({
+          leadId: lead.id,
+          reason: 'updated',
+          previousStatus,
+        })
       }
 
       return lead;
