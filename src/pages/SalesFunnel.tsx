@@ -47,6 +47,7 @@ import {
   probabilityRangeToDraftTexts,
   type ProbabilityRange,
 } from '../utils/funnelProbabilityFilter'
+import type { FunnelOpenTarget, FunnelRestoreFocus } from '../utils/funnelFocus'
 
 export default function SalesFunnel() {
   const { t } = useTranslation('funnel')
@@ -446,7 +447,11 @@ export default function SalesFunnel() {
     setHasSavedFilters(false)
   }, [clearFilters, applyProbabilityRange])
 
-  const handleLeadClick = (leadId: number) => {
+  const lastOpenedTargetRef = useRef<FunnelOpenTarget | null>(null)
+  const [restoreFocus, setRestoreFocus] = useState<FunnelRestoreFocus | null>(null)
+
+  const handleLeadClick = (leadId: number, target?: FunnelOpenTarget) => {
+    lastOpenedTargetRef.current = target ?? null
     setSelectedLeadId(leadId)
     setShowChatModal(true)
   }
@@ -1065,6 +1070,7 @@ export default function SalesFunnel() {
               funnelId={selectedFunnel.id}
               funnelName={selectedFunnel.name}
               onLeadClick={handleLeadClick}
+              restoreFocus={restoreFocus}
               searchTerm={debouncedSearch}
               selectedOrigin={selectedOrigin}
               selectedPeriod={selectedPeriod}
@@ -1088,6 +1094,7 @@ export default function SalesFunnel() {
               funnelRequireWonSaleType={selectedFunnel.require_won_sale_type ?? false}
               funnelRequireLostLossType={selectedFunnel.require_lost_loss_type ?? false}
               onLeadClick={handleLeadClick}
+              restoreFocus={restoreFocus}
               visibleFields={visibleFields}
               searchTerm={debouncedSearch}
               selectedOrigin={selectedOrigin}
@@ -1165,8 +1172,12 @@ export default function SalesFunnel() {
           userId={user.id}
           isOpen={showChatModal}
           onClose={() => {
+            const opportunityId = lastOpenedTargetRef.current?.opportunityId
             setShowChatModal(false)
             setSelectedLeadId(null)
+            if (opportunityId) {
+              setRestoreFocus({ opportunityId, nonce: Date.now() })
+            }
           }}
         />
       )}

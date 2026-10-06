@@ -1056,7 +1056,7 @@ export interface FunnelBoardProps {
 export interface FunnelColumnProps {
   stage: FunnelStage
   leads: LeadFunnelPosition[]
-  onLeadClick?: (leadId: number) => void
+  onLeadClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
   onAddLead?: (stageId: string) => void
 }
 
@@ -1064,7 +1064,7 @@ export interface LeadCardProps {
   position: LeadFunnelPosition
   index: number
   visibleFields?: string[]
-  onClick?: (leadId: number) => void
+  onClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
 }
 
 export interface FunnelSelectorProps {

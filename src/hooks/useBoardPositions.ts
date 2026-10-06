@@ -18,7 +18,7 @@
 //   Usamos LIMIT/OFFSET clássico. Em cenários de alta concorrência
 //   (cards adicionados/removidos entre páginas), o offset pode
 //   gerar drift (duplicatas ou gaps). Para Phase 3A isso é aceitável.
-//   Mitigação: ao fazer refresh(stageId), volta ao offset 0.
+//   Refresh preserva a janela já carregada (limit >= cards visíveis).
 //   Cursor-based pagination fica para Phase 4.
 //
 // =====================================================
@@ -85,7 +85,7 @@ export function useBoardPositions(
   // FETCH: carrega uma página de uma etapa
   // --------------------------------------------------
   const fetchStage = useCallback(
-    async (stageId: string, page: number, append: boolean) => {
+    async (stageId: string, page: number, append: boolean, customOffset?: number) => {
       if (!companyId || !funnelId) return
 
       setStageMap(prev => {
@@ -97,7 +97,7 @@ export function useBoardPositions(
 
       const generation = fetchGenerationRef.current
       try {
-        const offset = page * pageSize
+        const offset = customOffset ?? page * pageSize
         const positions = await funnelApi.getStagePositionsPaged(
           funnelId,
           stageId,
@@ -178,24 +178,93 @@ export function useBoardPositions(
     (stageId: string) => {
       const cur = stageMapRef.current.get(stageId)
       if (!cur || cur.loading || !cur.hasMore) return
-      fetchStage(stageId, cur.page + 1, true)
+      const nextOffset = cur.positions.length
+      const nextPage = Math.floor(nextOffset / pageSize)
+      fetchStage(stageId, nextPage, true, nextOffset)
     },
-    [fetchStage]
+    [fetchStage, pageSize]
+  )
+
+  const fetchStageWindow = useCallback(
+    async (stageId: string, limit: number) => {
+      if (!companyId || !funnelId) return
+
+      setStageMap(prev => {
+        const next = new Map(prev)
+        const cur = next.get(stageId) ?? { ...EMPTY_STATE }
+        next.set(stageId, { ...cur, loading: true })
+        return next
+      })
+
+      const generation = fetchGenerationRef.current
+      try {
+        const positions = await funnelApi.getStagePositionsPaged(
+          funnelId,
+          stageId,
+          companyId,
+          {
+            search:                  filter.search,
+            origin:                  filter.origin,
+            period_start:            filter.period_start,
+            period_end:              filter.period_end,
+            date_field:              filter.date_field,
+            tags:                    filter.tags,
+            tags_mode:               filter.tags_mode,
+            sort_by:                 sortByStage?.get(stageId) ?? filter.sort_by,
+            owner_user_id:           filter.owner_user_id,
+            unassigned_responsible:  filter.unassigned_responsible,
+            contact_attempts_state:  filter.contact_attempts_state,
+            probability_min:         filter.probability_min,
+            probability_max:         filter.probability_max,
+          },
+          limit,
+          0,
+        )
+
+        if (generation !== fetchGenerationRef.current) return
+
+        setStageMap(prev => {
+          const next = new Map(prev)
+          next.set(stageId, {
+            positions,
+            loading: false,
+            hasMore: positions.length === limit && positions.length >= pageSize,
+            page: Math.max(0, Math.ceil(positions.length / pageSize) - 1),
+          })
+          return next
+        })
+      } catch (err) {
+        console.error(`Error refreshing stage ${stageId}:`, err)
+        if (generation !== fetchGenerationRef.current) return
+        setStageMap(prev => {
+          const next = new Map(prev)
+          const cur = next.get(stageId) ?? { ...EMPTY_STATE }
+          next.set(stageId, { ...cur, loading: false })
+          return next
+        })
+      }
+    },
+    [funnelId, companyId, filter, pageSize, sortByStage],
   )
 
   // --------------------------------------------------
-  // REFRESH: recarrega do zero (full board ou etapa única)
+  // REFRESH: recarrega a janela já visível (não volta para 20)
   // --------------------------------------------------
   const refresh = useCallback(
     (stageId?: string) => {
-      if (stageId) {
-        fetchStage(stageId, 0, false)
-      } else {
-        const visibleStages = stages.filter(s => !s.is_hidden)
-        Promise.all(visibleStages.map(s => fetchStage(s.id, 0, false)))
+      const refreshOne = (id: string) => {
+        const cur = stageMapRef.current.get(id)
+        const limit = Math.max(cur?.positions.length ?? 0, pageSize)
+        return fetchStageWindow(id, limit)
       }
+      if (stageId) {
+        void refreshOne(stageId)
+        return
+      }
+      const visibleStages = stages.filter(s => !s.is_hidden)
+      void Promise.all(visibleStages.map(s => refreshOne(s.id)))
     },
-    [stages, fetchStage]
+    [stages, fetchStageWindow, pageSize],
   )
 
   // --------------------------------------------------

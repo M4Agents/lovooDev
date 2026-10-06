@@ -65,6 +65,12 @@ import type {
 } from '../../types/sales-funnel'
 import { isCustomFieldKey, fromCustomFieldKey } from '../../utils/customFieldUtils'
 import { toAssigneeFilter } from '../../utils/funnelAssigneeFilter'
+import {
+  scheduleScrollToFunnelOpportunity,
+  useRestoreFunnelFocus,
+  type FunnelLeadClickHandler,
+  type FunnelRestoreFocus,
+} from '../../utils/funnelFocus'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
 import type { PeriodFilter as PeriodFilterType } from '../../types/analytics'
 import type { BulkMoveRequest } from './FunnelColumn'
@@ -87,7 +93,8 @@ interface FunnelBoardProps {
   /** Quando true, exige tipo de perda ao fechar como perdido. */
   funnelRequireLostLossType?: boolean
   visibleFields?: string[]
-  onLeadClick?: (leadId: number) => void
+  onLeadClick?: FunnelLeadClickHandler
+  restoreFocus?: FunnelRestoreFocus | null
   searchTerm?: string
   selectedOrigin?: string
   selectedPeriod?: PeriodFilterType | null
@@ -113,6 +120,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   funnelRequireLostLossType = false,
   visibleFields,
   onLeadClick,
+  restoreFocus = null,
   searchTerm = '',
   selectedOrigin = '',
   selectedPeriod = null,
@@ -128,6 +136,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
   const { t } = useTranslation('funnel')
   const { company, user } = useAuth()
   const { canSelectOpportunities, canBulkAssignLeads, canBulkTagLeads } = useAccessControl()
+  const highlightOpportunityId = useRestoreFunnelFocus(restoreFocus)
   const companyId = company?.id
   const { tags: availableTags } = useAvailableTags(companyId)
   const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
@@ -1882,6 +1891,7 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
                 leads={getLeadsByStage(stage.id)}
                 visibleFields={visibleFields}
                 onLeadClick={onLeadClick}
+                highlightOpportunityId={highlightOpportunityId}
                 onAddLead={handleAddLead}
                 onEditStage={handleEditStage}
                 onViewPlaybook={handleViewPlaybook}
@@ -2094,8 +2104,12 @@ export const FunnelBoard: React.FC<FunnelBoardProps> = ({
         <OpportunityDetailModal
           isOpen={true}
           onClose={() => {
+            const opportunityId = detailOpportunityId
             setDetailOpportunityId(null)
             setDetailOpportunityFetched(null)
+            if (opportunityId) {
+              scheduleScrollToFunnelOpportunity(opportunityId)
+            }
           }}
           opportunity={detailOpportunity}
           companyId={companyId ?? ''}

@@ -20,6 +20,7 @@ import { CycleStatusBadge } from './CycleStatusBadge'
 import { LeadCardCustomFieldRows } from './LeadCardCustomFieldRows'
 import { isCustomFieldKey } from '../../utils/customFieldUtils'
 import { getProbabilityTextClass } from '../../utils/probabilityColor'
+import { FUNNEL_OPP_FOCUS_ATTR } from '../../utils/funnelFocus'
 
 function ProbabilityLabel({ value }: { value: number }) {
   return (
@@ -41,7 +42,8 @@ interface LeadCardProps {
   index: number
   visibleFields?: string[]
   /** Clique no corpo do card (ex.: abrir chat). */
-  onClick?: (leadId: number) => void
+  onClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
+  highlightOpportunityId?: string | null
   /** Necessário para TagSelectorPopover (multi-tenant). */
   companyId?: string
   /** Abre o modal de detalhes/jornada da oportunidade. */
@@ -71,6 +73,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   index,
   visibleFields = ['photo', 'name', 'phone', 'company', 'tags'],
   onClick,
+  highlightOpportunityId = null,
   companyId,
   onDetailClick,
   companyUsers = [],
@@ -100,7 +103,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const displayTags = localTagNames ?? lead.tags ?? []
 
   const handleClick = () => {
-    if (onClick) onClick(lead.id)
+    if (onClick) {
+      onClick(lead.id, {
+        opportunityId: position.opportunity_id,
+        stageId: position.stage_id,
+      })
+    }
   }
 
   const isFieldVisible = (field: string) => visibleFields.includes(field)
@@ -126,6 +134,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          {...{ [FUNNEL_OPP_FOCUS_ATTR]: position.opportunity_id }}
           onClick={handleClick}
           className={`
             group relative bg-white rounded-lg shadow-sm border p-4 mb-3
@@ -137,7 +146,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50 opacity-70'
                 : isSelected
                   ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50 hover:border-blue-500'
-                  : 'border-gray-200 hover:border-blue-300'}
+                  : highlightOpportunityId === position.opportunity_id
+                    ? 'ring-2 ring-amber-400 border-amber-400'
+                    : 'border-gray-200 hover:border-blue-300'}
           `}
         >
           {/* Banner de multi-drag — exibido no card arrastado quando há seleção múltipla */}

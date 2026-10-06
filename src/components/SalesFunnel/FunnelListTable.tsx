@@ -8,6 +8,7 @@ import {
 } from '../../utils/funnelListVisibleColumns'
 import { FunnelListBodyCell } from './FunnelListCells'
 import type { ListStageError } from './useFunnelListPositions'
+import { FUNNEL_OPP_FOCUS_ATTR } from '../../utils/funnelFocus'
 
 export interface FunnelListGroup {
   stage: FunnelStage
@@ -34,7 +35,8 @@ interface FunnelListTableProps {
   onDeselectLoadedInStage: (stageId: string) => void
   onClearSelection: () => void
   onRowClick: (opportunityId: string) => void
-  onChatClick?: (leadId: number) => void
+  onChatClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
+  highlightOpportunityId?: string | null
   onLoadMoreStage: (stageId: string) => void
   onRetryStage: (stageId: string) => void
   userById: Map<string, AssignableUser>
@@ -98,6 +100,7 @@ export function FunnelListTable({
   onClearSelection,
   onRowClick,
   onChatClick,
+  highlightOpportunityId = null,
   onLoadMoreStage,
   onRetryStage,
   userById,
@@ -181,6 +184,7 @@ export function FunnelListTable({
                 onDeselectLoadedInStage={onDeselectLoadedInStage}
                 onRowClick={onRowClick}
                 onChatClick={onChatClick}
+                highlightOpportunityId={highlightOpportunityId}
                 onLoadMoreStage={onLoadMoreStage}
                 onRetryStage={onRetryStage}
                 userById={userById}
@@ -205,6 +209,7 @@ interface StageGroupRowsProps {
   onDeselectLoadedInStage: FunnelListTableProps['onDeselectLoadedInStage']
   onRowClick: FunnelListTableProps['onRowClick']
   onChatClick?: FunnelListTableProps['onChatClick']
+  highlightOpportunityId?: string | null
   onLoadMoreStage: FunnelListTableProps['onLoadMoreStage']
   onRetryStage: FunnelListTableProps['onRetryStage']
   userById: Map<string, AssignableUser>
@@ -222,6 +227,7 @@ function StageGroupRows({
   onDeselectLoadedInStage,
   onRowClick,
   onChatClick,
+  highlightOpportunityId = null,
   onLoadMoreStage,
   onRetryStage,
   userById,
@@ -279,6 +285,7 @@ function StageGroupRows({
           onToggleSelect={onToggleSelect}
           onRowClick={onRowClick}
           onChatClick={onChatClick}
+          highlightOpportunityId={highlightOpportunityId}
           userById={userById}
           customFieldValuesMap={customFieldValuesMap}
         />
@@ -359,6 +366,7 @@ interface OpportunityRowProps {
   onToggleSelect: FunnelListTableProps['onToggleSelect']
   onRowClick: FunnelListTableProps['onRowClick']
   onChatClick?: FunnelListTableProps['onChatClick']
+  highlightOpportunityId?: string | null
   userById: Map<string, AssignableUser>
   customFieldValuesMap: Record<number, CustomFieldValueEntry[]>
 }
@@ -372,14 +380,19 @@ function OpportunityRow({
   onToggleSelect,
   onRowClick,
   onChatClick,
+  highlightOpportunityId = null,
   userById,
   customFieldValuesMap,
 }: OpportunityRowProps) {
   const { t } = useTranslation('funnel')
+  const highlighted = highlightOpportunityId === position.opportunity_id
 
   return (
     <tr
-      className={`group cursor-pointer hover:bg-gray-50 ${selected ? 'bg-blue-50' : ''}`}
+      {...{ [FUNNEL_OPP_FOCUS_ATTR]: position.opportunity_id }}
+      className={`group cursor-pointer hover:bg-gray-50 ${
+        selected ? 'bg-blue-50' : highlighted ? 'bg-amber-50' : ''
+      } ${highlighted ? 'outline outline-2 outline-amber-400 outline-offset-[-2px]' : ''}`}
       onClick={() => onRowClick(position.opportunity_id)}
     >
       {columnConfig.columns.map((column) => (

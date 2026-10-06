@@ -36,6 +36,12 @@ import { fromCustomFieldKey, isCustomFieldKey } from '../../utils/customFieldUti
 import type { PeriodFilter } from '../../types/analytics'
 import type { ContactAttemptsState } from '../../types/contact-cycles'
 import { toAssigneeFilter } from '../../utils/funnelAssigneeFilter'
+import {
+  scheduleScrollToFunnelOpportunity,
+  useRestoreFunnelFocus,
+  type FunnelLeadClickHandler,
+  type FunnelRestoreFocus,
+} from '../../utils/funnelFocus'
 
 const FUNNEL_REALTIME_ENABLED = true
 const MAX_BULK_LEADS = 200
@@ -49,7 +55,8 @@ interface SelectedOpportunity {
 interface FunnelListViewProps {
   funnelId: string
   funnelName?: string
-  onLeadClick?: (leadId: number) => void
+  onLeadClick?: FunnelLeadClickHandler
+  restoreFocus?: FunnelRestoreFocus | null
   searchTerm?: string
   selectedOrigin?: string
   selectedPeriod?: PeriodFilter | null
@@ -70,6 +77,7 @@ export function FunnelListView({
   funnelId,
   funnelName,
   onLeadClick,
+  restoreFocus = null,
   searchTerm = '',
   selectedOrigin = '',
   selectedPeriod = null,
@@ -87,6 +95,7 @@ export function FunnelListView({
 }: FunnelListViewProps) {
   const { t } = useTranslation('funnel')
   const { company } = useAuth()
+  const highlightOpportunityId = useRestoreFunnelFocus(restoreFocus)
   const companyId = company?.id
   const { canSelectOpportunities, canBulkAssignLeads, canBulkTagLeads } = useAccessControl()
   const { tags: availableTags } = useAvailableTags(companyId)
@@ -578,6 +587,7 @@ export function FunnelListView({
           onClearSelection={clearSelection}
           onRowClick={setDetailOpportunityId}
           onChatClick={onLeadClick}
+          highlightOpportunityId={highlightOpportunityId}
           onLoadMoreStage={(stageId) => { void handleLoadMoreStage(stageId) }}
           onRetryStage={(stageId) => { void handleRetryStage(stageId) }}
           userById={userById}
@@ -627,8 +637,12 @@ export function FunnelListView({
         <OpportunityDetailModal
           isOpen={true}
           onClose={() => {
+            const opportunityId = detailOpportunityId
             setDetailOpportunityId(null)
             setDetailOpportunityFetched(null)
+            if (opportunityId) {
+              scheduleScrollToFunnelOpportunity(opportunityId)
+            }
           }}
           opportunity={detailOpportunity}
           companyId={companyId}

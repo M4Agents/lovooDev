@@ -20,7 +20,7 @@ export interface FunnelListRowContext {
   canSelect: boolean
   selected: boolean
   onToggleSelect: (positionId: string, leadId: number, opportunityId: string, stageId: string) => void
-  onChatClick?: (leadId: number) => void
+  onChatClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
   userById: Map<string, AssignableUser>
   columnConfig: FunnelListColumnConfig
   customFieldValuesMap: Record<number, CustomFieldValueEntry[]>
@@ -318,7 +318,10 @@ export function FunnelListBodyCell({
         {onChatClick && leadId ? (
           <button
             type="button"
-            onClick={() => onChatClick(leadId)}
+            onClick={() => onChatClick(leadId, {
+              opportunityId: position.opportunity_id,
+              stageId: stage.id,
+            })}
             className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
             title={t('list.chat')}
           >

@@ -55,7 +55,8 @@ interface FunnelColumnProps {
   stage: FunnelStage
   leads: LeadFunnelPosition[]
   visibleFields?: string[]
-  onLeadClick?: (leadId: number) => void
+  onLeadClick?: (leadId: number, target?: { opportunityId: string; stageId: string }) => void
+  highlightOpportunityId?: string | null
   onAddLead?: (stageId: string) => void
   onEditStage?: (stageId: string) => void
   /** Abre o modal de Playbook somente-leitura da etapa. */
@@ -118,6 +119,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
   leads,
   visibleFields,
   onLeadClick,
+  highlightOpportunityId = null,
   onAddLead,
   onEditStage,
   onViewPlaybook,
@@ -463,6 +465,7 @@ export const FunnelColumn: React.FC<FunnelColumnProps> = ({
                   index={index}
                   visibleFields={visibleFields}
                   onClick={onLeadClick}
+                  highlightOpportunityId={highlightOpportunityId}
                   companyId={companyId}
                   onDetailClick={onDetailClick}
                   companyUsers={companyUsers}
