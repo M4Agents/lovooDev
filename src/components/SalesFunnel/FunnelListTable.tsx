@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { CustomFieldDefinition, CustomFieldValueEntry, FunnelStage, OpportunityFunnelPosition } from '../../types/sales-funnel'
 import {
@@ -30,6 +30,8 @@ interface FunnelListTableProps {
   selectedPositionIds: Set<string>
   onToggleSelect: (positionId: string, leadId: number, opportunityId: string, stageId: string) => void
   onSelectLoaded: () => void
+  onSelectLoadedInStage: (stageId: string) => void
+  onDeselectLoadedInStage: (stageId: string) => void
   onClearSelection: () => void
   onRowClick: (opportunityId: string) => void
   onChatClick?: (leadId: number) => void
@@ -46,12 +48,53 @@ function resolveLead(position: OpportunityFunnelPosition) {
   return position.opportunity?.lead ?? position.lead
 }
 
+function selectablePositions(positions: OpportunityFunnelPosition[]) {
+  return positions.filter((position) => {
+    const lead = resolveLead(position)
+    return Boolean(position.lead_id || lead?.id || position.opportunity?.lead_id)
+  })
+}
+
+function SelectionCheckbox({
+  checked,
+  indeterminate = false,
+  disabled = false,
+  title,
+  onChange,
+}: {
+  checked: boolean
+  indeterminate?: boolean
+  disabled?: boolean
+  title: string
+  onChange: (checked: boolean) => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate && !checked
+  }, [indeterminate, checked])
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      checked={checked}
+      disabled={disabled}
+      title={title}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  )
+}
+
 export function FunnelListTable({
   groups,
   canSelect,
   selectedPositionIds,
   onToggleSelect,
   onSelectLoaded,
+  onSelectLoadedInStage,
+  onDeselectLoadedInStage,
   onClearSelection,
   onRowClick,
   onChatClick,
@@ -75,11 +118,9 @@ export function FunnelListTable({
   )
   const { columns } = columnConfig
   const colSpan = columns.length
-  const selectable = groups.flatMap(g => g.positions).filter((position) => {
-    const lead = resolveLead(position)
-    return Boolean(position.lead_id || lead?.id || position.opportunity?.lead_id)
-  })
+  const selectable = selectablePositions(groups.flatMap(g => g.positions))
   const allSelected = selectable.length > 0 && selectable.every(p => selectedPositionIds.has(p.id))
+  const someSelected = selectable.some(p => selectedPositionIds.has(p.id))
 
   return (
     <div className="overflow-x-auto h-full">
@@ -90,15 +131,15 @@ export function FunnelListTable({
               if (column.id === 'select') {
                 return (
                   <th key={column.id} className="pl-4 pr-2 py-2 w-8">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    <SelectionCheckbox
                       checked={allSelected}
-                      onChange={(e) => {
-                        if (e.target.checked) onSelectLoaded()
+                      indeterminate={someSelected && !allSelected}
+                      disabled={selectable.length === 0}
+                      title={allSelected ? t('list.clearSelection') : t('list.selectLoaded')}
+                      onChange={(checked) => {
+                        if (checked) onSelectLoaded()
                         else onClearSelection()
                       }}
-                      title={allSelected ? t('list.clearSelection') : t('list.selectLoaded')}
                     />
                   </th>
                 )
@@ -136,6 +177,8 @@ export function FunnelListTable({
                 canSelect={canSelect}
                 selectedPositionIds={selectedPositionIds}
                 onToggleSelect={onToggleSelect}
+                onSelectLoadedInStage={onSelectLoadedInStage}
+                onDeselectLoadedInStage={onDeselectLoadedInStage}
                 onRowClick={onRowClick}
                 onChatClick={onChatClick}
                 onLoadMoreStage={onLoadMoreStage}
@@ -158,6 +201,8 @@ interface StageGroupRowsProps {
   canSelect: boolean
   selectedPositionIds: Set<string>
   onToggleSelect: FunnelListTableProps['onToggleSelect']
+  onSelectLoadedInStage: FunnelListTableProps['onSelectLoadedInStage']
+  onDeselectLoadedInStage: FunnelListTableProps['onDeselectLoadedInStage']
   onRowClick: FunnelListTableProps['onRowClick']
   onChatClick?: FunnelListTableProps['onChatClick']
   onLoadMoreStage: FunnelListTableProps['onLoadMoreStage']
@@ -173,6 +218,8 @@ function StageGroupRows({
   canSelect,
   selectedPositionIds,
   onToggleSelect,
+  onSelectLoadedInStage,
+  onDeselectLoadedInStage,
   onRowClick,
   onChatClick,
   onLoadMoreStage,
@@ -182,6 +229,15 @@ function StageGroupRows({
 }: StageGroupRowsProps) {
   const { t } = useTranslation('funnel')
   const { stage, positions, loadedCount, totalCount, hasMore, loading, error } = group
+  const stageSelectable = selectablePositions(positions)
+  const stageAllSelected = stageSelectable.length > 0
+    && stageSelectable.every(p => selectedPositionIds.has(p.id))
+  const stageSomeSelected = stageSelectable.some(p => selectedPositionIds.has(p.id))
+  const stageSelectTitle = stageAllSelected
+    ? t('list.deselectLoadedStage')
+    : (hasMore && totalCount != null)
+      ? t('list.selectLoadedStagePartial', { loaded: loadedCount, total: totalCount })
+      : t('list.selectLoadedStage')
   const countLabel = totalCount != null
     ? t('list.stageLoadedOfTotal', { loaded: loadedCount, total: totalCount })
     : t('list.stageLoadedCount', { loaded: loadedCount })
@@ -192,6 +248,18 @@ function StageGroupRows({
         <td colSpan={colSpan} className="px-4 py-2">
           <div className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-2 min-w-0">
+              {canSelect && (
+                <SelectionCheckbox
+                  checked={stageAllSelected}
+                  indeterminate={stageSomeSelected && !stageAllSelected}
+                  disabled={stageSelectable.length === 0}
+                  title={stageSelectTitle}
+                  onChange={(checked) => {
+                    if (checked) onSelectLoadedInStage(stage.id)
+                    else onDeselectLoadedInStage(stage.id)
+                  }}
+                />
+              )}
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
               <span className="text-sm font-semibold text-gray-800 truncate">{stage.name}</span>
             </span>

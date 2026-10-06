@@ -353,6 +353,26 @@ export function FunnelListView({
     setSelectedMap(new Map(loadedByPositionId))
   }, [loadedByPositionId])
 
+  const selectLoadedInStage = useCallback((stageId: string) => {
+    setSelectedMap((prev) => {
+      const next = new Map(prev)
+      for (const [id, item] of loadedByPositionId) {
+        if (item.stageId === stageId) next.set(id, item)
+      }
+      return next
+    })
+  }, [loadedByPositionId])
+
+  const deselectLoadedInStage = useCallback((stageId: string) => {
+    setSelectedMap((prev) => {
+      const next = new Map(prev)
+      for (const [id, item] of loadedByPositionId) {
+        if (item.stageId === stageId) next.delete(id)
+      }
+      return next
+    })
+  }, [loadedByPositionId])
+
   const clearSelection = useCallback(() => {
     setSelectedMap(new Map())
   }, [])
@@ -553,6 +573,8 @@ export function FunnelListView({
           selectedPositionIds={selectedPositionIds}
           onToggleSelect={toggleSelect}
           onSelectLoaded={selectLoaded}
+          onSelectLoadedInStage={selectLoadedInStage}
+          onDeselectLoadedInStage={deselectLoadedInStage}
           onClearSelection={clearSelection}
           onRowClick={setDetailOpportunityId}
           onChatClick={onLeadClick}
