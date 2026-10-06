@@ -106,6 +106,7 @@ export const Settings: React.FC = () => {
   
   // Estados para edição e exclusão - FUNCIONALIDADE BOTÕES
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
+  const [editingOriginalEvent, setEditingOriginalEvent] = useState<string | null>(null);
   const [deletingConfigId, setDeletingConfigId] = useState<string | null>(null);
   
   // ===== NOVOS ESTADOS ISOLADOS PARA LOGS AVANÇADOS =====
@@ -657,15 +658,24 @@ export const Settings: React.FC = () => {
 
       let result;
       
-      if (editingConfigId) {
-        // Modo edição - atualizar configuração existente
+      const eventChanged = Boolean(
+        editingConfigId && editingOriginalEvent && webhookConfig.trigger_event !== editingOriginalEvent
+      );
+
+      if (editingConfigId && !eventChanged) {
         result = await api.updateWebhookTriggerConfig(editingConfigId, company.id, configData);
         alert('Configuração atualizada com sucesso!');
-        setEditingConfigId(null); // Sair do modo edição
+        setEditingConfigId(null);
+        setEditingOriginalEvent(null);
       } else {
-        // Modo criação - criar nova configuração
         result = await api.createWebhookTriggerConfig(company.id, configData);
-        alert('Configuração criada com sucesso!');
+        if (eventChanged) {
+          alert('A ação mudou. A configuração anterior foi mantida e esta foi criada como uma nova.');
+        } else {
+          alert('Configuração criada com sucesso!');
+        }
+        setEditingConfigId(null);
+        setEditingOriginalEvent(null);
       }
       
       // Reset form
@@ -715,8 +725,8 @@ export const Settings: React.FC = () => {
       }
     });
     
-    // Definir modo edição
     setEditingConfigId(config.id);
+    setEditingOriginalEvent(config.trigger_events?.[0] || 'lead_converted');
     
     // Scroll para o formulário
     const formElement = document.querySelector('form');
@@ -745,8 +755,36 @@ export const Settings: React.FC = () => {
       }
     });
     
-    // Sair do modo edição
     setEditingConfigId(null);
+    setEditingOriginalEvent(null);
+  };
+
+  const webhookSaveUpdatesCurrent = Boolean(
+    editingConfigId && webhookConfig.trigger_event === editingOriginalEvent
+  );
+
+  const webhookEventLabel = (event?: string) => {
+    if (event === 'lead_created' || event === 'lead_converted' || event === 'lead_updated') {
+      return t(`integrations.webhookAdvanced.triggerOptions.${event}`);
+    }
+    return event || t('users.notAvailable');
+  };
+
+  const webhookPayloadSummary = (payload: any) => {
+    const labels: string[] = [];
+    for (const key of Array.isArray(payload?.lead) ? payload.lead : []) {
+      labels.push(t(`integrations.webhookAdvanced.payload.lead.${key}.label`));
+    }
+    for (const key of Array.isArray(payload?.empresa) ? payload.empresa : []) {
+      labels.push(t(`integrations.webhookAdvanced.payload.empresa.${key}.label`));
+    }
+    for (const id of Array.isArray(payload?.custom_fields) ? payload.custom_fields : []) {
+      const field = availableCustomFields.find(
+        (item) => String(item.numeric_id ?? item.id) === String(id)
+      );
+      labels.push(field?.field_label || String(id));
+    }
+    return labels;
   };
 
   // FUNÇÃO EXCLUIR CONFIGURAÇÃO - NOVA FUNCIONALIDADE
@@ -2136,22 +2174,35 @@ export const Settings: React.FC = () => {
                 
                 {/* Formulário de Configuração */}
                 <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-orange-900">
-                      {editingConfigId ? t('integrations.webhookAdvanced.form.titleEdit') : t('integrations.webhookAdvanced.form.titleNew')}
-                    </h3>
-                    {editingConfigId && (
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
-                      >
-                        {t('integrations.webhookAdvanced.form.cancelEdit')}
-                      </button>
-                    )}
-                  </div>
-                  
                   <form onSubmit={handleCreateWebhook} className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <h3 className="text-lg font-semibold text-orange-900">
+                        {editingConfigId ? t('integrations.webhookAdvanced.form.titleEdit') : t('integrations.webhookAdvanced.form.titleNew')}
+                      </h3>
+                      {editingConfigId && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="px-3 py-2 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
+                          >
+                            {t('integrations.webhookAdvanced.form.cancelEdit')}
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={savingWebhook}
+                            className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                          >
+                            <Save className="w-4 h-4" />
+                            {savingWebhook
+                              ? t('integrations.webhookAdvanced.form.saving')
+                              : (webhookSaveUpdatesCurrent
+                                ? t('integrations.webhookAdvanced.form.submitUpdate')
+                                : t('integrations.webhookAdvanced.form.submitCreate'))}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2226,6 +2277,10 @@ export const Settings: React.FC = () => {
                         />
                       </div>
                     </div>
+
+                    <p className="text-xs text-slate-600">
+                      {t('integrations.webhookAdvanced.form.eventHint')}
+                    </p>
 
                     {/* Seção de Campos do Payload */}
                     <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-6">
@@ -2387,7 +2442,11 @@ export const Settings: React.FC = () => {
                         className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         <Save className="w-4 h-4" />
-                        {savingWebhook ? t('integrations.webhookAdvanced.form.saving') : (editingConfigId ? t('integrations.webhookAdvanced.form.submitUpdate') : t('integrations.webhookAdvanced.form.submitCreate'))}
+                        {savingWebhook
+                          ? t('integrations.webhookAdvanced.form.saving')
+                          : (webhookSaveUpdatesCurrent
+                            ? t('integrations.webhookAdvanced.form.submitUpdate')
+                            : t('integrations.webhookAdvanced.form.submitCreate'))}
                       </button>
                       <button
                         type="button"
@@ -2403,7 +2462,19 @@ export const Settings: React.FC = () => {
 
                 {/* Lista de Configurações */}
                 <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('integrations.webhookAdvanced.configsTitle')}</h3>
+                  <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                    <h3 className="text-lg font-semibold text-slate-900">{t('integrations.webhookAdvanced.configsTitle')}</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCancelEdit();
+                        document.querySelector('form')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="px-3 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      {t('integrations.webhookAdvanced.configsNew')}
+                    </button>
+                  </div>
                   
                   {webhookConfigs.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
@@ -2412,17 +2483,37 @@ export const Settings: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {webhookConfigs.map((config: any) => (
-                        <div key={config.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium text-slate-900">{config.name}</h4>
-                              <p className="text-sm text-slate-600 mt-1">{config.webhook_url}</p>
-                              <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                                <span>{t('integrations.webhookAdvanced.eventLabel')} {config.trigger_events?.[0] || t('users.notAvailable')}</span>
+                      {webhookConfigs.map((config: any) => {
+                        const payloadLabels = webhookPayloadSummary(config.payload_fields);
+                        return (
+                        <div key={config.id} className={`border rounded-lg p-4 transition-colors ${editingConfigId === config.id ? 'border-orange-400 bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-medium text-slate-900">{config.name}</h4>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                  {webhookEventLabel(config.trigger_events?.[0])}
+                                </span>
+                              </div>
+                              <p className="text-sm text-slate-600 mt-1 break-all">{config.webhook_url}</p>
+                              <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
                                 <span>{t('integrations.webhookAdvanced.statusLabel')} {config.is_active ? `✅ ${t('integrations.webhookAdvanced.statusActive')}` : `❌ ${t('integrations.webhookAdvanced.statusInactive')}`}</span>
                                 <span>{t('integrations.webhookAdvanced.timeoutLabel')} {config.timeout_seconds}s</span>
                                 <span>{t('integrations.webhookAdvanced.retryLabel')} {config.retry_attempts}x</span>
+                              </div>
+                              <div className="mt-3">
+                                <p className="text-xs font-medium text-slate-700 mb-1">{t('integrations.webhookAdvanced.configsPayloadLabel')}</p>
+                                {payloadLabels.length === 0 ? (
+                                  <p className="text-xs text-slate-500">{t('integrations.webhookAdvanced.configsPayloadEmpty')}</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {payloadLabels.map((label, index) => (
+                                      <span key={`${label}-${index}`} className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-xs text-slate-700">
+                                        {label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -2444,7 +2535,8 @@ export const Settings: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
