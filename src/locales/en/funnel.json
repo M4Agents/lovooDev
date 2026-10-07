@@ -153,6 +153,7 @@
     "placeholder": "Select a pipeline",
     "hint": "Select a sales pipeline",
     "defaultBadge": "Default",
+    "inactiveBadge": "Inactive",
     "noFunnels": "No pipelines available",
     "createFirstFunnel": "Create your first pipeline",
     "createNew": "Create new pipeline"

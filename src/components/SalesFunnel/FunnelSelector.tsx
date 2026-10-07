@@ -68,7 +68,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
     
     if (!draggedFunnel || !onReorderFunnels) return
 
-    const currentIndex = activeFunnels.findIndex(f => f.id === draggedFunnel.id)
+    const currentIndex = funnels.findIndex(f => f.id === draggedFunnel.id)
     
     if (currentIndex === dropIndex) {
       setDraggedFunnel(null)
@@ -77,7 +77,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
     }
 
     // Reordenar localmente
-    const newFunnels = [...activeFunnels]
+    const newFunnels = [...funnels]
     newFunnels.splice(currentIndex, 1)
     newFunnels.splice(dropIndex, 0, draggedFunnel)
 
@@ -97,7 +97,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
     }
   }
 
-  const activeFunnels = funnels.filter(f => f.is_active)
+  const selectedInactive = selectedFunnel != null && !selectedFunnel.is_active
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -106,13 +106,18 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
         className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2 flex-1">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
-          <span className="font-medium text-gray-900">
+          <div className={`w-2 h-2 rounded-full ${selectedInactive ? 'bg-gray-400' : 'bg-blue-500'}`} />
+          <span className={`font-medium ${selectedInactive ? 'text-gray-500' : 'text-gray-900'}`}>
             {selectedFunnel?.name || t('selector.placeholder')}
           </span>
           {selectedFunnel?.is_default && (
             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
               {t('selector.defaultBadge')}
+            </span>
+          )}
+          {selectedInactive && (
+            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+              {t('selector.inactiveBadge')}
             </span>
           )}
         </div>
@@ -128,7 +133,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
           </div>
 
           <div className="max-h-80 overflow-y-auto p-2">
-            {activeFunnels.length === 0 ? (
+            {funnels.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-gray-500 mb-4">
                   {t('selector.noFunnels')}
@@ -149,7 +154,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                 )}
               </div>
             ) : (
-              activeFunnels.map((funnel, index) => (
+              funnels.map((funnel, index) => (
                 <div
                   key={funnel.id}
                   draggable={!!onReorderFunnels}
@@ -164,6 +169,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                       ? 'bg-blue-50 border border-blue-200' 
                       : 'hover:bg-gray-50'
                     }
+                    ${!funnel.is_active ? 'opacity-70' : ''}
                     ${draggedFunnel?.id === funnel.id ? 'opacity-50' : ''}
                     ${dragOverIndex === index ? 'border-t-2 border-blue-500' : ''}
                   `}
@@ -172,9 +178,15 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                     {onReorderFunnels && (
                       <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     )}
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${funnel.is_over_plan ? 'bg-orange-400' : 'bg-blue-500'}`} />
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      !funnel.is_active
+                        ? 'bg-gray-400'
+                        : funnel.is_over_plan
+                          ? 'bg-orange-400'
+                          : 'bg-blue-500'
+                    }`} />
                     <div className="flex-1 min-w-0 text-left">
-                      <p className="font-medium text-gray-900 truncate">
+                      <p className={`font-medium truncate ${funnel.is_active ? 'text-gray-900' : 'text-gray-500'}`}>
                         {funnel.name}
                       </p>
                       {funnel.description && (
@@ -186,6 +198,11 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
                         {funnel.is_default && (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
                             {t('selector.defaultBadge')}
+                          </span>
+                        )}
+                        {!funnel.is_active && (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                            {t('selector.inactiveBadge')}
                           </span>
                         )}
                         {funnel.is_over_plan && (
@@ -207,7 +224,7 @@ export const FunnelSelector: React.FC<FunnelSelectorProps> = ({
             )}
           </div>
 
-          {onCreateFunnel && activeFunnels.length > 0 && (
+          {onCreateFunnel && funnels.length > 0 && (
             <div className="p-2 border-t border-gray-100">
               <button
                 onClick={() => {

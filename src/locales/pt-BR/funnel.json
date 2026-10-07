@@ -153,6 +153,7 @@
     "placeholder": "Selecione um funil",
     "hint": "Selecione um funil de vendas",
     "defaultBadge": "Padrão",
+    "inactiveBadge": "Inativo",
     "noFunnels": "Nenhum funil disponível",
     "createFirstFunnel": "Criar primeiro funil",
     "createNew": "Criar novo funil"

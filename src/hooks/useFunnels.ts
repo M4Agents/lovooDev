@@ -77,42 +77,49 @@ export const useFunnels = (
 
     if (visibleFunnels.length === 0) return undefined
 
-    // 1. Manter funil atualmente selecionado se ainda visível (refresh)
+    const activeVisible = visibleFunnels.filter(f => f.is_active)
+
+    // 1. Manter seleção no refresh, exceto se o funil acabou de ser desativado
     if (currentSelected) {
       const still = visibleFunnels.find(f => f.id === currentSelected.id)
-      if (still) return still
+      if (still) {
+        if (currentSelected.is_active && !still.is_active) {
+          return activeVisible[0]
+            ?? visibleFunnels.find(f => f.is_default)
+            ?? visibleFunnels[0]
+        }
+        return still
+      }
     }
 
-    // 2. Funil padrão da settings do usuário (default_funnel_id)
+    // 2. Funil padrão da settings do usuário (só se ainda ativo)
     if (defaultFunnelId) {
-      const fromSettings = visibleFunnels.find(f => f.id === defaultFunnelId)
+      const fromSettings = activeVisible.find(f => f.id === defaultFunnelId)
       if (fromSettings) return fromSettings
     }
 
-    // 3. localStorage escopado por userId + companyId
+    // 3. localStorage escopado por userId + companyId (apenas funil ativo)
     if (userId && companyId) {
       const key = getLocalStorageKey(userId, companyId)
       const saved = localStorage.getItem(key)
       if (saved) {
-        const found = visibleFunnels.find(f => f.id === saved)
+        const found = activeVisible.find(f => f.id === saved)
         if (found) return found
-        // ID salvo não existe mais (funil deletado ou acesso revogado) → ignorar silenciosamente
       }
     } else {
-      // Fallback para chave legada (sem userId)
       const saved = localStorage.getItem('selected_funnel_id')
       if (saved) {
-        const found = visibleFunnels.find(f => f.id === saved)
+        const found = activeVisible.find(f => f.id === saved)
         if (found) return found
       }
     }
 
-    // 4. Funil marcado como padrão da empresa
-    const defaultFunnel = visibleFunnels.find(f => f.is_default)
+    // 4. Funil padrão da empresa — só se estiver ativo
+    const defaultFunnel = activeVisible.find(f => f.is_default)
     if (defaultFunnel) return defaultFunnel
 
-    // 5. Primeiro funil disponível
-    return visibleFunnels[0]
+    // 5. Primeiro funil ativo; se não houver, o primeiro visível
+    return activeVisible[0] ?? visibleFunnels[0]
   }, [userId, companyId])
 
   // Buscar funis + settings do usuário

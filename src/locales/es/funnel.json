@@ -153,6 +153,7 @@
     "placeholder": "Seleccione un embudo",
     "hint": "Seleccione un embudo de ventas",
     "defaultBadge": "Predeterminado",
+    "inactiveBadge": "Inactivo",
     "noFunnels": "No hay embudos disponibles",
     "createFirstFunnel": "Crear el primer embudo",
     "createNew": "Crear nuevo embudo"
