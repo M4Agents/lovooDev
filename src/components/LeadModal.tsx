@@ -105,6 +105,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
   const [activeTab, setActiveTab] = useState<'lead' | 'company' | 'entries' | 'nuvemshop'>('lead');
+  const [showMoreInfo, setShowMoreInfo] = useState(false);
   const [companyUsers, setCompanyUsers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -415,6 +416,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       setSelectedFunnelId('');
       setDefaultFunnelId(null);
       setFormBaseline(null);
+      setShowMoreInfo(false);
+      setActiveTab('lead');
     }
   }, [isOpen]);
 
@@ -1067,6 +1070,102 @@ export const LeadModal: React.FC<LeadModalProps> = ({
     }
   };
 
+  const isCreateMode = !activeLead?.id;
+  const showExtendedFields = !isCreateMode || showMoreInfo;
+  const requiredCustomFields = isCreateMode
+    ? customFields.filter(field => field.is_required)
+    : [];
+  const extraCustomFields = isCreateMode
+    ? customFields.filter(field => !field.is_required)
+    : customFields;
+
+  const renderLeadClassificationFields = () => (
+    <>
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          <Building className="w-4 h-4 inline mr-1" />
+          Origem
+        </label>
+        <select
+          value={formData.origin}
+          onChange={(e) => handleInputChange('origin', e.target.value)}
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+        >
+          <option value="manual">Manual</option>
+          <option value="landing_page">Landing Page</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="import">Importação</option>
+          <option value="api">API Externa</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          <Tag className="w-4 h-4 inline mr-1" />
+          Status
+        </label>
+        <select
+          value={formData.status}
+          onChange={(e) => handleInputChange('status', e.target.value)}
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+        >
+          <option value="novo">Novo</option>
+          <option value="em_qualificacao">Em Qualificação</option>
+          <option value="convertido">Convertido</option>
+          <option value="perdido">Perdido</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          <Type className="w-4 h-4 inline mr-1" />
+          Tipo de Registro
+        </label>
+        <select
+          value={formData.record_type}
+          onChange={(e) => handleInputChange('record_type', e.target.value)}
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
+        >
+          <option value="Lead">Lead</option>
+          <option value="Oportunidade">Oportunidade</option>
+          <option value="Cliente Ativo">Cliente Ativo</option>
+          <option value="Cliente Inativo">Cliente Inativo</option>
+          <option value="Ex-cliente">Ex-cliente</option>
+          <option value="Parceiro">Parceiro</option>
+          <option value="Fornecedor">Fornecedor</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          <User className="w-4 h-4 inline mr-1" />
+          Responsável
+        </label>
+        {!activeLead?.id && !canAssignLead() ? (
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+            <div className="w-7 h-7 rounded-full bg-green-200 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-green-700" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-green-800 truncate">
+                {user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Você'}
+              </p>
+              <p className="text-xs text-green-600">Atribuído automaticamente a você</p>
+            </div>
+          </div>
+        ) : (
+          <UserSelector
+            users={companyUsers}
+            selectedUser={formData.responsible_user_id}
+            onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
+            showNoneOption={false}
+            disabled={loading || !canAssignLead()}
+          />
+        )}
+      </div>
+    </>
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -1087,7 +1186,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Sistema de Abas */}
+          {/* Sistema de Abas — na criação, só depois de Mais Informações */}
+          {showExtendedFields && (
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
               <button
@@ -1143,6 +1243,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
               )}
             </nav>
           </div>
+          )}
 
           {/* Conteúdo da Aba - Dados do Lead */}
           {activeTab === 'lead' && (
@@ -1213,94 +1314,17 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Building className="w-4 h-4 inline mr-1" />
-                    Origem
-                  </label>
-                  <select
-                    value={formData.origin}
-                    onChange={(e) => handleInputChange('origin', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                  >
-                    <option value="manual">Manual</option>
-                    <option value="landing_page">Landing Page</option>
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="import">Importação</option>
-                    <option value="api">API Externa</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Tag className="w-4 h-4 inline mr-1" />
-                    Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => handleInputChange('status', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                  >
-                    <option value="novo">Novo</option>
-                    <option value="em_qualificacao">Em Qualificação</option>
-                    <option value="convertido">Convertido</option>
-                    <option value="perdido">Perdido</option>
-                  </select>
-                </div>
-
-                {/* NOVO: Campo Tipo de Registro */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <Type className="w-4 h-4 inline mr-1" />
-                    Tipo de Registro
-                  </label>
-                  <select
-                    value={formData.record_type}
-                    onChange={(e) => handleInputChange('record_type', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-gray-900 placeholder-gray-400 hover:border-gray-400"
-                  >
-                    <option value="Lead">Lead</option>
-                    <option value="Oportunidade">Oportunidade</option>
-                    <option value="Cliente Ativo">Cliente Ativo</option>
-                    <option value="Cliente Inativo">Cliente Inativo</option>
-                    <option value="Ex-cliente">Ex-cliente</option>
-                    <option value="Parceiro">Parceiro</option>
-                    <option value="Fornecedor">Fornecedor</option>
-                  </select>
-                </div>
-
-                {/* NOVO: Campo Responsável */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <User className="w-4 h-4 inline mr-1" />
-                    Responsável
-                  </label>
-                  {/* Seller em criação: auto-atribuído, sem dropdown */}
-                  {!activeLead?.id && !canAssignLead() ? (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="w-7 h-7 rounded-full bg-green-200 flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-green-700" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-green-800 truncate">
-                          {user?.user_metadata?.name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Você'}
-                        </p>
-                        <p className="text-xs text-green-600">Atribuído automaticamente a você</p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Admin/Manager ou edição: dropdown completo */
-                    <UserSelector
-                      users={companyUsers}
-                      selectedUser={formData.responsible_user_id}
-                      onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
-                      showNoneOption={false}
-                      disabled={loading || !canAssignLead()}
-                    />
-                  )}
-                </div>
+                {!isCreateMode && renderLeadClassificationFields()}
 
               </div>
+
+              {isCreateMode && (
+                <LeadTagsField
+                  selectedTags={selectedTags}
+                  onTagsChange={setSelectedTags}
+                  disabled={loading}
+                />
+              )}
 
               {/* ── Seletor de Funil (apenas em criação) ──────────────────── */}
               {!activeLead?.id && (
@@ -1348,6 +1372,35 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 </div>
               )}
 
+              {isCreateMode && requiredCustomFields.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {requiredCustomFields.map(renderCustomField)}
+                </div>
+              )}
+
+              {isCreateMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMoreInfo(prev => {
+                      if (prev) setActiveTab('lead')
+                      return !prev
+                    })
+                  }}
+                  className="w-full px-4 py-2.5 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  {showMoreInfo ? 'Ocultar informações' : 'Mais Informações'}
+                </button>
+              )}
+
+              {isCreateMode && showMoreInfo && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderLeadClassificationFields()}
+                </div>
+              )}
+
+              {showExtendedFields && (
+              <>
               {/* NOVOS CAMPOS - Informações Profissionais */}
               <div className="space-y-4">
                 <h4 className="text-md font-medium text-gray-800 border-b border-gray-100 pb-1">
@@ -1422,29 +1475,32 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                 </div>
               </div>
 
-              {/* NOVO: Campo de Tags */}
-              <LeadTagsField
-                selectedTags={selectedTags}
-                onTagsChange={setSelectedTags}
-                disabled={loading}
-              />
+              {!isCreateMode && (
+                <LeadTagsField
+                  selectedTags={selectedTags}
+                  onTagsChange={setSelectedTags}
+                  disabled={loading}
+                />
+              )}
 
-              {/* Campos Personalizados */}
-              {customFields.length > 0 && (
+              {/* Campos Personalizados opcionais na criação; todos na edição */}
+              {showExtendedFields && extraCustomFields.length > 0 && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                     Campos Personalizados
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {customFields.map(renderCustomField)}
+                    {extraCustomFields.map(renderCustomField)}
                   </div>
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
 
           {/* Conteúdo da Aba - Dados da Empresa */}
-          {activeTab === 'company' && (
+          {activeTab === 'company' && showExtendedFields && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Informações da Empresa
@@ -1664,7 +1720,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Endereço */}
-          {activeTab === 'lead' && (
+          {activeTab === 'lead' && showExtendedFields && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Dados de Endereço
@@ -1781,7 +1837,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Redes Sociais */}
-          {activeTab === 'lead' && (
+          {activeTab === 'lead' && showExtendedFields && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Redes Sociais
@@ -1846,7 +1902,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           )}
 
           {/* Conteúdo da Aba - Anúncios */}
-          {activeTab === 'lead' && (
+          {activeTab === 'lead' && showExtendedFields && (
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
                 Dados de Anúncios
