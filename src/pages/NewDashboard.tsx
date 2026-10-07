@@ -369,6 +369,17 @@ export const NewDashboard: React.FC = () => {
         />
       </section>
 
+      <SellerRankingSection
+        data={sellerRanking.data}
+        meta={sellerRanking.meta}
+        loading={sellerRanking.loading}
+        error={sellerRanking.error}
+        onRetry={sellerRanking.refetch}
+        sellerDeltas={sellerDeltaMap.size > 0 ? sellerDeltaMap : undefined}
+        comparisonMode={comparisonMode}
+        onScopeSaved={sellerRanking.refetch}
+      />
+
       {/* ── 2. Inteligência Comercial ───────────────────────────────────── */}
       <section>
         <IntelligenceCentral
@@ -439,25 +450,14 @@ export const NewDashboard: React.FC = () => {
       <div className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-800">Performance Comercial</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Volumes, tendências e desempenho comercial do período.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Entrada de leads ao longo do período.</p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <TrendsSection
-            data={trends.data}
-            loading={trends.loading}
-            error={trends.error}
-            onRetry={trends.refetch}
-          />
-          <SellerRankingSection
-            data={sellerRanking.data}
-            meta={sellerRanking.meta}
-            loading={sellerRanking.loading}
-            error={sellerRanking.error}
-            onRetry={sellerRanking.refetch}
-            sellerDeltas={sellerDeltaMap.size > 0 ? sellerDeltaMap : undefined}
-            comparisonMode={comparisonMode}
-          />
-        </div>
+        <TrendsSection
+          data={trends.data}
+          loading={trends.loading}
+          error={trends.error}
+          onRetry={trends.refetch}
+        />
       </div>
 
       {/* ── 7–10. Pipeline Comercial — apenas manager+ ──────────────────── */}

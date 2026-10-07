@@ -6,7 +6,10 @@
 // =====================================================
 
 import React, { useState } from 'react'
-import { Trophy, TrendingUp, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Trophy, TrendingUp, AlertTriangle, RefreshCw, HelpCircle, Settings2 } from 'lucide-react'
+import { SellerRankingHelpModal } from './SellerRankingHelpModal'
+import { SellerRankingScopeModal } from './SellerRankingScopeModal'
+import { useAccessControl } from '../../../hooks/useAccessControl'
 import { SellerPerformanceChart }  from '../charts/SellerPerformanceChart'
 import { DeltaBadge }              from '../historical/DeltaBadge'
 import { TrendSparkline }          from '../historical/TrendSparkline'
@@ -28,6 +31,7 @@ interface Props {
   // FASE 4.1 — deltas históricos (opcional)
   sellerDeltas?:  Map<string, SellerSnapshotDelta>
   comparisonMode?: ComparisonMode
+  onScopeSaved?:   () => void
 }
 
 function scoreBadge(score: number) {
@@ -54,8 +58,12 @@ export function SellerRankingSection({
   onRetry,
   sellerDeltas,
   comparisonMode = 'wow',
+  onScopeSaved,
 }: Props) {
+  const { canViewDashboardSettings } = useAccessControl()
   const [showChart, setShowChart] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showScope, setShowScope] = useState(false)
 
   const isIndividual  = meta?.is_individual_view ?? false
   const title         = isIndividual ? 'Suas Métricas' : 'Ranking Comercial'
@@ -77,6 +85,25 @@ export function SellerRankingSection({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            title="Como ler o Ranking Comercial"
+            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            Como funciona
+          </button>
+          {canViewDashboardSettings && (
+            <button
+              type="button"
+              onClick={() => setShowScope(true)}
+              title="Escolher funis e etapas do ranking"
+              className="text-gray-400 hover:text-indigo-600"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           {!isIndividual && data.length > 1 && (
             <button
               onClick={() => setShowChart(v => !v)}
@@ -235,6 +262,14 @@ export function SellerRankingSection({
           </>
         )}
       </div>
+
+      {showHelp && <SellerRankingHelpModal onClose={() => setShowHelp(false)} />}
+      {showScope && (
+        <SellerRankingScopeModal
+          onClose={() => setShowScope(false)}
+          onSaved={() => onScopeSaved?.()}
+        />
+      )}
     </div>
   )
 }

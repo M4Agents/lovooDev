@@ -394,6 +394,21 @@ export interface SellerRankingResponse {
   meta: SellerRankingMeta
 }
 
+export interface RankingScopeSettings {
+  mode:        'all' | 'custom'
+  funnel_ids?: string[]
+  stage_ids?:  string[]
+}
+
+export interface RankingScopeResponse {
+  ok:   boolean
+  data: RankingScopeSettings
+  meta: {
+    is_default:  boolean
+    updated_at?: string
+  }
+}
+
 // ---------------------------------------------------------------------------
 // SLA Alerts — Leads sem resposta (Fase 2)
 // ---------------------------------------------------------------------------

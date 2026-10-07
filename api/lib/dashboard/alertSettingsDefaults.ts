@@ -44,6 +44,12 @@ export interface FunnelScopeSettings {
   stage_ids?: string[]   // obrigatório quando mode = 'custom'; deve ser array não vazio
 }
 
+export interface RankingScopeSettings {
+  mode:        'all' | 'custom'
+  funnel_ids?: string[]
+  stage_ids?:  string[]
+}
+
 export interface AwaitingLeadReplySettings {
   enabled:          boolean
   min_minutes:      number
@@ -324,6 +330,62 @@ export function validateFunnelScopeSettings(s: unknown): string | null {
       return `funnel_scope_settings: stage_ids contém um valor inválido: "${id}". Todos os itens devem ser UUIDs válidos`
     }
   }
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// validateRankingScopeSettings
+// Ganhou e Perdeu não são selecionáveis. A API confirma o tipo da etapa.
+// ---------------------------------------------------------------------------
+
+const RANKING_SCOPE_ALL_KEYS    = new Set(['mode'])
+const RANKING_SCOPE_CUSTOM_KEYS = new Set(['mode', 'funnel_ids', 'stage_ids'])
+
+export const RANKING_SCOPE_DEFAULTS: RankingScopeSettings = { mode: 'all' }
+
+function validateUuidList(value: unknown, field: string): string | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return `ranking_scope_settings: "${field}" deve ter ao menos um item`
+  }
+  if (value.length > 200) {
+    return `ranking_scope_settings: "${field}" excede o limite de 200 itens`
+  }
+  const seen = new Set<string>()
+  for (const id of value) {
+    if (typeof id !== 'string' || !UUID_RE.test(id)) {
+      return `ranking_scope_settings: "${field}" contém um UUID inválido`
+    }
+    if (seen.has(id)) {
+      return `ranking_scope_settings: "${field}" contém um item repetido`
+    }
+    seen.add(id)
+  }
+  return null
+}
+
+export function validateRankingScopeSettings(s: unknown): string | null {
+  if (!isPlainObject(s)) {
+    return 'ranking_scope_settings deve ser um objeto JSON'
+  }
+
+  if (s.mode !== 'all' && s.mode !== 'custom') {
+    return 'ranking_scope_settings: "mode" deve ser "all" ou "custom"'
+  }
+
+  const unknownErr = rejectUnknownKeys(
+    s,
+    s.mode === 'custom' ? RANKING_SCOPE_CUSTOM_KEYS : RANKING_SCOPE_ALL_KEYS,
+  )
+  if (unknownErr) return `ranking_scope_settings: ${unknownErr}`
+
+  if (s.mode === 'all') return null
+
+  const funnelErr = validateUuidList(s.funnel_ids, 'funnel_ids')
+  if (funnelErr) return funnelErr
+
+  const stageErr = validateUuidList(s.stage_ids, 'stage_ids')
+  if (stageErr) return stageErr
 
   return null
 }

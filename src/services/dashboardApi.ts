@@ -113,6 +113,8 @@ export type {
   SlaAlertsMeta,
   SlaAlertsResponse,
   AwaitingLeadReplyResponse,
+  RankingScopeSettings,
+  RankingScopeResponse,
   LeadOriginItem,
   LeadOriginsMeta,
   LeadOriginsResponse,
@@ -172,6 +174,8 @@ import type {
   SellerRankingResponse,
   SlaAlertsResponse,
   AwaitingLeadReplyResponse,
+  RankingScopeSettings,
+  RankingScopeResponse,
   LeadOriginsResponse,
   ForecastResponse,
   PriorityAlertsResponse,
@@ -1041,6 +1045,28 @@ export const dashboardApi = {
    * updated_by é sempre user.id do JWT no backend — nunca enviado pelo frontend.
    * Requer role admin / system_admin / super_admin.
    */
+  async getRankingScope(
+    companyId: string,
+    signal?:   AbortSignal,
+  ): Promise<RankingScopeResponse> {
+    return apiFetch<RankingScopeResponse>(
+      '/api/dashboard/ranking-scope',
+      { company_id: companyId },
+      signal,
+    )
+  },
+
+  async saveRankingScope(
+    companyId: string,
+    settings:  RankingScopeSettings,
+  ): Promise<RankingScopeResponse> {
+    return apiPost<RankingScopeResponse>(
+      '/api/dashboard/ranking-scope',
+      {},
+      { company_id: companyId, ranking_scope_settings: settings },
+    )
+  },
+
   async saveAlertSettings(
     companyId: string,
     settings:  Partial<AlertSettings>,
