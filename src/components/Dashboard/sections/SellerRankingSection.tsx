@@ -99,9 +99,10 @@ export function SellerRankingSection({
               type="button"
               onClick={() => setShowScope(true)}
               title="Escolher funis e etapas do ranking"
-              className="text-gray-400 hover:text-indigo-600"
+              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
             >
               <Settings2 className="w-3.5 h-3.5" />
+              Configurar
             </button>
           )}
           {!isIndividual && data.length > 1 && (
