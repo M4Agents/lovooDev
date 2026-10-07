@@ -33,6 +33,7 @@
 
 import { getSupabaseAdmin }                     from '../../automation/supabaseAdmin.js';
 import { handleLeadReentry, hashPayload }       from '../../leads/handleLeadReentry.js';
+import { triggerAdvancedWebhooks }              from '../../webhook/triggerAdvancedWebhooks.js';
 import { tryEnrichLeadAttribution }             from './attributionSync.js';
 
 const GENERIC_NAMES = new Set(['lead', 'lead sem nome', 'lead sem nome', 'unknown', 'usuário']);
@@ -245,6 +246,12 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
     const { data: ins, error: insErr } = await svc.from('leads').insert(newRow).select('id').single();
     if (insErr) throw new Error(`[customerSync] collision_insert_failed: ${insErr.message}`);
     await tryEnrichLeadAttribution({ companyId, leadId: ins.id, email, phone, svc }).catch(() => {});
+    await triggerAdvancedWebhooks({
+      supabase: svc,
+      companyId,
+      leadId: ins.id,
+      event: 'lead_created',
+    });
     return { ok: true, leadId: ins.id, action: 'created_collision_blocked', matchedBy };
   }
 
@@ -302,5 +309,11 @@ export async function upsertCustomer({ companyId, storeId, customerData, svc: _s
   const { data: inserted, error: insertErr } = await svc.from('leads').insert(newRow).select('id').single();
   if (insertErr) throw new Error(`[customerSync] insert_failed: ${insertErr.message}`);
   await tryEnrichLeadAttribution({ companyId, leadId: inserted.id, email, phone, svc }).catch(() => {});
+  await triggerAdvancedWebhooks({
+    supabase: svc,
+    companyId,
+    leadId: inserted.id,
+    event: 'lead_created',
+  });
   return { ok: true, leadId: inserted.id, action: 'created', matchedBy: null };
 }

@@ -34,6 +34,7 @@ import { CRITICAL_TOOLS, FORBIDDEN_ARG_FIELDS } from './toolDefinitions.js'
 import { INTENT_TO_USAGE_ROLE } from './mediaConstants.js'
 import { mediaSelector } from './mediaSelector.js'
 import { dispatchLeadCreatedTrigger }              from '../automation/dispatchLeadCreatedTrigger.js'
+import { triggerAdvancedWebhooks }                  from '../webhook/triggerAdvancedWebhooks.js'
 import { dispatchOpportunityStageChangedTrigger }  from '../automation/dispatchOpportunityTrigger.js'
 
 const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com'
@@ -1558,6 +1559,15 @@ async function execCreateLead(svc, args, ctx) {
         instagram_conversation_id: igConvId,
       })
     }
+  }
+
+  if (action === 'lead_created') {
+    await triggerAdvancedWebhooks({
+      supabase: svc,
+      companyId: ctx.company_id,
+      leadId,
+      event: 'lead_created',
+    })
   }
 
   return {

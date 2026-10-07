@@ -47,6 +47,7 @@
 // =============================================================================
 
 import { getSupabaseAdmin }           from '../../automation/supabaseAdmin.js';
+import { triggerAdvancedWebhooks }    from '../../webhook/triggerAdvancedWebhooks.js';
 import { tryEnrichLeadAttribution } from './attributionSync.js';
 
 // ── Sanitização de cart_items ─────────────────────────────────────────────────
@@ -259,6 +260,12 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
     const { data: ins, error } = await svc.from('leads').insert(newRow).select('id').single();
     if (error) throw new Error(`[checkoutSync] collision_insert_failed: ${error.message}`);
     await tryEnrichLeadAttribution({ companyId, leadId: ins.id, email, phone, svc }).catch(() => {});
+    await triggerAdvancedWebhooks({
+      supabase: svc,
+      companyId,
+      leadId: ins.id,
+      event: 'lead_created',
+    });
     return {
       ok: true, leadId: ins.id, action: 'created_collision_blocked', matchedBy,
       checkoutId: nuvemshopCheckoutId, cartTotal: checkoutFields.cart_total,
@@ -316,6 +323,12 @@ export async function upsertCheckout({ companyId, storeId, checkoutData, svc: _s
 
   if (insertErr) throw new Error(`[checkoutSync] insert_failed: ${insertErr.message}`);
   await tryEnrichLeadAttribution({ companyId, leadId: inserted.id, email, phone, svc }).catch(() => {});
+  await triggerAdvancedWebhooks({
+    supabase: svc,
+    companyId,
+    leadId: inserted.id,
+    event: 'lead_created',
+  });
   return {
     ok: true, leadId: inserted.id, action: 'created', matchedBy: null,
     checkoutId: nuvemshopCheckoutId, cartTotal: checkoutFields.cart_total,

@@ -226,6 +226,14 @@ async function postConfig(supabase, config, companyId, leadId, event, payload) {
   })
 }
 
+// Não espera o envio. Usado em lote e no WhatsApp, onde a resposta não pode
+// ficar presa no timeout do webhook do cliente.
+export function scheduleAdvancedWebhooks(params) {
+  void triggerAdvancedWebhooks(params).catch((error) => {
+    console.error('[advanced-webhook] falha ao agendar:', error?.message || error)
+  })
+}
+
 export async function triggerAdvancedWebhooks({
   supabase,
   companyId,

@@ -31,6 +31,7 @@
 // =====================================================
 
 import { dispatchLeadCreatedTrigger }    from './lib/automation/dispatchLeadCreatedTrigger.js';
+import { scheduleAdvancedWebhooks }       from './lib/webhook/triggerAdvancedWebhooks.js';
 import { dispatchMessageReceivedTrigger } from './lib/automation/dispatchMessageReceivedTrigger.js';
 import { resumeFromNode, resumeClaimedExecution } from './lib/automation/executor.js';
 import { acquireLock, releaseLock }               from './lib/automation/executionLock.js';
@@ -1288,6 +1289,12 @@ async function processMessage(payload) {
 
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId: leadResult.lead_id, source: 'whatsapp' })
               .catch(err => console.error('[uazapi-webhook-final] automation trigger failed:', err));
+            scheduleAdvancedWebhooks({
+              supabase: supabaseAdminForLead,
+              companyId: company.id,
+              leadId: leadResult.lead_id,
+              event: 'lead_created',
+            });
           } else if (leadResult.created === false) {
             console.log('ℹ️ Lead já existe para este telefone:', leadResult.lead_id);
             const supabaseAdmin = getSupabaseAdmin();

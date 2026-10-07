@@ -18,6 +18,7 @@
 import { createClient }          from '@supabase/supabase-js';
 import { getPlanLimits }         from '../lib/plans/limitChecker.js';
 import { dispatchLeadCreatedTrigger } from '../lib/automation/dispatchLeadCreatedTrigger.js';
+import { scheduleAdvancedWebhooks } from '../lib/webhook/triggerAdvancedWebhooks.js';
 import { handleLeadReentry, hashPayload } from '../lib/leads/handleLeadReentry.js';
 import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile.js';
 
@@ -530,6 +531,13 @@ async function processOneLead(rawLead, { svc, companyId, funnelId, targetStageId
 
     dispatchLeadCreatedTrigger({ companyId, leadId, source: 'file_import' })
       .catch(err => console.error('[import-file] automation dispatch error:', err?.message));
+
+    scheduleAdvancedWebhooks({
+      supabase: svc,
+      companyId,
+      leadId,
+      event: 'lead_created',
+    });
 
     return { ...zero, success: 1, ...resp };
 

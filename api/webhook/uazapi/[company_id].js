@@ -3,6 +3,7 @@
 // CÓPIA EXATA DO uazapi-webhook-final.js + PROCESSAMENTO ROBUSTO DE MÍDIA
 
 import { dispatchLeadCreatedTrigger }    from '../../lib/automation/dispatchLeadCreatedTrigger.js';
+import { scheduleAdvancedWebhooks }       from '../../lib/webhook/triggerAdvancedWebhooks.js';
 import { dispatchMessageReceivedTrigger } from '../../lib/automation/dispatchMessageReceivedTrigger.js';
 import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js';
 import { handleLeadReentry } from '../../lib/leads/handleLeadReentry.js';
@@ -733,6 +734,12 @@ async function processMessage(payload) {
           if (wasCreated && leadId) {
             dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'whatsapp' })
               .catch(err => console.error('[webhook/uazapi] automation trigger failed:', err));
+            scheduleAdvancedWebhooks({
+              supabase: getSupabaseAdmin(),
+              companyId: company.id,
+              leadId,
+              event: 'lead_created',
+            });
           }
           // Registrar reentrada quando lead já existia — await garante execução completa
           if (!wasCreated && leadId) {

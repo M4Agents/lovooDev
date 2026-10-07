@@ -3,6 +3,8 @@
 // Método: POST com qualquer JSON contendo dados de formulário
 
 import { dispatchLeadCreatedTrigger } from '../../lib/automation/dispatchLeadCreatedTrigger.js';
+import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js';
+import { triggerAdvancedWebhooks } from '../../lib/webhook/triggerAdvancedWebhooks.js';
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -153,6 +155,15 @@ async function createLeadFromWebhook(params) {
       await dispatchLeadCreatedTrigger({ companyId: company.id, leadId, source: 'webhook' });
     } catch (err) {
       console.error('[webhook/lead/[api_key]] automation trigger failed:', err);
+    }
+
+    if (rpcResult.is_duplicate !== true) {
+      await triggerAdvancedWebhooks({
+        supabase: getSupabaseAdmin(),
+        companyId: company.id,
+        leadId,
+        event: 'lead_created',
+      });
     }
 
     console.log('Lead criado com sucesso:', leadId);
