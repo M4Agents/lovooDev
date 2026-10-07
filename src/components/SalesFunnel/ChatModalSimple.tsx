@@ -292,7 +292,7 @@ export default function ChatModalSimple({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden" style={{ width: '70vw', height: '80vh' }}>
+      <div className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden w-[min(70vw,calc(100vw-2rem))] h-[min(80dvh,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
           <h2 className="text-xl font-semibold text-gray-900">Chat do Lead</h2>
@@ -306,7 +306,7 @@ export default function ChatModalSimple({
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -336,7 +336,7 @@ export default function ChatModalSimple({
           ) : conversationId ? (
             <>
               {/* ChatArea - 60% */}
-              <div className="flex flex-col bg-white" style={{ width: '60%' }}>
+              <div className="flex h-full min-h-0 min-w-0 flex-col bg-white" style={{ width: '60%' }}>
                 <ChatArea
                   conversationId={conversationId}
                   companyId={companyId}
@@ -345,7 +345,7 @@ export default function ChatModalSimple({
               </div>
 
               {/* LeadPanel - 40% */}
-              <div className="bg-white border-l border-gray-200" style={{ width: '40%' }}>
+              <div className="h-full min-h-0 overflow-hidden bg-white border-l border-gray-200" style={{ width: '40%' }}>
                 <LeadPanel
                   conversationId={conversationId}
                   companyId={companyId}

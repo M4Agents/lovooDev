@@ -365,7 +365,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   // =====================================================
 
   return (
-    <div className="flex h-full bg-gradient-to-br from-slate-50 to-gray-100">
+    <div className="flex h-full min-h-0 min-w-0 bg-gradient-to-br from-slate-50 to-gray-100">
       {/* Sidebar Conversas - 25% */}
       {!hideConversationSidebar && (
         <div className="w-1/4 min-w-[320px] bg-white/80 backdrop-blur-sm border-r border-slate-200/60 shadow-sm">
@@ -396,7 +396,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       )}
 
       {/* Área Chat - 50% */}
-      <div className={`${hideConversationSidebar ? 'flex-[3]' : 'flex-1'} flex flex-col bg-white/60 backdrop-blur-sm`}>
+      <div className={`${hideConversationSidebar ? 'flex-[3] min-w-0' : 'flex-1'} flex min-h-0 flex-col bg-white/60 backdrop-blur-sm`}>
         {selectedChannel === 'instagram' ? (
           <InstagramMainArea
             companyId={companyId}
@@ -467,7 +467,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
       </div>
 
       {/* Painel Lead - 25% */}
-      <div className={`${hideConversationSidebar ? 'flex-[2] h-full' : 'w-1/4 min-w-[320px]'} bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
+      <div className={`${hideConversationSidebar ? 'flex-[2] h-full min-w-0 overflow-hidden' : 'w-1/4 min-w-[320px]'} min-h-0 bg-white/80 backdrop-blur-sm border-l border-slate-200/60 shadow-sm`}>
         {selectedChannel === 'instagram' ? (
           <InstagramRightPanel
             companyId={companyId}

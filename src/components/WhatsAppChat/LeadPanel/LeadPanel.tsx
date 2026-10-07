@@ -341,7 +341,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   // =====================================================
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full min-h-0 bg-white overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex space-x-1">
@@ -389,7 +389,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === 'info' ? (
           <ContactInfo
             contact={contact}
@@ -928,10 +928,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Seção de Oportunidades - Scroll Inteligente */}
+    <div className="flex flex-col h-full min-h-0">
+      {/* Seção de Oportunidades - limitada à altura do painel, não da janela */}
       {conversation?.contact_phone && (
-        <div className="flex-shrink-0 overflow-y-auto max-h-[40vh] px-4 pt-4">
+        <div className="flex-shrink-0 overflow-y-auto max-h-[40%] min-h-0 px-4 pt-4">
           <OpportunitiesSection
             leadId={conversation.lead_id}
             phoneNumber={conversation.contact_phone}
@@ -948,7 +948,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       )}
 
       {/* Campos Fixos - Sempre Visíveis */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
         {/* Tags do Lead */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">

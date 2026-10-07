@@ -6,10 +6,53 @@ import { useLeadTags } from '../hooks/useLeadTags'
 import { useAvailableTags } from '../hooks/useAvailableTags'
 import type { Tag } from '../types/tags'
 
+const POPOVER_WIDTH = 280
+const VIEWPORT_MARGIN = 8
+const MAX_POPOVER_HEIGHT = 420
+const HEADER_HEIGHT = 36
+
+interface PopoverCoords {
+  top?: number
+  bottom?: number
+  left: number
+  width: number
+  maxHeight: number
+}
+
+function measurePopover(anchor: HTMLElement): PopoverCoords {
+  const rect = anchor.getBoundingClientRect()
+  const width = Math.min(POPOVER_WIDTH, window.innerWidth - VIEWPORT_MARGIN * 2)
+  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN
+  const spaceAbove = rect.top - VIEWPORT_MARGIN
+  const openUpward = spaceBelow < 240 && spaceAbove > spaceBelow
+  const available = Math.max(0, openUpward ? spaceAbove : spaceBelow)
+  const maxHeight = Math.min(MAX_POPOVER_HEIGHT, available)
+  const left = Math.min(
+    Math.max(VIEWPORT_MARGIN, rect.left),
+    Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN)
+  )
+
+  if (openUpward) {
+    return {
+      bottom: Math.round(window.innerHeight - rect.top + VIEWPORT_MARGIN),
+      left: Math.round(left),
+      width,
+      maxHeight: Math.round(maxHeight)
+    }
+  }
+
+  return {
+    top: Math.round(rect.bottom + VIEWPORT_MARGIN),
+    left: Math.round(left),
+    width,
+    maxHeight: Math.round(maxHeight)
+  }
+}
+
 interface TagSelectorPopoverProps {
   leadId: number
   companyId: string
-  /** Elemento âncora: o popover se posiciona abaixo dele via createPortal. */
+  /** Elemento âncora: o popover se posiciona ao lado dele via createPortal. */
   anchorRef: React.RefObject<HTMLButtonElement>
   /** Chamado com os nomes atualizados apenas se houver mudança real. */
   onTagsChanged: (names: string[]) => void
@@ -26,7 +69,7 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
   const { tags: leadTags, loading: loadingLead, error, load, addTag, removeTag } = useLeadTags()
   const { tags: availableTags, loading: loadingAvailable } = useAvailableTags(companyId)
   const [searchTerm, setSearchTerm] = useState('')
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const [coords, setCoords] = useState<PopoverCoords | null>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
   // Snapshot das tag IDs ao abrir o popover (para comparação ao fechar)
@@ -47,21 +90,35 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
     }
   }, [leadTags, loadingLead])
 
-  // Calcular posição do popover abaixo do botão âncora.
-  // Garante que o popover não ultrapasse nenhuma das bordas horizontais
-  // do viewport (relevante para painéis estreitos como o chat).
+  // Posiciona o popover no espaço livre da janela.
+  // Abre para cima quando não cabe abaixo e acompanha resize e scroll.
   useEffect(() => {
-    if (!anchorRef.current) return
-    const rect = anchorRef.current.getBoundingClientRect()
-    const popoverWidth = 280
-    const margin = 4
-    setCoords({
-      top: rect.bottom + margin,
-      left: Math.min(
-        Math.max(margin, rect.left),
-        window.innerWidth - popoverWidth - margin
-      )
-    })
+    const updatePosition = () => {
+      const anchor = anchorRef.current
+      if (!anchor) return
+      const next = measurePopover(anchor)
+      setCoords(prev => {
+        if (
+          prev &&
+          prev.top === next.top &&
+          prev.bottom === next.bottom &&
+          prev.left === next.left &&
+          prev.width === next.width &&
+          prev.maxHeight === next.maxHeight
+        ) {
+          return prev
+        }
+        return next
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
   }, [anchorRef])
 
   // Fechar e chamar onTagsChanged apenas se houve mudança real
@@ -128,14 +185,16 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
       style={{
         position: 'fixed',
         top: coords.top,
+        bottom: coords.bottom,
         left: coords.left,
         zIndex: 9999,
-        width: '280px'
+        width: coords.width,
+        maxHeight: coords.maxHeight
       }}
-      className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden"
+      className="bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
           <TagIcon className="w-3.5 h-3.5" />
           Tags
@@ -150,8 +209,12 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
         </button>
       </div>
 
+      <div
+        className="overflow-y-auto min-h-0"
+        style={{ maxHeight: Math.max(0, coords.maxHeight - HEADER_HEIGHT) }}
+      >
       {/* Tags atribuídas */}
-      <div className="px-3 pt-2.5 pb-1.5">
+      <div className="px-3 pt-2.5 pb-1.5 max-h-24 overflow-y-auto">
         {loadingLead ? (
           <p className="text-xs text-gray-400 italic">Carregando...</p>
         ) : leadTags.length === 0 ? (
@@ -202,7 +265,7 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
       </div>
 
       {/* Lista de tags disponíveis */}
-      <div className="max-h-48 overflow-y-auto border-t border-gray-100">
+      <div className="border-t border-gray-100">
         {loadingAvailable ? (
           <p className="px-3 py-3 text-xs text-gray-400 text-center">Carregando tags...</p>
         ) : filteredAvailable.length === 0 ? (
@@ -224,6 +287,7 @@ export const TagSelectorPopover: React.FC<TagSelectorPopoverProps> = ({
             </button>
           ))
         )}
+      </div>
       </div>
     </div>,
     document.body
