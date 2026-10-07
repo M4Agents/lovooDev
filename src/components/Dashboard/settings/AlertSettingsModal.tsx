@@ -6,7 +6,7 @@
 // Fluxo 2 etapas: 'editing' → 'confirming'.
 //
 // Seções configuráveis:
-//   1. SLA sem resposta    (sla_settings)
+//   1. Fila de Atendimento (sla_settings)
 //   2. Oportunidade parada (stalled_settings)
 //   3. Risco de vendedor   (seller_risk_settings)
 //
@@ -370,7 +370,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     const orig = formToSettings(originalForm)
     const curr = formToSettings(form)
     const result: string[] = []
-    if (JSON.stringify(orig.sla_settings)          !== JSON.stringify(curr.sla_settings))          result.push('SLA sem resposta')
+    if (JSON.stringify(orig.sla_settings)          !== JSON.stringify(curr.sla_settings))          result.push('Fila de Atendimento')
     if (JSON.stringify(orig.stalled_settings)       !== JSON.stringify(curr.stalled_settings))       result.push('Oportunidade parada')
     if (JSON.stringify(orig.seller_risk_settings)   !== JSON.stringify(curr.seller_risk_settings))   result.push('Risco de vendedor')
     if (JSON.stringify(orig.funnel_scope_settings)  !== JSON.stringify(curr.funnel_scope_settings))  result.push('Escopo para Oportunidades Paradas')
@@ -569,23 +569,23 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
           {!loading && form && (
             <>
-              {/* ── Seção 1: SLA sem resposta ─────────────────────── */}
+              {/* ── Seção 1: Fila de Atendimento ─────────────────── */}
               <div className="space-y-4">
                 <SectionHeader
-                  title="SLA sem resposta"
+                  title="Fila de Atendimento"
                   enabled={form.sla.enabled}
                   canEdit={canEdit}
                   onToggle={() => setSla({ enabled: !form.sla.enabled })}
                 />
 
                 <p className="text-xs text-gray-500 leading-relaxed pl-1">
-                  Define quando um lead aparece nos alertas por falta de resposta humana.
+                  Define quando um lead entra na Fila de Atendimento por falta de resposta humana.
                 </p>
 
                 <div className="pl-1 space-y-3">
                   <NumericField
                     label="Aparece após"
-                    hint="Lead aparece em Alertas Prioritários e em Leads sem Resposta após este tempo sem resposta humana."
+                    hint="O lead entra na Fila de Atendimento depois deste tempo sem resposta humana."
                     value={form.sla.min_hours}
                     step={0.5}
                     unit="horas"
@@ -594,21 +594,12 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   />
                   <NumericField
                     label="Crítico após"
-                    hint="Lead recebe badge Crítico em ambos os blocos de alerta após este tempo. Deve ser maior que o valor acima."
+                    hint="O lead recebe o selo Crítico na Fila de Atendimento depois deste tempo. Deve ser maior que o valor acima."
                     value={form.sla.critical_hours}
                     step={0.5}
                     unit="horas"
                     disabled={!canEdit || !form.sla.enabled}
                     onChange={(v) => setSla({ critical_hours: v })}
-                  />
-                  <NumericField
-                    label="Máximo de alertas exibidos"
-                    hint="Limita apenas os alertas de SLA exibidos em Alertas Prioritários."
-                    value={form.sla.limit}
-                    step={1}
-                    unit="alertas"
-                    disabled={!canEdit || !form.sla.enabled}
-                    onChange={(v) => setSla({ limit: Math.round(v) })}
                   />
                 </div>
 
@@ -691,7 +682,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 <div className="pl-1 space-y-3">
                   <NumericField
                     label="Leads aguardando há mais de"
-                    hint="Vendedor alerta quando tem leads sem resposta há mais de X horas."
+                    hint="Vendedor aparece em Alertas Prioritários quando tem leads sem resposta há mais de X horas. Os leads continuam na Fila de Atendimento."
                     value={form.sellerRisk.waiting_hours}
                     step={0.5}
                     unit="horas"
@@ -733,7 +724,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800">Escopo para Oportunidades Paradas</h3>
                   <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                    Este filtro afeta apenas alertas de oportunidades paradas. SLA sem resposta e risco por
+                    Este filtro afeta apenas alertas de oportunidades paradas. A fila de atendimento e o risco por
                     vendedor continuam usando suas próprias regras.
                   </p>
                 </div>

@@ -175,10 +175,10 @@ export const NewDashboard: React.FC = () => {
   const snapshot = useFunnelSnapshot(funnelId, funnelMode, canViewPipelineDashboard)
   const flow     = useFunnelFlow(funnelId, filters, canViewFunnelFlow)
 
-  // Âncora de scroll: KPI "Alertas Críticos" → PriorityAlertsSection
-  const priorityAlertsSectionRef = useRef<HTMLElement>(null)
-  const handleAlertsClick = useCallback(() => {
-    priorityAlertsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // Âncora de scroll: card "Leads Aguardando Atendimento" → Fila de Atendimento
+  const queueSectionRef = useRef<HTMLElement>(null)
+  const handleWaitingLeadsClick = useCallback(() => {
+    queueSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
   // Label do período ativo para exibir no header
@@ -358,7 +358,9 @@ export const NewDashboard: React.FC = () => {
           snapshotTrendPoints={canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0}
           comparisonMode={comparisonMode}
           userScoped={summary.userScoped}
-          onAlertsClick={handleAlertsClick}
+          onWaitingLeadsClick={handleWaitingLeadsClick}
+          waitingLeadsCount={slaAlerts.meta?.total ?? null}
+          waitingLeadsLoading={slaAlerts.loading && slaAlerts.meta == null}
         />
       </section>
 
@@ -382,31 +384,24 @@ export const NewDashboard: React.FC = () => {
       <div className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-800">Ações Urgentes</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Leads que exigem resposta imediata ou estão em risco de abandono.</p>
+          <p className="text-xs text-gray-500 mt-0.5">A fila lista quem espera resposta. Os alertas mostram oportunidade parada e vendedor com a fila acumulada.</p>
         </div>
 
-        <section ref={priorityAlertsSectionRef}>
-          <PriorityAlertsSection
-            data={priorityAlerts.data}
-            loading={priorityAlerts.loading}
-            error={priorityAlerts.error}
-            companyId={companyId}
-          />
-        </section>
-
-        {/* LeadOriginsSection: apenas manager+. Quando oculto, SlaAlertsPanel ocupa largura total */}
+        {/* LeadOriginsSection: apenas manager+. Quando oculto, a fila ocupa a largura toda */}
         <div className={`grid grid-cols-1 gap-4 ${canViewLeadOrigins ? 'lg:grid-cols-2' : ''}`}>
-          <SlaAlertsPanel
-            data={slaAlerts.data}
-            meta={slaAlerts.meta}
-            loading={slaAlerts.loading}
-            error={slaAlerts.error}
-            companyId={companyId}
-            onRetry={slaAlerts.refetch}
-            onLoadMore={slaAlerts.loadMore}
-            snapshotTrends={slaTrendSource}
-            snapshotTrendPoints={slaTrendPoints}
-          />
+          <section ref={queueSectionRef}>
+            <SlaAlertsPanel
+              data={slaAlerts.data}
+              meta={slaAlerts.meta}
+              loading={slaAlerts.loading}
+              error={slaAlerts.error}
+              companyId={companyId}
+              onRetry={slaAlerts.refetch}
+              onLoadMore={slaAlerts.loadMore}
+              snapshotTrends={slaTrendSource}
+              snapshotTrendPoints={slaTrendPoints}
+            />
+          </section>
           {canViewLeadOrigins && (
             <LeadOriginsSection
               data={leadOrigins.data}
@@ -417,6 +412,13 @@ export const NewDashboard: React.FC = () => {
             />
           )}
         </div>
+
+        <PriorityAlertsSection
+          data={priorityAlerts.data}
+          loading={priorityAlerts.loading}
+          error={priorityAlerts.error}
+          companyId={companyId}
+        />
       </div>
 
       {/* ── 6. Performance Comercial ────────────────────────────────────── */}

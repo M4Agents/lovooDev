@@ -212,7 +212,7 @@ export function SlaAlertsPanel({
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Leads aguardando sua resposta, ordenados por tempo.</p>
+          <p className="text-xs text-gray-400 mt-0.5">Leads sem resposta humana, do mais antigo para o mais recente. O selo Crítico marca quem passou do prazo configurado.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Botão da trendline — só aparece se houver dados suficientes */}
@@ -257,7 +257,7 @@ export function SlaAlertsPanel({
               <span className="text-emerald-600 text-lg">✓</span>
             </div>
             <p className="text-xs text-gray-500">
-              Nenhum lead aguardando resposta · SLA dentro do limite
+              Nenhum lead aguardando atendimento.
             </p>
           </div>
         )}

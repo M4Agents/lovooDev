@@ -48,8 +48,11 @@ interface ExecutiveSummaryProps {
    * e comparar seller-realtime com company-snapshot geraria deltas enganosos.
    */
   userScoped?:      boolean
-  /** Callback chamado ao clicar no KPI "Alertas críticos". Substitui drawer placeholder. */
-  onAlertsClick?:   () => void
+  /** Clique no card Leads Aguardando Atendimento. Desce até a Fila de Atendimento. */
+  onWaitingLeadsClick?: () => void
+  /** Total da Fila de Atendimento. Mesma regra do painel (prazo, 7 dias, dispensas). */
+  waitingLeadsCount?:   number | null
+  waitingLeadsLoading?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +90,9 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   snapshotTrendPoints = 0,
   comparisonMode = 'wow',
   userScoped = false,
-  onAlertsClick,
+  onWaitingLeadsClick,
+  waitingLeadsCount = null,
+  waitingLeadsLoading = false,
 }) => {
   const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
 
@@ -218,16 +223,16 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
           </SnapshotDataGuard>
         </InteractiveMetricCard>
 
-        {/* Alertas críticos — clique faz scroll até PriorityAlertsSection */}
+        {/* Leads aguardando atendimento — clique desce até a Fila de Atendimento */}
         <InteractiveMetricCard
-          title="Alertas críticos"
-          value={data?.alerts_count ?? 0}
-          subtitle="Não reconhecidos"
+          title="Leads Aguardando Atendimento"
+          value={waitingLeadsCount ?? 0}
+          subtitle="Sem resposta humana"
           icon={<Bell size={18} />}
           accent="red"
-          emptyLabel="Sem alertas no momento"
-          loading={loading}
-          onClick={onAlertsClick}
+          emptyLabel="Nenhum lead aguardando"
+          loading={loading || waitingLeadsLoading}
+          onClick={onWaitingLeadsClick}
         >
           {/* SLA: lower is better → queda = verde */}
           <SnapshotDataGuard dataPoints={snapshotTrendPoints} enabled={hasSnapshot}>

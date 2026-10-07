@@ -2,7 +2,8 @@
 // GET /api/dashboard/priority-alerts
 //
 // Alertas prioritários em tempo real (sem filtro de período).
-// Tipos: sla_critical, sla_high, stalled_opportunity, seller_risk.
+// Tipos: stalled_opportunity, seller_risk.
+// Lead sem resposta humana fica só na Fila de Atendimento.
 //
 // Query params:
 //   company_id   (obrigatório)

@@ -1,31 +1,25 @@
 // =====================================================
 // PriorityAlertsSection — Alertas prioritários do Dashboard.
-// Lista acionável com botões condicionais por tipo de alerta.
+// Oportunidade parada e risco de vendedor.
+// Lead sem resposta humana fica só na Fila de Atendimento.
 //
 // Regras de ação:
-//   sla_unanswered / sla_critical / sla_high → Chat (MessageCircle) → ChatModalSimple
-//   stalled_opportunity                       → Oportunidade (Eye)  → OpportunityDetailModal
-//   seller_risk                               → sem ação
+//   stalled_opportunity → Oportunidade (Eye) → OpportunityDetailModal
+//   seller_risk         → sem ação (alerta agregado)
 //
 // Dispensa ("Marcar como analisado"):
-//   sla_unanswered      → disponível se last_inbound_message_id presente
-//   sla_critical/high   → idem (legado, mesma regra)
 //   stalled_opportunity → disponível sempre
-//   seller_risk         → NÃO dispensável (alerta agregado)
-//
-// Chave de optimistic update: `${entity_id}:${last_inbound_message_id ?? ''}`
-// Evita ocultar novo alerta da mesma conversa se uma nova inbound chegar.
+//   seller_risk         → não dispensável
 // =====================================================
 
 import React, { useState, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import {
-  AlertTriangle, MessageCircle, TrendingDown, User, Zap,
-  Clock, ChevronRight, Eye, Loader2, CheckCircle,
+  AlertTriangle, TrendingDown, User, Zap,
+  ChevronRight, Eye, Loader2, CheckCircle,
 } from 'lucide-react'
 import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
 import { useDismissAlert }           from '../../../hooks/dashboard/useDismissAlert'
-import ChatModalSimple               from '../../SalesFunnel/ChatModalSimple'
 import { OpportunityDetailModal }    from '../../SalesFunnel/OpportunityDetailModal'
 import type {
   PriorityAlertItem,
@@ -37,21 +31,20 @@ import type {
 // Sets de controle de ação — sem inline if (type === ...) no JSX
 // ---------------------------------------------------------------------------
 
-const ALERT_CHAT_TYPES = new Set<PriorityAlertType>([
-  'sla_unanswered',
-  'sla_critical',
-  'sla_high',
-])
-
 const ALERT_OPP_TYPES = new Set<PriorityAlertType>([
   'stalled_opportunity',
 ])
 
-// seller_risk é alerta agregado — não representa entidade específica dispensável
-const ALERT_DISMISSABLE_TYPES = new Set<PriorityAlertType>([
+// Lead sem resposta fica na Fila de Atendimento. Se a API ainda devolver
+// esses tipos, a lista não os repete aqui.
+const QUEUE_ONLY_ALERT_TYPES = new Set<PriorityAlertType>([
   'sla_unanswered',
   'sla_critical',
   'sla_high',
+])
+
+// seller_risk é alerta agregado — não representa entidade específica dispensável
+const ALERT_DISMISSABLE_TYPES = new Set<PriorityAlertType>([
   'stalled_opportunity',
 ])
 
@@ -82,25 +75,20 @@ interface PriorityAlertsSectionProps {
 
 function alertIcon(type: PriorityAlertType) {
   switch (type) {
-    case 'sla_unanswered':
-    case 'sla_critical':    return MessageCircle
-    case 'sla_high':        return Clock
     case 'stalled_opportunity': return TrendingDown
-    case 'seller_risk':     return User
-    default:                return Zap
+    case 'seller_risk':         return User
+    default:                    return Zap
   }
 }
 
 function alertColors(severity: 'critical' | 'high') {
   if (severity === 'critical') {
     return {
-      badge:  'bg-red-100 text-red-700',
       icon:   'bg-red-50 text-red-500',
       border: 'border-red-100',
     }
   }
   return {
-    badge:  'bg-amber-100 text-amber-700',
     icon:   'bg-amber-50 text-amber-500',
     border: 'border-amber-100',
   }
@@ -114,7 +102,6 @@ interface AlertRowProps {
   item:              PriorityAlertItem
   openingOppId:      string | null
   dismissingKey:     string | null
-  onOpenChat:        (referenceId: string) => void
   onOpenOpportunity: (entityId: string) => void
   onDismiss:         (item: PriorityAlertItem) => void
 }
@@ -123,20 +110,14 @@ function AlertRow({
   item,
   openingOppId,
   dismissingKey,
-  onOpenChat,
   onOpenOpportunity,
   onDismiss,
 }: AlertRowProps) {
   const Icon   = alertIcon(item.type)
   const colors = alertColors(item.severity)
 
-  const canOpenChat        = ALERT_CHAT_TYPES.has(item.type)
   const canOpenOpportunity = ALERT_OPP_TYPES.has(item.type)
-  const canDismiss         = ALERT_DISMISSABLE_TYPES.has(item.type) && (
-    item.type === 'stalled_opportunity'
-      ? true
-      : !!item.last_inbound_message_id   // SLA só dispensável com a mensagem presente
-  )
+  const canDismiss         = ALERT_DISMISSABLE_TYPES.has(item.type)
 
   const isLoadingOpp     = openingOppId === item.entity_id
   const isDismissing     = dismissingKey === makeDismissKey(item.entity_id, item.last_inbound_message_id)
@@ -154,24 +135,8 @@ function AlertRow({
         <p className="text-xs text-gray-500">{item.description}</p>
       </div>
 
-      {/* Badge de severidade */}
-      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${colors.badge}`}>
-        {item.severity === 'critical' ? 'Crítico' : 'Alto'}
-      </span>
-
       {/* Ações condicionais */}
       <div className="flex items-center gap-0.5 shrink-0">
-        {canOpenChat && (
-          <button
-            type="button"
-            title="Abrir chat"
-            onClick={() => onOpenChat(item.reference_id)}
-            className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-          >
-            <MessageCircle size={14} />
-          </button>
-        )}
-
         {canOpenOpportunity && (
           <button
             type="button"
@@ -221,21 +186,15 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
   const [dismissingKey, setDismissingKey] = useState<string | null>(null)
 
   const handleDismiss = useCallback(async (item: PriorityAlertItem) => {
+    if (item.type !== 'stalled_opportunity') return
+
     const dismissKey = makeDismissKey(item.entity_id, item.last_inbound_message_id)
 
-    const isOpportunity = item.type === 'stalled_opportunity'
-    const payload: DismissAlertPayload = isOpportunity
-      ? {
-          entity_type: 'opportunity',
-          entity_id:   item.entity_id,
-          alert_kind:  'stalled_opportunity',
-        }
-      : {
-          entity_type:             'conversation',
-          entity_id:               item.entity_id,
-          alert_kind:              'sla_unanswered',
-          last_inbound_message_id: item.last_inbound_message_id ?? null,
-        }
+    const payload: DismissAlertPayload = {
+      entity_type: 'opportunity',
+      entity_id:   item.entity_id,
+      alert_kind:  'stalled_opportunity',
+    }
 
     // 1. Optimistic remove
     setDismissedKeys(prev => new Set([...prev, dismissKey]))
@@ -307,15 +266,9 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
     })
   }, [undo])
 
-  function handleOpenChat(referenceId: string) {
-    const id = Number(referenceId)
-    if (!Number.isFinite(id)) return
-    actions.openChat(id)
-  }
-
-  // Filtragem dos alertas dispensados otimisticamente
-  const alerts    = (data?.alerts ?? []).filter(
-    a => !dismissedKeys.has(makeDismissKey(a.entity_id, a.last_inbound_message_id)),
+  const alerts = (data?.alerts ?? []).filter(
+    a => !QUEUE_ONLY_ALERT_TYPES.has(a.type)
+      && !dismissedKeys.has(makeDismissKey(a.entity_id, a.last_inbound_message_id)),
   )
   const hasAlerts = alerts.length > 0
 
@@ -350,22 +303,8 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
             <Zap className="h-4 w-4 text-amber-500" />
             <h3 className="font-semibold text-gray-900 text-sm">Alertas Prioritários</h3>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">Leads que podem ser perdidos sem atenção agora.</p>
+          <p className="text-xs text-gray-400 mt-0.5">Oportunidade parada e vendedor com muitos leads sem resposta. Os leads estão na fila acima.</p>
         </div>
-        {data && (data.critical > 0 || data.high > 0) && (
-          <div className="flex items-center gap-1.5">
-            {data.critical > 0 && (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                {data.critical} crítico{data.critical > 1 ? 's' : ''}
-              </span>
-            )}
-            {data.high > 0 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                {data.high} alto{data.high > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Lista */}
@@ -374,8 +313,8 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 mb-3">
             <AlertTriangle className="h-6 w-6 text-emerald-400" />
           </div>
-          <p className="text-sm font-medium text-gray-600">Nenhum alerta no momento</p>
-          <p className="text-xs text-gray-400 mt-1">Todos os leads estão sendo atendidos</p>
+          <p className="text-sm font-medium text-gray-600">Nenhum alerta de oportunidade ou de vendedor</p>
+          <p className="text-xs text-gray-400 mt-1">Leads sem resposta ficam na Fila de Atendimento</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -385,7 +324,6 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
               item={item}
               openingOppId={actions.openingOppId}
               dismissingKey={dismissingKey}
-              onOpenChat={handleOpenChat}
               onOpenOpportunity={actions.openOpportunity}
               onDismiss={handleDismiss}
             />
@@ -405,17 +343,6 @@ export function PriorityAlertsSection({ data, loading, error, companyId }: Prior
           <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           Carregando oportunidade...
         </div>
-      )}
-
-      {/* Modal de chat */}
-      {actions.chatLeadId != null && actions.companyId && actions.userId && (
-        <ChatModalSimple
-          isOpen={actions.chatOpen}
-          onClose={actions.closeChat}
-          leadId={actions.chatLeadId}
-          companyId={actions.companyId}
-          userId={actions.userId}
-        />
       )}
 
       {/* Modal de oportunidade */}
