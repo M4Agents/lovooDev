@@ -31,7 +31,7 @@ import {
 import { logDashboardError } from '../lib/dashboard/observability.js'
 
 const VALID_ENTITY_TYPES = new Set(['conversation', 'opportunity'])
-const VALID_ALERT_KINDS  = new Set(['sla_unanswered', 'stalled_opportunity'])
+const VALID_ALERT_KINDS  = new Set(['sla_unanswered', 'stalled_opportunity', 'awaiting_lead_reply'])
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -78,20 +78,20 @@ export default async function handler(req: any, res: any): Promise<void> {
       jsonError(res, 400, 'entity_type deve ser "conversation" ou "opportunity"'); return
     }
     if (!VALID_ALERT_KINDS.has(alertKind)) {
-      jsonError(res, 400, 'alert_kind deve ser "sla_unanswered" ou "stalled_opportunity"'); return
+      jsonError(res, 400, 'alert_kind deve ser "sla_unanswered", "awaiting_lead_reply" ou "stalled_opportunity"'); return
     }
 
-    // Consistência entre alert_kind e last_inbound_message_id
-    if (alertKind === 'sla_unanswered' && !isUUID(lastInboundId)) {
-      jsonError(res, 400, 'last_inbound_message_id é obrigatório para sla_unanswered'); return
+    const needsMessage = alertKind === 'sla_unanswered' || alertKind === 'awaiting_lead_reply'
+    if (needsMessage && !isUUID(lastInboundId)) {
+      jsonError(res, 400, 'last_inbound_message_id é obrigatório para este alerta'); return
     }
     if (alertKind === 'stalled_opportunity' && lastInboundId !== null) {
       jsonError(res, 400, 'last_inbound_message_id deve ser nulo para stalled_opportunity'); return
     }
 
     // Consistência entre entity_type e alert_kind
-    if (alertKind === 'sla_unanswered' && entityType !== 'conversation') {
-      jsonError(res, 400, 'sla_unanswered requer entity_type = "conversation"'); return
+    if ((alertKind === 'sla_unanswered' || alertKind === 'awaiting_lead_reply') && entityType !== 'conversation') {
+      jsonError(res, 400, 'Este alerta requer entity_type = "conversation"'); return
     }
     if (alertKind === 'stalled_opportunity' && entityType !== 'opportunity') {
       jsonError(res, 400, 'stalled_opportunity requer entity_type = "opportunity"'); return
@@ -178,6 +178,48 @@ export default async function handler(req: any, res: any): Promise<void> {
       }
     }
 
+    if (alertKind === 'awaiting_lead_reply' && isUUID(lastInboundId)) {
+      const { data: msgCheck, error: msgError } = await svc
+        .from('chat_messages')
+        .select('id, created_at, conversation_id')
+        .eq('id', lastInboundId)
+        .eq('conversation_id', entityId)
+        .eq('direction', 'outbound')
+        .eq('is_ai_generated', false)
+        .maybeSingle()
+
+      if (msgError || !msgCheck) {
+        jsonError(res, 422, 'Mensagem do vendedor não encontrada nesta conversa'); return
+      }
+
+      const { data: newerHuman } = await svc
+        .from('chat_messages')
+        .select('id')
+        .eq('conversation_id', entityId)
+        .eq('direction', 'outbound')
+        .eq('is_ai_generated', false)
+        .gt('created_at', msgCheck.created_at)
+        .limit(1)
+        .maybeSingle()
+
+      if (newerHuman) {
+        jsonError(res, 422, 'Existe uma mensagem mais recente do vendedor nesta conversa'); return
+      }
+
+      const { data: newerInbound } = await svc
+        .from('chat_messages')
+        .select('id')
+        .eq('conversation_id', entityId)
+        .eq('direction', 'inbound')
+        .gt('created_at', msgCheck.created_at)
+        .limit(1)
+        .maybeSingle()
+
+      if (newerInbound) {
+        jsonError(res, 422, 'O lead já respondeu depois desta mensagem'); return
+      }
+    }
+
     // --------------------------------------------------
     // 6. INSERT com idempotência via ON CONFLICT DO NOTHING
     //    Os índices únicos parciais são:
@@ -231,16 +273,18 @@ export default async function handler(req: any, res: any): Promise<void> {
     // --------------------------------------------------
     if (!inserted) {
       const whereClause =
-        alertKind === 'sla_unanswered'
+        alertKind === 'sla_unanswered' || alertKind === 'awaiting_lead_reply'
           ? {
               company_id:              companyId,
               dismissed_by:            user.id,
               last_inbound_message_id: lastInboundId,
+              alert_kind:              alertKind,
             }
           : {
               company_id:   companyId,
               dismissed_by: user.id,
               entity_id:    entityId,
+              alert_kind:   alertKind,
             }
 
       const { data: existing } = await svc

@@ -429,6 +429,32 @@ export interface SlaAlertsResponse {
   meta: SlaAlertsMeta
 }
 
+export interface AwaitingLeadReplyItem {
+  conversation_id:          string
+  lead_id:                  string
+  lead_name:                string
+  responsible_user_id:      string | null
+  seller_name:              string | null
+  last_out_at:              string
+  hours_waiting:            number
+  severity:                 SlaAlertSeverity
+  last_outbound_message_id: string
+}
+
+export interface AwaitingLeadReplyMeta {
+  total:     number
+  page:      number
+  limit:     number
+  has_more:  boolean
+  min_hours: number
+}
+
+export interface AwaitingLeadReplyResponse {
+  ok:   boolean
+  data: AwaitingLeadReplyItem[]
+  meta: AwaitingLeadReplyMeta
+}
+
 // ---------------------------------------------------------------------------
 // Forecast Comercial (Fase 3A)
 // ---------------------------------------------------------------------------
@@ -594,7 +620,7 @@ export type AlertDismissalScope = 'company' | 'user'
 
 /** Tipo de alerta que pode ser dispensado.
  *  Espelha o CHECK constraint da tabela dashboard_alert_dismissals. */
-export type AlertKind = 'sla_unanswered' | 'stalled_opportunity'
+export type AlertKind = 'sla_unanswered' | 'stalled_opportunity' | 'awaiting_lead_reply'
 
 /**
  * Payload enviado ao POST /api/dashboard/alert-dismissals.
@@ -961,16 +987,23 @@ export interface SellerRiskSettings {
   limit:           number
 }
 
+export interface AwaitingLeadReplySettings {
+  enabled:          boolean
+  min_minutes:      number
+  critical_minutes: number
+}
+
 export interface FunnelScopeSettings {
   mode:       'all' | 'custom'
   stage_ids?: string[]   // obrigatório quando mode = 'custom'; deve ser array não vazio
 }
 
 export interface AlertSettings {
-  sla_settings:           SlaSettings
-  stalled_settings:       StalledSettings
-  seller_risk_settings:   SellerRiskSettings
-  funnel_scope_settings:  FunnelScopeSettings
+  sla_settings:                  SlaSettings
+  stalled_settings:              StalledSettings
+  seller_risk_settings:          SellerRiskSettings
+  funnel_scope_settings:         FunnelScopeSettings
+  awaiting_lead_reply_settings:  AwaitingLeadReplySettings
 }
 
 /** Resposta do GET /api/dashboard/alert-settings */

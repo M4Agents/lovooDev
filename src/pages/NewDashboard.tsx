@@ -16,6 +16,7 @@ import { IntelligenceCentral }        from '../components/Dashboard/sections/Int
 import { TrendsSection }              from '../components/Dashboard/sections/TrendsSection'
 import { SellerRankingSection }       from '../components/Dashboard/sections/SellerRankingSection'
 import { SlaAlertsPanel }             from '../components/Dashboard/sections/SlaAlertsPanel'
+import { AwaitingLeadReplyPanel }     from '../components/Dashboard/sections/AwaitingLeadReplyPanel'
 import { LeadOriginsSection }         from '../components/Dashboard/sections/LeadOriginsSection'
 import { ActivationSection }          from '../components/Dashboard/sections/ActivationSection'
 import { DashboardTabs }              from '../components/Dashboard/navigation/DashboardTabs'
@@ -29,6 +30,7 @@ import { useDashboardTrends }         from '../hooks/dashboard/useDashboardTrend
 import { useDashboardUsers }          from '../hooks/dashboard/useDashboardUsers'
 import { useSellerPerformance }       from '../hooks/dashboard/useSellerPerformance'
 import { useSlaAlerts }               from '../hooks/dashboard/useSlaAlerts'
+import { useAwaitingLeadReply }       from '../hooks/dashboard/useAwaitingLeadReply'
 import { useLeadOrigins }             from '../hooks/dashboard/useLeadOrigins'
 import { useDashboardForecast }       from '../hooks/dashboard/useDashboardForecast'
 import { usePriorityAlerts }          from '../hooks/dashboard/usePriorityAlerts'
@@ -125,6 +127,9 @@ export const NewDashboard: React.FC = () => {
   const slaAlerts = useSlaAlerts({
     userId:     userId ?? undefined,
     hybridMode: slaHybridActive,
+  })
+  const awaitingLeadReply = useAwaitingLeadReply({
+    userId: userId ?? undefined,
   })
   const leadOrigins   = useLeadOrigins(filters, canViewLeadOrigins)
 
@@ -384,11 +389,10 @@ export const NewDashboard: React.FC = () => {
       <div className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-800">Ações Urgentes</h2>
-          <p className="text-xs text-gray-500 mt-0.5">A fila lista quem espera resposta. Os alertas mostram oportunidade parada e vendedor com a fila acumulada.</p>
+          <p className="text-xs text-gray-500 mt-0.5">A fila lista quem espera o vendedor. Ao lado, quem já foi respondido e ainda não retornou. Os alertas mostram oportunidade parada e vendedor com a fila acumulada.</p>
         </div>
 
-        {/* LeadOriginsSection: apenas manager+. Quando oculto, a fila ocupa a largura toda */}
-        <div className={`grid grid-cols-1 gap-4 ${canViewLeadOrigins ? 'lg:grid-cols-2' : ''}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <section ref={queueSectionRef}>
             <SlaAlertsPanel
               data={slaAlerts.data}
@@ -402,16 +406,26 @@ export const NewDashboard: React.FC = () => {
               snapshotTrendPoints={slaTrendPoints}
             />
           </section>
-          {canViewLeadOrigins && (
-            <LeadOriginsSection
-              data={leadOrigins.data}
-              meta={leadOrigins.meta}
-              loading={leadOrigins.loading}
-              error={leadOrigins.error}
-              onRetry={leadOrigins.refetch}
-            />
-          )}
+          <AwaitingLeadReplyPanel
+            data={awaitingLeadReply.data}
+            meta={awaitingLeadReply.meta}
+            loading={awaitingLeadReply.loading}
+            error={awaitingLeadReply.error}
+            companyId={companyId}
+            onRetry={awaitingLeadReply.refetch}
+            onLoadMore={awaitingLeadReply.loadMore}
+          />
         </div>
+
+        {canViewLeadOrigins && (
+          <LeadOriginsSection
+            data={leadOrigins.data}
+            meta={leadOrigins.meta}
+            loading={leadOrigins.loading}
+            error={leadOrigins.error}
+            onRetry={leadOrigins.refetch}
+          />
+        )}
 
         <PriorityAlertsSection
           data={priorityAlerts.data}

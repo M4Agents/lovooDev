@@ -112,6 +112,7 @@ export type {
   SlaAlertItem,
   SlaAlertsMeta,
   SlaAlertsResponse,
+  AwaitingLeadReplyResponse,
   LeadOriginItem,
   LeadOriginsMeta,
   LeadOriginsResponse,
@@ -170,6 +171,7 @@ import type {
   DashboardUsersResponse,
   SellerRankingResponse,
   SlaAlertsResponse,
+  AwaitingLeadReplyResponse,
   LeadOriginsResponse,
   ForecastResponse,
   PriorityAlertsResponse,
@@ -685,6 +687,18 @@ export const dashboardApi = {
     if (options.page !== undefined)     params.page      = String(options.page)
     if (options.limit !== undefined)    params.limit     = String(options.limit)
     return apiFetch<SlaAlertsResponse>('/api/dashboard/sla-alerts', params, signal)
+  },
+
+  async getAwaitingLeadReply(
+    companyId: string,
+    options:   { userId?: string | null; page?: number; limit?: number } = {},
+    signal?:   AbortSignal,
+  ): Promise<AwaitingLeadReplyResponse> {
+    const params: Record<string, string> = { company_id: companyId }
+    if (options.userId)            params.user_id = options.userId
+    if (options.page !== undefined) params.page    = String(options.page)
+    if (options.limit !== undefined) params.limit  = String(options.limit)
+    return apiFetch<AwaitingLeadReplyResponse>('/api/dashboard/awaiting-lead-reply', params, signal)
   },
 
   /**

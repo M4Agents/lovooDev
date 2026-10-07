@@ -75,6 +75,12 @@ interface FormSellerRisk {
   limit:         number
 }
 
+interface FormAwaitingLeadReply {
+  enabled:        boolean
+  min_hours:      number
+  critical_hours: number
+}
+
 interface FormFunnelScope {
   mode:      'all' | 'custom'
   stage_ids: string[]
@@ -84,6 +90,7 @@ interface FormState {
   sla:         FormSla
   stalled:     FormStalled
   sellerRisk:  FormSellerRisk
+  awaiting:    FormAwaitingLeadReply
   funnelScope: FormFunnelScope
 }
 
@@ -91,6 +98,7 @@ interface ValidationErrors {
   sla?:         string
   stalled?:     string
   sellerRisk?:  string
+  awaiting?:    string
   funnelScope?: string
 }
 
@@ -123,6 +131,11 @@ function settingsToForm(s: AlertSettings): FormState {
       min_leads:     s.seller_risk_settings.min_leads,
       limit:         s.seller_risk_settings.limit,
     },
+    awaiting: {
+      enabled:        s.awaiting_lead_reply_settings?.enabled ?? true,
+      min_hours:      minsToHours(s.awaiting_lead_reply_settings?.min_minutes ?? 1440),
+      critical_hours: minsToHours(s.awaiting_lead_reply_settings?.critical_minutes ?? 4320),
+    },
     funnelScope: {
       mode:      s.funnel_scope_settings?.mode ?? 'all',
       stage_ids: s.funnel_scope_settings?.stage_ids ?? [],
@@ -149,6 +162,11 @@ function formToSettings(f: FormState): AlertSettings {
       waiting_minutes: hoursToMins(f.sellerRisk.waiting_hours),
       min_leads:       f.sellerRisk.min_leads,
       limit:           f.sellerRisk.limit,
+    },
+    awaiting_lead_reply_settings: {
+      enabled:          f.awaiting.enabled,
+      min_minutes:      hoursToMins(f.awaiting.min_hours),
+      critical_minutes: hoursToMins(f.awaiting.critical_hours),
     },
     funnel_scope_settings: {
       mode:      f.funnelScope.mode,
@@ -193,6 +211,16 @@ function validateForm(f: FormState): ValidationErrors {
     errors.sellerRisk = 'Mínimo de leads deve ser um inteiro positivo'
   } else if (!Number.isInteger(f.sellerRisk.limit) || f.sellerRisk.limit < 1) {
     errors.sellerRisk = 'Limite deve ser um inteiro positivo'
+  }
+
+  if (f.awaiting.min_hours <= 0) {
+    errors.awaiting = 'Tempo mínimo deve ser positivo'
+  } else if (f.awaiting.min_hours >= 168) {
+    errors.awaiting = '"Aparece após" precisa ser menor que 7 dias'
+  } else if (f.awaiting.critical_hours <= f.awaiting.min_hours) {
+    errors.awaiting = '"Crítico após" deve ser maior que o tempo mínimo'
+  } else if (f.awaiting.critical_hours >= 168) {
+    errors.awaiting = '"Crítico após" precisa ser menor que 7 dias'
   }
 
   // Escopo de funil
@@ -373,6 +401,7 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
     if (JSON.stringify(orig.sla_settings)          !== JSON.stringify(curr.sla_settings))          result.push('Fila de Atendimento')
     if (JSON.stringify(orig.stalled_settings)       !== JSON.stringify(curr.stalled_settings))       result.push('Oportunidade parada')
     if (JSON.stringify(orig.seller_risk_settings)   !== JSON.stringify(curr.seller_risk_settings))   result.push('Risco de vendedor')
+    if (JSON.stringify(orig.awaiting_lead_reply_settings) !== JSON.stringify(curr.awaiting_lead_reply_settings)) result.push('Aguardando retorno do lead')
     if (JSON.stringify(orig.funnel_scope_settings)  !== JSON.stringify(curr.funnel_scope_settings))  result.push('Escopo para Oportunidades Paradas')
     return result
   }, [form, originalForm])
@@ -393,6 +422,10 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
 
   function setSellerRisk(patch: Partial<FormSellerRisk>) {
     setForm((prev) => prev ? { ...prev, sellerRisk: { ...prev.sellerRisk, ...patch } } : prev)
+  }
+
+  function setAwaiting(patch: Partial<FormAwaitingLeadReply>) {
+    setForm((prev) => prev ? { ...prev, awaiting: { ...prev.awaiting, ...patch } } : prev)
   }
 
   function setFunnelScope(patch: Partial<FormFunnelScope>) {
@@ -607,6 +640,46 @@ export const AlertSettingsModal: React.FC<AlertSettingsModalProps> = ({
                   <div className="flex items-center gap-1.5 text-xs text-red-600">
                     <AlertCircle size={12} className="flex-shrink-0" />
                     {validationErrors.sla}
+                  </div>
+                )}
+              </div>
+
+              <hr className="border-gray-100" />
+
+              <div className="space-y-4">
+                <SectionHeader
+                  title="Aguardando retorno do lead"
+                  enabled={form.awaiting.enabled}
+                  canEdit={canEdit}
+                  onToggle={() => setAwaiting({ enabled: !form.awaiting.enabled })}
+                />
+                <p className="text-xs text-gray-500 leading-relaxed pl-1">
+                  Define quando a conversa entra na lista ao lado da fila, depois que o vendedor enviou a mensagem e o lead não respondeu.
+                </p>
+                <div className="pl-1 space-y-3">
+                  <NumericField
+                    label="Aparece após"
+                    hint="A conversa entra em Aguardando retorno do lead depois deste tempo sem resposta do lead."
+                    value={form.awaiting.min_hours}
+                    step={0.5}
+                    unit="horas"
+                    disabled={!canEdit || !form.awaiting.enabled}
+                    onChange={(v) => setAwaiting({ min_hours: v })}
+                  />
+                  <NumericField
+                    label="Crítico após"
+                    hint="O lead recebe o selo Crítico nesta lista depois deste tempo. Deve ser maior que o valor acima e menor que 7 dias."
+                    value={form.awaiting.critical_hours}
+                    step={0.5}
+                    unit="horas"
+                    disabled={!canEdit || !form.awaiting.enabled}
+                    onChange={(v) => setAwaiting({ critical_hours: v })}
+                  />
+                </div>
+                {validationErrors.awaiting && (
+                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+                    <AlertCircle size={12} className="flex-shrink-0" />
+                    {validationErrors.awaiting}
                   </div>
                 )}
               </div>

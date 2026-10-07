@@ -40,11 +40,13 @@ import {
   validateStalledSettings,
   validateSellerRiskSettings,
   validateFunnelScopeSettings,
+  validateAwaitingLeadReplySettings,
   type AlertSettings,
   type SlaSettings,
   type StalledSettings,
   type SellerRiskSettings,
   type FunnelScopeSettings,
+  type AwaitingLeadReplySettings,
 } from '../lib/dashboard/alertSettingsDefaults.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -90,7 +92,7 @@ async function handleGet(req: any, res: any): Promise<void> {
     // 4. Leitura das configurações
     const { data, error: dbError } = await svc
       .from('dashboard_alert_settings')
-      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, updated_at')
+      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, awaiting_lead_reply_settings, updated_at')
       .eq('company_id', companyId)
       .maybeSingle()
 
@@ -116,6 +118,7 @@ async function handleGet(req: any, res: any): Promise<void> {
         stalled_settings:      data.stalled_settings      as StalledSettings,
         seller_risk_settings:  data.seller_risk_settings  as SellerRiskSettings,
         funnel_scope_settings: (data.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings,
+        awaiting_lead_reply_settings: (data.awaiting_lead_reply_settings as AwaitingLeadReplySettings) ?? GLOBAL_DEFAULTS.awaiting_lead_reply_settings,
       } satisfies AlertSettings,
       meta: {
         is_default: false,
@@ -165,9 +168,10 @@ async function handlePost(req: any, res: any): Promise<void> {
     const hasStalled     = 'stalled_settings' in body
     const hasSellerRisk  = 'seller_risk_settings' in body
     const hasFunnelScope = 'funnel_scope_settings' in body
+    const hasAwaiting    = 'awaiting_lead_reply_settings' in body
 
-    if (!hasSla && !hasStalled && !hasSellerRisk && !hasFunnelScope) {
-      jsonError(res, 400, 'Informe ao menos uma seção: sla_settings, stalled_settings, seller_risk_settings ou funnel_scope_settings'); return
+    if (!hasSla && !hasStalled && !hasSellerRisk && !hasFunnelScope && !hasAwaiting) {
+      jsonError(res, 400, 'Informe ao menos uma seção: sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings ou awaiting_lead_reply_settings'); return
     }
 
     // 5. Validar cada seção presente (completa e sem campos extras)
@@ -181,6 +185,10 @@ async function handlePost(req: any, res: any): Promise<void> {
     }
     if (hasSellerRisk) {
       const err = validateSellerRiskSettings(body.seller_risk_settings)
+      if (err) { jsonError(res, 400, err); return }
+    }
+    if (hasAwaiting) {
+      const err = validateAwaitingLeadReplySettings(body.awaiting_lead_reply_settings)
       if (err) { jsonError(res, 400, err); return }
     }
     if (hasFunnelScope) {
@@ -218,12 +226,12 @@ async function handlePost(req: any, res: any): Promise<void> {
     let currentStalled     = GLOBAL_DEFAULTS.stalled_settings
     let currentSellerRisk  = GLOBAL_DEFAULTS.seller_risk_settings
     let currentFunnelScope = GLOBAL_DEFAULTS.funnel_scope_settings
+    let currentAwaiting    = GLOBAL_DEFAULTS.awaiting_lead_reply_settings
 
-    if (!hasSla || !hasStalled || !hasSellerRisk || !hasFunnelScope) {
-      // Só busca o estado atual quando há seções ausentes (evita query desnecessária)
+    if (!hasSla || !hasStalled || !hasSellerRisk || !hasFunnelScope || !hasAwaiting) {
       const { data: existing } = await svc
         .from('dashboard_alert_settings')
-        .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings')
+        .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, awaiting_lead_reply_settings')
         .eq('company_id', companyId)
         .maybeSingle()
 
@@ -232,6 +240,7 @@ async function handlePost(req: any, res: any): Promise<void> {
         currentStalled     = (existing.stalled_settings      as StalledSettings)    ?? GLOBAL_DEFAULTS.stalled_settings
         currentSellerRisk  = (existing.seller_risk_settings  as SellerRiskSettings) ?? GLOBAL_DEFAULTS.seller_risk_settings
         currentFunnelScope = (existing.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings
+        currentAwaiting    = (existing.awaiting_lead_reply_settings as AwaitingLeadReplySettings) ?? GLOBAL_DEFAULTS.awaiting_lead_reply_settings
       }
     }
 
@@ -239,6 +248,7 @@ async function handlePost(req: any, res: any): Promise<void> {
     const mergedStalled     = hasStalled     ? (body.stalled_settings      as StalledSettings)    : currentStalled
     const mergedSellerRisk  = hasSellerRisk  ? (body.seller_risk_settings  as SellerRiskSettings) : currentSellerRisk
     const mergedFunnelScope = hasFunnelScope ? (body.funnel_scope_settings as FunnelScopeSettings) : currentFunnelScope
+    const mergedAwaiting    = hasAwaiting    ? (body.awaiting_lead_reply_settings as AwaitingLeadReplySettings) : currentAwaiting
 
     // 7. Upsert — service_role (autorização já validada acima)
     //    updated_by é SEMPRE user.id do JWT, nunca aceito do payload
@@ -254,11 +264,12 @@ async function handlePost(req: any, res: any): Promise<void> {
           stalled_settings:      mergedStalled,
           seller_risk_settings:  mergedSellerRisk,
           funnel_scope_settings: mergedFunnelScope,
+          awaiting_lead_reply_settings: mergedAwaiting,
           updated_by:            user.id,
         },
         { onConflict: 'company_id' },
       )
-      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, updated_at')
+      .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, awaiting_lead_reply_settings, updated_at')
       .single()
 
     if (upsertError) {
@@ -273,6 +284,7 @@ async function handlePost(req: any, res: any): Promise<void> {
         stalled_settings:      saved.stalled_settings      as StalledSettings,
         seller_risk_settings:  saved.seller_risk_settings  as SellerRiskSettings,
         funnel_scope_settings: (saved.funnel_scope_settings as FunnelScopeSettings) ?? GLOBAL_DEFAULTS.funnel_scope_settings,
+        awaiting_lead_reply_settings: (saved.awaiting_lead_reply_settings as AwaitingLeadReplySettings) ?? GLOBAL_DEFAULTS.awaiting_lead_reply_settings,
       } satisfies AlertSettings,
       meta: {
         updated_at: saved.updated_at as string,

@@ -44,11 +44,18 @@ export interface FunnelScopeSettings {
   stage_ids?: string[]   // obrigatório quando mode = 'custom'; deve ser array não vazio
 }
 
+export interface AwaitingLeadReplySettings {
+  enabled:          boolean
+  min_minutes:      number
+  critical_minutes: number
+}
+
 export interface AlertSettings {
-  sla_settings:           SlaSettings
-  stalled_settings:       StalledSettings
-  seller_risk_settings:   SellerRiskSettings
-  funnel_scope_settings:  FunnelScopeSettings
+  sla_settings:                   SlaSettings
+  stalled_settings:               StalledSettings
+  seller_risk_settings:           SellerRiskSettings
+  funnel_scope_settings:          FunnelScopeSettings
+  awaiting_lead_reply_settings:   AwaitingLeadReplySettings
 }
 
 // ---------------------------------------------------------------------------
@@ -76,11 +83,18 @@ export const SELLER_RISK_DEFAULTS: SellerRiskSettings = {
   limit:           3,
 } as const
 
+export const AWAITING_LEAD_REPLY_DEFAULTS: AwaitingLeadReplySettings = {
+  enabled:          true,
+  min_minutes:      1440,
+  critical_minutes: 4320,
+} as const
+
 export const GLOBAL_DEFAULTS: AlertSettings = {
-  sla_settings:           SLA_DEFAULTS,
-  stalled_settings:       STALLED_DEFAULTS,
-  seller_risk_settings:   SELLER_RISK_DEFAULTS,
-  funnel_scope_settings:  { mode: 'all' },
+  sla_settings:                  SLA_DEFAULTS,
+  stalled_settings:              STALLED_DEFAULTS,
+  seller_risk_settings:          SELLER_RISK_DEFAULTS,
+  funnel_scope_settings:         { mode: 'all' },
+  awaiting_lead_reply_settings:  AWAITING_LEAD_REPLY_DEFAULTS,
 } as const
 
 // ---------------------------------------------------------------------------
@@ -103,6 +117,10 @@ export const SETTINGS_LIMITS = {
     min_leads:        { min: 1,    max: 50     },
     limit:            { min: 1,    max: 50     },
   },
+  awaiting_lead_reply: {
+    min_minutes:      { min: 30,   max: 10079  },   // 0,5h → menos de 7 dias
+    critical_minutes: { min: 60,   max: 10079  },
+  },
 } as const
 
 // ---------------------------------------------------------------------------
@@ -118,6 +136,7 @@ export const ADMIN_ROLES = new Set(['admin', 'system_admin', 'super_admin'])
 const SLA_KEYS          = new Set(['enabled', 'min_minutes', 'critical_minutes', 'limit'])
 const STALLED_KEYS      = new Set(['enabled', 'idle_minutes', 'min_probability', 'limit'])
 const SELLER_RISK_KEYS  = new Set(['enabled', 'waiting_minutes', 'min_leads', 'limit'])
+const AWAITING_LEAD_REPLY_KEYS = new Set(['enabled', 'min_minutes', 'critical_minutes'])
 
 // ---------------------------------------------------------------------------
 // Helpers internos
@@ -237,6 +256,36 @@ export function validateSellerRiskSettings(s: unknown): string | null {
 
   const limitErr = checkRange(s.limit, 'limit', SETTINGS_LIMITS.seller_risk.limit)
   if (limitErr) return `seller_risk_settings: ${limitErr}`
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// validateAwaitingLeadReplySettings
+// ---------------------------------------------------------------------------
+
+export function validateAwaitingLeadReplySettings(s: unknown): string | null {
+  if (!isPlainObject(s)) {
+    return 'awaiting_lead_reply_settings deve ser um objeto JSON'
+  }
+
+  const unknownErr = rejectUnknownKeys(s, AWAITING_LEAD_REPLY_KEYS)
+  if (unknownErr) return `awaiting_lead_reply_settings: ${unknownErr}`
+
+  if (typeof s.enabled !== 'boolean') {
+    return 'awaiting_lead_reply_settings: "enabled" deve ser boolean'
+  }
+
+  const limits = SETTINGS_LIMITS.awaiting_lead_reply
+  const minErr = checkRange(s.min_minutes, 'min_minutes', limits.min_minutes)
+  if (minErr) return `awaiting_lead_reply_settings: ${minErr}`
+
+  const critErr = checkRange(s.critical_minutes, 'critical_minutes', limits.critical_minutes)
+  if (critErr) return `awaiting_lead_reply_settings: ${critErr}`
+
+  if ((s.critical_minutes as number) <= (s.min_minutes as number)) {
+    return 'awaiting_lead_reply_settings: "critical_minutes" deve ser maior que "min_minutes"'
+  }
 
   return null
 }
