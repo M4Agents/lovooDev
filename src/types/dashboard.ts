@@ -624,20 +624,37 @@ export interface LeadOriginsResponse {
   meta: LeadOriginsMeta
 }
 
-export interface TagGroupDefinition {
+export interface TagGroupBlock {
   id: string
-  name: string
   tag_ids: string[]
 }
 
+export interface TagGroupDefinition {
+  id: string
+  name: string
+  blocks: TagGroupBlock[]
+}
+
 export interface TagGroupSettings {
+  version: 2
+  revision: number
   groups: TagGroupDefinition[]
+}
+
+export interface TagGroupEmptySettings {
+  groups: []
 }
 
 export interface TagGroupSettingsResponse {
   ok: boolean
-  data: TagGroupSettings
-  meta: { is_default: boolean; updated_at?: string }
+  data: TagGroupSettings | TagGroupEmptySettings
+  meta: {
+    is_default: boolean
+    updated_at?: string
+    revision: number | null
+    schema: 2 | null
+    readable: boolean
+  }
 }
 
 export interface TagGroupMetricRow {

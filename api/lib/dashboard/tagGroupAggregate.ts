@@ -1,5 +1,7 @@
 // Semântica local das métricas de grupos de tags.
 // A RPC get_dashboard_tag_group_metrics segue estas mesmas regras.
+// O lead entra no grupo quando tem pelo menos uma tag de cada bloco.
+// Várias tags do mesmo bloco contam uma vez.
 //
 // Coorte: leads da empresa, deleted_at nulo, created_at dentro do período UTC.
 // Responsável: leads.responsible_user_id, só quando o filtro de vendedor vem preenchido.
@@ -29,10 +31,15 @@ export interface KnownTag {
   isActive: boolean
 }
 
+export interface TagBlockInput {
+  id: string
+  tagIds: string[]
+}
+
 export interface TagGroupInput {
   id: string
   name: string
-  tagIds: string[]
+  blocks: TagBlockInput[] | null
 }
 
 export interface TagGroupAggregateRow {
@@ -69,8 +76,24 @@ export function classifyTagGroup(
   companyId: string,
   knownTags: KnownTag[],
 ): { status: 'ok' | 'invalid'; invalidTagIds: string[] } {
-  const invalidTagIds = group.tagIds.filter(tagId => !tagIsAvailable(tagId, companyId, knownTags))
-  if (group.tagIds.length === 0 || invalidTagIds.length > 0) {
+  if (!group.blocks || group.blocks.length === 0) {
+    return { status: 'invalid', invalidTagIds: [] }
+  }
+
+  const shapeBroken = group.blocks.some(block => {
+    if (block.tagIds.length === 0) return true
+    return new Set(block.tagIds).size !== block.tagIds.length
+  })
+  const seen = new Set<string>()
+  const invalidTagIds: string[] = []
+  for (const block of group.blocks) {
+    for (const tagId of block.tagIds) {
+      if (seen.has(tagId)) continue
+      seen.add(tagId)
+      if (!tagIsAvailable(tagId, companyId, knownTags)) invalidTagIds.push(tagId)
+    }
+  }
+  if (shapeBroken || invalidTagIds.length > 0) {
     return { status: 'invalid', invalidTagIds }
   }
   return { status: 'ok', invalidTagIds: [] }
@@ -89,9 +112,9 @@ function inCohort(lead: TagCohortLead, cohort: TagGroupCohort): boolean {
   return true
 }
 
-function hasEveryTag(lead: TagCohortLead, tagIds: string[]): boolean {
+function matchesAllBlocks(lead: TagCohortLead, blocks: TagBlockInput[]): boolean {
   const owned = new Set(lead.tagIds)
-  return tagIds.every(tagId => owned.has(tagId))
+  return blocks.every(block => block.tagIds.some(tagId => owned.has(tagId)))
 }
 
 function roundPct(value: number): number {
@@ -120,7 +143,7 @@ export function aggregateTagGroups(cohort: TagGroupCohort): TagGroupAggregateRow
       }
     }
 
-    const matched = leads.filter(lead => hasEveryTag(lead, group.tagIds))
+    const matched = leads.filter(lead => matchesAllBlocks(lead, group.blocks ?? []))
     const matchedIds = new Set(matched.map(lead => lead.id))
     const opportunities = cohort.opportunities.filter(opp =>
       matchedIds.has(opp.leadId) && opp.companyId === cohort.companyId,

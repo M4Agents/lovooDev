@@ -374,7 +374,12 @@ async function apiDelete<T>(path: string, queryParams: Record<string, string>): 
   return res.json() as Promise<T>
 }
 
-async function apiPost<T>(path: string, queryParams: Record<string, string>, body: unknown): Promise<T> {
+async function apiPost<T>(
+  path: string,
+  queryParams: Record<string, string>,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   const token = await getToken()
   if (!token) throw new Error('Sessão expirada. Faça login novamente.')
 
@@ -388,6 +393,7 @@ async function apiPost<T>(path: string, queryParams: Record<string, string>, bod
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   })
@@ -1081,6 +1087,7 @@ export const dashboardApi = {
       '/api/dashboard/tag-groups',
       {},
       { company_id: companyId, tag_group_settings: settings },
+      { 'X-Tag-Groups-Schema': '2' },
     )
   },
 

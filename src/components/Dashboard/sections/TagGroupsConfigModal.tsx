@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../../contexts/AuthContext'
 import { dashboardApi } from '../../../services/dashboardApi'
 import { tagsApi } from '../../../services/tagsApi'
-import type { TagGroupDefinition } from '../../../types/dashboard'
+import type { TagGroupDefinition, TagGroupSettings } from '../../../types/dashboard'
 import type { Tag } from '../../../types/tags'
+import { TagGroupBlockEditor } from './TagGroupBlockEditor'
 
 interface Props {
   onClose: () => void
@@ -14,10 +15,17 @@ interface Props {
 }
 
 const MAX_GROUPS = 8
-const MAX_TAGS_PER_GROUP = 10
 
 function newGroup(): TagGroupDefinition {
-  return { id: crypto.randomUUID(), name: '', tag_ids: [] }
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    blocks: [{ id: crypto.randomUUID(), tag_ids: [] }],
+  }
+}
+
+function isVersion2(data: { groups: unknown[] } | TagGroupSettings): data is TagGroupSettings {
+  return 'version' in data && data.version === 2
 }
 
 export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
@@ -27,12 +35,11 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
   const [groups, setGroups] = useState<TagGroupDefinition[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [tagQuery, setTagQuery] = useState<Record<string, string>>({})
+  const [expectedRevision, setExpectedRevision] = useState<number | null>(0)
+  const [readable, setReadable] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const sortedTags = useMemo(
-    () => [...tags].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
-    [tags],
-  )
+  const [draftKept, setDraftKept] = useState(false)
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -53,7 +60,10 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
           tagsApi.getTags(companyId),
         ])
         if (cancelled) return
-        setGroups(settings.data.groups ?? [])
+        const canEdit = settings.meta.readable && (settings.data.groups.length === 0 || isVersion2(settings.data))
+        setReadable(canEdit)
+        setExpectedRevision(settings.meta.revision)
+        setGroups(canEdit && isVersion2(settings.data) ? settings.data.groups : [])
         setTags(available)
       } catch (err: unknown) {
         if (!cancelled) toast.error(err instanceof Error ? err.message : t('commercialTagGroups.error'))
@@ -78,25 +88,43 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
   }
 
   async function save() {
-    if (!companyId) return
+    if (!companyId || expectedRevision === null || !readable) return
     const activeIds = new Set(tags.map(tag => tag.id))
-    const hasMissing = groups.some(group => group.tag_ids.some(id => !activeIds.has(id)))
+    const hasMissing = groups.some(group =>
+      group.blocks.some(block => block.tag_ids.some(id => !activeIds.has(id))),
+    )
     if (hasMissing) { toast.error(t('commercialTagGroups.saveBlocked')); return }
-    if (groups.some(group => !group.name.trim() || group.tag_ids.length === 0)) {
-      toast.error(t('commercialTagGroups.needTag'))
+    if (groups.some(group => !group.name.trim())) {
+      toast.error(t('commercialTagGroups.needName'))
+      return
+    }
+    if (groups.some(group => group.blocks.length === 0)) {
+      toast.error(t('commercialTagGroups.needBlock'))
+      return
+    }
+    if (groups.some(group => group.blocks.some(block => block.tag_ids.length === 0))) {
+      toast.error(t('commercialTagGroups.emptyBlock'))
       return
     }
 
     setSaving(true)
     try {
       await dashboardApi.saveTagGroups(companyId, {
-        groups: groups.map(group => ({ ...group, name: group.name.trim() })),
+        version: 2,
+        revision: expectedRevision,
+        groups: groups.map(group => ({
+          id: group.id,
+          name: group.name.trim(),
+          blocks: group.blocks.map(block => ({ id: block.id, tag_ids: [...block.tag_ids] })),
+        })),
       })
       toast.success(t('commercialTagGroups.saved'))
       onSaved()
       onClose()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t('commercialTagGroups.error'))
+      const message = err instanceof Error ? err.message : t('commercialTagGroups.error')
+      if (message.includes('não foi alterada')) setDraftKept(true)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
@@ -121,82 +149,60 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+          {draftKept && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {t('commercialTagGroups.draftKept')}
+            </p>
+          )}
           {loading && <p className="text-xs text-gray-400">{t('commercialTagGroups.loading')}</p>}
-          {!loading && groups.map((group, index) => {
-            const activeIds = new Set(tags.map(tag => tag.id))
-            return (
-              <div key={group.id} className="border border-gray-100 rounded-xl p-3 space-y-2">
-                <input
-                  value={group.name}
-                  maxLength={40}
-                  onChange={event => update(index, { ...group, name: event.target.value })}
-                  placeholder={t('commercialTagGroups.groupName')}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
-                />
-                {group.tag_ids.filter(id => !activeIds.has(id)).map(id => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="block text-[11px] text-amber-700 underline"
-                    onClick={() => update(index, { ...group, tag_ids: group.tag_ids.filter(tagId => tagId !== id) })}
-                  >
-                    {t('commercialTagGroups.missingTag')}
-                  </button>
-                ))}
-                <div className="flex items-center gap-2">
-                  <input
-                    value={tagQuery[group.id] ?? ''}
-                    onChange={event => setTagQuery(current => ({ ...current, [group.id]: event.target.value }))}
-                    placeholder={t('commercialTagGroups.searchTags')}
-                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5"
-                  />
-                  <span className="text-[11px] text-gray-500 shrink-0">
-                    {t('commercialTagGroups.selectedCount', { count: group.tag_ids.length, max: MAX_TAGS_PER_GROUP })}
-                  </span>
-                </div>
-                <TagPickList
-                  tags={sortedTags}
-                  query={tagQuery[group.id] ?? ''}
-                  selectedIds={group.tag_ids}
-                  emptyLabel={t('commercialTagGroups.noTagMatch')}
-                  onToggle={tagId => {
-                    const checked = group.tag_ids.includes(tagId)
-                    const tagIds = checked
-                      ? group.tag_ids.filter(id => id !== tagId)
-                      : group.tag_ids.length >= MAX_TAGS_PER_GROUP
-                        ? group.tag_ids
-                        : [...group.tag_ids, tagId]
-                    update(index, { ...group, tag_ids: tagIds })
-                  }}
-                />
-                <div className="flex gap-3 text-xs">
-                  <button type="button" onClick={() => move(index, -1)} className="text-gray-500">{t('commercialTagGroups.moveUp')}</button>
-                  <button type="button" onClick={() => move(index, 1)} className="text-gray-500">{t('commercialTagGroups.moveDown')}</button>
-                  <button type="button" onClick={() => setGroups(current => current.filter((_, i) => i !== index))} className="text-rose-600">
-                    {t('commercialTagGroups.remove')}
-                  </button>
-                </div>
+          {!loading && !readable && (
+            <p className="text-xs text-amber-700">{t('commercialTagGroups.unreadable')}</p>
+          )}
+          {!loading && readable && groups.map((group, index) => (
+            <div key={group.id} className="border border-gray-100 rounded-xl p-3 space-y-2">
+              <input
+                value={group.name}
+                maxLength={40}
+                onChange={event => update(index, { ...group, name: event.target.value })}
+                placeholder={t('commercialTagGroups.groupName')}
+                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
+              />
+              <TagGroupBlockEditor
+                group={group}
+                tags={tags}
+                query={tagQuery}
+                onQuery={(blockId, value) => setTagQuery(current => ({ ...current, [blockId]: value }))}
+                onChange={next => update(index, next)}
+              />
+              <div className="flex gap-3 text-xs">
+                <button type="button" onClick={() => move(index, -1)} className="text-gray-500">{t('commercialTagGroups.moveUp')}</button>
+                <button type="button" onClick={() => move(index, 1)} className="text-gray-500">{t('commercialTagGroups.moveDown')}</button>
+                <button type="button" onClick={() => setGroups(current => current.filter((_, i) => i !== index))} className="text-rose-600">
+                  {t('commercialTagGroups.remove')}
+                </button>
               </div>
-            )
-          })}
-          <button
-            type="button"
-            disabled={groups.length >= MAX_GROUPS}
-            onClick={() => {
-              if (groups.length >= MAX_GROUPS) { toast.error(t('commercialTagGroups.maxGroups')); return }
-              setGroups(current => [...current, newGroup()])
-            }}
-            className="text-xs font-medium text-indigo-600 disabled:text-gray-300"
-          >
-            {t('commercialTagGroups.addGroup')}
-          </button>
+            </div>
+          ))}
+          {readable && (
+            <button
+              type="button"
+              disabled={groups.length >= MAX_GROUPS}
+              onClick={() => {
+                if (groups.length >= MAX_GROUPS) { toast.error(t('commercialTagGroups.maxGroups')); return }
+                setGroups(current => [...current, newGroup()])
+              }}
+              className="text-xs font-medium text-indigo-600 disabled:text-gray-300"
+            >
+              {t('commercialTagGroups.addGroup')}
+            </button>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100">
           <button type="button" onClick={onClose} className="text-xs text-gray-500 px-3 py-2">{t('commercialTagGroups.cancel')}</button>
           <button
             type="button"
-            disabled={saving || loading}
+            disabled={saving || loading || !readable}
             onClick={() => { void save() }}
             className="text-xs font-medium text-white bg-indigo-600 rounded-lg px-3 py-2 disabled:opacity-50"
           >
@@ -204,59 +210,6 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function TagPickList({
-  tags,
-  query,
-  selectedIds,
-  emptyLabel,
-  onToggle,
-}: {
-  tags: Tag[]
-  query: string
-  selectedIds: string[]
-  emptyLabel: string
-  onToggle: (tagId: string) => void
-}) {
-  const normalized = query.trim().toLocaleLowerCase()
-  const visible = normalized
-    ? tags.filter(tag => tag.name.toLocaleLowerCase().includes(normalized))
-    : tags
-  const atLimit = selectedIds.length >= MAX_TAGS_PER_GROUP
-
-  return (
-    <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-lg">
-      {visible.length === 0 && normalized && (
-        <p className="px-2 py-3 text-xs text-gray-400">{emptyLabel}</p>
-      )}
-      {visible.map(tag => {
-        const checked = selectedIds.includes(tag.id)
-        const disabled = atLimit && !checked
-        return (
-          <label
-            key={tag.id}
-            className={`flex items-center gap-2 px-2 py-1.5 text-sm border-b border-gray-50 last:border-b-0 ${
-              checked ? 'bg-indigo-50' : 'hover:bg-gray-50'
-            } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <input
-              type="checkbox"
-              className="shrink-0"
-              checked={checked}
-              disabled={disabled}
-              onChange={() => onToggle(tag.id)}
-            />
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10"
-              style={{ backgroundColor: tag.color || '#9ca3af' }}
-            />
-            <span className="truncate text-gray-800">{tag.name}</span>
-          </label>
-        )
-      })}
     </div>
   )
 }
