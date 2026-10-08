@@ -8,6 +8,7 @@
 import React, { useState } from 'react'
 import { Trophy, TrendingUp, AlertTriangle, RefreshCw, HelpCircle, Settings2 } from 'lucide-react'
 import { SellerRankingHelpModal } from './SellerRankingHelpModal'
+import { COLUMN_HINTS, ColumnHint } from './SellerRankingColumnHint'
 import { SellerRankingScopeModal } from './SellerRankingScopeModal'
 import { useAccessControl } from '../../../hooks/useAccessControl'
 import { SellerPerformanceChart }  from '../charts/SellerPerformanceChart'
@@ -159,17 +160,39 @@ export function SellerRankingSection({
             {/* Tabela */}
             <div className="overflow-x-auto -mx-1">
               <table className="w-full text-xs min-w-[600px]">
-                <thead>
+                <thead className="relative z-20">
                   <tr className="text-gray-400 border-b border-gray-100">
-                    {!isIndividual && <th className="pb-2 pl-2 text-left w-8">#</th>}
-                    <th className="pb-2 text-left">Vendedor</th>
-                    {!isIndividual && <th className="pb-2 text-center w-16">Score</th>}
-                    <th className="pb-2 text-center">Leads</th>
-                    <th className="pb-2 text-center">Atend.</th>
-                    <th className="pb-2 text-center">T. Resp.</th>
-                    <th className="pb-2 text-center">Conversão</th>
-                    <th className="pb-2 text-center">SLA ❌</th>
-                    <th className="pb-2 text-right pr-2">Receita</th>
+                    {!isIndividual && (
+                      <th className="pb-2 pl-2 text-left whitespace-nowrap">
+                        <ColumnHint label="#" hint={COLUMN_HINTS.rank} align="start" />
+                      </th>
+                    )}
+                    <th className="pb-2 text-left whitespace-nowrap">
+                      <ColumnHint label="Vendedor" hint={COLUMN_HINTS.seller} align="start" />
+                    </th>
+                    {!isIndividual && (
+                      <th className="pb-2 text-center whitespace-nowrap">
+                        <ColumnHint label="Score" hint={COLUMN_HINTS.score} />
+                      </th>
+                    )}
+                    <th className="pb-2 text-center whitespace-nowrap">
+                      <ColumnHint label="Leads" hint={COLUMN_HINTS.leads} />
+                    </th>
+                    <th className="pb-2 text-center whitespace-nowrap">
+                      <ColumnHint label="Atend." hint={COLUMN_HINTS.attendance} />
+                    </th>
+                    <th className="pb-2 text-center whitespace-nowrap">
+                      <ColumnHint label="T. Resp." hint={COLUMN_HINTS.response} />
+                    </th>
+                    <th className="pb-2 text-center whitespace-nowrap">
+                      <ColumnHint label="Conversão" hint={COLUMN_HINTS.conversion} />
+                    </th>
+                    <th className="pb-2 text-center whitespace-nowrap">
+                      <ColumnHint label="SLA ❌" hint={COLUMN_HINTS.sla} name="SLA" />
+                    </th>
+                    <th className="pb-2 pr-2 text-right whitespace-nowrap">
+                      <ColumnHint label="Receita" hint={COLUMN_HINTS.revenue} align="end" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
