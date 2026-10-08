@@ -369,6 +369,19 @@ export const NewDashboard: React.FC = () => {
         />
       </section>
 
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Performance Comercial</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Entrada de leads ao longo do período.</p>
+        </div>
+        <TrendsSection
+          data={trends.data}
+          loading={trends.loading}
+          error={trends.error}
+          onRetry={trends.refetch}
+        />
+      </div>
+
       <SellerRankingSection
         data={sellerRanking.data}
         meta={sellerRanking.meta}
@@ -379,22 +392,6 @@ export const NewDashboard: React.FC = () => {
         comparisonMode={comparisonMode}
         onScopeSaved={sellerRanking.refetch}
       />
-
-      {/* ── 2. Inteligência Comercial ───────────────────────────────────── */}
-      <section>
-        <IntelligenceCentral
-          data={insights.data}
-          loading={insights.loading}
-          error={insights.error}
-          canCustomize={insights.canCustomize}
-          canAiAnalysis={insights.canAiAnalysis}
-          dashboardFilters={filters}
-          periodLabel={periodLabel}
-          companyId={companyId}
-          resumeAnalysisId={resumeAnalysisId}
-          onRefetchInsights={insights.refetch}
-        />
-      </section>
 
       {/* ── 3–5. Ações Urgentes ─────────────────────────────────────────── */}
       <div className="space-y-4">
@@ -428,6 +425,21 @@ export const NewDashboard: React.FC = () => {
           />
         </div>
 
+        <section>
+          <IntelligenceCentral
+            data={insights.data}
+            loading={insights.loading}
+            error={insights.error}
+            canCustomize={insights.canCustomize}
+            canAiAnalysis={insights.canAiAnalysis}
+            dashboardFilters={filters}
+            periodLabel={periodLabel}
+            companyId={companyId}
+            resumeAnalysisId={resumeAnalysisId}
+            onRefetchInsights={insights.refetch}
+          />
+        </section>
+
         {canViewLeadOrigins && (
           <LeadOriginsSection
             data={leadOrigins.data}
@@ -443,20 +455,6 @@ export const NewDashboard: React.FC = () => {
           loading={priorityAlerts.loading}
           error={priorityAlerts.error}
           companyId={companyId}
-        />
-      </div>
-
-      {/* ── 6. Performance Comercial ────────────────────────────────────── */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-800">Performance Comercial</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Entrada de leads ao longo do período.</p>
-        </div>
-        <TrendsSection
-          data={trends.data}
-          loading={trends.loading}
-          error={trends.error}
-          onRetry={trends.refetch}
         />
       </div>
 
