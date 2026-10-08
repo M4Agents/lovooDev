@@ -12,7 +12,7 @@
 // Sequência (campo sequential obrigatório antes do paralelo):
 //   1. Auth + Membership
 //   2. detectFunnelMode (síncrono — necessário para validação de funnel_id)
-//   3. Resolução de effective_funnel_id (síncrono — requerido por aggregate_snapshot_period)
+//   3. Resolução de effective_funnel_id (síncrono — requerido por aggregate_snapshot_company_period)
 //   4. resolveComparisonPeriods
 //   5. Promise.allSettled([realtime, historical×2])
 //
@@ -33,7 +33,12 @@
 
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js'
 import { detectFunnelMode }         from '../lib/dashboard/metrics.js'
-import { resolveComparisonPeriods } from '../lib/dashboard/snapshotPeriods.js'
+import { readCompanyTimeZone }      from '../lib/dashboard/period.js'
+import {
+  requireCompatibleSnapshot,
+  resolveComparisonPeriods,
+  SnapshotCalendarGap,
+} from '../lib/dashboard/snapshotPeriods.js'
 import {
   extractToken,
   getUserFromToken,
@@ -152,7 +157,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       return
     }
 
-    // 4. Resolução de effective_funnel_id (síncrono — requerido por aggregate_snapshot_period)
+    // 4. Resolução de effective_funnel_id (síncrono — requerido por aggregate_snapshot_company_period)
     let effectiveFunnelId = funnelId
 
     if (!effectiveFunnelId) {
@@ -194,8 +199,9 @@ export default async function handler(req: any, res: any): Promise<void> {
       ? req.query.comparison_mode.trim()
       : 'wow'
     const comparisonMode: 'wow' | 'mom' = rawMode === 'mom' ? 'mom' : 'wow'
+    const companyTimeZone = await readCompanyTimeZone(svc, companyId)
     const { currentFrom, currentTo, previousFrom, previousTo } =
-      resolveComparisonPeriods(comparisonMode)
+      resolveComparisonPeriods(comparisonMode, companyTimeZone)
 
     const ctx = { companyId, funnelId: effectiveFunnelId, comparisonMode }
 
@@ -218,15 +224,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'funnel_executive_v2.historical.current',
         async () => {
-          const { data, error } = await svc.rpc('aggregate_snapshot_period', {
+          const { data, error } = await svc.rpc('aggregate_snapshot_company_period', {
             p_company_id: companyId,
             p_funnel_id:  effectiveFunnelId,
             p_start_date: currentFrom,
             p_end_date:   currentTo,
           })
-          if (error) throw new Error(`aggregate_snapshot_period/current: ${error.message}`)
-          if (!data) throw new Error('Dados de snapshot insuficientes — período atual')
-          return data as any
+          if (error) throw new Error(`aggregate_snapshot_company_period/current: ${error.message}`)
+          return requireCompatibleSnapshot(data) as any
         },
         ctx,
       ),
@@ -234,15 +239,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'funnel_executive_v2.historical.previous',
         async () => {
-          const { data, error } = await svc.rpc('aggregate_snapshot_period', {
+          const { data, error } = await svc.rpc('aggregate_snapshot_company_period', {
             p_company_id: companyId,
             p_funnel_id:  effectiveFunnelId,
             p_start_date: previousFrom,
             p_end_date:   previousTo,
           })
-          if (error) throw new Error(`aggregate_snapshot_period/previous: ${error.message}`)
-          if (!data) throw new Error('Dados de snapshot insuficientes — período anterior')
-          return data as any
+          if (error) throw new Error(`aggregate_snapshot_company_period/previous: ${error.message}`)
+          return requireCompatibleSnapshot(data) as any
         },
         ctx,
       ),
@@ -321,11 +325,13 @@ export default async function handler(req: any, res: any): Promise<void> {
         currentResult.status  === 'rejected' ? currentResult.reason  :
         previousResult.status === 'rejected' ? previousResult.reason : null
       console.warn(`[funnel-executive-v2] historical ${failedLeg} failed (degraded silently):`, failReason?.message)
-      // Caso A: aggregate_snapshot_period falhou em current ou previous
+      // Caso A: aggregate_snapshot_company_period falhou em current ou previous
       logHistoricalFallback(svc, {
         companyId,
         endpoint:       'funnel-executive-v2',
-        reason:         'aggregate_failed',
+        reason:         failReason instanceof SnapshotCalendarGap
+          ? 'no_snapshot_data'
+          : 'aggregate_failed',
         comparisonMode,
       })
     }

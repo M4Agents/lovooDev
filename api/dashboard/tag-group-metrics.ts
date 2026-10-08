@@ -1,11 +1,16 @@
 // GET /api/dashboard/tag-group-metrics
 //
-// Mesmo período UTC e mesmo recorte de vendedor de /api/dashboard/lead-origins.
+// Mesmo período da empresa e mesmo recorte de vendedor de /api/dashboard/lead-origins.
 // O responsável é leads.responsible_user_id.
 // funnel_id enviado pelo cliente é ignorado.
 // A RPC lê tag_group_settings no banco. O cliente não envia os grupos.
 
-import { resolvePeriod } from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  sqlInclusiveEnd,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import { jsonError } from '../lib/dashboard/auth.js'
 import { logDashboardError, withTiming } from '../lib/dashboard/observability.js'
 import { authorizeTagGroups, resolveTagGroupUserId } from '../lib/dashboard/tagGroupAuth.js'
@@ -31,9 +36,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     const startDate = typeof req.query?.start_date === 'string' ? req.query.start_date.trim() : undefined
     const endDate = typeof req.query?.end_date === 'string' ? req.query.end_date.trim() : undefined
 
-    let resolved: { start: string; end: string }
-    try { resolved = resolvePeriod(period, startDate, endDate) }
-    catch (err: any) { jsonError(res, 400, err.message ?? 'Período inválido'); return }
+    let resolved: ResolvedRange
+    try {
+      resolved = await resolveCompanyPeriod(actor.svc, actor.companyId, period, startDate, endDate)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
 
     const raw = await withTiming(
       'dashboard.tag-group-metrics',
@@ -41,7 +51,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         const { data, error } = await actor.svc.rpc('get_dashboard_tag_group_metrics', {
           p_company_id: actor.companyId,
           p_start_date: resolved.start,
-          p_end_date: resolved.end,
+          p_end_date: sqlInclusiveEnd(resolved),
           p_user_id: effectiveUserId,
         })
         if (error) throw new Error(`get_dashboard_tag_group_metrics: ${error.message}`)
@@ -63,7 +73,8 @@ export default async function handler(req: any, res: any): Promise<void> {
         groups_configured: rows.length,
         funnel_applied: false,
         responsible_field: 'leads.responsible_user_id',
-        period_timezone: 'UTC',
+        period_timezone: resolved.timeZone,
+        end_inclusive: resolved.endInclusive,
       },
     })
   } catch (err: unknown) {

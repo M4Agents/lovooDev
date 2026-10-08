@@ -46,6 +46,7 @@ import { useAuth }                    from '../contexts/AuthContext'
 import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
 import { useSnapshotHealth }          from '../hooks/dashboard/useSnapshotHealth'
+import { HistoricalGapNotice }        from '../components/Dashboard/historical/HistoricalGapNotice'
 import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
 import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
 import { useSnapshotSellerDeltas }    from '../hooks/dashboard/useSnapshotSellerDeltas'
@@ -59,7 +60,7 @@ import type { DashboardTab }          from '../components/Dashboard/navigation/D
 // ---------------------------------------------------------------------------
 
 export const NewDashboard: React.FC = () => {
-  const { company } = useAuth()
+  const { company, companyTimezone } = useAuth()
   const companyId = company?.id ?? null
 
   const {
@@ -86,11 +87,19 @@ export const NewDashboard: React.FC = () => {
   // Feature flags — sem flags ativas o dashboard se comporta exatamente como antes
   const flags = useFeatureFlags()
 
-  // FASE 4.2 Sprint 1A — Saúde do tenant histórico
-  // canUseSnapshots = false para insufficient_history, degraded, critical e em caso de erro
+  // A comparação usa a cobertura das datas do modo ativo.
+  // Sem essa cobertura, o histórico fica oculto e as métricas ao vivo continuam.
   const snapshotHealth   = useSnapshotHealth(companyId)
-  const canUseSnapshots  = snapshotHealth.canUseSnapshots
-  const freshnessOk      = snapshotHealth.freshnessOk
+  const activeCoverage   = comparisonMode === 'mom' ? snapshotHealth.momCoverage : snapshotHealth.wowCoverage
+  const historyReady     = activeCoverage?.complete === true
+  const historicalFlagsOn =
+    flags.snapshotDelta ||
+    flags.snapshotTrends ||
+    flags.hybridExecutiveSummary ||
+    flags.hybridSellerRanking ||
+    flags.hybridForecast ||
+    flags.hybridFunnelExecutive ||
+    flags.hybridSlaAlerts
 
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
@@ -105,16 +114,16 @@ export const NewDashboard: React.FC = () => {
   const trends = useDashboardTrends(filters)
 
   // FASE 4.2 Sprint 3 — v2 ativo apenas quando flag ligada E tenant elegível
-  const sellerHybridActive = flags.hybridSellerRanking && canUseSnapshots
+  const sellerHybridActive = flags.hybridSellerRanking && historyReady
 
   // FASE 4.2 Sprint 4 — v2 ativo apenas quando flag ligada E tenant elegível
-  const slaHybridActive = flags.hybridSlaAlerts && canUseSnapshots
+  const slaHybridActive = flags.hybridSlaAlerts && historyReady
 
   // FASE 4.2 Sprint 5 — v2 ativo apenas quando flag ligada E tenant elegível
-  const forecastHybridActive = flags.hybridForecast && canUseSnapshots
+  const forecastHybridActive = flags.hybridForecast && historyReady
 
   // FASE 4.2 Sprint 6 — v2 ativo apenas quando flag ligada E tenant elegível
-  const funnelExecHybridActive = flags.hybridFunnelExecutive && canUseSnapshots
+  const funnelExecHybridActive = flags.hybridFunnelExecutive && historyReady
 
   // Fase 2 — Gestão Comercial
   // hybridMode=true → chama seller-ranking-v2 (ranking + deltas num único request)
@@ -135,7 +144,7 @@ export const NewDashboard: React.FC = () => {
   const leadOrigins   = useLeadOrigins(filters, canViewLeadOrigins)
 
   // FASE 4.2 Sprint 2 — v2 ativo apenas quando flag ligada E tenant elegível
-  const hybridModeActive = flags.hybridExecutiveSummary && canUseSnapshots
+  const hybridModeActive = flags.hybridExecutiveSummary && historyReady
 
   // Dados base — summary precisa vir antes de funnelMode (que depende dele)
   // hybridMode=true → chama executive-summary-v2 (realtime + comparação num único request)
@@ -201,7 +210,7 @@ export const NewDashboard: React.FC = () => {
     funnelId,
     mode:            comparisonMode,
     enabled:         flags.snapshotDelta && !hybridModeActive,
-    canUseSnapshots,
+    canUseSnapshots: historyReady,
   })
   const snapshotTrends = useSnapshotTrends({
     companyId,
@@ -209,7 +218,7 @@ export const NewDashboard: React.FC = () => {
     metrics:         ['leads_created', 'conversations_attended', 'sla_breached_count', 'hot_count'],
     days:            7,
     enabled:         flags.snapshotTrends || flags.snapshotDelta,
-    canUseSnapshots,
+    canUseSnapshots: historyReady,
   })
   // Quando sellerHybridActive=true: v2 já entrega deltas → useSnapshotSellerDeltas desativado
   // Quando sellerHybridActive=false: useSnapshotSellerDeltas opera normalmente (Sprint 1A)
@@ -217,7 +226,7 @@ export const NewDashboard: React.FC = () => {
     companyId,
     mode:            comparisonMode,
     enabled:         flags.snapshotDelta && !sellerHybridActive,
-    canUseSnapshots,
+    canUseSnapshots: historyReady,
   })
 
   // Fonte unificada de comparação histórica para o ExecutiveSummary:
@@ -226,7 +235,7 @@ export const NewDashboard: React.FC = () => {
   const comparisonData: SnapshotComparisonData | null =
     hybridModeActive
       ? summary.historicalComparison
-      : (flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotComparison.data : null)
+      : (flags.snapshotDelta && historyReady ? snapshotComparison.data : null)
 
   // Fonte unificada de deltas para o SellerRankingSection:
   //   - sellerHybridActive=true  → vem do v2 (sellerRanking.sellerDeltasMap)
@@ -234,7 +243,7 @@ export const NewDashboard: React.FC = () => {
   const sellerDeltaMap: Map<string, SellerSnapshotDelta> =
     sellerHybridActive
       ? sellerRanking.sellerDeltasMap
-      : (flags.snapshotDelta && canUseSnapshots && freshnessOk ? sellerDeltas.byUserId : new Map())
+      : (flags.snapshotDelta && historyReady ? sellerDeltas.byUserId : new Map())
 
   // Fonte unificada de trend SLA para o SlaAlertsPanel:
   //   - slaHybridActive=true  → vem do v2 (slaAlerts.slaTrendData)
@@ -242,12 +251,12 @@ export const NewDashboard: React.FC = () => {
   const slaTrendSource: SnapshotTrendsData | null =
     slaHybridActive
       ? slaAlerts.slaTrendData
-      : (flags.snapshotTrends && canUseSnapshots && freshnessOk ? snapshotTrends.data : null)
+      : (flags.snapshotTrends && historyReady ? snapshotTrends.data : null)
 
   const slaTrendPoints: number =
     slaHybridActive
       ? slaAlerts.slaTrendPoints
-      : (canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0)
+      : (historyReady ? snapshotTrends.dataPoints : 0)
 
   // Seções de funil só são exibidas se:
   //   - single-funnel (sempre), OU
@@ -304,7 +313,7 @@ export const NewDashboard: React.FC = () => {
             flags.hybridSellerRanking    ||
             flags.hybridForecast         ||
             flags.hybridFunnelExecutive
-          ) && canUseSnapshots && (
+          ) && (
             <div className="flex items-center rounded-lg border border-gray-200 bg-white text-xs overflow-hidden">
               <button
                 onClick={() => setComparisonMode('wow')}
@@ -351,6 +360,14 @@ export const NewDashboard: React.FC = () => {
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'operation' && (<>
 
+      {historicalFlagsOn && !snapshotHealth.loading && !historyReady && (
+        <HistoricalGapNotice
+          mode={comparisonMode}
+          timeZone={companyTimezone}
+          coverage={activeCoverage}
+        />
+      )}
+
       {/* ── 1. KPIs executivos ─────────────────────────────────────────── */}
       <section>
         <ExecutiveSummary
@@ -360,8 +377,8 @@ export const NewDashboard: React.FC = () => {
           dashboardFilters={filters}
           periodLabel={periodLabel}
           snapshotComparison={comparisonData}
-          snapshotTrends={flags.snapshotDelta && canUseSnapshots && freshnessOk ? snapshotTrends.data : null}
-          snapshotTrendPoints={canUseSnapshots && freshnessOk ? snapshotTrends.dataPoints : 0}
+          snapshotTrends={flags.snapshotDelta && historyReady ? snapshotTrends.data : null}
+          snapshotTrendPoints={historyReady ? snapshotTrends.dataPoints : 0}
           comparisonMode={comparisonMode}
           userScoped={summary.userScoped}
           onWaitingLeadsClick={handleWaitingLeadsClick}

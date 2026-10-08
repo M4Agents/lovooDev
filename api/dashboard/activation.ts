@@ -25,7 +25,12 @@
 // =====================================================
 
 import { getSupabaseAdmin }                    from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }                       from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  sqlInclusiveEnd,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import {
   extractToken,
   getUserFromToken,
@@ -95,21 +100,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
-    try { resolvedRange = resolvePeriod(period, start_date, end_date) }
-    catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
-
-    // ------------------------------------------------------------------
-    // 5. Timezone da empresa
-    // Busca após validação de auth + membership (passos 1-3).
-    // ------------------------------------------------------------------
-    const { data: co } = await svc
-      .from('companies')
-      .select('timezone')
-      .eq('id', companyId)
-      .maybeSingle()
-
-    const timezone = co?.timezone || 'America/Sao_Paulo'
+    let resolvedRange: ResolvedRange
+    try {
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
+    const timezone = resolvedRange.timeZone
 
     // ------------------------------------------------------------------
     // 6. Configurações de ativação da empresa
@@ -136,7 +135,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         const { data, error } = await svc.rpc('get_dashboard_activation', {
           p_company_id:                       companyId,
           p_start_date:                       resolvedRange.start,
-          p_end_date:                         resolvedRange.end,
+          p_end_date:                         sqlInclusiveEnd(resolvedRange),
           p_user_id:                          effectiveUserId ?? null,
           p_timezone:                         timezone,
           p_lead_rescue_inactivity_days:      rescueInactivityDays,

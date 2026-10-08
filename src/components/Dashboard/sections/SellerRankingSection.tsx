@@ -10,6 +10,7 @@ import { Trophy, TrendingUp, AlertTriangle, RefreshCw, HelpCircle, Settings2 } f
 import { SellerRankingHelpModal } from './SellerRankingHelpModal'
 import { COLUMN_HINTS, ColumnHint } from './SellerRankingColumnHint'
 import { SellerRankingScopeModal } from './SellerRankingScopeModal'
+import { useAuth } from '../../../contexts/AuthContext'
 import { useAccessControl } from '../../../hooks/useAccessControl'
 import { SellerPerformanceChart }  from '../charts/SellerPerformanceChart'
 import { DeltaBadge }              from '../historical/DeltaBadge'
@@ -61,6 +62,7 @@ export function SellerRankingSection({
   comparisonMode = 'wow',
   onScopeSaved,
 }: Props) {
+  const { companyTimezone } = useAuth()
   const { canViewDashboardSettings } = useAccessControl()
   const [showChart, setShowChart] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
@@ -70,7 +72,7 @@ export function SellerRankingSection({
   const title         = isIndividual ? 'Suas Métricas' : 'Ranking Comercial'
   const ranked        = isIndividual ? data : [...data].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
   const hasDeltaData  = !!sellerDeltas && sellerDeltas.size > 0
-  const periodLabel2  = getComparisonLabel(comparisonMode)
+  const periodLabel2  = getComparisonLabel(comparisonMode, companyTimezone)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

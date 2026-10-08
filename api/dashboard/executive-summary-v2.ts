@@ -24,14 +24,20 @@
 // =====================================================
 
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }            from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import {
   detectAgentMode,
   detectFunnelMode,
   buildExecutiveMetrics,
 }                                   from '../lib/dashboard/metrics.js'
 import {
+  requireCompatibleSnapshot,
   resolveComparisonPeriods,
+  SnapshotCalendarGap,
 }                                   from '../lib/dashboard/snapshotPeriods.js'
 import {
   extractToken,
@@ -52,7 +58,7 @@ import { calcDelta } from '../lib/dashboard/deltaUtils.js'
 const MANAGER_ROLES = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
 
 // ---------------------------------------------------------------------------
-// getComparisonData — chama aggregate_snapshot_period × 2 e calcula deltas
+// getComparisonData — chama aggregate_snapshot_company_period × 2 e calcula deltas
 // ---------------------------------------------------------------------------
 
 const FLOW_METRICS  = [
@@ -77,13 +83,13 @@ async function getComparisonData(
 ) {
   const [{ data: curr, error: currErr }, { data: prev, error: prevErr }] =
     await Promise.all([
-      svc.rpc('aggregate_snapshot_period', {
+      svc.rpc('aggregate_snapshot_company_period', {
         p_company_id: companyId,
         p_funnel_id:  funnelId,
         p_start_date: currentFrom,
         p_end_date:   currentTo,
       }),
-      svc.rpc('aggregate_snapshot_period', {
+      svc.rpc('aggregate_snapshot_company_period', {
         p_company_id: companyId,
         p_funnel_id:  funnelId,
         p_start_date: previousFrom,
@@ -91,9 +97,10 @@ async function getComparisonData(
       }),
     ])
 
-  if (currErr) throw new Error(`aggregate_snapshot_period/current: ${currErr.message}`)
-  if (prevErr) throw new Error(`aggregate_snapshot_period/previous: ${prevErr.message}`)
-  if (!curr || !prev) throw new Error('Dados de snapshot insuficientes para o período')
+  if (currErr) throw new Error(`aggregate_snapshot_company_period/current: ${currErr.message}`)
+  if (prevErr) throw new Error(`aggregate_snapshot_company_period/previous: ${prevErr.message}`)
+  requireCompatibleSnapshot(curr)
+  requireCompatibleSnapshot(prev)
 
   const deltas: Record<string, { abs: number; pct: number }> = {}
 
@@ -195,12 +202,13 @@ export default async function handler(req: any, res: any): Promise<void> {
       }
     }
 
-    let resolvedRange: { start: string; end: string }
+    let resolvedRange: ResolvedRange
     try {
-      resolvedRange = resolvePeriod(period, start_date, end_date)
-    } catch (e: any) {
-      jsonError(res, 400, e.message ?? 'Período inválido')
-      return
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
     }
 
     // ── 4. Modo de comparação + períodos históricos ──────────────────────────
@@ -210,7 +218,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     const comparisonMode: 'wow' | 'mom' = rawMode === 'mom' ? 'mom' : 'wow'
 
     const { currentFrom, currentTo, previousFrom, previousTo } =
-      resolveComparisonPeriods(comparisonMode)
+      resolveComparisonPeriods(comparisonMode, resolvedRange.timeZone)
 
     // ── 5. Realtime + comparação em paralelo ─────────────────────────────────
     const ctx = { companyId, period }
@@ -226,7 +234,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         return { ...execMetrics, agent_mode: agentMode, funnel_mode: funnelMode }
       }, ctx),
 
-      // Histórico: aggregate_snapshot_period × 2 + deltas
+      // Histórico: aggregate_snapshot_company_period × 2 + deltas
       withTiming('executive_v2.comparison', () =>
         getComparisonData(
           svc, companyId, funnelId,
@@ -253,11 +261,13 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     if (comparisonResult.status === 'rejected') {
       console.warn('[executive-summary-v2] comparison fallback:', (comparisonResult.reason as Error)?.message)
-      // Caso A: aggregate_snapshot_period falhou
+      // Caso A: aggregate_snapshot_company_period falhou
       logHistoricalFallback(svc, {
         companyId,
         endpoint:       'executive-summary-v2',
-        reason:         'aggregate_failed',
+        reason:         comparisonResult.reason instanceof SnapshotCalendarGap
+          ? 'no_snapshot_data'
+          : 'aggregate_failed',
         comparisonMode,
       })
     } else if (historical === null) {

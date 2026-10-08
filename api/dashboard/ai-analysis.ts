@@ -20,7 +20,11 @@
 // =====================================================
 
 import { getSupabaseAdmin }    from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }        from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import { canAiAnalysis }        from '../lib/dashboard/aiAnalysisAccess.js'
 import {
   buildAnalysisContext,
@@ -311,9 +315,6 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     const period = typeof body.period === 'string' ? body.period.trim() : '30d'
-    let resolvedRange: { start: string; end: string }
-    try { resolvedRange = resolvePeriod(period) }
-    catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
 
     // 4. Membership — company_id extraído do body mas VALIDADO contra membership
     const companyId = typeof body.company_id === 'string' ? body.company_id.trim() : ''
@@ -321,6 +322,15 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     const membership = await assertMembership(svc, user.id, companyId)
     if (!membership) { jsonError(res, 403, 'Acesso negado'); return }
+
+    let resolvedRange: ResolvedRange
+    try {
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
 
     // 4.1. Verificar se é empresa pai — isenta de controle de créditos
     const { data: companyRow } = await svc

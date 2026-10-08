@@ -2,6 +2,7 @@ import React from 'react'
 import { TrendingUp, AlertTriangle, CheckCircle, XCircle, BarChart3 } from 'lucide-react'
 import { ForecastGauge } from '../charts/ForecastGauge'
 import { DeltaBadge } from '../historical/DeltaBadge'
+import { useAuth } from '../../../contexts/AuthContext'
 import { getComparisonLabel } from '../../../lib/snapshotPeriods'
 import type {
   ComparisonMode,
@@ -70,6 +71,7 @@ export function ForecastSection({
   historicalComparison,
   comparisonMode,
 }: ForecastSectionProps) {
+  const { companyTimezone } = useAuth()
   if (loading) {
     return (
       <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5 animate-pulse">
@@ -105,7 +107,7 @@ export function ForecastSection({
 
   const hasHistorical = !!historicalComparison
   const periodLabel   = hasHistorical && comparisonMode
-    ? getComparisonLabel(comparisonMode)
+    ? getComparisonLabel(comparisonMode, companyTimezone)
     : undefined
   const deltas        = historicalComparison?.deltas
 

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { PREDEFINED_PERIODS } from '../../types/analytics'
 import type { PeriodFilter } from '../../types/analytics'
+import { civilDateFromLocalDate, dateFromStoredCustom } from '../../lib/dashboard/customPeriod'
 
 const STORAGE_KEY_PREFIX = 'lovoo_dashboard_filters'
 const DEFAULT_PERIOD_TYPE = '7days' as const
@@ -40,8 +41,8 @@ function buildPeriodFilter(type: string, startISO?: string, endISO?: string): Pe
     : { type: DEFAULT_PERIOD_TYPE, label: 'Últimos 7 dias' }
 
   if (type === 'custom' && startISO && endISO) {
-    base.startDate = new Date(startISO)
-    base.endDate   = new Date(endISO)
+    base.startDate = dateFromStoredCustom(startISO)
+    base.endDate   = dateFromStoredCustom(endISO)
   }
 
   return base
@@ -75,8 +76,8 @@ function saveToStorage(
   try {
     const payload: PersistedFilters = { periodType: period.type, funnelId, userId }
     if (period.type === 'custom') {
-      if (period.startDate) payload.startDateISO = period.startDate.toISOString()
-      if (period.endDate)   payload.endDateISO   = period.endDate.toISOString()
+      if (period.startDate) payload.startDateISO = civilDateFromLocalDate(period.startDate)
+      if (period.endDate)   payload.endDateISO   = civilDateFromLocalDate(period.endDate)
     }
     localStorage.setItem(key, JSON.stringify(payload))
   } catch {

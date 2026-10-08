@@ -1,6 +1,7 @@
 import React from 'react'
 import { GitBranch, Clock, AlertTriangle, TrendingUp } from 'lucide-react'
 import { DeltaBadge } from '../historical/DeltaBadge'
+import { useAuth } from '../../../contexts/AuthContext'
 import { getComparisonLabel } from '../../../lib/snapshotPeriods'
 import type {
   ComparisonMode,
@@ -99,6 +100,7 @@ export function FunnelExecutiveSection({
   stageDeltasMap,
   comparisonMode,
 }: FunnelExecutiveSectionProps) {
+  const { companyTimezone } = useAuth()
   if (funnelRequired) {
     return (
       <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm p-5">
@@ -140,7 +142,7 @@ export function FunnelExecutiveSection({
 
   const hasDeltas  = stageDeltasMap && stageDeltasMap.size > 0
   const periodLabel = hasDeltas && comparisonMode
-    ? getComparisonLabel(comparisonMode)
+    ? getComparisonLabel(comparisonMode, companyTimezone)
     : undefined
 
   return (

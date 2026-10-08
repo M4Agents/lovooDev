@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { ResolvedRange } from './period'
+import { upperBoundOp, type ResolvedRange } from './period'
 
 // ---------------------------------------------------------------------------
 // Tipos de modo
@@ -222,8 +222,7 @@ async function countConversationsForLeads(
       .from('chat_conversations')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .gte('updated_at', resolvedRange.start)
-      .lte('updated_at', resolvedRange.end)
+      .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
       .in('lead_id', batch)
     if (error) throw new Error(`countConversations-batch: ${error.message}`)
     total += count ?? 0
@@ -251,8 +250,7 @@ async function countHotOppsForLeads(
       .eq('company_id', companyId)
       .eq('status', 'open')
       .gte('probability', 70)
-      .gte('updated_at', resolvedRange.start)
-      .lte('updated_at', resolvedRange.end)
+      .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
       .in('lead_id', batch)
     if (error) throw new Error(`countHotOpps-batch: ${error.message}`)
     total += count ?? 0
@@ -305,8 +303,7 @@ export async function buildExecutiveMetrics(
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
       .eq('responsible_user_id', userId)
-      .gte('created_at', resolvedRange.start)
-      .lte('created_at', resolvedRange.end)
+      .gte('created_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
       .is('deleted_at', null)
 
     // 3. Todos os KPIs em paralelo usando helpers com batching quando necessário
@@ -342,17 +339,15 @@ export async function buildExecutiveMetrics(
       .from('leads')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .gte('created_at', resolvedRange.start)
-      .lte('created_at', resolvedRange.end)
+      .gte('created_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
       .is('deleted_at', null),
 
-    // BUG-02: intervalo fechado — gte + lte — consistente com o endpoint conversations
+    // Limite superior segue endInclusive: lte no período aberto e lt no período fechado.
     svc
       .from('chat_conversations')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .gte('updated_at', resolvedRange.start)
-      .lte('updated_at', resolvedRange.end),
+      .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end),
 
     // Fase 3A: alerts_count real via RPC get_dashboard_alerts_count
     svc.rpc('get_dashboard_alerts_count', {
@@ -369,8 +364,7 @@ export async function buildExecutiveMetrics(
       .eq('company_id', companyId)
       .eq('status', 'open')
       .gte('probability', 70)
-      .gte('updated_at', resolvedRange.start)
-      .lte('updated_at', resolvedRange.end),
+      .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end),
   ])
 
   const safeCount = (r: PromiseSettledResult<{ count: number | null; error: unknown }>) =>
@@ -546,7 +540,7 @@ export async function buildFunnelFlowMetrics(
     .eq('company_id', companyId)
     .eq('funnel_id', funnelId)
     .gte('created_at', resolvedRange.start)
-    .lte('created_at', resolvedRange.end)
+    [upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
     .limit(10_000)
 
   if (histErr) throw new Error(`buildFunnelFlowMetrics/history: ${histErr.message}`)
@@ -654,7 +648,7 @@ export async function buildFunnelStageConversionMetrics(
     .eq('company_id', companyId)
     .eq('funnel_id', funnelId)
     .gte('created_at', resolvedRange.start)
-    .lte('created_at', resolvedRange.end)
+    [upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
     .limit(10_000)
 
   if (histErr) throw new Error(`buildFunnelStageConversionMetrics/history: ${histErr.message}`)

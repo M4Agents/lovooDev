@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { dashboardApi }                from '../../services/dashboardApi'
+import { useAuth }                     from '../../contexts/AuthContext'
 import { getLastNDays }                from '../../lib/snapshotPeriods'
 import type { SnapshotTrendsData }     from '../../types/dashboard'
 
@@ -52,6 +53,7 @@ export function useSnapshotTrends({
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
+  const { companyTimezone } = useAuth()
   const abortRef = useRef<AbortController | null>(null)
 
   // Garante máximo de 30 dias
@@ -72,13 +74,13 @@ export function useSnapshotTrends({
     const ctrl = new AbortController()
     abortRef.current = ctrl
 
-    const { fromDate, toDate } = getLastNDays(safeDays)
+    const { fromDate, toDate } = getLastNDays(safeDays, companyTimezone)
 
     setLoading(true)
     setError(null)
 
     dashboardApi
-      .getSnapshotTrends(companyId, fromDate, toDate, metrics, funnelId, ctrl.signal)
+      .getSnapshotTrends(companyId, fromDate, toDate, metrics, funnelId, ctrl.signal, safeDays)
       .then(result => {
         if (ctrl.signal.aborted) return
         // Rastrear quando retorna dados insuficientes (< 5 pontos — D4)
@@ -100,7 +102,7 @@ export function useSnapshotTrends({
 
     return () => { ctrl.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, funnelId, metricsKey, safeDays, enabled, canUseSnapshots])
+  }, [companyId, companyTimezone, funnelId, metricsKey, safeDays, enabled, canUseSnapshots])
 
   return {
     data,

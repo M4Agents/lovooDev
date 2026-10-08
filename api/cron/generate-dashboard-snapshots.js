@@ -13,7 +13,9 @@
 //
 // EXECUÇÃO:
 //   Para cada empresa ativa, chama generate_dashboard_daily_snapshot()
-//   para D-1, D-2 e D-3 (late arriving data — upsert idempotente).
+//   para os três dias civis já encerrados no fuso da empresa.
+//   O upsert atinge só a linha da mesma calendar_basis. A linha UTC do mesmo
+//   period_start permanece. Não há backfill das datas anteriores.
 //   Processa em batches de 10 empresas com delay entre batches.
 //
 // OBSERVABILIDADE (FASE 4.1.5):
@@ -42,7 +44,13 @@
 
 import { cronGuard }           from '../lib/cronGuard.js';
 import { createClient } from '@supabase/supabase-js'
+import { completedCivilDates, normalizeDashboardTimeZone } from '../lib/dashboard/companyCivilDate.js'
+import { decideCompanyRunClaim, companyRunFinalStatus } from '../lib/dashboard/companySnapshotRun.js'
 
+// A base da empresa só é gerada no LovooCRM, com as duas variáveis.
+// A flag sozinha não basta: o LovooDev não define DASHBOARD_SNAPSHOT_PRODUCER.
+const COMPANY_SNAPSHOT_WRITES = process.env.DASHBOARD_COMPANY_SNAPSHOT_WRITES === 'true'
+  && process.env.DASHBOARD_SNAPSHOT_PRODUCER === 'lovoo-crm'
 const BATCH_SIZE   = 10     // empresas por batch de geração
 const BATCH_DELAY  = 300    // ms entre batches
 const DATES_BACK   = 3      // D-1, D-2, D-3 (late arriving data)
@@ -91,16 +99,32 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Retorna as últimas N datas em formato YYYY-MM-DD (UTC), excluindo hoje */
-function getTargetDates(daysBack) {
+/** Dias civis já encerrados no fuso da empresa. Não regrava o histórico anterior. */
+function companySnapshotDates(timeZone, now = new Date()) {
+  return completedCivilDates(timeZone, DATES_BACK, now)
+}
+
+/** Datas UTC do cron publicado. Usadas enquanto a gravação da base da empresa está desligada. */
+function utcSnapshotDates(daysBack, now = new Date()) {
   const dates = []
-  const now   = new Date()
   for (let i = 1; i <= daysBack; i++) {
-    const d = new Date(now)
-    d.setUTCDate(d.getUTCDate() - i)
-    dates.push(d.toISOString().slice(0, 10))
+    const day = new Date(now)
+    day.setUTCDate(day.getUTCDate() - i)
+    dates.push(day.toISOString().slice(0, 10))
   }
-  return dates  // [D-1, D-2, D-3]
+  return dates
+}
+
+/**
+ * O cron novo só grava depois que calendar_basis existe.
+ * Sem a coluna, a função antiga regravaria a janela UTC.
+ */
+async function snapshotCalendarReady(svc) {
+  const { error } = await svc
+    .from('dashboard_snapshots')
+    .select('calendar_basis')
+    .limit(1)
+  return !error
 }
 
 /** Calcula delta percentual absoluto entre snapshot e realtime */
@@ -123,12 +147,70 @@ function sampleCompanies(companyIds, sampleSize, seedDate) {
   return shuffled.slice(0, sampleSize)
 }
 
+/**
+ * Posse exclusiva da geração no calendário da empresa.
+ * Não usa dashboard_snapshot_cron_runs: o LovooDev conclui essa tabela na base utc
+ * e impediria a produção de gerar o outro calendário.
+ */
+async function claimCompanySnapshotRun(svc, jobDate, nowMs = Date.now()) {
+  const startedAt = new Date(nowMs).toISOString()
+  const { data: inserted, error: insertError } = await svc
+    .from('dashboard_company_snapshot_runs')
+    .insert({ run_date: jobDate, status: 'running', started_at: startedAt })
+    .select('id, started_at')
+    .maybeSingle()
+
+  if (!insertError && inserted?.id) {
+    return { claimed: true, id: inserted.id, startedAt: inserted.started_at }
+  }
+
+  const { data: existing } = await svc
+    .from('dashboard_company_snapshot_runs')
+    .select('id, status, started_at')
+    .eq('run_date', jobDate)
+    .maybeSingle()
+
+  const decision = decideCompanyRunClaim(existing, nowMs)
+  if (decision === 'skip_completed') return { claimed: false, reason: 'duplicate_invocation' }
+  if (decision === 'concurrent') return { claimed: false, reason: 'concurrent_run' }
+  if (decision !== 'retry' && decision !== 'retry_stale') {
+    return { claimed: false, reason: 'claim_failed' }
+  }
+
+  let takeover = svc
+    .from('dashboard_company_snapshot_runs')
+    .update({
+      status: 'running',
+      started_at: startedAt,
+      finished_at: null,
+    })
+    .eq('id', existing.id)
+    .eq('status', existing.status)
+    .eq('started_at', existing.started_at)
+  const { data: taken } = await takeover.select('id, started_at').maybeSingle()
+
+  if (taken?.id) return { claimed: true, id: taken.id, startedAt: taken.started_at }
+  return { claimed: false, reason: 'concurrent_run' }
+}
+
+async function finishOwnedCompanyRun(svc, runId, startedAt, status) {
+  const { data } = await svc
+    .from('dashboard_company_snapshot_runs')
+    .update({ status, finished_at: new Date().toISOString() })
+    .eq('id', runId)
+    .eq('status', 'running')
+    .eq('started_at', startedAt)
+    .select('id')
+    .maybeSingle()
+  return Boolean(data?.id)
+}
+
 /** Processa um batch de empresas para uma data específica */
-async function processBatch(svc, companyIds, date, jobDate) {
+async function processBatch(svc, companyIds, date, jobDate, rpcName) {
   const results = []
   for (const companyId of companyIds) {
     const start = Date.now()
-    const { data, error } = await svc.rpc('generate_dashboard_daily_snapshot', {
+    const { data, error } = await svc.rpc(rpcName, {
       p_company_id: companyId,
       p_date:       date,
     })
@@ -152,16 +234,17 @@ async function processBatch(svc, companyIds, date, jobDate) {
 }
 
 /** Executa drift check para uma empresa e salva em dashboard_snapshot_drift_logs */
-async function runDriftCheckForCompany(svc, companyId, targetDate) {
+async function runDriftCheckForCompany(svc, companyId, targetDate, timeZone, companyWrites) {
   try {
-    // 1. Buscar snapshot da data alvo
-    const { data: snap } = await svc
+    const calendarBasis = normalizeDashboardTimeZone(timeZone)
+    let query = svc
       .from('dashboard_snapshots')
       .select(DRIFT_METRICS.map(m => m.snap_field).join(', ') + ', snapshot_taken_at')
       .eq('company_id', companyId)
       .is('funnel_id', null)
       .eq('period_start', targetDate)
-      .maybeSingle()
+    query = query.eq('calendar_basis', companyWrites ? calendarBasis : 'utc')
+    const { data: snap } = await query.maybeSingle()
 
     if (!snap) {
       // Sem snapshot = não há como comparar, ignorar silenciosamente
@@ -169,7 +252,9 @@ async function runDriftCheckForCompany(svc, companyId, targetDate) {
     }
 
     // 2. Buscar realtime para o mesmo dia via get_dashboard_forecast
-    const { data: rtData } = await svc.rpc('get_dashboard_forecast', {
+    const { data: rtData } = await svc.rpc(
+      companyWrites ? 'get_dashboard_forecast_company' : 'get_dashboard_forecast',
+      {
       p_company_id: companyId,
       p_start_date: targetDate,
       p_end_date:   targetDate,
@@ -277,9 +362,30 @@ export default async function handler(req, res) {
 
   const startedAt = Date.now()
   const jobDate   = new Date().toISOString().slice(0, 10)
-  const dates     = getTargetDates(DATES_BACK)
+  const now       = new Date(startedAt)
+  const runTable  = COMPANY_SNAPSHOT_WRITES
+    ? 'dashboard_company_snapshot_runs'
+    : 'dashboard_snapshot_cron_runs'
+  let runId = null
+  let companyRunStartedAt = null
 
-  // ── 0. Guard de idempotência — Vercel at-least-once delivery ─────────────
+  if (COMPANY_SNAPSHOT_WRITES) {
+    const claim = await claimCompanySnapshotRun(svc, jobDate, startedAt)
+    if (!claim.claimed) {
+      return res.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: claim.reason,
+        job_date: jobDate,
+        producer: 'lovoo-crm',
+      })
+    }
+    runId = claim.id
+    companyRunStartedAt = claim.startedAt
+  }
+
+  // ── 0. Guard de idempotência da base utc — não bloqueia o produtor da empresa ──
+  if (!COMPANY_SNAPSHOT_WRITES) {
   // Cobre dois cenários:
   //   a) Run 'completed'/'partial': invocação duplicada pós-término → ignorar
   //   b) Run 'running' recente (< 10 min): invocação concorrente → ignorar
@@ -335,26 +441,30 @@ export default async function handler(req, res) {
     // Falha no guard não impede a execução (benefício da dúvida)
     console.warn('[cron/idempotency-guard] Erro ao verificar run existente:', err?.message)
   }
+  }
 
-  console.log('[cron/generate-dashboard-snapshots] Iniciando | jobDate:', jobDate, '| datas:', dates)
+  console.log(
+    '[cron/generate-dashboard-snapshots] Iniciando | jobDate:', jobDate,
+    '| writer:', COMPANY_SNAPSHOT_WRITES ? 'lovoo-crm' : 'utc',
+  )
 
-  // ── 1. Criar registro de execução global (cron_runs header) ───────────────
-  let cronRunId = null
-  try {
-    const { data: cronRun } = await svc
-      .from('dashboard_snapshot_cron_runs')
-      .insert({
-        run_date:   jobDate,
-        started_at: new Date(startedAt).toISOString(),
-        status:     'running',
-      })
-      .select('id')
-      .single()
+  // ── 1. Registro da base utc. A base da empresa já tomou posse acima. ──
+  if (!COMPANY_SNAPSHOT_WRITES) {
+    try {
+      const { data: cronRun } = await svc
+        .from('dashboard_snapshot_cron_runs')
+        .insert({
+          run_date:   jobDate,
+          started_at: new Date(startedAt).toISOString(),
+          status:     'running',
+        })
+        .select('id')
+        .single()
 
-    cronRunId = cronRun?.id ?? null
-  } catch (err) {
-    // Não falhar o cron por causa do registro de monitoramento
-    console.warn('[cron] Falha ao criar cron_run header:', err?.message)
+      runId = cronRun?.id ?? null
+    } catch (err) {
+      console.warn('[cron] Falha ao criar cron_run header:', err?.message)
+    }
   }
 
   // ── Processamento principal — outer try/catch garante cleanup do cron_run ──
@@ -365,7 +475,7 @@ export default async function handler(req, res) {
     // ── 3. Buscar empresas ativas ───────────────────────────────────────────
     const { data: companies, error: companiesError } = await svc
       .from('companies')
-      .select('id')
+      .select('id, timezone')
       .is('deleted_at', null)
       .eq('status', 'active')
 
@@ -373,7 +483,21 @@ export default async function handler(req, res) {
       throw new Error('Erro ao buscar empresas: ' + companiesError.message)
     }
 
-    const companyIds = (companies ?? []).map(c => c.id)
+    if (COMPANY_SNAPSHOT_WRITES && !(await snapshotCalendarReady(svc))) {
+      console.error('[cron/generate-dashboard-snapshots] calendar_basis ausente. Nenhuma métrica foi gravada.')
+      if (runId) {
+        await finishOwnedCompanyRun(svc, runId, companyRunStartedAt, 'failed')
+      }
+      return res.status(200).json({
+        ok: false,
+        skipped: true,
+        reason: 'calendar_basis_ausente',
+        job_date: jobDate,
+      })
+    }
+
+    const companyRows = companies ?? []
+    const companyIds = companyRows.map(c => c.id)
     const total      = companyIds.length
 
     console.log('[cron/generate-dashboard-snapshots] Empresas ativas:', total)
@@ -397,14 +521,22 @@ export default async function handler(req, res) {
         break
       }
 
-      const batch   = companyIds.slice(i, i + BATCH_SIZE)
+      const batch   = companyRows.slice(i, i + BATCH_SIZE)
       const batchNo = Math.floor(i / BATCH_SIZE) + 1
 
-      for (const date of dates) {
-        const results = await processBatch(svc, batch, date, jobDate)
-        for (const r of results) {
-          if (r.ok) processed++
-          else      failed++
+      for (const company of batch) {
+        const dates = COMPANY_SNAPSHOT_WRITES
+          ? companySnapshotDates(company.timezone, now)
+          : utcSnapshotDates(DATES_BACK, now)
+        const rpcName = COMPANY_SNAPSHOT_WRITES
+          ? 'generate_dashboard_company_daily_snapshot'
+          : 'generate_dashboard_daily_snapshot'
+        for (const date of dates) {
+          const results = await processBatch(svc, [company.id], date, jobDate, rpcName)
+          for (const r of results) {
+            if (r.ok) processed++
+            else      failed++
+          }
         }
       }
 
@@ -422,9 +554,9 @@ export default async function handler(req, res) {
     let driftChecked = 0
     let driftAlerts  = 0
 
-    // Verificar drift apenas em D-1 (o mais recente e crítico)
-    const targetDate  = dates[0] // D-1
+    // Drift do último dia civil encerrado de cada empresa da amostra.
     const driftSample = sampleCompanies(companyIds, DRIFT_SAMPLE_SIZE, jobDate)
+    const timezoneByCompany = new Map(companyRows.map(company => [company.id, company.timezone]))
 
     for (const companyId of driftSample) {
       if (Date.now() - startedAt > TIMEOUT_MS) {
@@ -432,7 +564,13 @@ export default async function handler(req, res) {
         break
       }
 
-      const result = await runDriftCheckForCompany(svc, companyId, targetDate)
+      const companyZone = timezoneByCompany.get(companyId)
+      const targetDate = (COMPANY_SNAPSHOT_WRITES
+        ? companySnapshotDates(companyZone, now)
+        : utcSnapshotDates(DATES_BACK, now))[0]
+      const result = await runDriftCheckForCompany(
+        svc, companyId, targetDate, companyZone, COMPANY_SNAPSHOT_WRITES,
+      )
 
       if (result) {
         driftChecked++
@@ -455,20 +593,33 @@ export default async function handler(req, res) {
 
     // ── 6. Finalizar registro de execução global ────────────────────────────
     const duration    = Date.now() - startedAt
-    const finalStatus = timeoutHit ? 'partial' : (failed === 0 ? 'completed' : 'partial')
+    const finalStatus = companyRunFinalStatus(timeoutHit, failed)
 
-    if (cronRunId) {
-      await svc.from('dashboard_snapshot_cron_runs').update({
-        status:          finalStatus,
-        finished_at:     new Date().toISOString(),
-        total_companies: total,
-        processed_count: processed,
-        failed_count:    failed,
-        timeout_hit:     timeoutHit,
-        duration_ms:     duration,
-        drift_checked:   driftChecked,
-        drift_alerts:    driftAlerts,
-      }).eq('id', cronRunId)
+    if (runId && COMPANY_SNAPSHOT_WRITES) {
+      const owned = await finishOwnedCompanyRun(svc, runId, companyRunStartedAt, finalStatus)
+      if (!owned) {
+        return res.status(200).json({
+          ok: false,
+          skipped: true,
+          reason: 'lost_ownership',
+          job_date: jobDate,
+          producer: 'lovoo-crm',
+          status: 'running',
+        })
+      }
+    } else if (runId) {
+      const patch = {
+            status:          finalStatus,
+            finished_at:     new Date().toISOString(),
+            total_companies: total,
+            processed_count: processed,
+            failed_count:    failed,
+            timeout_hit:     timeoutHit,
+            duration_ms:     duration,
+            drift_checked:   driftChecked,
+            drift_alerts:    driftAlerts,
+          }
+      await svc.from(runTable).update(patch).eq('id', runId)
     }
 
     console.log(
@@ -480,9 +631,11 @@ export default async function handler(req, res) {
     )
 
     return res.status(200).json({
-      ok:              true,
+      ok:              COMPANY_SNAPSHOT_WRITES ? finalStatus === 'completed' : true,
       job_date:        jobDate,
-      dates,
+      dates_basis:     COMPANY_SNAPSHOT_WRITES ? 'company_timezone' : 'utc',
+      company_writes:  COMPANY_SNAPSHOT_WRITES,
+      fallback_dates:  COMPANY_SNAPSHOT_WRITES ? companySnapshotDates(null, now) : utcSnapshotDates(DATES_BACK, now),
       total_companies: total,
       processed,
       failed,
@@ -497,13 +650,17 @@ export default async function handler(req, res) {
     const duration = Date.now() - startedAt
     console.error('[cron/generate-dashboard-snapshots] Erro inesperado:', err?.message)
 
-    if (cronRunId) {
-      await svc.from('dashboard_snapshot_cron_runs').update({
-        status:      'failed',
+    if (runId && COMPANY_SNAPSHOT_WRITES) {
+      await finishOwnedCompanyRun(svc, runId, companyRunStartedAt, 'failed').catch(updateErr => {
+        console.error('[cron] Falha ao atualizar a execução para failed:', updateErr?.message)
+      })
+    } else if (runId) {
+      await svc.from(runTable).update({
+        status: 'failed',
         finished_at: new Date().toISOString(),
         duration_ms: duration,
-      }).eq('id', cronRunId).catch(updateErr => {
-        console.error('[cron] Falha ao atualizar cron_run para failed:', updateErr?.message)
+      }).eq('id', runId).catch(updateErr => {
+        console.error('[cron] Falha ao atualizar a execução para failed:', updateErr?.message)
       })
     }
 

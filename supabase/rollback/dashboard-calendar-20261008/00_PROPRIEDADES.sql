@@ -1,0 +1,68 @@
+-- Captura de leitura em 2026-10-08. Projeto etzdsywunlpbgxkphuil.
+-- Este arquivo não executa nada. A restauração está nos três arquivos seguintes.
+-- Não usar migrations antigas como fonte: os corpos abaixo saíram de pg_get_functiondef.
+--
+-- Funções que a migration nova substitui, todas com a mesma assinatura:
+--
+-- get_dashboard_forecast(uuid, date, date, uuid, uuid, integer)
+--   owner postgres
+--   SECURITY DEFINER
+--   search_path = public
+--   volatility volatile, parallel unsafe
+--   retorno json
+--   ACL: {=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--   PUBLIC tem EXECUTE. CREATE OR REPLACE preserva essa ACL. Não acrescentar GRANT.
+--
+-- generate_dashboard_daily_snapshot(uuid, date)
+--   owner postgres
+--   SECURITY DEFINER
+--   search_path = public
+--   volatility volatile, parallel unsafe
+--   retorno json
+--   ACL: {postgres=X/postgres,anon=X/postgres,service_role=X/postgres}
+--   authenticated NÃO tem EXECUTE. Não conceder.
+--
+-- aggregate_snapshot_period(uuid, uuid, date, date)
+--   owner postgres
+--   SECURITY DEFINER
+--   search_path = public
+--   volatility volatile, parallel unsafe
+--   retorno json
+--   ACL: {postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--
+-- get_dashboard_trends e get_dashboard_activation não são substituídas.
+-- O agrupamento diário delas já usa AT TIME ZONE p_timezone.
+--
+-- Restaurar estas funções NÃO desfaz:
+--   a coluna calendar_basis
+--   a mudança das chaves únicas
+--   linhas inseridas na base do fuso da empresa
+--   qualquer métrica que um upsert da mesma base já tenha regravado
+--
+-- get_snapshot_health_score(uuid, date)
+--   owner postgres
+--   SECURITY DEFINER
+--   proconfig nulo: não há search_path
+--   volatility stable, parallel unsafe
+--   retorno jsonb
+--   ACL inclui anon e authenticated. Não executar REVOKE nem GRANT.
+--   A função nova repete STABLE e omite SET search_path para manter proconfig nulo.
+--
+-- A função antiga de agregação soma todas as bases. Não aplicar
+-- 03_aggregate_snapshot_period.sql depois que existirem as duas bases.
+-- A recuperação da agregação é 05_aggregate_snapshot_period_mesma_base.sql.
+--
+-- A geração antiga, se o INSERT omitir calendar_basis, cai no DEFAULT 'utc'
+-- e regrava a linha UTC. A recuperação é
+-- 04_generate_dashboard_daily_snapshot_base_utc.sql, com 'utc' explícito
+-- e a leitura de etapas filtrada nessa base.
+--
+-- Coordenação: parar o cron, aplicar o SQL e publicar o código na mesma
+-- janela, depois religar o cron. SQL novo com o cron antigo grava a janela
+-- da empresa no rótulo de data que o código antigo enviar. Código novo com
+-- a função antiga regravaria a base UTC; o cron novo recusa gravar enquanto
+-- calendar_basis não existir.
+--
+-- Restaurar funções não apaga linhas, não devolve métricas regravadas
+-- e não reverte colunas nem constraints. Não remover calendar_basis
+-- enquanto as duas bases coexistirem.

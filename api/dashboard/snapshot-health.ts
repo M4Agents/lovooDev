@@ -14,7 +14,7 @@
 //   date        (opcional — YYYY-MM-DD; padrão: hoje)
 //
 // Autenticação: Bearer JWT do usuário → membership validado.
-// Cálculo: RPC get_snapshot_health_score (SECURITY DEFINER, service_role).
+// Cálculo: RPC get_snapshot_health_score (SECURITY INVOKER, service_role).
 // =====================================================
 
 import { getSupabaseAdmin }   from '../lib/automation/supabaseAdmin.js'
@@ -24,6 +24,8 @@ import {
   assertMembership,
   jsonError,
 }                              from '../lib/dashboard/auth.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
+import { companyCivilDate }    from '../lib/dashboard/snapshotPeriods.js'
 import { withTiming }          from '../lib/dashboard/observability.js'
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -56,7 +58,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     ) {
       refDate = req.query.date
     } else {
-      refDate = new Date().toISOString().slice(0, 10)
+      refDate = companyCivilDate(new Date(), await readCompanyTimeZone(svc, companyId))
     }
 
     // ── Calcular health score via RPC ─────────────────────────────────────────

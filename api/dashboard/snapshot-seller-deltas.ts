@@ -23,14 +23,10 @@ import {
   jsonError,
 }                           from '../lib/dashboard/auth.js'
 import { withTiming }    from '../lib/dashboard/observability.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
 import { calcDeltaPct } from '../lib/dashboard/deltaUtils.js'
-
-/** Subtrai N dias de uma data UTC e retorna YYYY-MM-DD */
-function subDays(base: Date, n: number): string {
-  const d = new Date(base)
-  d.setUTCDate(d.getUTCDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+import { civilDaysInclusive, comparisonCoverage, flowOnGeneratedDay, resolveComparisonPeriods } from '../lib/dashboard/snapshotPeriods.js'
+import { fetchGeneratedCompanyDates } from '../lib/dashboard/snapshotSeries.js'
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
@@ -57,23 +53,57 @@ export default async function handler(req: any, res: any): Promise<void> {
     // ── Períodos ─────────────────────────────────────────────────────────────
     const rawMode = req.query.mode
     const mode: 'wow' | 'mom' = rawMode === 'mom' ? 'mom' : 'wow'
-    const days = mode === 'wow' ? 7 : 30
+    const companyTimeZone = await readCompanyTimeZone(svc, companyId)
+    const periods = resolveComparisonPeriods(mode, companyTimeZone)
 
-    const today     = new Date()
-    const yesterday = subDays(today, 1)
-    const currFrom  = subDays(today, days)
-    const prevFrom  = subDays(today, days * 2)
-    const prevTo    = subDays(today, days + 1)
+    let generatedDates: string[]
+    try {
+      generatedDates = await fetchGeneratedCompanyDates(
+        svc,
+        companyId,
+        periods.timeZone,
+        periods.previousFrom,
+        periods.currentTo,
+      )
+    } catch (error: any) {
+      console.error('[snapshot-seller-deltas] cobertura:', error?.message)
+      return res.status(200).json({
+        ok: true,
+        mode,
+        sellers: [],
+        history_status: 'insufficient',
+        calendar_basis: periods.timeZone,
+        current_from: periods.currentFrom,
+        current_to: periods.currentTo,
+        previous_from: periods.previousFrom,
+        previous_to: periods.previousTo,
+      })
+    }
 
-    // Busca todos os registros dos últimos 2 * days dias
+    const coverage = comparisonCoverage(generatedDates, periods, mode)
+    if (coverage.status !== 'ready') {
+      return res.status(200).json({
+        ok: true,
+        mode,
+        sellers: [],
+        history_status: 'insufficient',
+        calendar_basis: periods.timeZone,
+        current_from: periods.currentFrom,
+        current_to: periods.currentTo,
+        previous_from: periods.previousFrom,
+        previous_to: periods.previousTo,
+      })
+    }
+
     const { data: rows, error: dbErr } = await withTiming(
       'snapshot.seller_deltas.query',
       async () => await svc
         .from('dashboard_seller_snapshots')
-        .select('user_id, display_name, period_start, attendance_rate, avg_response_min, won_value')
+        .select('user_id, display_name, period_start, calendar_basis, attendance_rate, avg_response_min, won_value')
         .eq('company_id', companyId)
-        .gte('period_start', prevFrom)
-        .lte('period_start', yesterday)
+        .eq('calendar_basis', periods.timeZone)
+        .gte('period_start', periods.previousFrom)
+        .lte('period_start', periods.currentTo)
         .order('user_id')
         .order('period_start'),
       { companyId },
@@ -85,8 +115,15 @@ export default async function handler(req: any, res: any): Promise<void> {
       return
     }
 
-    if (!rows || rows.length === 0) {
-      return res.status(200).json({ ok: true, mode, sellers: [] })
+    const sellerRowsAll = rows ?? []
+    if (sellerRowsAll.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        mode,
+        sellers: [],
+        history_status: 'ready',
+        calendar_basis: periods.timeZone,
+      })
     }
 
     // ── Agrupar por user_id ──────────────────────────────────────────────────
@@ -99,10 +136,12 @@ export default async function handler(req: any, res: any): Promise<void> {
     }
 
     const sellers = []
+    const generated = new Set(civilDaysInclusive(periods.previousFrom, periods.currentTo))
+    const sparkDays = civilDaysInclusive(periods.currentFrom, periods.currentTo).slice(-7)
     for (const [userId, { display_name, rows: sellerRows }] of grouped.entries()) {
       // Separar em período atual e anterior
-      const currRows = sellerRows.filter((r: any) => r.period_start >= currFrom && r.period_start <= yesterday)
-      const prevRows = sellerRows.filter((r: any) => r.period_start >= prevFrom && r.period_start <= prevTo)
+      const currRows = sellerRows.filter((r: any) => r.period_start >= periods.currentFrom && r.period_start <= periods.currentTo)
+      const prevRows = sellerRows.filter((r: any) => r.period_start >= periods.previousFrom && r.period_start <= periods.previousTo)
 
       // STATE: último valor de cada período
       const lastCurrRow = currRows.length > 0 ? currRows[currRows.length - 1] : null
@@ -117,11 +156,12 @@ export default async function handler(req: any, res: any): Promise<void> {
         lastPrevRow ? Number(lastPrevRow.avg_response_min) : null,
       )
 
-      // FLOW: série diária de won_value dos últimos 7 dias (sparkline)
-      const sparklineRows = sellerRows
-        .filter((r: any) => r.period_start >= currFrom && r.period_start <= yesterday)
-        .slice(-7)
-      const wonValueSeries = sparklineRows.map((r: any) => Number(r.won_value ?? 0))
+      const byDay = new Map(sellerRows.map((row: any) => [String(row.period_start).slice(0, 10), row]))
+      const wonValueSeries = sparkDays.flatMap(day => {
+        const row = byDay.get(day)
+        const value = flowOnGeneratedDay(generated.has(day), row ? Number(row.won_value) : null)
+        return value === null ? [] : [value]
+      })
 
       sellers.push({
         user_id:              userId,
@@ -132,7 +172,13 @@ export default async function handler(req: any, res: any): Promise<void> {
       })
     }
 
-    return res.status(200).json({ ok: true, mode, sellers })
+    return res.status(200).json({
+      ok: true,
+      mode,
+      sellers,
+      history_status: 'ready',
+      calendar_basis: periods.timeZone,
+    })
   } catch (err: any) {
     console.error('[snapshot-seller-deltas] Erro:', err?.message)
     jsonError(res, 500, 'Erro interno')

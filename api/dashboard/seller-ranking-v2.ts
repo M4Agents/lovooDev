@@ -29,8 +29,14 @@
 // =====================================================
 
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }            from '../lib/dashboard/period.js'
-import { resolveComparisonPeriods } from '../lib/dashboard/snapshotPeriods.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  sqlInclusiveEnd,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
+import { comparisonCoverage, civilDaysInclusive, flowOnGeneratedDay, resolveComparisonPeriods } from '../lib/dashboard/snapshotPeriods.js'
+import { fetchGeneratedCompanyDates } from '../lib/dashboard/snapshotSeries.js'
 import {
   extractToken,
   getUserFromToken,
@@ -97,14 +103,19 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
-    try { resolvedRange = resolvePeriod(period, start_date, end_date) }
-    catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
+    let resolvedRange: ResolvedRange
+    try {
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
 
     // 5. Períodos de comparação histórica (lib compartilhada)
     const rawMode = req.query.comparison_mode
     const comparisonMode: 'wow' | 'mom' = rawMode === 'mom' ? 'mom' : 'wow'
-    const periods = resolveComparisonPeriods(comparisonMode)
+    const periods = resolveComparisonPeriods(comparisonMode, resolvedRange.timeZone)
 
     const ctx = { companyId, period, comparisonMode }
 
@@ -117,7 +128,7 @@ export default async function handler(req: any, res: any): Promise<void> {
           const { data, error } = await svc.rpc('get_dashboard_seller_ranking', {
             p_company_id:      companyId,
             p_start_date:      resolvedRange.start,
-            p_end_date:        resolvedRange.end,
+            p_end_date:        sqlInclusiveEnd(resolvedRange),
             p_user_id:         effectiveUserId ?? null,
             p_include_ranking: !isIndividualView,
           })
@@ -130,11 +141,23 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'seller-ranking-v2.historical',
         async () => {
-          // Query filtrada por effectiveUserId em individual view (otimização)
+          const generatedDates = await fetchGeneratedCompanyDates(
+            svc,
+            companyId,
+            periods.timeZone,
+            periods.previousFrom,
+            periods.currentTo,
+          )
+          const coverage = comparisonCoverage(generatedDates, periods, comparisonMode)
+          if (coverage.status !== 'ready') {
+            return { coverage, rows: [] as any[] }
+          }
+
           let query = svc
             .from('dashboard_seller_snapshots')
-            .select('user_id, period_start, attendance_rate, avg_response_min, won_value')
+            .select('user_id, period_start, calendar_basis, attendance_rate, avg_response_min, won_value')
             .eq('company_id', companyId)
+            .eq('calendar_basis', periods.timeZone)
             .gte('period_start', periods.previousFrom)
             .lte('period_start', periods.currentTo)
             .order('user_id')
@@ -146,7 +169,7 @@ export default async function handler(req: any, res: any): Promise<void> {
 
           const { data: rows, error: dbErr } = await query
           if (dbErr) throw new Error(`dashboard_seller_snapshots: ${dbErr.message}`)
-          return (rows ?? []) as any[]
+          return { coverage, rows: (rows ?? []) as any[] }
         },
         ctx,
       ),
@@ -173,10 +196,10 @@ export default async function handler(req: any, res: any): Promise<void> {
       mode:    'wow' | 'mom'
     } | null = null
 
-    if (deltasResult.status === 'fulfilled' && deltasResult.value.length > 0) {
-      const rows = deltasResult.value
+    if (deltasResult.status === 'fulfilled' && deltasResult.value.coverage.status === 'ready') {
+      const rows = deltasResult.value.rows
+      const generated = new Set(civilDaysInclusive(periods.previousFrom, periods.currentTo))
 
-      // Agrupar por user_id
       const grouped = new Map<string, { rows: any[] }>()
       for (const row of rows) {
         if (!grouped.has(row.user_id)) {
@@ -186,6 +209,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       }
 
       const sellers: any[] = []
+      const sparkDays = civilDaysInclusive(periods.currentFrom, periods.currentTo).slice(-7)
       for (const [userId, { rows: sellerRows }] of grouped.entries()) {
         const currRows = sellerRows.filter((r: any) =>
           r.period_start >= periods.currentFrom && r.period_start <= periods.currentTo,
@@ -194,7 +218,6 @@ export default async function handler(req: any, res: any): Promise<void> {
           r.period_start >= periods.previousFrom && r.period_start <= periods.previousTo,
         )
 
-        // STATE: último valor de cada período
         const lastCurrRow = currRows.length > 0 ? currRows[currRows.length - 1] : null
         const lastPrevRow = prevRows.length > 0 ? prevRows[prevRows.length - 1] : null
 
@@ -207,11 +230,12 @@ export default async function handler(req: any, res: any): Promise<void> {
           lastPrevRow ? Number(lastPrevRow.avg_response_min) : null,
         )
 
-        // FLOW: série dos últimos N dias de won_value (sparkline)
-        const sparklineRows = sellerRows
-          .filter((r: any) => r.period_start >= periods.currentFrom && r.period_start <= periods.currentTo)
-          .slice(-7)
-        const wonValueSeries = sparklineRows.map((r: any) => Number(r.won_value ?? 0))
+        const byDay = new Map(sellerRows.map((row: any) => [String(row.period_start).slice(0, 10), row]))
+        const wonValueSeries = sparkDays.flatMap(day => {
+          const row = byDay.get(day)
+          const value = flowOnGeneratedDay(generated.has(day), row ? Number(row.won_value) : null)
+          return value === null ? [] : [value]
+        })
 
         sellers.push({
           user_id:              userId,
@@ -232,8 +256,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         reason:         'aggregate_failed',
         comparisonMode,
       })
-    } else if (deltasResult.status === 'fulfilled' && deltasResult.value.length === 0) {
-      // Caso B: fulfilled mas sem snapshots de vendedores para o período
+    } else {
       logHistoricalFallback(svc, {
         companyId,
         endpoint:       'seller-ranking-v2',
@@ -258,6 +281,8 @@ export default async function handler(req: any, res: any): Promise<void> {
           period,
           start:              resolvedRange.start,
           end:                resolvedRange.end,
+          timezone:           resolvedRange.timeZone,
+          end_inclusive:      resolvedRange.endInclusive,
           user_id:            effectiveUserId,
           total:              rankingData.length,
           is_individual_view: isIndividualView,
@@ -267,6 +292,12 @@ export default async function handler(req: any, res: any): Promise<void> {
       snapshot_meta: {
         available:       historicalPayload !== null,
         comparison_mode: comparisonMode,
+        history_status:  historicalPayload !== null ? 'ready' : 'insufficient',
+        current_from:    periods.currentFrom,
+        current_to:      periods.currentTo,
+        previous_from:   periods.previousFrom,
+        previous_to:     periods.previousTo,
+        calendar_basis:  periods.timeZone,
       },
     })
 

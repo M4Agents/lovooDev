@@ -9,6 +9,7 @@
 // =====================================================
 
 import { supabase } from '../lib/supabase'
+import { civilDateFromLocalDate } from '../lib/dashboard/customPeriod'
 
 // ---------------------------------------------------------------------------
 // Re-exports de src/types/dashboard.ts
@@ -438,8 +439,8 @@ function buildPeriodParams(filters: DashboardFilters): Record<string, string> {
   const params: Record<string, string> = { period: key }
 
   if (key === 'custom' && period.startDate && period.endDate) {
-    params.start_date = period.startDate.toISOString()
-    params.end_date   = period.endDate.toISOString()
+    params.start_date = civilDateFromLocalDate(period.startDate)
+    params.end_date   = civilDateFromLocalDate(period.endDate)
   }
 
   if (filters.funnelId) {
@@ -864,6 +865,7 @@ export const dashboardApi = {
     previousTo:   string,
     funnelId?:    string | null,
     signal?:      AbortSignal,
+    comparisonMode?: 'wow' | 'mom',
   ): Promise<SnapshotComparisonData> {
     const params: Record<string, string> = {
       company_id:    companyId,
@@ -872,6 +874,7 @@ export const dashboardApi = {
       previous_from: previousFrom,
       previous_to:   previousTo,
     }
+    if (comparisonMode) params.comparison_mode = comparisonMode
     if (funnelId) params.funnel_id = funnelId
     return apiFetch<SnapshotComparisonData>('/api/dashboard/snapshot-comparison', params, signal)
   },
@@ -887,12 +890,14 @@ export const dashboardApi = {
     metrics?:  string[],
     funnelId?: string | null,
     signal?:   AbortSignal,
+    days?:     number,
   ): Promise<SnapshotTrendsData> {
     const params: Record<string, string> = {
       company_id: companyId,
       from_date:  fromDate,
       to_date:    toDate,
     }
+    if (days) params.days = String(days)
     if (metrics && metrics.length > 0) params.metrics = metrics.join(',')
     if (funnelId) params.funnel_id = funnelId
     return apiFetch<SnapshotTrendsData>('/api/dashboard/snapshot-trends', params, signal)

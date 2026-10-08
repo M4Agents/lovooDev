@@ -20,6 +20,7 @@ import { useState, useEffect, useRef } from 'react'
 import { dashboardApi }                from '../../services/dashboardApi'
 import type {
   SnapshotClassification,
+  SnapshotComparisonCoverage,
   SnapshotSeverity,
   SnapshotMaturityStatus,
 }                                      from '../../types/dashboard'
@@ -34,6 +35,8 @@ export interface UseSnapshotHealthReturn {
   ready:           boolean
   freshnessOk:     boolean
   canUseSnapshots: boolean
+  wowCoverage:     SnapshotComparisonCoverage | null
+  momCoverage:     SnapshotComparisonCoverage | null
   loading:         boolean
   error:           string | null
 }
@@ -48,6 +51,8 @@ const INITIAL_STATE: UseSnapshotHealthReturn = {
   ready:           false,
   freshnessOk:     false,
   canUseSnapshots: false,
+  wowCoverage:     null,
+  momCoverage:     null,
   loading:         false,
   error:           null,
 }
@@ -63,6 +68,8 @@ function deriveFromRaw(raw: Awaited<ReturnType<typeof dashboardApi.getSnapshotHe
   const daysSince      = raw.components?.freshness?.days_since ?? null
 
   const freshnessOk     = daysSince !== null && daysSince <= 1
+  const wowCoverage     = coverageWindow(raw.comparison_coverage?.wow)
+  const momCoverage     = coverageWindow(raw.comparison_coverage?.mom)
   const canUseSnapshots = classification === 'healthy' && maturityStatus === 'mature' && ready === true
 
   return {
@@ -75,9 +82,16 @@ function deriveFromRaw(raw: Awaited<ReturnType<typeof dashboardApi.getSnapshotHe
     ready,
     freshnessOk,
     canUseSnapshots,
+    wowCoverage,
+    momCoverage,
     loading:         false,
     error:           null,
   }
+}
+
+function coverageWindow(raw: SnapshotComparisonCoverage | undefined): SnapshotComparisonCoverage | null {
+  if (!raw || typeof raw.complete !== 'boolean') return null
+  return raw
 }
 
 export function useSnapshotHealth(companyId: string | null | undefined): UseSnapshotHealthReturn {

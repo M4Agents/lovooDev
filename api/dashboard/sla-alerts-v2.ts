@@ -49,20 +49,15 @@ import {
   logHistoricalFallback,
   logEndpointCall,
 }                          from '../lib/dashboard/observability.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
 import { fetchDailySeries } from '../lib/dashboard/snapshotSeries.js'
+import { getLastNDays } from '../lib/dashboard/snapshotPeriods.js'
 import { SLA_DEFAULTS }    from '../lib/dashboard/alertSettingsDefaults.js'
 
 const MANAGER_ROLES  = new Set(['manager', 'admin', 'system_admin', 'super_admin'])
 const MAX_PAGE_LIMIT = 50
 const MAX_AGE_HOURS  = 168  // 7 dias de janela de busca (igual ao v1)
 const TREND_DAYS     = 7    // janela da trendline de SLA
-
-/** Subtrai N dias de uma data UTC e retorna YYYY-MM-DD */
-function subDays(base: Date, n: number): string {
-  const d = new Date(base)
-  d.setUTCDate(d.getUTCDate() - n)
-  return d.toISOString().slice(0, 10)
-}
 
 export default async function handler(req: any, res: any): Promise<void> {
   res.setHeader('Content-Type', 'application/json')
@@ -128,10 +123,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     const slaHours      = rawSlaHoursQuery ? Math.max(0, Number(rawSlaHoursQuery) || minMinutes / 60) : minMinutes / 60
     const criticalHours = criticalMinutes / 60
 
-    // 6. Janela histórica: D-7 até D-1
-    const today    = new Date()
-    const toDate   = subDays(today, 1)
-    const fromDate = subDays(today, TREND_DAYS)
+    // 6. Janela histórica: últimos 7 dias civis já encerrados
+    const companyTimeZone = await readCompanyTimeZone(svc, companyId)
+    const { fromDate, toDate } = getLastNDays(TREND_DAYS, companyTimeZone)
 
     const ctx = { companyId, slaHours, page, limit }
 
@@ -163,6 +157,7 @@ export default async function handler(req: any, res: any): Promise<void> {
           metrics:  ['sla_breached_count'],
           fromDate,
           toDate,
+          calendarBasis: companyTimeZone,
         }),
         ctx,
       ),

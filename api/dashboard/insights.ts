@@ -18,7 +18,12 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod, type ResolvedRange } from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  upperBoundOp,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import { getInsightPolicies, type InsightPolicies } from '../lib/dashboard/insightPolicies.js'
 import { canCustomizeInsights } from '../lib/dashboard/insightAccess.js'
 import { canAiAnalysis }        from '../lib/dashboard/aiAnalysisAccess.js'
@@ -103,8 +108,7 @@ async function computeHotOpportunities(
     .eq('company_id', companyId)
     .eq('status', 'open')
     .gte('probability', policies.hot_probability_threshold)
-    .gte('updated_at', resolvedRange.start)
-    .lte('updated_at', resolvedRange.end)
+    .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
 
   if (userOppIds) {
     query = query.in('id', userOppIds)
@@ -364,8 +368,7 @@ async function computeConversionDrop(
     .select('opportunity_id, to_stage_id')
     .eq('company_id', companyId)
     .eq('funnel_id', funnelId)
-    .gte('created_at', resolvedRange.start)
-    .lte('created_at', resolvedRange.end)
+    .gte('created_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
     .limit(5_000)
 
   if (histErr) throw new Error(`conversion_drop/history: ${histErr.message}`)
@@ -516,8 +519,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
     let resolvedRange: ResolvedRange
-    try { resolvedRange = resolvePeriod(period, start_date, end_date) }
-    catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
+    try {
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
 
     // 4. funnel_id opcional — valida se fornecido + restrições pessoais (Fase 2)
     const rawFunnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null

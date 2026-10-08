@@ -678,7 +678,8 @@ export interface TagGroupMetricsMeta {
   groups_configured: number
   funnel_applied: false
   responsible_field: 'leads.responsible_user_id'
-  period_timezone: 'UTC'
+  period_timezone: string
+  end_inclusive: boolean
 }
 
 export interface TagGroupMetricsResponse {
@@ -943,10 +944,27 @@ export interface SnapshotHealthData {
       success_rate: number | null
     }
   }
-  readiness_4_2: {
-    ready:   boolean
-    blocker: string | null
+  comparison_coverage?: {
+    calendar_basis: string
+    wow: SnapshotComparisonCoverage
+    mom: SnapshotComparisonCoverage
   }
+  readiness_4_2: {
+    ready:      boolean
+    ready_wow?: boolean
+    ready_mom?: boolean
+    blocker:    string | null
+  }
+}
+
+export interface SnapshotComparisonCoverage {
+  current_from:  string
+  current_to:    string
+  previous_from: string
+  previous_to:   string
+  required_days: number
+  present_days:  number
+  complete:      boolean
 }
 
 // ---------------------------------------------------------------------------

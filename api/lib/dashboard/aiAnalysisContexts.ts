@@ -15,6 +15,7 @@
 
 import { createHash } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { upperBoundOp, type ResolvedRange } from './period.js'
 
 export type AnalysisType = 'cooling_opportunities' | 'conversion_drop' | 'funnel_overview'
 
@@ -71,7 +72,7 @@ async function buildCoolingContext(
   svc: SupabaseClient,
   companyId: string,
   period: string,
-  resolvedRange: { start: string; end: string },
+  resolvedRange: ResolvedRange,
   funnelId: string | null,
 ): Promise<AnalysisContextResult> {
   const COOLING_DAYS = 7
@@ -169,7 +170,7 @@ async function buildConversionDropContext(
   svc: SupabaseClient,
   companyId: string,
   period: string,
-  resolvedRange: { start: string; end: string },
+  resolvedRange: ResolvedRange,
   funnelId: string,
 ): Promise<AnalysisContextResult> {
   const { data: funnel } = await svc
@@ -186,7 +187,7 @@ async function buildConversionDropContext(
     .from('opportunity_stage_history')
     .select('opportunity_id, to_stage_id')
     .eq('company_id', companyId).eq('funnel_id', funnelId)
-    .gte('created_at', resolvedRange.start).lte('created_at', resolvedRange.end)
+    .gte('created_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('created_at', resolvedRange.end)
     .limit(5000)
 
   // Contagem de oportunidades distintas por etapa
@@ -250,7 +251,7 @@ async function buildFunnelOverviewContext(
   svc: SupabaseClient,
   companyId: string,
   period: string,
-  resolvedRange: { start: string; end: string },
+  resolvedRange: ResolvedRange,
   funnelId: string,
 ): Promise<AnalysisContextResult> {
   const { data: funnel } = await svc
@@ -294,7 +295,7 @@ async function buildFunnelOverviewContext(
     .from('opportunities')
     .select('status')
     .eq('company_id', companyId)
-    .gte('updated_at', resolvedRange.start).lte('updated_at', resolvedRange.end)
+    .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
 
   const statusCount: Record<string, number> = {}
   for (const o of (statusDist ?? []) as any[]) {
@@ -341,7 +342,7 @@ export async function buildAnalysisContext(
   companyId: string,
   analysisType: AnalysisType,
   period: string,
-  resolvedRange: { start: string; end: string },
+  resolvedRange: ResolvedRange,
   funnelId: string | null,
 ): Promise<AnalysisContextResult> {
   if (analysisType === 'cooling_opportunities') {

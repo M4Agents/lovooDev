@@ -17,6 +17,7 @@ import { DeltaBadge }             from '../historical/DeltaBadge'
 import { TrendSparkline }         from '../historical/TrendSparkline'
 import { SnapshotDataGuard }      from '../historical/SnapshotDataGuard'
 import { useInteractiveMetrics }  from '../../../hooks/dashboard/useInteractiveMetrics'
+import { useAuth }                from '../../../contexts/AuthContext'
 import { getComparisonLabel }     from '../../../lib/snapshotPeriods'
 import type { EntityListFilters } from '../../../hooks/dashboard/useEntityList'
 import type { ExecutiveData }     from '../../../services/dashboardApi'
@@ -94,6 +95,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   waitingLeadsCount = null,
   waitingLeadsLoading = false,
 }) => {
+  const { companyTimezone } = useAuth()
   const { drawer, openDrawer, closeDrawer } = useInteractiveMetrics()
 
   const buildDrawerFilters = (): EntityListFilters => ({
@@ -106,7 +108,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({
   // os snapshots são sempre company-wide, comparar seller-realtime com
   // company-snapshot geraria deltas enganosos.
   const hasSnapshot = !!snapshotComparison && !userScoped
-  const periodLabel2 = getComparisonLabel(comparisonMode)
+  const periodLabel2 = getComparisonLabel(comparisonMode, companyTimezone)
 
   // Deltas por métrica
   const leadsDelta     = getDelta(snapshotComparison, 'leads_created')

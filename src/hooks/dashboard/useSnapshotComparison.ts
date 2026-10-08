@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { dashboardApi }                from '../../services/dashboardApi'
+import { useAuth }                     from '../../contexts/AuthContext'
 import { getComparisonPeriods }        from '../../lib/snapshotPeriods'
 import type { SnapshotComparisonData } from '../../types/dashboard'
 import type { ComparisonMode }         from '../../lib/snapshotPeriods'
@@ -45,6 +46,7 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
+  const { companyTimezone } = useAuth()
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
     const ctrl = new AbortController()
     abortRef.current = ctrl
 
-    const { currentFrom, currentTo, previousFrom, previousTo } = getComparisonPeriods(mode)
+    const { currentFrom, currentTo, previousFrom, previousTo } = getComparisonPeriods(mode, companyTimezone)
 
     setLoading(true)
     setError(null)
@@ -74,6 +76,7 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
         previousTo,
         funnelId,
         ctrl.signal,
+        mode,
       )
       .then(result => {
         if (ctrl.signal.aborted) return
@@ -93,7 +96,7 @@ export function useSnapshotComparison({ companyId, funnelId, mode, enabled = tru
 
     return () => { ctrl.abort() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, funnelId, mode, enabled, canUseSnapshots])
+  }, [companyId, companyTimezone, funnelId, mode, enabled, canUseSnapshots])
 
   return { data, loading, error }
 }

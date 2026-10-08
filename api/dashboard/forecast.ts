@@ -19,7 +19,12 @@
 // =====================================================
 
 import { getSupabaseAdmin }    from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }       from '../lib/dashboard/period.js'
+import {
+  forecastDateBounds,
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import {
   extractToken,
   getUserFromToken,
@@ -75,13 +80,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
+    let resolvedRange: ResolvedRange
     try {
-      resolvedRange = resolvePeriod(period, start_date, end_date)
-    } catch (e: any) {
-      jsonError(res, 400, e.message ?? 'Período inválido')
-      return
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
     }
+    const forecastDates = forecastDateBounds(resolvedRange)
 
     // 5. Validação de funnel_id (opcional) + restrições pessoais de funis (Fase 2)
     const rawFunnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
@@ -108,21 +115,21 @@ export default async function handler(req: any, res: any): Promise<void> {
       }
     }
 
-    // 6. RPC get_dashboard_forecast
+    // 6. RPC get_dashboard_forecast_company
     const ctx = { companyId, period }
 
     const rpcResult = await withTiming(
       'dashboard.forecast',
       async () => {
-        const { data, error } = await svc.rpc('get_dashboard_forecast', {
+        const { data, error } = await svc.rpc('get_dashboard_forecast_company', {
           p_company_id:   companyId,
-          p_start_date:   resolvedRange.start.split('T')[0],
-          p_end_date:     resolvedRange.end.split('T')[0],
+          p_start_date:   forecastDates.startDate,
+          p_end_date:     forecastDates.endDate,
           p_funnel_id:    funnelId ?? null,
           p_user_id:      effectiveUserId ?? null,
           p_stalled_days: 14,
         })
-        if (error) throw new Error(`get_dashboard_forecast: ${error.message}`)
+        if (error) throw new Error(`get_dashboard_forecast_company: ${error.message}`)
         return data
       },
       ctx,

@@ -8,7 +8,7 @@
 //   O endpoint assume que o frontend já validou canUseSnapshots = true
 //   via useSnapshotHealth. Não recalcula health, maturity ou classification.
 //
-// Historical usa aggregate_snapshot_period × 2 (current + previous).
+// Historical usa aggregate_snapshot_company_period × 2 (current + previous).
 // Métricas: pipeline_weighted (STATE), pipeline_risk (STATE),
 //           won_value (FLOW), stalled_count (STATE).
 //
@@ -36,8 +36,17 @@
 // =====================================================
 
 import { getSupabaseAdmin }         from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }            from '../lib/dashboard/period.js'
-import { resolveComparisonPeriods } from '../lib/dashboard/snapshotPeriods.js'
+import {
+  forecastDateBounds,
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
+import {
+  requireCompatibleSnapshot,
+  resolveComparisonPeriods,
+  SnapshotCalendarGap,
+} from '../lib/dashboard/snapshotPeriods.js'
 import {
   extractToken,
   getUserFromToken,
@@ -101,13 +110,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
+    let resolvedRange: ResolvedRange
     try {
-      resolvedRange = resolvePeriod(period, start_date, end_date)
-    } catch (e: any) {
-      jsonError(res, 400, e.message ?? 'Período inválido')
-      return
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
     }
+    const forecastDates = forecastDateBounds(resolvedRange)
 
     // 5. Validação de funnel_id (opcional) + restrições pessoais de funis (Fase 2)
     const rawFunnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
@@ -151,7 +162,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       : 'wow'
     const comparisonMode: 'wow' | 'mom' = rawMode === 'mom' ? 'mom' : 'wow'
     const { currentFrom, currentTo, previousFrom, previousTo } =
-      resolveComparisonPeriods(comparisonMode)
+      resolveComparisonPeriods(comparisonMode, resolvedRange.timeZone)
 
     const ctx = { companyId, period, comparisonMode }
 
@@ -161,15 +172,15 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'forecast-v2.realtime',
         async () => {
-          const { data, error } = await svc.rpc('get_dashboard_forecast', {
+          const { data, error } = await svc.rpc('get_dashboard_forecast_company', {
             p_company_id:   companyId,
-            p_start_date:   resolvedRange.start.split('T')[0],
-            p_end_date:     resolvedRange.end.split('T')[0],
+            p_start_date:   forecastDates.startDate,
+            p_end_date:     forecastDates.endDate,
             p_funnel_id:    funnelId ?? null,
             p_user_id:      effectiveUserId ?? null,
             p_stalled_days: stalledDays,
           })
-          if (error) throw new Error(`get_dashboard_forecast: ${error.message}`)
+          if (error) throw new Error(`get_dashboard_forecast_company: ${error.message}`)
           return data ?? {
             pipeline_total: 0, pipeline_weighted: 0, pipeline_risk: 0,
             pipeline_safe: 0, open_count: 0, stalled_count: 0,
@@ -184,15 +195,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'forecast-v2.historical.current',
         async () => {
-          const { data, error } = await svc.rpc('aggregate_snapshot_period', {
+          const { data, error } = await svc.rpc('aggregate_snapshot_company_period', {
             p_company_id: companyId,
             p_funnel_id:  funnelId ?? null,
             p_start_date: currentFrom,
             p_end_date:   currentTo,
           })
-          if (error) throw new Error(`aggregate_snapshot_period/current: ${error.message}`)
-          if (!data) throw new Error('Dados de snapshot insuficientes — período atual')
-          return data as any
+          if (error) throw new Error(`aggregate_snapshot_company_period/current: ${error.message}`)
+          return requireCompatibleSnapshot(data) as any
         },
         ctx,
       ),
@@ -200,15 +210,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       withTiming(
         'forecast-v2.historical.previous',
         async () => {
-          const { data, error } = await svc.rpc('aggregate_snapshot_period', {
+          const { data, error } = await svc.rpc('aggregate_snapshot_company_period', {
             p_company_id: companyId,
             p_funnel_id:  funnelId ?? null,
             p_start_date: previousFrom,
             p_end_date:   previousTo,
           })
-          if (error) throw new Error(`aggregate_snapshot_period/previous: ${error.message}`)
-          if (!data) throw new Error('Dados de snapshot insuficientes — período anterior')
-          return data as any
+          if (error) throw new Error(`aggregate_snapshot_company_period/previous: ${error.message}`)
+          return requireCompatibleSnapshot(data) as any
         },
         ctx,
       ),
@@ -293,11 +302,13 @@ export default async function handler(req: any, res: any): Promise<void> {
         currentResult.status  === 'rejected' ? currentResult.reason  :
         previousResult.status === 'rejected' ? previousResult.reason : null
       console.warn(`[forecast-v2] historical ${failedLeg} failed (degraded silently):`, failReason?.message)
-      // Caso A: aggregate_snapshot_period falhou em current ou previous
+      // Caso A: aggregate_snapshot_company_period falhou em current ou previous
       logHistoricalFallback(svc, {
         companyId,
         endpoint:       'forecast-v2',
-        reason:         'aggregate_failed',
+        reason:         failReason instanceof SnapshotCalendarGap
+          ? 'no_snapshot_data'
+          : 'aggregate_failed',
         comparisonMode,
       })
     }

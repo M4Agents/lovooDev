@@ -24,7 +24,12 @@
 // =====================================================
 
 import { getSupabaseAdmin }  from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }     from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  upperBoundOp,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import {
   extractToken,
   getUserFromToken,
@@ -95,9 +100,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
-    try { resolvedRange = resolvePeriod(period, start_date, end_date) }
-    catch (e: any) { jsonError(res, 400, e.message ?? 'Período inválido'); return }
+    let resolvedRange: ResolvedRange
+    try {
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
+    }
 
     // ------------------------------------------------------------------
     // 4. Filtro opcional de ai_state
@@ -150,8 +160,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (useChatVisibility && effectiveUserId !== null) {
       function applyBaseFiltersChat(q: any) {
         q = q.eq('company_id', companyId)
-             .gte('updated_at', resolvedRange.start)
-             .lte('updated_at', resolvedRange.end)
+             .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
              .eq('assigned_to', effectiveUserId)
         if (aiState) q = q.eq('ai_state', aiState)
         return q
@@ -264,8 +273,7 @@ export default async function handler(req: any, res: any): Promise<void> {
 
     function applyBaseFilters(q: any) {
       q = q.eq('company_id', companyId)
-           .gte('updated_at', resolvedRange.start)
-           .lte('updated_at', resolvedRange.end)
+           .gte('updated_at', resolvedRange.start)[upperBoundOp(resolvedRange)]('updated_at', resolvedRange.end)
       if (aiState) q = q.eq('ai_state', aiState)
       return q
     }

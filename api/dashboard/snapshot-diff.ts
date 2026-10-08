@@ -17,7 +17,8 @@
 // =====================================================
 
 import { createClient }  from '@supabase/supabase-js'
-import { resolvePeriod } from '../lib/dashboard/period.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
+import { addCivilDays, companyCivilDate } from '../lib/dashboard/snapshotPeriods.js'
 
 function getServiceSupabase() {
   const url = process.env.VITE_SUPABASE_URL ?? ''
@@ -60,22 +61,21 @@ export default async function handler(req: any, res: any): Promise<void> {
   }
 
   // Data alvo: ontem por padrão
+  const companyTimeZone = await readCompanyTimeZone(svc, companyId)
   let targetDate: string
   if (typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
     targetDate = req.query.date
   } else {
-    const d = new Date()
-    d.setUTCDate(d.getUTCDate() - 1)
-    targetDate = d.toISOString().slice(0, 10)
+    targetDate = addCivilDays(companyCivilDate(new Date(), companyTimeZone), -1)
   }
 
-  // 1. Buscar snapshot do dia
   const { data: snap } = await svc
     .from('dashboard_snapshots')
     .select('*')
     .eq('company_id', companyId)
     .is('funnel_id', null)
     .eq('period_start', targetDate)
+    .eq('calendar_basis', companyTimeZone)
     .maybeSingle()
 
   if (!snap) {
@@ -87,8 +87,7 @@ export default async function handler(req: any, res: any): Promise<void> {
   }
 
   // 2. Query realtime para o mesmo período
-  const period = resolvePeriod('custom', targetDate, targetDate)
-  const { data: rtData } = await svc.rpc('get_dashboard_forecast', {
+  const { data: rtData } = await svc.rpc('get_dashboard_forecast_company', {
     p_company_id: companyId,
     p_start_date: targetDate,
     p_end_date:   targetDate,

@@ -1,7 +1,7 @@
 // =====================================================
 // GET /api/dashboard/snapshot-comparison
 //
-// Compara dois períodos históricos usando aggregate_snapshot_period.
+// Compara dois períodos históricos usando aggregate_snapshot_company_period.
 // Retorna: current, previous, delta absoluto e delta percentual.
 //
 // SHADOW MODE: endpoint ativo mas NÃO chamado pelo frontend ainda.
@@ -20,6 +20,10 @@
 // =====================================================
 
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
+import {
+  getComparisonPeriods,
+} from '../lib/dashboard/snapshotPeriods.js'
 import {
   extractToken,
   getUserFromToken,
@@ -53,7 +57,23 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!member) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ── Parâmetros ─────────────────────────────────────────────────────────
-    const { current_from, current_to, previous_from, previous_to } = req.query
+    const comparisonMode = req.query.comparison_mode === 'mom'
+      ? 'mom'
+      : req.query.comparison_mode === 'wow'
+        ? 'wow'
+        : null
+    const companyTimeZone = await readCompanyTimeZone(svc, companyId)
+    const companyPeriods = comparisonMode
+      ? getComparisonPeriods(comparisonMode, companyTimeZone)
+      : null
+    const current_from = companyPeriods?.currentFrom
+      ?? (typeof req.query.current_from === 'string' ? req.query.current_from : '')
+    const current_to = companyPeriods?.currentTo
+      ?? (typeof req.query.current_to === 'string' ? req.query.current_to : '')
+    const previous_from = companyPeriods?.previousFrom
+      ?? (typeof req.query.previous_from === 'string' ? req.query.previous_from : '')
+    const previous_to = companyPeriods?.previousTo
+      ?? (typeof req.query.previous_to === 'string' ? req.query.previous_to : '')
     let funnelId = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
 
     if (funnelId) {
@@ -81,17 +101,17 @@ export default async function handler(req: any, res: any): Promise<void> {
       return
     }
 
-    // ── Chamar aggregate_snapshot_period para ambos os períodos ────────────
+    // ── Chamar aggregate_snapshot_company_period para ambos os períodos ────────────
     const [{ data: curr }, { data: prev }] = await withTiming(
       'snapshot.comparison.aggregate',
       () => Promise.all([
-        svc.rpc('aggregate_snapshot_period', {
+        svc.rpc('aggregate_snapshot_company_period', {
           p_company_id: companyId,
           p_funnel_id:  funnelId,
           p_start_date: current_from,
           p_end_date:   current_to,
         }),
-        svc.rpc('aggregate_snapshot_period', {
+        svc.rpc('aggregate_snapshot_company_period', {
           p_company_id: companyId,
           p_funnel_id:  funnelId,
           p_start_date: previous_from,
@@ -101,7 +121,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       { companyId },
     )
 
-    if (!curr || !prev) {
+    if (!curr || !prev || (curr as any).meta?.compatible !== true || (prev as any).meta?.compatible !== true) {
       jsonError(res, 404, 'Dados de snapshot insuficientes para o período solicitado')
       return
     }

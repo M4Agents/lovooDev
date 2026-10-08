@@ -16,7 +16,11 @@
 // =====================================================
 
 import { getSupabaseAdmin }    from '../lib/automation/supabaseAdmin.js'
-import { resolvePeriod }       from '../lib/dashboard/period.js'
+import {
+  invalidPeriodMessage,
+  resolveCompanyPeriod,
+  type ResolvedRange,
+} from '../lib/dashboard/period.js'
 import {
   detectAgentMode,
   detectFunnelMode,
@@ -84,12 +88,13 @@ export default async function handler(req: any, res: any): Promise<void> {
     const start_date = typeof req.query.start_date === 'string' ? req.query.start_date.trim() : undefined
     const end_date   = typeof req.query.end_date   === 'string' ? req.query.end_date.trim()   : undefined
 
-    let resolvedRange: { start: string; end: string }
+    let resolvedRange: ResolvedRange
     try {
-      resolvedRange = resolvePeriod(period, start_date, end_date)
-    } catch (e: any) {
-      jsonError(res, 400, e.message ?? 'Período inválido')
-      return
+      resolvedRange = await resolveCompanyPeriod(svc, companyId, period, start_date, end_date)
+    } catch (error: unknown) {
+      const message = invalidPeriodMessage(error)
+      if (message) { jsonError(res, 400, message); return }
+      throw error
     }
 
     // ------------------------------------------------------------------

@@ -27,8 +27,10 @@ import {
   assertUserFunnelAccess,
   jsonError,
 }                           from '../lib/dashboard/auth.js'
+import { readCompanyTimeZone } from '../lib/dashboard/period.js'
 import { withTiming }        from '../lib/dashboard/observability.js'
 import { fetchDailySeries } from '../lib/dashboard/snapshotSeries.js'
+import { civilDaysInclusive, getLastNDays } from '../lib/dashboard/snapshotPeriods.js'
 
 // Métricas permitidas (whitelist para evitar injeção SQL)
 const ALLOWED_METRICS = new Set([
@@ -68,8 +70,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!member) { jsonError(res, 403, 'Acesso negado'); return }
 
     // ── Parâmetros ─────────────────────────────────────────────────────────
-    const fromDate = typeof req.query.from_date === 'string' ? req.query.from_date.trim() : ''
-    const toDate   = typeof req.query.to_date   === 'string' ? req.query.to_date.trim()   : ''
+    const companyTimeZone = await readCompanyTimeZone(svc, companyId)
+    const requestedDays = Number(req.query.days)
+    const companyWindow = Number.isInteger(requestedDays) && requestedDays > 0
+      ? getLastNDays(requestedDays, companyTimeZone)
+      : null
+    const fromDate = companyWindow?.fromDate
+      ?? (typeof req.query.from_date === 'string' ? req.query.from_date.trim() : '')
+    const toDate = companyWindow?.toDate
+      ?? (typeof req.query.to_date === 'string' ? req.query.to_date.trim() : '')
     let funnelId   = typeof req.query.funnel_id === 'string' ? req.query.funnel_id.trim() : null
 
     if (funnelId) {
@@ -92,15 +101,13 @@ export default async function handler(req: any, res: any): Promise<void> {
       }
     }
 
-    if (!fromDate || !toDate) {
-      jsonError(res, 400, 'from_date e to_date são obrigatórios')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+      jsonError(res, 400, 'from_date e to_date devem ser YYYY-MM-DD')
       return
     }
 
     // Validar janela temporal
-    const fromMs = new Date(fromDate).getTime()
-    const toMs   = new Date(toDate).getTime()
-    const daysDiff = Math.ceil((toMs - fromMs) / 86_400_000) + 1
+    const daysDiff = civilDaysInclusive(fromDate, toDate).length
 
     if (daysDiff > MAX_DAYS) {
       jsonError(res, 400, `Janela máxima: ${MAX_DAYS} dias`)
@@ -123,7 +130,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     try {
       rows = await withTiming(
         'snapshot.trends.query',
-        () => fetchDailySeries(svc, { companyId, funnelId, metrics, fromDate, toDate }),
+        () => fetchDailySeries(svc, {
+          companyId,
+          funnelId,
+          metrics,
+          fromDate,
+          toDate,
+          calendarBasis: companyTimeZone,
+        }),
         { companyId },
       )
     } catch (e: any) {
