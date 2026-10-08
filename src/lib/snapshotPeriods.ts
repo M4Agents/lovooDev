@@ -2,7 +2,7 @@
 // O dia civil sai do fuso da empresa. O instante de referência é UTC.
 // O backend reexporta este módulo para não divergir do frontend.
 
-import { companyWallFromInstant } from '../utils/companyTime'
+import { companyWallFromInstant } from '../utils/companyTime.js'
 
 export const DASHBOARD_TIME_ZONE_FALLBACK = 'America/Sao_Paulo'
 

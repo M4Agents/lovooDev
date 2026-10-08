@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { upperBoundOp, type ResolvedRange } from './period'
+import { upperBoundOp, type ResolvedRange } from './period.js'
 
 // ---------------------------------------------------------------------------
 // Tipos de modo
