@@ -157,6 +157,9 @@
     "saveBlocked": "Quite las etiquetas no disponibles antes de guardar. No se borran solas.",
     "maxGroups": "El límite es de 8 grupos.",
     "needTag": "Cada grupo necesita al menos una etiqueta.",
-    "saved": "Grupos de etiquetas guardados."
+    "saved": "Grupos de etiquetas guardados.",
+    "searchTags": "Buscar etiqueta",
+    "selectedCount": "{{count}} de {{max}}",
+    "noTagMatch": "Ninguna etiqueta con ese nombre."
   }
 }

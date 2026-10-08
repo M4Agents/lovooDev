@@ -157,6 +157,9 @@
     "saveBlocked": "Remove unavailable tags before saving. They are not deleted automatically.",
     "maxGroups": "The limit is 8 groups.",
     "needTag": "Each group needs at least one tag.",
-    "saved": "Tag groups saved."
+    "saved": "Tag groups saved.",
+    "searchTags": "Search tags",
+    "selectedCount": "{{count}} of {{max}}",
+    "noTagMatch": "No tag with that name."
   }
 }

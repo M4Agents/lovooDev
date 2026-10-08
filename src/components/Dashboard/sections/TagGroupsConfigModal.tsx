@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -13,6 +13,9 @@ interface Props {
   onSaved: () => void
 }
 
+const MAX_GROUPS = 8
+const MAX_TAGS_PER_GROUP = 10
+
 function newGroup(): TagGroupDefinition {
   return { id: crypto.randomUUID(), name: '', tag_ids: [] }
 }
@@ -23,8 +26,13 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
   const companyId = company?.id ?? null
   const [groups, setGroups] = useState<TagGroupDefinition[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [tagQuery, setTagQuery] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const sortedTags = useMemo(
+    () => [...tags].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    [tags],
+  )
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -97,7 +105,7 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -125,36 +133,42 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
                   placeholder={t('commercialTagGroups.groupName')}
                   className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5"
                 />
-                <div className="flex flex-wrap gap-2">
-                  {tags.map(tag => {
-                    const checked = group.tag_ids.includes(tag.id)
-                    return (
-                      <label key={tag.id} className="flex items-center gap-1 text-xs text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const tagIds = checked
-                              ? group.tag_ids.filter(id => id !== tag.id)
-                              : group.tag_ids.length >= 10 ? group.tag_ids : [...group.tag_ids, tag.id]
-                            update(index, { ...group, tag_ids: tagIds })
-                          }}
-                        />
-                        {tag.name}
-                      </label>
-                    )
-                  })}
-                  {group.tag_ids.filter(id => !activeIds.has(id)).map(id => (
-                    <button
-                      key={id}
-                      type="button"
-                      className="text-[11px] text-amber-700 underline"
-                      onClick={() => update(index, { ...group, tag_ids: group.tag_ids.filter(tagId => tagId !== id) })}
-                    >
-                      {t('commercialTagGroups.missingTag')}
-                    </button>
-                  ))}
+                {group.tag_ids.filter(id => !activeIds.has(id)).map(id => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="block text-[11px] text-amber-700 underline"
+                    onClick={() => update(index, { ...group, tag_ids: group.tag_ids.filter(tagId => tagId !== id) })}
+                  >
+                    {t('commercialTagGroups.missingTag')}
+                  </button>
+                ))}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={tagQuery[group.id] ?? ''}
+                    onChange={event => setTagQuery(current => ({ ...current, [group.id]: event.target.value }))}
+                    placeholder={t('commercialTagGroups.searchTags')}
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5"
+                  />
+                  <span className="text-[11px] text-gray-500 shrink-0">
+                    {t('commercialTagGroups.selectedCount', { count: group.tag_ids.length, max: MAX_TAGS_PER_GROUP })}
+                  </span>
                 </div>
+                <TagPickList
+                  tags={sortedTags}
+                  query={tagQuery[group.id] ?? ''}
+                  selectedIds={group.tag_ids}
+                  emptyLabel={t('commercialTagGroups.noTagMatch')}
+                  onToggle={tagId => {
+                    const checked = group.tag_ids.includes(tagId)
+                    const tagIds = checked
+                      ? group.tag_ids.filter(id => id !== tagId)
+                      : group.tag_ids.length >= MAX_TAGS_PER_GROUP
+                        ? group.tag_ids
+                        : [...group.tag_ids, tagId]
+                    update(index, { ...group, tag_ids: tagIds })
+                  }}
+                />
                 <div className="flex gap-3 text-xs">
                   <button type="button" onClick={() => move(index, -1)} className="text-gray-500">{t('commercialTagGroups.moveUp')}</button>
                   <button type="button" onClick={() => move(index, 1)} className="text-gray-500">{t('commercialTagGroups.moveDown')}</button>
@@ -167,9 +181,9 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
           })}
           <button
             type="button"
-            disabled={groups.length >= 8}
+            disabled={groups.length >= MAX_GROUPS}
             onClick={() => {
-              if (groups.length >= 8) { toast.error(t('commercialTagGroups.maxGroups')); return }
+              if (groups.length >= MAX_GROUPS) { toast.error(t('commercialTagGroups.maxGroups')); return }
               setGroups(current => [...current, newGroup()])
             }}
             className="text-xs font-medium text-indigo-600 disabled:text-gray-300"
@@ -190,6 +204,59 @@ export function TagGroupsConfigModal({ onClose, onSaved }: Props) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TagPickList({
+  tags,
+  query,
+  selectedIds,
+  emptyLabel,
+  onToggle,
+}: {
+  tags: Tag[]
+  query: string
+  selectedIds: string[]
+  emptyLabel: string
+  onToggle: (tagId: string) => void
+}) {
+  const normalized = query.trim().toLocaleLowerCase()
+  const visible = normalized
+    ? tags.filter(tag => tag.name.toLocaleLowerCase().includes(normalized))
+    : tags
+  const atLimit = selectedIds.length >= MAX_TAGS_PER_GROUP
+
+  return (
+    <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-lg">
+      {visible.length === 0 && normalized && (
+        <p className="px-2 py-3 text-xs text-gray-400">{emptyLabel}</p>
+      )}
+      {visible.map(tag => {
+        const checked = selectedIds.includes(tag.id)
+        const disabled = atLimit && !checked
+        return (
+          <label
+            key={tag.id}
+            className={`flex items-center gap-2 px-2 py-1.5 text-sm border-b border-gray-50 last:border-b-0 ${
+              checked ? 'bg-indigo-50' : 'hover:bg-gray-50'
+            } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            <input
+              type="checkbox"
+              className="shrink-0"
+              checked={checked}
+              disabled={disabled}
+              onChange={() => onToggle(tag.id)}
+            />
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10"
+              style={{ backgroundColor: tag.color || '#9ca3af' }}
+            />
+            <span className="truncate text-gray-800">{tag.name}</span>
+          </label>
+        )
+      })}
     </div>
   )
 }
