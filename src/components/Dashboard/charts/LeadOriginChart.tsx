@@ -1,7 +1,7 @@
 // =====================================================
-// LeadOriginChart — barras horizontais por canal de origem.
-// Usa layout="horizontal" do Recharts com YAxis categórico.
-// Ajuste obrigatório: horizontal (não pizza).
+// LeadOriginChart — barras deitadas por canal de origem.
+// No Recharts, layout="vertical" desenha a categoria no eixo Y
+// e o valor no eixo X. layout="horizontal" geraria colunas em pé.
 // =====================================================
 
 import React from 'react'
@@ -54,7 +54,7 @@ export function LeadOriginChart({ data, dataKey = 'lead_count', height = 260 }: 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart
-        layout="horizontal"
+        layout="vertical"
         data={data}
         margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
       >
