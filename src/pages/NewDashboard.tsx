@@ -18,6 +18,7 @@ import { SellerRankingSection }       from '../components/Dashboard/sections/Sel
 import { SlaAlertsPanel }             from '../components/Dashboard/sections/SlaAlertsPanel'
 import { AwaitingLeadReplyPanel }     from '../components/Dashboard/sections/AwaitingLeadReplyPanel'
 import { LeadOriginsSection }         from '../components/Dashboard/sections/LeadOriginsSection'
+import { TagGroupsSection }           from '../components/Dashboard/sections/TagGroupsSection'
 import { ActivationSection }          from '../components/Dashboard/sections/ActivationSection'
 import { DashboardTabs }              from '../components/Dashboard/navigation/DashboardTabs'
 import { TaskBoard }                  from '../components/Dashboard/tasks/TaskBoard'
@@ -440,7 +441,22 @@ export const NewDashboard: React.FC = () => {
           />
         </section>
 
-        {canViewLeadOrigins && (
+        {canViewLeadOrigins && flags.tagGroups && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <LeadOriginsSection
+              data={leadOrigins.data}
+              meta={leadOrigins.meta}
+              loading={leadOrigins.loading}
+              error={leadOrigins.error}
+              onRetry={leadOrigins.refetch}
+            />
+            <TagGroupsSection
+              filters={filters}
+              canConfigure={canViewDashboardSettings}
+            />
+          </div>
+        )}
+        {canViewLeadOrigins && !flags.tagGroups && (
           <LeadOriginsSection
             data={leadOrigins.data}
             meta={leadOrigins.meta}

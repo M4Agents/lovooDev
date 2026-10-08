@@ -49,6 +49,18 @@ import {
   type AwaitingLeadReplySettings,
 } from '../lib/dashboard/alertSettingsDefaults.js'
 
+// Colunas gravadas por este POST. tag_group_settings e ranking_scope_settings
+// têm endpoints próprios e não podem entrar neste upsert.
+export const ALERT_SETTINGS_UPSERT_COLUMNS = [
+  'company_id',
+  'sla_settings',
+  'stalled_settings',
+  'seller_risk_settings',
+  'funnel_scope_settings',
+  'awaiting_lead_reply_settings',
+  'updated_by',
+] as const
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isUUID(v: unknown): v is string {
@@ -255,20 +267,26 @@ async function handlePost(req: any, res: any): Promise<void> {
     //    ON CONFLICT (company_id) funciona corretamente aqui:
     //    o índice UNIQUE simples em company_id não tem WHERE predicate
     //    → sem limitação do Supabase JS v2 com partial indexes
+    const alertSettingsPayload = {
+      company_id:            companyId,
+      sla_settings:          mergedSla,
+      stalled_settings:      mergedStalled,
+      seller_risk_settings:  mergedSellerRisk,
+      funnel_scope_settings: mergedFunnelScope,
+      awaiting_lead_reply_settings: mergedAwaiting,
+      updated_by:            user.id,
+    }
+    const extraColumns = Object.keys(alertSettingsPayload).filter(
+      key => !(ALERT_SETTINGS_UPSERT_COLUMNS as readonly string[]).includes(key),
+    )
+    if (extraColumns.length > 0) {
+      jsonError(res, 500, 'payload de alertas inclui coluna fora da lista permitida')
+      return
+    }
+
     const { data: saved, error: upsertError } = await svc
       .from('dashboard_alert_settings')
-      .upsert(
-        {
-          company_id:            companyId,
-          sla_settings:          mergedSla,
-          stalled_settings:      mergedStalled,
-          seller_risk_settings:  mergedSellerRisk,
-          funnel_scope_settings: mergedFunnelScope,
-          awaiting_lead_reply_settings: mergedAwaiting,
-          updated_by:            user.id,
-        },
-        { onConflict: 'company_id' },
-      )
+      .upsert(alertSettingsPayload, { onConflict: 'company_id' })
       .select('sla_settings, stalled_settings, seller_risk_settings, funnel_scope_settings, awaiting_lead_reply_settings, updated_at')
       .single()
 

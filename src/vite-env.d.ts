@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   // Usar APENAS em api/ (Vercel Functions / Node.js) via process.env.
   /** Opcional: UUID da empresa Pai (deve ser igual a PARENT_COMPANY_ID no servidor). */
   readonly VITE_PARENT_COMPANY_ID?: string
+  readonly VITE_FEATURE_TAG_GROUPS?: string
 }
 
 interface ImportMeta {

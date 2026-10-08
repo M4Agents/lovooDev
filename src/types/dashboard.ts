@@ -624,6 +624,52 @@ export interface LeadOriginsResponse {
   meta: LeadOriginsMeta
 }
 
+export interface TagGroupDefinition {
+  id: string
+  name: string
+  tag_ids: string[]
+}
+
+export interface TagGroupSettings {
+  groups: TagGroupDefinition[]
+}
+
+export interface TagGroupSettingsResponse {
+  ok: boolean
+  data: TagGroupSettings
+  meta: { is_default: boolean; updated_at?: string }
+}
+
+export interface TagGroupMetricRow {
+  group_id: string
+  name: string
+  position: number
+  status: 'ok' | 'invalid'
+  invalid_tag_ids: string[]
+  lead_count: number | null
+  opps_generated: number | null
+  leads_converted: number | null
+  conversion_rate_pct: number | null
+  total_won_value: number | null
+}
+
+export interface TagGroupMetricsMeta {
+  period: string
+  start: string
+  end: string
+  user_id: string | null
+  groups_configured: number
+  funnel_applied: false
+  responsible_field: 'leads.responsible_user_id'
+  period_timezone: 'UTC'
+}
+
+export interface TagGroupMetricsResponse {
+  ok: boolean
+  data: TagGroupMetricRow[]
+  meta: TagGroupMetricsMeta
+}
+
 // ---------------------------------------------------------------------------
 // Dispensa de Alertas do Dashboard (Fase Dismissal)
 // ---------------------------------------------------------------------------

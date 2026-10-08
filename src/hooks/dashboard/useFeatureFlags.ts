@@ -60,6 +60,15 @@ export interface FeatureFlags {
    * Padrão: false (rollback instantâneo ao desligar).
    */
   stageTransitionQuestions:  boolean
+  /**
+   * Card de grupos de tags ao lado de Origem dos Leads.
+   * Variável de build VITE_FEATURE_TAG_GROUPS. Só a string "true" liga.
+   * Mudar o valor exige novo build e deploy da aplicação.
+   * LovooDev e LovooCRM produção são deploys separados e compartilham o banco.
+   * Ausente ou diferente de "true": o card não aparece e o endpoint não é chamado.
+   * Depende da migration 20261008131827_dashboard_tag_groups já aplicada.
+   */
+  tagGroups:                 boolean
 }
 
 function parseFlag(value: string | undefined): boolean {
@@ -80,6 +89,7 @@ export function getFeatureFlags(): FeatureFlags {
     hybridForecast:            parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FORECAST),
     hybridFunnelExecutive:     parseFlag(import.meta.env.VITE_FEATURE_HYBRID_FUNNEL_EXECUTIVE),
     stageTransitionQuestions:  parseFlag(import.meta.env.VITE_FEATURE_STAGE_TRANSITION_QUESTIONS),
+    tagGroups:                 parseFlag(import.meta.env.VITE_FEATURE_TAG_GROUPS),
   }
 }
 

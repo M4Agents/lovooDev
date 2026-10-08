@@ -118,6 +118,9 @@ export type {
   LeadOriginItem,
   LeadOriginsMeta,
   LeadOriginsResponse,
+  TagGroupSettings,
+  TagGroupSettingsResponse,
+  TagGroupMetricsResponse,
   // Fase 3A
   ForecastData,
   ForecastMeta,
@@ -177,6 +180,9 @@ import type {
   RankingScopeSettings,
   RankingScopeResponse,
   LeadOriginsResponse,
+  TagGroupSettings,
+  TagGroupSettingsResponse,
+  TagGroupMetricsResponse,
   ForecastResponse,
   PriorityAlertsResponse,
   FunnelExecutiveResponse,
@@ -1052,6 +1058,42 @@ export const dashboardApi = {
     return apiFetch<RankingScopeResponse>(
       '/api/dashboard/ranking-scope',
       { company_id: companyId },
+      signal,
+    )
+  },
+
+  async getTagGroups(
+    companyId: string,
+    signal?: AbortSignal,
+  ): Promise<TagGroupSettingsResponse> {
+    return apiFetch<TagGroupSettingsResponse>(
+      '/api/dashboard/tag-groups',
+      { company_id: companyId },
+      signal,
+    )
+  },
+
+  async saveTagGroups(
+    companyId: string,
+    settings: TagGroupSettings,
+  ): Promise<TagGroupSettingsResponse> {
+    return apiPost<TagGroupSettingsResponse>(
+      '/api/dashboard/tag-groups',
+      {},
+      { company_id: companyId, tag_group_settings: settings },
+    )
+  },
+
+  async getTagGroupMetrics(
+    companyId: string,
+    filters: DashboardFilters,
+    signal?: AbortSignal,
+  ): Promise<TagGroupMetricsResponse> {
+    const params = buildPeriodParams(filters)
+    delete params.funnel_id
+    return apiFetch<TagGroupMetricsResponse>(
+      '/api/dashboard/tag-group-metrics',
+      { company_id: companyId, ...params },
       signal,
     )
   },
