@@ -101,17 +101,27 @@ export function getLastNDays(
   }
 }
 
+export function formatCivilDay(value: string): string {
+  const [, month, day] = value.split('-')
+  return `${day}/${month}`
+}
+
+export function comparisonWindowTitle(
+  mode: ComparisonMode,
+  timeZone?: string | null,
+  now: Date = new Date(),
+): string {
+  const periods = getComparisonPeriods(mode, timeZone, now)
+  return `${formatCivilDay(periods.currentFrom)} a ${formatCivilDay(periods.currentTo)} contra ${formatCivilDay(periods.previousFrom)} a ${formatCivilDay(periods.previousTo)}. Não inclui hoje.`
+}
+
 export function getComparisonLabel(
   mode: ComparisonMode,
   timeZone?: string | null,
   now: Date = new Date(),
 ): string {
   const { previousFrom, previousTo } = getComparisonPeriods(mode, timeZone, now)
-  const fmt = (value: string) => {
-    const [, month, day] = value.split('-')
-    return `${day}/${month}`
-  }
-  return `vs ${fmt(previousFrom)} – ${fmt(previousTo)}`
+  return `vs ${formatCivilDay(previousFrom)} – ${formatCivilDay(previousTo)}`
 }
 
 export interface SnapshotKey {

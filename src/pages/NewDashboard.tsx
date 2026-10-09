@@ -47,6 +47,8 @@ import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
 import { useSnapshotHealth }          from '../hooks/dashboard/useSnapshotHealth'
 import { HistoricalGapNotice }        from '../components/Dashboard/historical/HistoricalGapNotice'
+import { ComparisonModeToggle }       from '../components/Dashboard/historical/ComparisonModeToggle'
+import { PeriodComparisonPanel }      from '../components/Dashboard/historical/PeriodComparisonPanel'
 import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
 import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
 import { useSnapshotSellerDeltas }    from '../hooks/dashboard/useSnapshotSellerDeltas'
@@ -100,6 +102,15 @@ export const NewDashboard: React.FC = () => {
     flags.hybridForecast ||
     flags.hybridFunnelExecutive ||
     flags.hybridSlaAlerts
+  const comparisonControlsOn =
+    canViewTeamDashboard && (
+      flags.snapshotDelta ||
+      flags.snapshotTrends ||
+      flags.hybridExecutiveSummary ||
+      flags.hybridSellerRanking ||
+      flags.hybridForecast ||
+      flags.hybridFunnelExecutive
+    )
 
   // Constrói o objeto DashboardFilters para os hooks de dados
   const filters: DashboardFilters = useMemo(
@@ -202,6 +213,9 @@ export const NewDashboard: React.FC = () => {
   // Ativação Comercial — hook isolado, roda sempre para evitar delay na troca de aba
   const activation = useDashboardActivation(filters)
 
+  const sellerFiltered = Boolean(userId) || summary.userScoped
+  const showComparisonPanel = comparisonControlsOn && !sellerFiltered
+
   // FASE 4.1 / 4.2 Sprint 1A+2 — Dados históricos gateados por flags + saúde do tenant
   // Quando hybridModeActive=true: v2 já entrega comparison → useSnapshotComparison desativado
   // Quando hybridModeActive=false: useSnapshotComparison opera normalmente (Sprint 1A)
@@ -209,7 +223,9 @@ export const NewDashboard: React.FC = () => {
     companyId,
     funnelId,
     mode:            comparisonMode,
-    enabled:         flags.snapshotDelta && !hybridModeActive,
+    enabled:         !hybridModeActive && historyReady && (
+      flags.snapshotDelta || showComparisonPanel
+    ),
     canUseSnapshots: historyReady,
   })
   const snapshotTrends = useSnapshotTrends({
@@ -236,6 +252,10 @@ export const NewDashboard: React.FC = () => {
     hybridModeActive
       ? summary.historicalComparison
       : (flags.snapshotDelta && historyReady ? snapshotComparison.data : null)
+
+  const panelComparison: SnapshotComparisonData | null = historyReady
+    ? (hybridModeActive ? summary.historicalComparison : snapshotComparison.data)
+    : null
 
   // Fonte unificada de deltas para o SellerRankingSection:
   //   - sellerHybridActive=true  → vem do v2 (sellerRanking.sellerDeltasMap)
@@ -305,39 +325,12 @@ export const NewDashboard: React.FC = () => {
             />
           )}
 
-          {/* Toggle WoW/MoM — apenas para manager+ e quando feature flags ativas */}
-          {canViewTeamDashboard && (
-            flags.snapshotDelta          ||
-            flags.snapshotTrends         ||
-            flags.hybridExecutiveSummary ||
-            flags.hybridSellerRanking    ||
-            flags.hybridForecast         ||
-            flags.hybridFunnelExecutive
-          ) && (
-            <div className="flex items-center rounded-lg border border-gray-200 bg-white text-xs overflow-hidden">
-              <button
-                onClick={() => setComparisonMode('wow')}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  comparisonMode === 'wow'
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-                title="Comparar com semana anterior"
-              >
-                WoW
-              </button>
-              <button
-                onClick={() => setComparisonMode('mom')}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  comparisonMode === 'mom'
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-                title="Comparar com mês anterior"
-              >
-                MoM
-              </button>
-            </div>
+          {comparisonControlsOn && (
+            <ComparisonModeToggle
+              mode={comparisonMode}
+              timeZone={companyTimezone}
+              onChange={setComparisonMode}
+            />
           )}
 
           {/* Engrenagem — configurar alertas (apenas admin+) */}
@@ -360,7 +353,19 @@ export const NewDashboard: React.FC = () => {
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'operation' && (<>
 
-      {historicalFlagsOn && !snapshotHealth.loading && !historyReady && (
+      {showComparisonPanel && (
+        <PeriodComparisonPanel
+          mode={comparisonMode}
+          timeZone={companyTimezone}
+          coverage={activeCoverage}
+          historyReady={historyReady}
+          healthLoading={snapshotHealth.loading}
+          comparisonLoading={hybridModeActive ? summary.loading : snapshotComparison.loading}
+          comparison={panelComparison}
+        />
+      )}
+
+      {historicalFlagsOn && !showComparisonPanel && !snapshotHealth.loading && !historyReady && (
         <HistoricalGapNotice
           mode={comparisonMode}
           timeZone={companyTimezone}
