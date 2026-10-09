@@ -1,3 +1,4 @@
+import { ComparisonModeToggle } from './ComparisonModeToggle'
 import {
   comparisonWindowTitle,
   formatCivilDay,
@@ -14,6 +15,7 @@ interface Props {
   healthLoading: boolean
   comparisonLoading: boolean
   comparison: SnapshotComparisonData | null
+  onModeChange: (mode: ComparisonMode) => void
 }
 
 interface MetricRow {
@@ -131,6 +133,7 @@ export function PeriodComparisonPanel({
   healthLoading,
   comparisonLoading,
   comparison,
+  onModeChange,
 }: Props) {
   const title = mode === 'wow' ? 'Comparação semanal' : 'Comparação mensal'
   const windowTitle = comparisonWindowTitle(mode, timeZone)
@@ -147,9 +150,18 @@ export function PeriodComparisonPanel({
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
-      <p className="text-xs text-gray-500 mt-0.5">{windowTitle}</p>
-      <p className="text-xs text-gray-500">O filtro de período do dashboard não altera esta tabela.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{windowTitle}</p>
+          <p className="text-xs text-gray-500">O filtro de período do dashboard não altera esta tabela.</p>
+        </div>
+        <ComparisonModeToggle
+          mode={mode}
+          timeZone={timeZone}
+          onChange={onModeChange}
+        />
+      </div>
 
       {healthLoading || (historyReady && comparisonLoading && !comparison) ? (
         <p className="mt-3 text-xs text-gray-400">Carregando comparação…</p>

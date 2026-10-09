@@ -47,7 +47,6 @@ import { useAccessControl }           from '../hooks/useAccessControl'
 import { useFeatureFlags }            from '../hooks/dashboard/useFeatureFlags'
 import { useSnapshotHealth }          from '../hooks/dashboard/useSnapshotHealth'
 import { HistoricalGapNotice }        from '../components/Dashboard/historical/HistoricalGapNotice'
-import { ComparisonModeToggle }       from '../components/Dashboard/historical/ComparisonModeToggle'
 import { PeriodComparisonPanel }      from '../components/Dashboard/historical/PeriodComparisonPanel'
 import { useSnapshotComparison }      from '../hooks/dashboard/useSnapshotComparison'
 import { useSnapshotTrends }          from '../hooks/dashboard/useSnapshotTrends'
@@ -325,14 +324,6 @@ export const NewDashboard: React.FC = () => {
             />
           )}
 
-          {comparisonControlsOn && (
-            <ComparisonModeToggle
-              mode={comparisonMode}
-              timeZone={companyTimezone}
-              onChange={setComparisonMode}
-            />
-          )}
-
           {/* Engrenagem — configurar alertas (apenas admin+) */}
           {canViewDashboardSettings && (
             <button
@@ -352,18 +343,6 @@ export const NewDashboard: React.FC = () => {
           Conteúdo idêntico ao original — NÃO alterar a semântica interna.
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'operation' && (<>
-
-      {showComparisonPanel && (
-        <PeriodComparisonPanel
-          mode={comparisonMode}
-          timeZone={companyTimezone}
-          coverage={activeCoverage}
-          historyReady={historyReady}
-          healthLoading={snapshotHealth.loading}
-          comparisonLoading={hybridModeActive ? summary.loading : snapshotComparison.loading}
-          comparison={panelComparison}
-        />
-      )}
 
       {historicalFlagsOn && !showComparisonPanel && !snapshotHealth.loading && !historyReady && (
         <HistoricalGapNotice
@@ -485,6 +464,19 @@ export const NewDashboard: React.FC = () => {
             loading={leadOrigins.loading}
             error={leadOrigins.error}
             onRetry={leadOrigins.refetch}
+          />
+        )}
+
+        {showComparisonPanel && (
+          <PeriodComparisonPanel
+            mode={comparisonMode}
+            timeZone={companyTimezone}
+            coverage={activeCoverage}
+            historyReady={historyReady}
+            healthLoading={snapshotHealth.loading}
+            comparisonLoading={hybridModeActive ? summary.loading : snapshotComparison.loading}
+            comparison={panelComparison}
+            onModeChange={setComparisonMode}
           />
         )}
 
