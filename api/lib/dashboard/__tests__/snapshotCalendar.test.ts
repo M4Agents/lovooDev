@@ -64,10 +64,10 @@ describe('comparações históricas no calendário da empresa', () => {
     expect(wow.currentTo).toBe('2026-10-08')
     expect(wow.currentFrom).toBe('2026-10-02')
     expect(comparisonWindowTitle('wow', SP, now)).toBe(
-      '02/10 a 08/10 contra 25/09 a 01/10. Não inclui hoje.',
+      '25/09 a 01/10 contra 02/10 a 08/10. Não inclui hoje.',
     )
     expect(comparisonWindowTitle('mom', SP, now)).toBe(
-      '09/09 a 08/10 contra 10/08 a 08/09. Não inclui hoje.',
+      '10/08 a 08/09 contra 09/09 a 08/10. Não inclui hoje.',
     )
     expect(getLastNDays(7, SP, new Date('2026-10-09T04:00:00.000Z'))).toMatchObject({
       fromDate: '2026-10-02',

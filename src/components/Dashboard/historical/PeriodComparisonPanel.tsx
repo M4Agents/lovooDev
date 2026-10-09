@@ -204,8 +204,8 @@ export function PeriodComparisonPanel({
             <thead>
               <tr className="text-left text-xs text-gray-500">
                 <th className="pb-2 pr-3 font-medium">Métrica</th>
-                <th className="pb-2 pr-3 font-medium text-right">{currentLabel}</th>
                 <th className="pb-2 pr-3 font-medium text-right">{previousLabel}</th>
+                <th className="pb-2 pr-3 font-medium text-right">{currentLabel}</th>
                 <th className="pb-2 font-medium text-right">Diferença</th>
               </tr>
             </thead>
@@ -214,15 +214,15 @@ export function PeriodComparisonPanel({
                 <tr key={row.key}>
                   <th className="py-2.5 pr-3 text-left font-medium text-gray-700">{row.label}</th>
                   <td className="py-2.5 pr-3 text-right text-gray-800">
-                    {COUNT.format(row.current)}
-                    {row.currentMoney != null ? (
-                      <span className="block text-[11px] text-gray-500">{MONEY.format(row.currentMoney)}</span>
-                    ) : null}
-                  </td>
-                  <td className="py-2.5 pr-3 text-right text-gray-800">
                     {COUNT.format(row.previous)}
                     {row.previousMoney != null ? (
                       <span className="block text-[11px] text-gray-500">{MONEY.format(row.previousMoney)}</span>
+                    ) : null}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right text-gray-800">
+                    {COUNT.format(row.current)}
+                    {row.currentMoney != null ? (
+                      <span className="block text-[11px] text-gray-500">{MONEY.format(row.currentMoney)}</span>
                     ) : null}
                   </td>
                   <td className="py-2.5 text-right text-xs font-medium">

@@ -112,7 +112,7 @@ export function comparisonWindowTitle(
   now: Date = new Date(),
 ): string {
   const periods = getComparisonPeriods(mode, timeZone, now)
-  return `${formatCivilDay(periods.currentFrom)} a ${formatCivilDay(periods.currentTo)} contra ${formatCivilDay(periods.previousFrom)} a ${formatCivilDay(periods.previousTo)}. Não inclui hoje.`
+  return `${formatCivilDay(periods.previousFrom)} a ${formatCivilDay(periods.previousTo)} contra ${formatCivilDay(periods.currentFrom)} a ${formatCivilDay(periods.currentTo)}. Não inclui hoje.`
 }
 
 export function getComparisonLabel(
