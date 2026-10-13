@@ -43,6 +43,9 @@ function composeMinutes(d: number, h: number, m: number) {
 export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }: TriggerConfigModalProps) {
   const { company } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
+  const selectableInstances = instances.filter(
+    (instance) => instance.status === 'connected' && !instance.deleted_at
+  )
   const { funnels, loading: loadingFunnels } = useFunnels(company?.id || '')
   const [config, setConfig] = useState<Record<string, any>>(trigger?.config || {})
   const [activityTypes, setActivityTypes] = useState<CustomActivityType[]>([])
@@ -299,7 +302,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Selecionar</option>
-                  {instances.map(instance => (
+                  {selectableInstances.map(instance => (
                     <option key={instance.id} value={instance.id}>
                       {instance.instance_name || `Instância ${instance.id}`}
                     </option>
@@ -434,7 +437,7 @@ export default function TriggerConfigModal({ isOpen, onClose, trigger, onSave }:
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Selecionar</option>
-                  {instances.map(instance => (
+                  {selectableInstances.map(instance => (
                     <option key={instance.id} value={instance.id}>
                       {instance.instance_name || `Instância ${instance.id}`}
                     </option>

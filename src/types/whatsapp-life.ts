@@ -32,6 +32,7 @@ export interface WhatsAppLifeInstance {
   last_activity_at?: string;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 
   // Restrição de envio WhatsApp (ex: WHATSAPP_REACHOUT_TIMELOCK)
   // null = sem restrição ativa
