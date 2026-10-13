@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ActivityModal } from '../../Calendar/ActivityModal'
 import ChatModalSimple from '../../SalesFunnel/ChatModalSimple'
 import { useAuth } from '../../../contexts/AuthContext'
+import { canEditTasklessStages } from '../../../utils/tasklessLeadAccess'
 import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
 import { useTaskBoard } from '../../../hooks/dashboard/useTaskBoard'
 import { calendarApi } from '../../../services/calendarApi'
@@ -13,16 +14,26 @@ import { TaskBoardCards } from './TaskBoardCards'
 import { TaskBoardFilters } from './TaskBoardFilters'
 import { TaskBoardList } from './TaskBoardList'
 import { TaskReadPanel } from './TaskReadPanel'
+import { TasklessConfigPanel } from './TasklessConfigPanel'
+import { TasklessLeadsColumn } from './TasklessLeadsColumn'
+import { useTasklessLeads } from '../../../hooks/dashboard/useTasklessLeads'
 
 interface Props {
   users: DashboardUser[]
 }
 
 export function TaskBoard({ users }: Props) {
-  const { company, user } = useAuth()
+  const { company, user, userRoles } = useAuth()
   const companyId = company?.id ?? null
   const actions = useDashboardEntityActions({ companyId })
   const board = useTaskBoard({ companyId, userId: user?.id ?? null, active: true })
+  const taskless = useTasklessLeads(companyId, true)
+  const [configOpen, setConfigOpen] = useState(false)
+  const canConfigure = canEditTasklessStages({
+    companyId,
+    parentCompanyId: company?.parent_company_id,
+    roles: userRoles,
+  })
   const [types, setTypes] = useState<CustomActivityType[]>([])
   const [reading, setReading] = useState<TaskBoardActivity | null>(null)
   const [editing, setEditing] = useState<LeadActivity | null>(null)
@@ -59,7 +70,7 @@ export function TaskBoard({ users }: Props) {
       await calendarApi.completeActivity(activity.id, user.id, companyId)
       setConfirming(false)
       setReading(null)
-      await board.reload()
+      await Promise.all([board.reload(), taskless.reload()])
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Não foi possível finalizar a tarefa')
     }
@@ -103,28 +114,42 @@ export function TaskBoard({ users }: Props) {
         <p className="text-xs text-gray-400">Atualizando...</p>
       )}
 
-      {!board.loading && !board.error && !rangePending && board.data && board.data.activities.length === 0 && (
-        <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
-          Nenhuma tarefa neste filtro.
-        </p>
-      )}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div>
+          {!board.loading && !board.error && !rangePending && board.data && board.data.activities.length === 0 && (
+            <p className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
+              Nenhuma tarefa neste filtro.
+            </p>
+          )}
 
-      {board.data && board.data.activities.length > 0 && (
-        <TaskBoardList
-          activities={board.data.activities}
-          timezone={board.data.timezone}
-          asOf={board.data.as_of}
-          windowMinutes={board.controls.windowMinutes}
+          {board.data && board.data.activities.length > 0 && (
+            <TaskBoardList
+              activities={board.data.activities}
+              timezone={board.data.timezone}
+              asOf={board.data.as_of}
+              windowMinutes={board.controls.windowMinutes}
+              users={users}
+              types={types}
+              showResponsible={showResponsible}
+              selectedId={reading?.id ?? null}
+              onOpen={activity => { setReading(activity); setConfirming(false) }}
+              onChat={activity => { if (activity.lead_id != null) actions.openChat(activity.lead_id) }}
+              onEdit={activity => setEditing(toModalActivity(activity))}
+              onComplete={activity => { setReading(activity); setConfirming(true) }}
+            />
+          )}
+        </div>
+        <TasklessLeadsColumn
+          data={taskless.data}
+          loading={taskless.loading}
+          error={taskless.error}
+          canConfigure={canConfigure}
           users={users}
-          types={types}
-          showResponsible={showResponsible}
-          selectedId={reading?.id ?? null}
-          onOpen={activity => { setReading(activity); setConfirming(false) }}
-          onChat={activity => { if (activity.lead_id != null) actions.openChat(activity.lead_id) }}
-          onEdit={activity => setEditing(toModalActivity(activity))}
-          onComplete={activity => { setReading(activity); setConfirming(true) }}
+          onConfigure={() => setConfigOpen(true)}
+          onOpen={leadId => actions.openChat(leadId)}
+          onRetry={() => void taskless.reload()}
         />
-      )}
+      </div>
 
       {reading && board.data && (
         <TaskReadPanel
@@ -154,6 +179,14 @@ export function TaskBoard({ users }: Props) {
             setEditing(null)
             void board.reload()
           }}
+        />
+      )}
+
+      {configOpen && companyId && (
+        <TasklessConfigPanel
+          companyId={companyId}
+          onClose={() => setConfigOpen(false)}
+          onSaved={() => { void taskless.reload() }}
         />
       )}
 
