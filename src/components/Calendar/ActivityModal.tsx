@@ -35,6 +35,23 @@ interface CompanyUser {
   is_active: boolean
 }
 
+function responsibleFromSession(user: {
+  id: string
+  email?: string | null
+  user_metadata?: Record<string, unknown>
+}): CompanyUser {
+  const meta = user.user_metadata || {}
+  const fromMeta = [meta.name, meta.display_name, meta.full_name].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0
+  )
+  return {
+    user_id: user.id,
+    email: user.email || '',
+    display_name: fromMeta || user.email?.split('@')[0] || 'Você',
+    is_active: true,
+  }
+}
+
 export const ActivityModal: React.FC<ActivityModalProps> = ({
   activity,
   onClose,
@@ -57,6 +74,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [hasGoogleConnection, setHasGoogleConnection] = useState(false)
   const [showChatModal, setShowChatModal] = useState(false)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [showNextStep, setShowNextStep] = useState(false)
+  const [followUp, setFollowUp] = useState(false)
   const [completionNotes, setCompletionNotes] = useState('')
   const fieldsTouchedRef = useRef(false)
   const userChangedTypeRef = useRef(false)
@@ -65,6 +84,8 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const loadedActivityIdRef = useRef<string | null>(null)
   const originalScheduleRef = useRef<{ date: string; time: string } | null>(null)
   const syncTouchedRef = useRef(false)
+  const responsibleTouchedRef = useRef(false)
+  const isEditing = Boolean(activity) && !followUp
   const markManual = () => {
     fieldsTouchedRef.current = true
   }
@@ -142,14 +163,21 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
       try {
         const { data, error } = await supabase
-          .rpc('get_company_users_with_details', {
+          .rpc('get_assignable_users', {
             p_company_id: company.id
           })
-        
+
         if (error) throw error
-        setCompanyUsers(data || [])
+        setCompanyUsers((data || []).map(row => ({
+          user_id: row.user_id,
+          email: row.email || '',
+          display_name: row.display_name || row.email || 'Usuário',
+          profile_picture_url: row.profile_picture_url || undefined,
+          is_active: true,
+        })))
       } catch (error) {
         console.error('Error fetching company users:', error)
+        setCompanyUsers([])
       }
     }
 
@@ -158,6 +186,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
   // Carregar a atividade uma vez. Recarga de usuários não recoloca data nem hora.
   useEffect(() => {
+    if (followUp) return
     if (activity) {
       if (loadedActivityIdRef.current !== activity.id) {
         loadedActivityIdRef.current = activity.id
@@ -187,10 +216,6 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         }
       }
 
-      if (activity.assigned_to && companyUsers.length > 0) {
-        const responsible = companyUsers.find(u => u.user_id === activity.assigned_to)
-        if (responsible) setSelectedResponsible(responsible)
-      }
       return
     }
 
@@ -217,11 +242,36 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     }
 
     if (preSelectedLead) setSelectedLead(preSelectedLead)
-    if (user?.id && companyUsers.length > 0 && !selectedResponsible) {
-      const currentUser = companyUsers.find(u => u.user_id === user.id)
-      if (currentUser) setSelectedResponsible(currentUser)
+  }, [activity, followUp, user?.id, preSelectedLead, preSelectedDate, preSelectedTime, hasGoogleConnection, companyTimezone])
+
+  // Nova atividade abre com quem está logado, mesmo sem permissão de gestão de usuários.
+  // Em edição, o responsável gravado é resolvido na lista de membros ativos.
+  useEffect(() => {
+    if (responsibleTouchedRef.current) return
+
+    if (followUp) {
+      if (!user?.id) return
+      const fromList = companyUsers.find(u => u.user_id === user.id)
+      setSelectedResponsible(fromList || responsibleFromSession(user))
+      return
     }
-  }, [activity, companyUsers, user?.id, preSelectedLead, preSelectedDate, preSelectedTime, hasGoogleConnection, companyTimezone, selectedResponsible])
+
+    if (activity?.assigned_to) {
+      const fromList = companyUsers.find(u => u.user_id === activity.assigned_to)
+      if (fromList) {
+        setSelectedResponsible(fromList)
+        return
+      }
+      if (user && activity.assigned_to === user.id) {
+        setSelectedResponsible(responsibleFromSession(user))
+      }
+      return
+    }
+
+    if (activity || !user?.id) return
+    const fromList = companyUsers.find(u => u.user_id === user.id)
+    setSelectedResponsible(fromList || responsibleFromSession(user))
+  }, [activity, companyUsers, user, followUp])
 
   // Buscar leads
   useEffect(() => {
@@ -258,7 +308,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     }
 
     const scheduleUnchanged = Boolean(
-      activity
+      isEditing
       && originalScheduleRef.current
       && formData.scheduled_date === originalScheduleRef.current.date
       && formData.scheduled_time.slice(0, 5) === originalScheduleRef.current.time
@@ -285,7 +335,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
     try {
       setLoading(true)
 
-      const scheduleChanged = Boolean(activity) && !scheduleUnchanged
+      const scheduleChanged = isEditing && !scheduleUnchanged
 
       const dataToSave = {
         ...formData,
@@ -295,7 +345,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         assigned_to: selectedResponsible?.user_id || user.id
       }
 
-      if (activity) {
+      if (isEditing && activity) {
         // scheduled_date e scheduled_time saem do PATCH.
         // /reschedule só entra quando a data ou a hora exibidas mudaram.
         // ── Separar campos de agenda dos demais ──────────────────────────────
@@ -416,14 +466,59 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         completionNotes ? { completion_notes: completionNotes } : undefined
       )
       setShowCompletionModal(false)
-      onSave()
-      onClose()
+      setCompletionNotes('')
+      setShowNextStep(true)
     } catch (error) {
       console.error('Error completing activity:', error)
       alert('Erro ao concluir atividade')
     } finally {
       setCompleting(false)
     }
+  }
+
+  const closeAfterComplete = () => {
+    setShowNextStep(false)
+    onSave()
+    onClose()
+  }
+
+  const startFollowUp = () => {
+    if (!activity || !user) return
+    const nowWall = companyWallFromInstant(new Date(), companyTimezone)
+    const base: CreateActivityForm = {
+      lead_id: selectedLead?.id ?? activity.lead_id ?? null,
+      title: '',
+      description: '',
+      activity_type: activity.activity_type,
+      scheduled_date: nowWall.date,
+      scheduled_time: nowWall.time,
+      duration_minutes: 30,
+      reminder_minutes: 15,
+      priority: 'medium',
+      visibility: 'public',
+      sync_to_google: hasGoogleConnection,
+    }
+    const type = activityTypes.find(item => item.id === activity.activity_type)
+    setFormData(applyActivityTypePreset(base, type, companyTimezone))
+    fieldsTouchedRef.current = false
+    userChangedTypeRef.current = false
+    initialPresetAppliedRef.current = true
+    bootstrappedNewRef.current = true
+    responsibleTouchedRef.current = false
+    syncTouchedRef.current = false
+    originalScheduleRef.current = null
+    if (!selectedLead && activity.lead) {
+      setSelectedLead({
+        id: activity.lead.id,
+        name: activity.lead.name,
+        phone: activity.lead.phone,
+        email: activity.lead.email,
+      })
+    }
+    const fromList = companyUsers.find(item => item.user_id === user.id)
+    setSelectedResponsible(fromList || responsibleFromSession(user))
+    setShowNextStep(false)
+    setFollowUp(true)
   }
 
   const handleOpenChat = () => {
@@ -438,10 +533,13 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
           <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
-            {activity ? '✏️ Editar Atividade' : '📅 Nova Atividade'}
+            {isEditing ? '✏️ Editar Atividade' : '📅 Nova Atividade'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (followUp) closeAfterComplete()
+              else onClose()
+            }}
             className="text-slate-400 hover:text-slate-600 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -496,7 +594,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                 ))
               )}
             </select>
-            {activity && (
+            {isEditing && (
               <button
                 type="button"
                 disabled={!typeHasPreset(activityTypes.find(type => type.id === formData.activity_type))}
@@ -598,7 +696,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedResponsible(null)}
+                  onClick={() => {
+                    responsibleTouchedRef.current = true
+                    setSelectedResponsible(null)
+                  }}
                   className="text-red-600 hover:text-red-800 text-xs font-medium"
                 >
                   Alterar
@@ -607,9 +708,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             ) : (
               <select
                 onChange={(e) => {
-                  const selectedUser = companyUsers.find(u => u.user_id === e.target.value)
+                  const value = e.target.value
+                  if (!value) return
+                  responsibleTouchedRef.current = true
+                  const selectedUser = companyUsers.find(u => u.user_id === value)
                   if (selectedUser) {
                     setSelectedResponsible(selectedUser)
+                    return
+                  }
+                  if (user && value === user.id) {
+                    setSelectedResponsible(responsibleFromSession(user))
                   }
                 }}
                 className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:border-slate-400 transition-colors"
@@ -804,7 +912,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
-            {activity && (
+            {isEditing && activity && (
               <>
                 <button
                   type="button"
@@ -828,7 +936,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
             )}
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                if (followUp) closeAfterComplete()
+                else onClose()
+              }}
               className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
             >
               Cancelar
@@ -847,7 +958,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                   Salvando...
                 </span>
               ) : (
-                activity ? '✅ Atualizar' : '📅 Agendar'
+                isEditing ? '✅ Atualizar' : '📅 Agendar'
               )}
             </button>
           </div>
@@ -911,6 +1022,33 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
                 ) : (
                   '✅ Confirmar Conclusão'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNextStep && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Atividade concluída</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              Deseja abrir uma nova atividade ou fechar?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={closeAfterComplete}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={startFollowUp}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-all"
+              >
+                Abrir nova atividade
               </button>
             </div>
           </div>
