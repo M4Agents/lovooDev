@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { ActivityModal } from '../../Calendar/ActivityModal'
 import ChatModalSimple from '../../SalesFunnel/ChatModalSimple'
 import { useAuth } from '../../../contexts/AuthContext'
-import { canEditTasklessStages } from '../../../utils/tasklessLeadAccess'
 import { useDashboardEntityActions } from '../../../hooks/dashboard/useDashboardEntityActions'
 import { useTaskBoard } from '../../../hooks/dashboard/useTaskBoard'
 import { calendarApi } from '../../../services/calendarApi'
@@ -23,17 +22,12 @@ interface Props {
 }
 
 export function TaskBoard({ users }: Props) {
-  const { company, user, userRoles } = useAuth()
+  const { company, user } = useAuth()
   const companyId = company?.id ?? null
   const actions = useDashboardEntityActions({ companyId })
   const board = useTaskBoard({ companyId, userId: user?.id ?? null, active: true })
   const taskless = useTasklessLeads(companyId, true)
   const [configOpen, setConfigOpen] = useState(false)
-  const canConfigure = canEditTasklessStages({
-    companyId,
-    parentCompanyId: company?.parent_company_id,
-    roles: userRoles,
-  })
   const [types, setTypes] = useState<CustomActivityType[]>([])
   const [reading, setReading] = useState<TaskBoardActivity | null>(null)
   const [editing, setEditing] = useState<LeadActivity | null>(null)
@@ -143,7 +137,7 @@ export function TaskBoard({ users }: Props) {
           data={taskless.data}
           loading={taskless.loading}
           error={taskless.error}
-          canConfigure={canConfigure}
+          canConfigure={Boolean(companyId)}
           users={users}
           onConfigure={() => setConfigOpen(true)}
           onOpen={leadId => actions.openChat(leadId)}

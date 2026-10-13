@@ -1,6 +1,7 @@
 import { validateCaller } from '../lib/activities/activityAuth.js'
 import { resolveTaskScope } from '../../src/utils/taskBoardContract.js'
 import { TASKLESS_LIST_LIMIT } from '../../src/utils/tasklessLeadAccess.js'
+import { DEFAULT_TASKLESS_PERIOD, isCivilDate, isTasklessPeriodType, resolveTasklessPeriodWindow } from '../../src/utils/tasklessPeriod.js'
 
 function queryText(value: unknown): string {
   if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
@@ -35,21 +36,49 @@ export default async function handler(req: any, res: any) {
   const scope = resolveTaskScope(role)
   const responsibleUserId = scope === 'own' ? userId : null
 
-  const { data: company, error: companyError } = await supabase
-    .from('companies')
-    .select('timezone')
-    .eq('id', companyId)
-    .maybeSingle()
-  if (companyError) {
-    return res.status(500).json({ success: false, error: 'Erro ao ler o fuso da empresa' })
+  const [{ data: company, error: companyError }, { data: preference, error: preferenceError }] = await Promise.all([
+    supabase.from('companies').select('timezone').eq('id', companyId).maybeSingle(),
+    supabase
+      .from('user_taskless_preferences')
+      .select('period_type, custom_start, custom_end')
+      .eq('company_id', companyId)
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ])
+  if (companyError || preferenceError) {
+    return res.status(500).json({ success: false, error: 'Erro ao ler a configuração da coluna' })
   }
+
   const timezone = typeof company?.timezone === 'string' && isTimezone(company.timezone)
     ? company.timezone
     : 'America/Sao_Paulo'
 
+  const storedType = typeof preference?.period_type === 'string' ? preference.period_type : ''
+  const periodType = isTasklessPeriodType(storedType) ? storedType : DEFAULT_TASKLESS_PERIOD
+  const customStart = periodType === 'custom' && typeof preference?.custom_start === 'string' && isCivilDate(preference.custom_start.slice(0, 10))
+    ? preference.custom_start.slice(0, 10)
+    : null
+  const customEnd = periodType === 'custom' && typeof preference?.custom_end === 'string' && isCivilDate(preference.custom_end.slice(0, 10))
+    ? preference.custom_end.slice(0, 10)
+    : null
+
+  const window = resolveTasklessPeriodWindow({
+    periodType,
+    customStart,
+    customEnd,
+    timeZone: timezone,
+    now: new Date(),
+  })
+  if (!window) {
+    return res.status(422).json({ success: false, error: 'Período salvo é inválido. Abra Configurações e salve de novo.' })
+  }
+
   const { data, error } = await supabase.rpc('list_taskless_lead_positions', {
     p_company_id: companyId,
+    p_user_id: userId,
     p_responsible_user_id: responsibleUserId,
+    p_from: window.from.toISOString(),
+    p_to: window.to.toISOString(),
     p_limit: TASKLESS_LIST_LIMIT,
   })
   if (error) {
@@ -66,6 +95,9 @@ export default async function handler(req: any, res: any) {
     scope,
     timezone,
     configured: payload.configured === true,
+    period_type: periodType,
+    custom_start: customStart,
+    custom_end: customEnd,
     total,
     truncated: total > items.length,
     items,

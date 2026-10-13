@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import type { TaskScope } from '../utils/taskBoardContract'
+import { isTasklessPeriodType, type TasklessPeriodType } from '../utils/tasklessPeriod'
 import { TaskBoardRequestError } from './taskBoardApi'
 
 export interface TasklessStage {
@@ -17,9 +18,12 @@ export interface TasklessFunnel {
 }
 
 export interface TasklessConfig {
-  can_edit: boolean
   funnels: TasklessFunnel[]
   stage_ids: string[]
+  period_type: TasklessPeriodType
+  custom_start: string | null
+  custom_end: string | null
+  saved: boolean
 }
 
 export interface TasklessLeadPosition {
@@ -39,9 +43,16 @@ export interface TasklessLeadList {
   scope: TaskScope
   timezone: string
   configured: boolean
+  period_type: TasklessPeriodType
+  custom_start: string | null
+  custom_end: string | null
   total: number
   truncated: boolean
   items: TasklessLeadPosition[]
+}
+
+function isPeriod(value: unknown): value is TasklessPeriodType {
+  return typeof value === 'string' && isTasklessPeriodType(value)
 }
 
 async function authToken(): Promise<string> {
@@ -70,13 +81,20 @@ export async function fetchTasklessConfig(companyId: string, signal?: AbortSigna
     throw new TaskBoardRequestError(typeof json.error === 'string' ? json.error : 'Erro ao carregar as etapas')
   }
   return {
-    can_edit: json.can_edit === true,
     funnels: Array.isArray(json.funnels) ? json.funnels as TasklessFunnel[] : [],
     stage_ids: Array.isArray(json.stage_ids) ? json.stage_ids.filter((id): id is string => typeof id === 'string') : [],
+    period_type: isPeriod(json.period_type) ? json.period_type : '30days',
+    custom_start: typeof json.custom_start === 'string' ? json.custom_start : null,
+    custom_end: typeof json.custom_end === 'string' ? json.custom_end : null,
+    saved: json.saved === true,
   }
 }
 
-export async function saveTasklessConfig(companyId: string, stageIds: string[]): Promise<string[]> {
+export async function saveTasklessConfig(
+  companyId: string,
+  stageIds: string[],
+  period: { periodType: TasklessPeriodType; customStart: string | null; customEnd: string | null },
+): Promise<void> {
   const token = await authToken()
   const response = await fetch('/api/activities/taskless-config', {
     method: 'PUT',
@@ -84,13 +102,18 @@ export async function saveTasklessConfig(companyId: string, stageIds: string[]):
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ company_id: companyId, stage_ids: stageIds }),
+    body: JSON.stringify({
+      company_id: companyId,
+      stage_ids: stageIds,
+      period_type: period.periodType,
+      custom_start: period.customStart,
+      custom_end: period.customEnd,
+    }),
   })
   const json = await readJson(response)
   if (!response.ok || json.success === false) {
-    throw new TaskBoardRequestError(typeof json.error === 'string' ? json.error : 'Erro ao salvar as etapas')
+    throw new TaskBoardRequestError(typeof json.error === 'string' ? json.error : 'Erro ao salvar a configuração')
   }
-  return Array.isArray(json.stage_ids) ? json.stage_ids.filter((id): id is string => typeof id === 'string') : stageIds
 }
 
 export async function fetchTasklessLeads(companyId: string, signal?: AbortSignal): Promise<TasklessLeadList> {
@@ -107,6 +130,9 @@ export async function fetchTasklessLeads(companyId: string, signal?: AbortSignal
     scope: json.scope === 'company' ? 'company' : 'own',
     timezone: typeof json.timezone === 'string' ? json.timezone : 'America/Sao_Paulo',
     configured: json.configured === true,
+    period_type: isPeriod(json.period_type) ? json.period_type : '30days',
+    custom_start: typeof json.custom_start === 'string' ? json.custom_start : null,
+    custom_end: typeof json.custom_end === 'string' ? json.custom_end : null,
     total: typeof json.total === 'number' ? json.total : 0,
     truncated: json.truncated === true,
     items: Array.isArray(json.items) ? json.items as TasklessLeadPosition[] : [],

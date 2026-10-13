@@ -1,4 +1,5 @@
 import { TASKLESS_LIST_LIMIT } from '../../../utils/tasklessLeadAccess'
+import { PREDEFINED_PERIODS } from '../../../types/analytics'
 import type { DashboardUser } from '../../../types/dashboard'
 import type { TasklessLeadList } from '../../../services/tasklessLeadsApi'
 
@@ -11,6 +12,19 @@ interface Props {
   onConfigure: () => void
   onOpen: (leadId: number) => void
   onRetry: () => void
+}
+
+function formatCivil(date: string): string {
+  const [year, month, day] = date.split('-')
+  if (!year || !month || !day) return date
+  return `${day}/${month}/${year}`
+}
+
+function periodLabel(data: TasklessLeadList): string {
+  if (data.period_type === 'custom' && data.custom_start && data.custom_end) {
+    return `${formatCivil(data.custom_start)} – ${formatCivil(data.custom_end)}`
+  }
+  return PREDEFINED_PERIODS[data.period_type]?.label ?? 'Últimos 30 dias'
 }
 
 function formatWhen(iso: string | null, timezone: string): string | null {
@@ -38,13 +52,16 @@ export function TasklessLeadsColumn({
       <header className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Leads sem tarefas</h2>
-          {data?.configured && (
-            <p className="text-xs text-gray-500">{data.total} {data.total === 1 ? 'posição' : 'posições'}</p>
+          {data && (
+            <p className="text-xs text-gray-500">
+              {periodLabel(data)}
+              {data.configured ? ` · ${data.total} ${data.total === 1 ? 'posição' : 'posições'}` : ''}
+            </p>
           )}
         </div>
         {canConfigure && (
           <button type="button" onClick={onConfigure} className="text-xs font-medium text-indigo-700 hover:underline">
-            Etapas
+            Configurações
           </button>
         )}
       </header>
@@ -59,7 +76,7 @@ export function TasklessLeadsColumn({
         )}
         {!error && data && !data.configured && (
           <p className="px-4 py-6 text-sm text-gray-500">
-            Nenhuma etapa foi escolhida. {canConfigure ? 'Use Etapas para definir quais funis entram nesta lista.' : 'Um administrador precisa escolher as etapas.'}
+            Nenhuma etapa foi escolhida. Abra Configurações para definir quais etapas entram nesta lista.
           </p>
         )}
         {data && data.truncated && (
@@ -68,7 +85,7 @@ export function TasklessLeadsColumn({
           </p>
         )}
         {data && data.configured && data.items.length === 0 && !loading && !error && (
-          <p className="px-4 py-6 text-sm text-gray-500">Nenhum lead sem tarefa nas etapas escolhidas.</p>
+          <p className="px-4 py-6 text-sm text-gray-500">Nenhum lead sem tarefa nas etapas escolhidas neste período.</p>
         )}
         <ul className="divide-y divide-gray-100">
           {data?.items.map(item => {

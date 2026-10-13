@@ -7,6 +7,7 @@ import type { LeadActivity, CreateActivityForm } from '../../types/calendar'
 import { ACTIVITY_TYPES, PRIORITIES, DURATION_OPTIONS, REMINDER_OPTIONS } from '../../types/calendar'
 import type { CustomActivityType } from '../../types/calendar'
 import { applyActivityTypePreset, typeHasPreset } from '../../utils/applyActivityTypePreset'
+import { chooseFollowUpLead, normalizeFollowUpLead, type FollowUpLead } from '../../utils/followUpLead'
 import { companyWallFromInstant, companyWallToUtc, activityInstant } from '../../utils/companyTime'
 import ChatModalSimple from '../SalesFunnel/ChatModalSimple'
 
@@ -75,7 +76,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   const [showChatModal, setShowChatModal] = useState(false)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [showNextStep, setShowNextStep] = useState(false)
+  const [openingFollowUp, setOpeningFollowUp] = useState(false)
   const [followUp, setFollowUp] = useState(false)
+  const followUpRequestRef = useRef(0)
   const [completionNotes, setCompletionNotes] = useState('')
   const fieldsTouchedRef = useRef(false)
   const userChangedTypeRef = useRef(false)
@@ -477,48 +480,85 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
   }
 
   const closeAfterComplete = () => {
+    followUpRequestRef.current += 1
+    setOpeningFollowUp(false)
     setShowNextStep(false)
     onSave()
     onClose()
   }
 
-  const startFollowUp = () => {
-    if (!activity || !user) return
-    const nowWall = companyWallFromInstant(new Date(), companyTimezone)
-    const base: CreateActivityForm = {
-      lead_id: selectedLead?.id ?? activity.lead_id ?? null,
-      title: '',
-      description: '',
-      activity_type: activity.activity_type,
-      scheduled_date: nowWall.date,
-      scheduled_time: nowWall.time,
-      duration_minutes: 30,
-      reminder_minutes: 15,
-      priority: 'medium',
-      visibility: 'public',
-      sync_to_google: hasGoogleConnection,
+  const loadFollowUpLead = async (leadId: number): Promise<FollowUpLead | null> => {
+    if (!company?.id) return null
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, name, phone, email')
+      .eq('id', leadId)
+      .eq('company_id', company.id)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (error) throw error
+    return normalizeFollowUpLead(data)
+  }
+
+  const startFollowUp = async () => {
+    if (!activity || !user || openingFollowUp) return
+    const request = followUpRequestRef.current + 1
+    followUpRequestRef.current = request
+    const choice = chooseFollowUpLead({
+      leadId: activity.lead_id,
+      selected: selectedLead,
+      activityLead: activity.lead,
+      preSelected: preSelectedLead,
+    })
+
+    setOpeningFollowUp(true)
+    try {
+      let lead: FollowUpLead | null = choice.status === 'ready' ? choice.lead : null
+      if (choice.status === 'fetch') {
+        lead = await loadFollowUpLead(choice.leadId)
+        if (followUpRequestRef.current !== request) return
+        if (!lead) {
+          alert('Não foi possível carregar o lead desta atividade')
+          return
+        }
+      }
+      if (followUpRequestRef.current !== request) return
+
+      const nowWall = companyWallFromInstant(new Date(), companyTimezone)
+      const base: CreateActivityForm = {
+        lead_id: lead?.id ?? null,
+        title: '',
+        description: '',
+        activity_type: activity.activity_type,
+        scheduled_date: nowWall.date,
+        scheduled_time: nowWall.time,
+        duration_minutes: 30,
+        reminder_minutes: 15,
+        priority: 'medium',
+        visibility: 'public',
+        sync_to_google: hasGoogleConnection,
+      }
+      const type = activityTypes.find(item => item.id === activity.activity_type)
+      setFormData(applyActivityTypePreset(base, type, companyTimezone))
+      fieldsTouchedRef.current = false
+      userChangedTypeRef.current = false
+      initialPresetAppliedRef.current = true
+      bootstrappedNewRef.current = true
+      responsibleTouchedRef.current = false
+      syncTouchedRef.current = false
+      originalScheduleRef.current = null
+      setSelectedLead(lead)
+      const fromList = companyUsers.find(item => item.user_id === user.id)
+      setSelectedResponsible(fromList || responsibleFromSession(user))
+      setShowNextStep(false)
+      setFollowUp(true)
+    } catch (error) {
+      if (followUpRequestRef.current !== request) return
+      console.error('Error loading follow-up lead:', error)
+      alert('Não foi possível carregar o lead desta atividade')
+    } finally {
+      if (followUpRequestRef.current === request) setOpeningFollowUp(false)
     }
-    const type = activityTypes.find(item => item.id === activity.activity_type)
-    setFormData(applyActivityTypePreset(base, type, companyTimezone))
-    fieldsTouchedRef.current = false
-    userChangedTypeRef.current = false
-    initialPresetAppliedRef.current = true
-    bootstrappedNewRef.current = true
-    responsibleTouchedRef.current = false
-    syncTouchedRef.current = false
-    originalScheduleRef.current = null
-    if (!selectedLead && activity.lead) {
-      setSelectedLead({
-        id: activity.lead.id,
-        name: activity.lead.name,
-        phone: activity.lead.phone,
-        email: activity.lead.email,
-      })
-    }
-    const fromList = companyUsers.find(item => item.user_id === user.id)
-    setSelectedResponsible(fromList || responsibleFromSession(user))
-    setShowNextStep(false)
-    setFollowUp(true)
   }
 
   const handleOpenChat = () => {
@@ -1045,10 +1085,11 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={startFollowUp}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-all"
+                onClick={() => void startFollowUp()}
+                disabled={openingFollowUp}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Abrir nova atividade
+                {openingFollowUp ? 'Abrindo...' : 'Abrir nova atividade'}
               </button>
             </div>
           </div>
