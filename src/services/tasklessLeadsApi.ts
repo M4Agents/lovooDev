@@ -47,6 +47,7 @@ export interface TasklessLeadList {
   custom_start: string | null
   custom_end: string | null
   total: number
+  offset: number
   truncated: boolean
   items: TasklessLeadPosition[]
 }
@@ -116,9 +117,20 @@ export async function saveTasklessConfig(
   }
 }
 
-export async function fetchTasklessLeads(companyId: string, signal?: AbortSignal): Promise<TasklessLeadList> {
+export async function fetchTasklessLeads(
+  companyId: string,
+  offset = 0,
+  filters: { query?: string; userId?: string } = {},
+  signal?: AbortSignal,
+): Promise<TasklessLeadList> {
   const token = await authToken()
-  const response = await fetch(`/api/activities/taskless-leads?company_id=${encodeURIComponent(companyId)}`, {
+  const params = new URLSearchParams({
+    company_id: companyId,
+    offset: String(offset),
+  })
+  if (filters.query) params.set('q', filters.query)
+  if (filters.userId) params.set('user_id', filters.userId)
+  const response = await fetch(`/api/activities/taskless-leads?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   })
@@ -134,6 +146,7 @@ export async function fetchTasklessLeads(companyId: string, signal?: AbortSignal
     custom_start: typeof json.custom_start === 'string' ? json.custom_start : null,
     custom_end: typeof json.custom_end === 'string' ? json.custom_end : null,
     total: typeof json.total === 'number' ? json.total : 0,
+    offset: typeof json.offset === 'number' ? json.offset : offset,
     truncated: json.truncated === true,
     items: Array.isArray(json.items) ? json.items as TasklessLeadPosition[] : [],
   }

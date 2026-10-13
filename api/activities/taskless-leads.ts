@@ -1,11 +1,20 @@
 import { validateCaller } from '../lib/activities/activityAuth.js'
-import { resolveTaskScope } from '../../src/utils/taskBoardContract.js'
-import { TASKLESS_LIST_LIMIT } from '../../src/utils/tasklessLeadAccess.js'
+import { effectiveAssigneeFilter, normalizeSearchTerm, resolveTaskScope } from '../../src/utils/taskBoardContract.js'
+import { TASKLESS_MAX_OFFSET, TASKLESS_PAGE_SIZE } from '../../src/utils/tasklessLeadAccess.js'
 import { DEFAULT_TASKLESS_PERIOD, isCivilDate, isTasklessPeriodType, resolveTasklessPeriodWindow } from '../../src/utils/tasklessPeriod.js'
 
 function queryText(value: unknown): string {
   if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
   return typeof value === 'string' ? value : ''
+}
+
+function queryOffset(value: unknown): number | null {
+  const text = queryText(value)
+  if (!text) return 0
+  if (!/^\d+$/.test(text)) return null
+  const offset = Number(text)
+  if (offset > TASKLESS_MAX_OFFSET) return null
+  return offset
 }
 
 function isTimezone(value: string): boolean {
@@ -27,6 +36,11 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ success: false, error: 'Método não permitido. Use GET.' })
   }
 
+  const offset = queryOffset(req.query?.offset)
+  if (offset == null) {
+    return res.status(400).json({ success: false, error: 'Página inválida' })
+  }
+
   const authResult = await validateCaller(req, queryText(req.query?.company_id))
   if (!authResult.ok) {
     return res.status(authResult.status).json({ success: false, error: authResult.error })
@@ -34,7 +48,16 @@ export default async function handler(req: any, res: any) {
 
   const { supabase, companyId, userId, role } = authResult.ctx
   const scope = resolveTaskScope(role)
-  const responsibleUserId = scope === 'own' ? userId : null
+  const term = normalizeSearchTerm(queryText(req.query?.q))
+  if (term && typeof term === 'object') {
+    return res.status(422).json({ success: false, error: 'A busca ficou longa demais. Refine a busca.' })
+  }
+  const assignee = effectiveAssigneeFilter(scope, userId, queryText(req.query?.user_id))
+  if ('error' in assignee) {
+    return res.status(400).json({ success: false, error: assignee.error })
+  }
+  const responsibleUserId = assignee.userId
+  const leadQuery = typeof term === 'string' ? term : null
 
   const [{ data: company, error: companyError }, { data: preference, error: preferenceError }] = await Promise.all([
     supabase.from('companies').select('timezone').eq('id', companyId).maybeSingle(),
@@ -79,7 +102,9 @@ export default async function handler(req: any, res: any) {
     p_responsible_user_id: responsibleUserId,
     p_from: window.from.toISOString(),
     p_to: window.to.toISOString(),
-    p_limit: TASKLESS_LIST_LIMIT,
+    p_limit: TASKLESS_PAGE_SIZE,
+    p_offset: offset,
+    p_query: leadQuery,
   })
   if (error) {
     console.error('[taskless-leads] list:', error.message)
@@ -99,7 +124,8 @@ export default async function handler(req: any, res: any) {
     custom_start: customStart,
     custom_end: customEnd,
     total,
-    truncated: total > items.length,
+    offset,
+    truncated: offset + items.length < total,
     items,
   })
 }

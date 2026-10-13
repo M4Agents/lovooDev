@@ -159,6 +159,7 @@ export function useTaskBoard({ companyId, userId, active }: Options) {
 
   return {
     controls,
+    appliedQuery,
     patch,
     data,
     loading,

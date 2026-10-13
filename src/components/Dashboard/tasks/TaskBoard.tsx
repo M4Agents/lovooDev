@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityModal } from '../../Calendar/ActivityModal'
 import ChatModalSimple from '../../SalesFunnel/ChatModalSimple'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -26,13 +26,20 @@ export function TaskBoard({ users }: Props) {
   const companyId = company?.id ?? null
   const actions = useDashboardEntityActions({ companyId })
   const board = useTaskBoard({ companyId, userId: user?.id ?? null, active: true })
-  const taskless = useTasklessLeads(companyId, true)
+  const taskless = useTasklessLeads(companyId, true, {
+    query: board.appliedQuery,
+    userId: board.controls.userId,
+  })
   const [configOpen, setConfigOpen] = useState(false)
   const [types, setTypes] = useState<CustomActivityType[]>([])
   const [reading, setReading] = useState<TaskBoardActivity | null>(null)
   const [editing, setEditing] = useState<LeadActivity | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pinnedPositionId, setPinnedPositionId] = useState<string | null>(null)
+  const [openedLeadIds, setOpenedLeadIds] = useState<number[]>([])
+  const [returnTick, setReturnTick] = useState(0)
+  const chatWasOpen = useRef(false)
 
   useEffect(() => {
     if (!companyId) return
@@ -52,7 +59,16 @@ export function TaskBoard({ users }: Props) {
     setReading(null)
     setEditing(null)
     setConfirming(false)
+    setPinnedPositionId(null)
+    setOpenedLeadIds([])
   }, [companyId])
+
+  useEffect(() => {
+    if (chatWasOpen.current && !actions.chatOpen) {
+      setReturnTick(tick => tick + 1)
+    }
+    chatWasOpen.current = actions.chatOpen
+  }, [actions.chatOpen])
 
   const rangePending = board.controls.date === 'range' && (!board.controls.from || !board.controls.to)
   const showResponsible = board.data?.scope === 'company'
@@ -140,8 +156,17 @@ export function TaskBoard({ users }: Props) {
           canConfigure={Boolean(companyId)}
           users={users}
           onConfigure={() => setConfigOpen(true)}
-          onOpen={leadId => actions.openChat(leadId)}
+          pinnedPositionId={pinnedPositionId}
+          openedLeadIds={openedLeadIds}
+          returnTick={returnTick}
+          onOpen={(leadId, positionId) => {
+            setPinnedPositionId(positionId)
+            setOpenedLeadIds(ids => ids.includes(leadId) ? ids : [...ids, leadId])
+            actions.openChat(leadId)
+          }}
           onRetry={() => void taskless.reload()}
+          onPrev={taskless.showPrev}
+          onNext={taskless.showNext}
         />
       </div>
 
@@ -180,7 +205,11 @@ export function TaskBoard({ users }: Props) {
         <TasklessConfigPanel
           companyId={companyId}
           onClose={() => setConfigOpen(false)}
-          onSaved={() => { void taskless.reload() }}
+          onSaved={() => {
+            setPinnedPositionId(null)
+            setOpenedLeadIds([])
+            taskless.reset()
+          }}
         />
       )}
 
