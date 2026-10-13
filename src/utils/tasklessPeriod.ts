@@ -5,7 +5,7 @@ import {
   companyWallToUtc,
   daysInCivilMonth,
   startOfCompanyDayUtc,
-} from './companyTime'
+} from './companyTime.js'
 
 export const TASKLESS_PERIOD_TYPES = [
   'today',
