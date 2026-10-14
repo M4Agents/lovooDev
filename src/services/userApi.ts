@@ -569,18 +569,12 @@ export const updateCompanyUser = async (request: UpdateUserRequest): Promise<Com
     if (hasStructuralChange) {
       let newPermissions: Record<string, unknown> | undefined;
 
-      if (request.role !== undefined) {
-        // Role alterado: reset permissions para defaults do novo role
-        newPermissions = getDefaultPermissions(request.role);
-      }
-
       if (request.permissions !== undefined) {
-        // Patch de permissions: mesclar com o estado atual
-        const currentUser = await getUserById(request.id);
-        newPermissions = {
-          ...(currentUser?.permissions ?? {}),
-          ...request.permissions,
-        };
+        // Conjunto completo do modal. Substitui o JSON gravado para o preset
+        // escolhido valer por inteiro, sem manter chaves do perfil anterior.
+        newPermissions = { ...request.permissions };
+      } else if (request.role !== undefined) {
+        newPermissions = getDefaultPermissions(request.role);
       }
 
       const { data: rpcResult, error: rpcError } = await supabase.rpc(

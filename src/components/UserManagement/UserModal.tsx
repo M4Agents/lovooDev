@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Save, Shield, UserCheck, User, Lock, AlertCircle, CheckCircle, Mail, Info, RefreshCw, Eye, EyeOff, Camera, Upload, GitBranch, Check } from 'lucide-react';
 import { CompanyUser, UserRole, CreateUserRequest, UpdateUserRequest, UserTemplate, UserPermissions, UserProfile } from '../../types/user';
 import { createCompanyUser, updateCompanyUser, validateRoleForCompany, getDefaultPermissions, getAssignableRoles } from '../../services/userApi';
-import { applyTemplateToPermissions, getDefaultTemplateForRole } from '../../services/userTemplates';
+import { applyTemplateToPermissions, findMatchingSystemTemplate, getDefaultTemplateForRole } from '../../services/userTemplates';
 import { getProfilesForCompanyType, getProfileRole } from '../../services/userProfiles';
 import { TemplateSelector } from './TemplateSelector';
 import { useAuth } from '../../contexts/AuthContext';
@@ -186,8 +186,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           profilePicture: null // 🔧 NOVO: Reset foto no modo edição
         });
         
-        // NOVO: Resetar estados avançados para edição
-        setSelectedTemplate(null);
+        // Restaura o preset gravado (SDR, Closer, etc.). Sem match, fica sem seleção
+        // para não sugerir o padrão do role e sobrescrever o que está no banco.
+        setSelectedTemplate(findMatchingSystemTemplate(user.role, user.permissions));
         setUseAdvancedPermissions(false);
         setCustomPermissions(user.permissions || {});
         
@@ -299,15 +300,19 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedProfile(correctProfile);
       }
 
-      // Auto-selecionar template padrão ao trocar role (criação e edição).
-      // Respeita seleção manual: só substitui se o template atual não pertence ao novo role.
+      // Só troca o preset quando o atual não pertence ao role do formulário.
+      // Na edição do mesmo role, reabre o preset gravado — o padrão do vendedor é SDR
+      // e não pode mascarar um Closer já salvo. Sem match, deixa sem seleção.
       const templateMatchesRole = selectedTemplate && selectedTemplate.baseRole === formData.role;
       if (!templateMatchesRole) {
-        const defaultTemplate = getDefaultTemplateForRole(formData.role);
-        setSelectedTemplate(defaultTemplate || null);
+        const sameRoleAsSavedUser = !!user && user.role === formData.role;
+        const nextTemplate = sameRoleAsSavedUser
+          ? findMatchingSystemTemplate(user.role, user.permissions)
+          : getDefaultTemplateForRole(formData.role);
+        setSelectedTemplate(nextTemplate || null);
       }
     }
-  }, [formData.role, availableProfiles, isOpen, company?.id]);
+  }, [formData.role, availableProfiles, isOpen, company?.id, user]);
 
   // NOVO: Pré-seleção de perfil quando preSelectedProfileId é fornecido
   useEffect(() => {
@@ -465,7 +470,14 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
       if (selectedTemplate && selectedTemplate.baseRole === formData.role) {
         finalPermissions = applyTemplateToPermissions(selectedTemplate, getDefaultPermissions(formData.role));
       }
-      // Prioridade 2: Perfil canônico do role (fallback para edição sem template)
+      // Prioridade 2: edição sem preset reconhecido — mantém o JSON gravado
+      else if (isEditing && user && formData.role === user.role) {
+        finalPermissions = {
+          ...getDefaultPermissions(formData.role),
+          ...(user.permissions || {}),
+        };
+      }
+      // Prioridade 3: Perfil canônico do role
       else if (selectedProfile) {
         finalPermissions = selectedProfile.permissions;
       }

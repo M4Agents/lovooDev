@@ -301,6 +301,51 @@ export const applyTemplateToPermissions = (
   return { ...mergedBase, ...template.customPermissions } as UserPermissions;
 };
 
+const permissionValuesMatch = (stored: unknown, expected: unknown): boolean => {
+  const isAbsentFalse = (value: unknown) =>
+    value === undefined || value === null || value === false;
+
+  if (isAbsentFalse(expected) && isAbsentFalse(stored)) return true;
+  if (Array.isArray(expected) || Array.isArray(stored)) {
+    return JSON.stringify(expected ?? []) === JSON.stringify(stored ?? []);
+  }
+  return stored === expected;
+};
+
+/**
+ * Identifica o preset de sistema que corresponde às permissões gravadas.
+ * Compara o conjunto esperado do preset; chaves extras no registro não impedem o match.
+ * Retorna null quando nenhum preset cobre o conjunto (perfil customizado).
+ */
+export const findMatchingSystemTemplate = (
+  role: UserRole,
+  permissions: Partial<UserPermissions> | null | undefined
+): UserTemplate | null => {
+  if (!permissions) return null;
+
+  const candidates = getSystemTemplates().filter(template => template.baseRole === role);
+  if (role === 'partner') {
+    const partnerDefault = getDefaultTemplateForRole('partner');
+    if (partnerDefault && !candidates.some(template => template.id === partnerDefault.id)) {
+      candidates.push(partnerDefault);
+    }
+  }
+
+  const matches = candidates
+    .map(template => {
+      const expected = applyTemplateToPermissions(template);
+      const keys = Object.keys(expected) as (keyof UserPermissions)[];
+      const fits = keys.every(key => permissionValuesMatch(permissions[key], expected[key]));
+      return { template, fits, size: keys.length };
+    })
+    .filter(item => item.fits)
+    .sort((a, b) => b.size - a.size);
+
+  if (matches.length === 0) return null;
+  if (matches.length > 1 && matches[0].size === matches[1].size) return null;
+  return matches[0].template;
+};
+
 /**
  * Validar se template pode ser usado para um role específico.
  * Compatibilidade estrita: o baseRole do template deve ser exatamente o targetRole.
