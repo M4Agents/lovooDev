@@ -9,6 +9,7 @@ import type { CustomActivityType } from '../../types/calendar'
 import { applyActivityTypePreset, typeHasPreset } from '../../utils/applyActivityTypePreset'
 import { chooseFollowUpLead, normalizeFollowUpLead, type FollowUpLead } from '../../utils/followUpLead'
 import { companyWallFromInstant, companyWallToUtc, activityInstant } from '../../utils/companyTime'
+import { effectiveAssignee } from '../../utils/taskBoardContract'
 import ChatModalSimple from '../SalesFunnel/ChatModalSimple'
 
 interface ActivityModalProps {
@@ -196,6 +197,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
         fieldsTouchedRef.current = false
         const wall = companyWallFromInstant(activityInstant(activity), companyTimezone)
         originalScheduleRef.current = { date: wall.date, time: wall.time }
+        const assigneeId = effectiveAssignee(activity.assigned_to, activity.owner_user_id)
         setFormData({
           lead_id: activity.lead_id,
           title: activity.title,
@@ -204,19 +206,13 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
           scheduled_date: wall.date,
           scheduled_time: wall.time,
           duration_minutes: activity.duration_minutes,
-          assigned_to: activity.assigned_to,
+          assigned_to: assigneeId ?? undefined,
           reminder_minutes: activity.reminder_minutes,
           priority: activity.priority,
           visibility: activity.visibility
         })
-        if (activity.lead) {
-          setSelectedLead({
-            id: activity.lead.id,
-            name: activity.lead.name,
-            phone: activity.lead.phone,
-            email: activity.lead.email
-          })
-        }
+        const lead = normalizeFollowUpLead(activity.lead)
+        if (lead) setSelectedLead(lead)
       }
 
       return
@@ -259,13 +255,16 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({
       return
     }
 
-    if (activity?.assigned_to) {
-      const fromList = companyUsers.find(u => u.user_id === activity.assigned_to)
+    const assigneeId = activity
+      ? effectiveAssignee(activity.assigned_to, activity.owner_user_id)
+      : null
+    if (assigneeId) {
+      const fromList = companyUsers.find(u => u.user_id === assigneeId)
       if (fromList) {
         setSelectedResponsible(fromList)
         return
       }
-      if (user && activity.assigned_to === user.id) {
+      if (user && assigneeId === user.id) {
         setSelectedResponsible(responsibleFromSession(user))
       }
       return

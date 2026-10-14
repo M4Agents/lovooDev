@@ -249,6 +249,21 @@ export class CalendarApi {
     }
   }
 
+  static async listOpenLeadActivities(leadId: number, companyId: string): Promise<Array<Record<string, unknown>>> {
+    const token = await this.getAuthToken()
+    const response = await fetch(`/api/activities/lead/${leadId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-company-id': companyId,
+      },
+    })
+    const json = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(typeof json?.error === 'string' ? json.error : 'Falha ao listar atividades do lead')
+    }
+    return Array.isArray(json.activities) ? json.activities : []
+  }
+
   /**
    * Buscar atividade por ID
    */

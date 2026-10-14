@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { calendarApi } from '../../../services/calendarApi'
 
 interface Activity {
   id: string
@@ -8,6 +9,14 @@ interface Activity {
   activity_type: string
   scheduled_date: string
   scheduled_time: string
+  scheduled_datetime?: string | null
+  lead_id?: number | null
+  assigned_to?: string | null
+  owner_user_id?: string | null
+  duration_minutes?: number | null
+  reminder_minutes?: number | null
+  visibility?: string | null
+  lead?: { id: number; name: string; phone?: string | null; email?: string | null } | null
   priority: string
   status: string
   is_overdue: boolean
@@ -46,16 +55,8 @@ export const ActivityBadge: React.FC<ActivityBadgeProps> = ({
   const fetchActivities = async (showLoading: boolean) => {
     try {
       if (showLoading) setLoading(true)
-      const response = await fetch(`/api/activities/lead/${leadId}`, {
-        headers: {
-          'x-company-id': companyId
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setActivities(data.activities || [])
-      }
+      const activities = await calendarApi.listOpenLeadActivities(leadId, companyId) as unknown as Activity[]
+      setActivities(activities)
     } catch (error) {
       console.error('Error fetching activities:', error)
     } finally {

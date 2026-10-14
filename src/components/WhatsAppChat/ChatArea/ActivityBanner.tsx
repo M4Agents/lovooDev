@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../../../contexts/AuthContext'
+import { calendarApi } from '../../../services/calendarApi'
+import { activityInstant, companyWallFromInstant } from '../../../utils/companyTime'
 
 interface Activity {
   id: string
@@ -8,12 +11,29 @@ interface Activity {
   activity_type: string
   scheduled_date: string
   scheduled_time: string
+  scheduled_datetime?: string | null
+  lead_id?: number | null
+  assigned_to?: string | null
+  owner_user_id?: string | null
+  duration_minutes?: number | null
+  reminder_minutes?: number | null
+  visibility?: string | null
+  lead?: { id: number; name: string; phone?: string | null; email?: string | null } | null
   priority: string
   status: string
   is_overdue: boolean
   is_today: boolean
   is_urgent: boolean
   days_until: number
+}
+
+function bannerScheduleLabel(activity: Activity, timeZone: string): string {
+  if (!activity.scheduled_datetime && (!activity.scheduled_date || !activity.scheduled_time)) return ''
+  const instant = activityInstant(activity)
+  if (Number.isNaN(instant.getTime())) return ''
+  const wall = companyWallFromInstant(instant, timeZone)
+  const [year, month, day] = wall.date.split('-')
+  return `${day}/${month}/${year} às ${wall.time}`
 }
 
 interface ActivityBannerProps {
@@ -30,6 +50,7 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
   onViewDetails
 }) => {
   const { t } = useTranslation('chat')
+  const { companyTimezone } = useAuth()
   const [urgentActivity, setUrgentActivity] = useState<Activity | null>(null)
   const [loading, setLoading] = useState(true)
   const [dismissed, setDismissed] = useState(false)
@@ -46,20 +67,9 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
   const fetchUrgentActivity = async (showLoading: boolean) => {
     try {
       if (showLoading) setLoading(true)
-      const response = await fetch(`/api/activities/lead/${leadId}`, {
-        headers: {
-          'x-company-id': companyId
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const activities = data.activities || []
-        
-        // Pegar apenas atividades atrasadas ou para hoje
-        const urgent = activities.find((a: Activity) => a.is_overdue || a.is_today)
-        setUrgentActivity(urgent || null)
-      }
+      const activities = await calendarApi.listOpenLeadActivities(leadId, companyId) as unknown as Activity[]
+      const urgent = activities.find(activity => activity.is_overdue || activity.is_today)
+      setUrgentActivity(urgent || null)
     } catch (error) {
       console.error('Error fetching urgent activity:', error)
     } finally {
@@ -120,7 +130,7 @@ export const ActivityBanner: React.FC<ActivityBannerProps> = ({
               text-xs px-2 py-0.5 rounded-full
               ${isOverdue ? 'bg-red-200 text-red-800' : 'bg-yellow-200 text-yellow-800'}
             `}>
-              {new Date(urgentActivity.scheduled_date).toLocaleDateString('pt-BR')} às {urgentActivity.scheduled_time}
+              {bannerScheduleLabel(urgentActivity, companyTimezone)}
             </span>
           </div>
         </div>
