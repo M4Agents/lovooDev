@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase'
 import { useChatRealtime } from './useChatRealtime'
 import { ChatEventBus, useChatEvent } from '../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../config/chatFeatures'
-import { isConversationVisibleForUser } from '../../utils/chatVisibility'
+import { isConversationVisibleForUser, normalizeRealtimeAssignedTo } from '../../utils/chatVisibility'
 import type { ChatVisibilityContext } from '../../utils/chatVisibility'
 import type {
   ChatConversation,
@@ -259,11 +259,15 @@ export const useChatData = (
   // Listener para novas conversas criadas
   useChatEvent('chat:conversation:created', (conversation: ChatConversation) => {
     if (conversation.company_id === companyId) {
-      if (visibilityContext && !isConversationVisibleForUser(conversation, visibilityContext)) return
+      const normalized = {
+        ...conversation,
+        assigned_to: normalizeRealtimeAssignedTo(conversation.assigned_to),
+      }
+      if (visibilityContext && !isConversationVisibleForUser(normalized, visibilityContext)) return
       setConversations(prev => {
-        if (prev.some(conv => conv.id === conversation.id)) return prev
+        if (prev.some(conv => conv.id === normalized.id)) return prev
         // Slice via ref para evitar stale closure após load more
-        return [conversation, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
+        return [normalized, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
       })
     }
   }, [companyId, visibilityContext])
@@ -272,34 +276,34 @@ export const useChatData = (
   useChatEvent('chat:conversation:updated', (payload: any) => {
     if (payload.data && payload.data.company_id === companyId) {
       const raw = payload.data
+      const { assigned_to: rawAssigned, ...rest } = raw
       // Converter strings de data para Date — o payload bruto do realtime entrega
       // timestamps como strings ISO, mas o restante do sistema espera Date objects.
-      // Fazer merge parcial (spread) preserva campos joined (instance_status, etc.)
-      // que não existem no payload direto da tabela.
-      const patch: Partial<ChatConversation> = {
-        ...raw,
-        last_message_at:  raw.last_message_at  ? new Date(raw.last_message_at)  : undefined,
-        updated_at:       raw.updated_at        ? new Date(raw.updated_at)        : undefined,
-        created_at:       raw.created_at        ? new Date(raw.created_at)        : undefined,
-        last_read_at:     raw.last_read_at      ? new Date(raw.last_read_at)      : undefined,
-      }
-      if (visibilityContext) {
-        const visible = isConversationVisibleForUser(patch as ChatConversation, visibilityContext)
-        setConversations(prev => {
-          const exists = prev.some(conv => conv.id === raw.id)
-          if (!visible) {
-            return prev.filter(conv => conv.id !== raw.id)
-          }
-          if (!exists) {
-            return [patch as ChatConversation, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
-          }
-          return prev.map(conv => conv.id === raw.id ? { ...conv, ...patch } : conv)
-        })
-      } else {
-        setConversations(prev =>
-          prev.map(conv => conv.id === raw.id ? { ...conv, ...patch } : conv)
-        )
-      }
+      // assigned_to da tabela é UUID; a lista usa { id, email }. Normalizar antes
+      // do filtro de vendedor, senão a conversa atribuída some ao chegar mensagem.
+      const patch: Partial<ChatConversation> = { ...rest }
+      if (rest.last_message_at) patch.last_message_at = new Date(rest.last_message_at)
+      if (rest.updated_at) patch.updated_at = new Date(rest.updated_at)
+      if (rest.created_at) patch.created_at = new Date(rest.created_at)
+      if (rest.last_read_at) patch.last_read_at = new Date(rest.last_read_at)
+
+      setConversations(prev => {
+        const existing = prev.find(conv => conv.id === raw.id)
+        const merged = {
+          ...(existing ?? {}),
+          ...patch,
+          id: raw.id,
+          assigned_to: normalizeRealtimeAssignedTo(rawAssigned, existing?.assigned_to),
+        } as ChatConversation
+
+        if (visibilityContext && !isConversationVisibleForUser(merged, visibilityContext)) {
+          return prev.filter(conv => conv.id !== raw.id)
+        }
+        if (!existing) {
+          return [merged, ...prev].slice(0, loadedPagesRef.current * CONVERSATIONS_PAGE_SIZE)
+        }
+        return prev.map(conv => conv.id === raw.id ? merged : conv)
+      })
     }
   }, [companyId, visibilityContext])
 
@@ -487,7 +491,10 @@ export const useChatData = (
         (payload) => {
           // Atualizar lista de conversas
           if (payload.eventType === 'INSERT') {
-            const newConversation = payload.new as ChatConversation
+            const newConversation = {
+              ...(payload.new as ChatConversation),
+              assigned_to: normalizeRealtimeAssignedTo(payload.new.assigned_to),
+            }
             setConversations(prev => {
               // Verificar se já existe para evitar duplicatas
               const exists = prev.some(conv => conv.id === newConversation.id)
@@ -507,9 +514,7 @@ export const useChatData = (
                       last_message_at: payload.new.last_message_at ? new Date(payload.new.last_message_at) : conv.last_message_at,
                       last_message_content: payload.new.last_message_content || conv.last_message_content,
                       last_message_direction: payload.new.last_message_direction || conv.last_message_direction,
-                      assigned_to: payload.new.assigned_to !== undefined
-                        ? payload.new.assigned_to
-                        : conv.assigned_to,
+                      assigned_to: normalizeRealtimeAssignedTo(payload.new.assigned_to, conv.assigned_to),
                       updated_at: new Date(payload.new.updated_at)
                     }
                   : conv

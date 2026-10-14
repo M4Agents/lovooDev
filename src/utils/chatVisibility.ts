@@ -13,6 +13,44 @@ export interface ChatVisibilityContext {
   userId: string
 }
 
+type AssignedToValue = ChatConversation['assigned_to'] | string | null | undefined
+
+/**
+ * O RPC entrega assigned_to como { id, email }.
+ * O realtime da tabela entrega o UUID cru. Os dois formatos identificam o mesmo responsável.
+ */
+export function resolveAssignedUserId(assigned: AssignedToValue): string | null {
+  if (!assigned) return null
+  if (typeof assigned === 'string') {
+    const id = assigned.trim()
+    return id.length > 0 ? id : null
+  }
+  return assigned.id ?? null
+}
+
+/**
+ * Converte o assigned_to do realtime para o formato da lista.
+ * Mantém o e-mail já carregado quando o responsável não mudou.
+ */
+export function normalizeRealtimeAssignedTo(
+  incoming: unknown,
+  previous?: ChatConversation['assigned_to']
+): ChatConversation['assigned_to'] | undefined {
+  if (incoming === undefined) return previous
+  const id = resolveAssignedUserId(incoming as AssignedToValue)
+  if (!id) return undefined
+  if (previous?.id === id) return previous
+  if (
+    typeof incoming === 'object' &&
+    incoming !== null &&
+    'email' in incoming &&
+    typeof (incoming as { email?: unknown }).email === 'string'
+  ) {
+    return { id, email: (incoming as { email: string }).email }
+  }
+  return { id, email: '' }
+}
+
 /**
  * Determina se uma conversa deve ser visível para o usuário no cliente.
  *
@@ -30,13 +68,13 @@ export interface ChatVisibilityContext {
  * A segurança real é garantida pelo banco (RLS + guards nas RPCs).
  */
 export function isConversationVisibleForUser(
-  conversation: Pick<ChatConversation, 'assigned_to'>,
+  conversation: { assigned_to?: AssignedToValue },
   { flag, role, userId }: ChatVisibilityContext
 ): boolean {
   if (!flag) return true
   if (role !== 'seller') return true
 
-  const assignedId = conversation.assigned_to?.id ?? null
+  const assignedId = resolveAssignedUserId(conversation.assigned_to)
   if (assignedId === userId) return true
 
   // assigned_to IS NULL ou assigned_to de outro seller → invisível para seller restrito
