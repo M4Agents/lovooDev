@@ -78,6 +78,8 @@ export const NewDashboard: React.FC = () => {
 
   // Aba ativa do dashboard
   const [activeTab, setActiveTab] = useState<DashboardTab>('operation')
+  const [tasksMounted, setTasksMounted] = useState(false)
+  if (activeTab === 'tasks' && !tasksMounted) setTasksMounted(true)
 
   // Filtros globais — fonte única de verdade
   const { period, funnelId, userId, setPeriod, setFunnelId, setUserId } = useDashboardFilters()
@@ -563,8 +565,10 @@ export const NewDashboard: React.FC = () => {
         />
       )}
 
-      {activeTab === 'tasks' && (
-        <TaskBoard users={dashboardUsers} />
+      {tasksMounted && (
+        <div className={activeTab === 'tasks' ? undefined : 'hidden'}>
+          <TaskBoard users={dashboardUsers} active={activeTab === 'tasks'} />
+        </div>
       )}
       {/* ══ fim aba Ativação Comercial ════════════════════════════════════ */}
 

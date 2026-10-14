@@ -212,17 +212,10 @@ export default async function handler(req: any, res: any) {
     return count ?? 0
   }
 
-  try {
-    const [open, overdue, dueToday, upcoming] = await Promise.all([
-      countFor('open'),
-      countFor('overdue'),
-      countFor('due_today'),
-      countFor('upcoming'),
-    ])
+  const listBounds = resolveCardBounds(card, asOf, timezone, windowMinutes)
+  if ('error' in listBounds) return res.status(400).json({ success: false, error: listBounds.error })
 
-    const listBounds = resolveCardBounds(card, asOf, timezone, windowMinutes)
-    if ('error' in listBounds) return res.status(400).json({ success: false, error: listBounds.error })
-
+  const loadList = async () => {
     let listQuery = applyCommon(
       supabase.from('lead_activities').select(ACTIVITY_SELECT, { count: 'exact' }),
       companyScopeId,
@@ -240,15 +233,22 @@ export default async function handler(req: any, res: any) {
     if (signal.aborted || handlerTimedOut(startedAt, Date.now())) throw new QueryTimeoutError()
     refuseOversized(listQuery)
     const { data, count, error } = await listQuery
-
     if (signal.aborted) throw new QueryTimeoutError()
-    if (error) {
-      console.error('[activities/board] lista:', error.message)
-      return res.status(500).json({ success: false, error: 'Erro ao listar tarefas' })
-    }
+    if (error) throw new Error(error.message)
+    return { rows: data ?? [], total: count ?? 0 }
+  }
 
-    const listTotal = count ?? 0
-    const activities = (data ?? []).map((row: Record<string, unknown>) => ({
+  try {
+    const [open, overdue, dueToday, upcoming, list] = await Promise.all([
+      countFor('open'),
+      countFor('overdue'),
+      countFor('due_today'),
+      countFor('upcoming'),
+      loadList(),
+    ])
+
+    const listTotal = list.total
+    const activities = list.rows.map((row: Record<string, unknown>) => ({
       ...row,
       lead: normalizeLead(row.lead),
     }))

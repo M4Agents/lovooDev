@@ -86,6 +86,7 @@ export function TasklessLeadsColumn({
               {data.configured ? ` · ${data.total} ${data.total === 1 ? 'posição' : 'posições'}` : ''}
             </p>
           )}
+          {loading && data && <p className="text-xs text-gray-400">Atualizando...</p>}
         </div>
         {canConfigure && (
           <button type="button" onClick={onConfigure} className="text-xs font-medium text-indigo-700 hover:underline">

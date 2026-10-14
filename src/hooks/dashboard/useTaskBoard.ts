@@ -89,10 +89,7 @@ export function useTaskBoard({ companyId, userId, active }: Options) {
     abortRef.current = controller
     const requestId = ++generation.current
     inFlight.current = true
-    if (reason === 'filters') {
-      setLoading(true)
-      setData(null)
-    }
+    if (reason === 'filters') setLoading(true)
     setError(null)
 
     try {
@@ -119,7 +116,6 @@ export function useTaskBoard({ companyId, userId, active }: Options) {
         ? caught.message
         : 'Não foi possível carregar as tarefas'
       setError(message)
-      if (reason === 'filters') setData(null)
     } finally {
       if (abortRef.current === controller) inFlight.current = false
       if (!isStaleResponse(requestId, generation.current)) setLoading(false)

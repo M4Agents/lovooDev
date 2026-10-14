@@ -24,7 +24,6 @@ export function useTasklessLeads(companyId: string | null, active: boolean, filt
     setSeenFilter(filterKey)
     offsetRef.current = 0
     setOffset(0)
-    setData(null)
     setError(null)
   } else {
     offsetRef.current = offset

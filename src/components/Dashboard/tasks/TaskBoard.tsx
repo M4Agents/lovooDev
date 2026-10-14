@@ -19,14 +19,15 @@ import { useTasklessLeads } from '../../../hooks/dashboard/useTasklessLeads'
 
 interface Props {
   users: DashboardUser[]
+  active?: boolean
 }
 
-export function TaskBoard({ users }: Props) {
+export function TaskBoard({ users, active = true }: Props) {
   const { company, user } = useAuth()
   const companyId = company?.id ?? null
   const actions = useDashboardEntityActions({ companyId })
-  const board = useTaskBoard({ companyId, userId: user?.id ?? null, active: true })
-  const taskless = useTasklessLeads(companyId, true, {
+  const board = useTaskBoard({ companyId, userId: user?.id ?? null, active })
+  const taskless = useTasklessLeads(companyId, active, {
     query: board.appliedQuery,
     userId: board.controls.userId,
   })
