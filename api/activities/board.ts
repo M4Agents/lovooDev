@@ -158,7 +158,7 @@ export default async function handler(req: any, res: any) {
     .eq('id', authResult.ctx.companyId)
     .abortSignal(signal)
   refuseOversized(companyQuery)
-  const timezonePromise = companyQuery.maybeSingle()
+  const timezonePromise = Promise.resolve(companyQuery.maybeSingle())
   timezonePromise.catch(() => undefined)
 
   let searchOr: string | null = null
