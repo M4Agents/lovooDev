@@ -148,23 +148,18 @@ export default async function handler(req: any, res: any) {
   }
 
   const { supabase } = authResult.ctx
+  const asOf = new Date()
+  const from = queryText(req.query?.from)
+  const to = queryText(req.query?.to)
+  const dateSkipsTimezone = dateMode === 'all' || dateMode === 'undated'
   const companyQuery = supabase
     .from('companies')
     .select('timezone')
     .eq('id', authResult.ctx.companyId)
     .abortSignal(signal)
   refuseOversized(companyQuery)
-  const { data: company, error: companyError } = await companyQuery.maybeSingle()
-  if (companyError) {
-    return res.status(500).json({ success: false, error: 'Erro ao ler o fuso da empresa' })
-  }
-  const timezone = typeof company?.timezone === 'string' && isTimezone(company.timezone)
-    ? company.timezone
-    : 'America/Sao_Paulo'
-
-  const asOf = new Date()
-  const dateBounds = resolveDateBounds(dateMode, asOf, timezone, queryText(req.query?.from), queryText(req.query?.to))
-  if ('error' in dateBounds) return res.status(400).json({ success: false, error: dateBounds.error })
+  const timezonePromise = companyQuery.maybeSingle()
+  timezonePromise.catch(() => undefined)
 
   let searchOr: string | null = null
   if (typeof term === 'string') {
@@ -192,8 +187,8 @@ export default async function handler(req: any, res: any) {
   const assigneeOr = assignee.userId ? buildAssigneeOr(assignee.userId) : null
   const companyScopeId = authResult.ctx.companyId
 
-  const countFor = async (countCard: TaskCard) => {
-    const bounds = resolveCardBounds(countCard, asOf, timezone, windowMinutes)
+  const countFor = async (countCard: TaskCard, dateBounds: DateBounds, timeZone: string) => {
+    const bounds = resolveCardBounds(countCard, asOf, timeZone, windowMinutes)
     if ('error' in bounds) throw new Error(bounds.error)
     const query = applyBounds(applyCommon(
       supabase.from('lead_activities').select('id', { count: 'exact', head: true }),
@@ -212,12 +207,9 @@ export default async function handler(req: any, res: any) {
     return count ?? 0
   }
 
-  const listBounds = resolveCardBounds(card, asOf, timezone, windowMinutes)
-  if ('error' in listBounds) return res.status(400).json({ success: false, error: listBounds.error })
-
-  const loadList = async () => {
+  const loadList = async (dateBounds: DateBounds, listBounds: CardBounds) => {
     let listQuery = applyCommon(
-      supabase.from('lead_activities').select(ACTIVITY_SELECT, { count: 'exact' }),
+      supabase.from('lead_activities').select(ACTIVITY_SELECT),
       companyScopeId,
       assigneeOr,
       searchOr,
@@ -232,23 +224,66 @@ export default async function handler(req: any, res: any) {
       .abortSignal(signal)
     if (signal.aborted || handlerTimedOut(startedAt, Date.now())) throw new QueryTimeoutError()
     refuseOversized(listQuery)
-    const { data, count, error } = await listQuery
+    const { data, error } = await listQuery
     if (signal.aborted) throw new QueryTimeoutError()
     if (error) throw new Error(error.message)
-    return { rows: data ?? [], total: count ?? 0 }
+    return (data ?? []) as Record<string, unknown>[]
+  }
+
+  const settleEarly = (pending: Promise<unknown>[]) => {
+    for (const job of pending) job.catch(() => undefined)
+  }
+
+  let listPromise: Promise<Record<string, unknown>[]> | null = null
+  let openPromise: Promise<number> | null = null
+  let overduePromise: Promise<number> | null = null
+  let upcomingPromise: Promise<number> | null = null
+
+  if (dateSkipsTimezone) {
+    const earlyBounds = resolveDateBounds(dateMode, asOf, 'UTC', from, to)
+    if (!('error' in earlyBounds)) {
+      openPromise = countFor('open', earlyBounds, 'UTC')
+      overduePromise = countFor('overdue', earlyBounds, 'UTC')
+      upcomingPromise = countFor('upcoming', earlyBounds, 'UTC')
+      if (card !== 'due_today') {
+        const earlyListBounds = resolveCardBounds(card, asOf, 'UTC', windowMinutes)
+        if (!('error' in earlyListBounds)) listPromise = loadList(earlyBounds, earlyListBounds)
+      }
+    }
+  }
+
+  const timezoneResult = await timezonePromise
+  if (timezoneResult.error) {
+    settleEarly([openPromise, overduePromise, upcomingPromise, listPromise].filter((job): job is Promise<unknown> => job != null))
+    return res.status(500).json({ success: false, error: 'Erro ao ler o fuso da empresa' })
+  }
+  const timezone = typeof timezoneResult.data?.timezone === 'string' && isTimezone(timezoneResult.data.timezone)
+    ? timezoneResult.data.timezone
+    : 'America/Sao_Paulo'
+
+  const dateBounds = resolveDateBounds(dateMode, asOf, timezone, from, to)
+  if ('error' in dateBounds) {
+    settleEarly([openPromise, overduePromise, upcomingPromise, listPromise].filter((job): job is Promise<unknown> => job != null))
+    return res.status(400).json({ success: false, error: dateBounds.error })
+  }
+
+  const listBounds = resolveCardBounds(card, asOf, timezone, windowMinutes)
+  if ('error' in listBounds) {
+    settleEarly([openPromise, overduePromise, upcomingPromise, listPromise].filter((job): job is Promise<unknown> => job != null))
+    return res.status(400).json({ success: false, error: listBounds.error })
   }
 
   try {
-    const [open, overdue, dueToday, upcoming, list] = await Promise.all([
-      countFor('open'),
-      countFor('overdue'),
-      countFor('due_today'),
-      countFor('upcoming'),
-      loadList(),
+    const [open, overdue, dueToday, upcoming, rows] = await Promise.all([
+      openPromise ?? countFor('open', dateBounds, timezone),
+      overduePromise ?? countFor('overdue', dateBounds, timezone),
+      countFor('due_today', dateBounds, timezone),
+      upcomingPromise ?? countFor('upcoming', dateBounds, timezone),
+      listPromise ?? loadList(dateBounds, listBounds),
     ])
 
-    const listTotal = list.total
-    const activities = list.rows.map((row: Record<string, unknown>) => ({
+    const listTotal = card === 'overdue' ? overdue : card === 'due_today' ? dueToday : card === 'upcoming' ? upcoming : open
+    const activities = rows.map(row => ({
       ...row,
       lead: normalizeLead(row.lead),
     }))
