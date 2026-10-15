@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { normalizeHeatmapCoordinates } from '../utils/normalizeHeatmapCoordinates';
-import { canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
+import { brMobilePhoneLookupValues, canonicalizeBrMobilePhone } from '../lib/phone/canonicalizeBrMobile';
 import { scheduleLeadWebhookDispatch } from './leadWebhookDispatch';
 // triggerManager removido — automação via backend novo (/api/automation/trigger-event)
 
@@ -1110,7 +1110,12 @@ export const api = {
         countQuery = countQuery.eq('origin', filters.origin);
       }
       if (filters?.search) {
-        const searchExpr = `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%`;
+        const phoneVariants = brMobilePhoneLookupValues(filters.search)
+          .filter((value) => /^\d{10,}$/.test(value));
+        const phoneMatch = phoneVariants.length > 0
+          ? `,phone_normalized.in.(${phoneVariants.join(',')})`
+          : '';
+        const searchExpr = `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%${phoneMatch}`;
         query = query.or(searchExpr);
         countQuery = countQuery.or(searchExpr);
       }
@@ -1119,8 +1124,16 @@ export const api = {
         countQuery = countQuery.ilike('name', `%${filters.name}%`);
       }
       if (filters?.phone) {
-        query = query.ilike('phone', `%${filters.phone}%`);
-        countQuery = countQuery.ilike('phone', `%${filters.phone}%`);
+        const phoneVariants = brMobilePhoneLookupValues(filters.phone)
+          .filter((value) => /^\d{10,}$/.test(value));
+        if (phoneVariants.length > 0) {
+          const phoneExpr = `phone.ilike.%${filters.phone}%,phone_normalized.in.(${phoneVariants.join(',')})`;
+          query = query.or(phoneExpr);
+          countQuery = countQuery.or(phoneExpr);
+        } else {
+          query = query.ilike('phone', `%${filters.phone}%`);
+          countQuery = countQuery.ilike('phone', `%${filters.phone}%`);
+        }
       }
       if (filters?.email) {
         query = query.ilike('email', `%${filters.email}%`);

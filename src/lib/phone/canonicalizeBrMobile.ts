@@ -27,8 +27,10 @@ export function canonicalizeBrMobilePhone(
 }
 
 /**
- * Variantes usadas no lookup de conversa/lead:
- * dígitos crus, forma canônica (com 9º) e JID WhatsApp (sem 9º).
+ * Variantes usadas no lookup de conversa/lead.
+ * Espelha public.br_mobile_phone_lookup_values:
+ * dígitos crus, forma canônica (com 9º), JID WhatsApp (sem 9º)
+ * e o nacional de 11 dígitos (DDD + 9 + 8, sem o 55).
  */
 export function brMobilePhoneLookupValues(
   phone: string | null | undefined
@@ -49,6 +51,7 @@ export function brMobilePhoneLookupValues(
     canonical.charAt(4) === '9'
   ) {
     values.add(canonical.slice(0, 4) + canonical.slice(5));
+    values.add(canonical.slice(2));
   }
 
   return [...values];
