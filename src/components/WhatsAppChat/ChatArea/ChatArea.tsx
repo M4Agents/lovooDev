@@ -380,6 +380,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           instance_deleted: inst ? inst.deleted_at !== null : false,
         }
       }
+
+      // O nome exibido vem da view, a mesma da lista. A coluna contact_name da
+      // tabela guarda o perfil do WhatsApp (pode ser ".") e não é reescrita.
+      let resolvedLeadId = conv?.lead_id || null
+      if (conv) {
+        const { data: linked } = await supabase
+          .from('chat_conversations_with_leads')
+          .select('contact_name, company_name, lead_id')
+          .eq('id', conversationId)
+          .eq('company_id', companyId)
+          .maybeSingle()
+
+        if (linked) {
+          const leadCompany = typeof linked.company_name === 'string' ? linked.company_name.trim() : ''
+          enriched = {
+            ...enriched,
+            contact_name: linked.contact_name || conv.contact_name,
+            ...(leadCompany ? { company_name: linked.company_name } : {}),
+          }
+          resolvedLeadId = linked.lead_id || conv.lead_id || null
+        }
+      }
+
       setConversation(enriched || null)
 
       // Carregar foto do contato a partir das informações detalhadas do contato
@@ -392,7 +415,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           setContactPhotoUrl(null)
         }
 
-        setLeadId(conv.lead_id || null)
+        setLeadId(resolvedLeadId)
       } else {
         setContactPhotoUrl(null)
         setLeadId(null)
