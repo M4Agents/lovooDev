@@ -6,6 +6,7 @@
 // e validateParameterValues.valid.
 //
 // Exports:
+//   isSafeHttpUrl(href) — predicado HTTP/HTTPS absoluto (WHATWG; nunca toString)
 //   buildTemplateButtonsSnapshot({ analysis, parameterValues })
 //   sanitizeTemplateButtonsSnapshot(raw)
 // =============================================================================
@@ -46,9 +47,10 @@ function firstPlaceholderInner(str) {
 
 /**
  * WHATWG URL só valida. Nunca persistir url.toString().
- * @private
+ * Fonte única da política HTTP/HTTPS usada pelo snapshot e pelo predicado
+ * static-ready do engine. Não autoriza envio por si só.
  */
-function isSafeHttpUrl(href) {
+export function isSafeHttpUrl(href) {
   if (typeof href !== 'string' || href.length === 0 || href.length > MAX_HREF) {
     return false;
   }
@@ -84,6 +86,38 @@ function buildQuickReplySnapshot(buttons) {
 
   if (out.length === 0) return null;
   return { v: 1, buttons: out };
+}
+
+/**
+ * Snapshot 4C.5A: href = URL aprovada original. Sem suffix, sem parameter_values.
+ * URL insegura → null (fail-closed). Não autoriza send.
+ * @private
+ */
+function buildStaticUrlSnapshot(analysis) {
+  if (analysis.headerMediaFormat != null) return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length !== 1) return null;
+
+  const button = buttons[0];
+  if (!isPlainObject(button)) return null;
+  if (button.type !== 'URL') return null;
+  if (button.index !== 0) return null;
+  if (button.url_kind !== 'static') return null;
+  if (!isValidText(button.text)) return null;
+  if (typeof button.url !== 'string' || button.url.trim().length === 0) return null;
+  if (countPlaceholders(button.url) !== 0) return null;
+  if (!isSafeHttpUrl(button.url)) return null;
+
+  return {
+    v: 1,
+    buttons: [{
+      type:  'URL',
+      index: 0,
+      text:  button.text,
+      href:  button.url,
+    }],
+  };
 }
 
 function buildDynamicUrlSnapshot(analysis, parameterValues) {
@@ -145,6 +179,9 @@ export function buildTemplateButtonsSnapshot(input = {}) {
   }
 
   if (buttons.length === 1 && buttons[0]?.type === 'URL') {
+    if (buttons[0].url_kind === 'static') {
+      return buildStaticUrlSnapshot(analysis);
+    }
     return buildDynamicUrlSnapshot(analysis, input.parameterValues);
   }
 

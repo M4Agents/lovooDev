@@ -3001,32 +3001,33 @@ describe('4C3B-SEND | mismatch url → zero Graph WRITE / persist', () => {
   });
 });
 
-describe('4C3B-SEND | static unsupported → zero Graph WRITE', () => {
-  it('supported=false → 422 template_unsupported; send 0', async () => {
-    setupHappyPath();
-    mockListMessageTemplates.mockResolvedValue(makeListResult([{
-      ...FAKE_RAW_TEMPLATE_URL,
-      components: [
-        { type: 'BODY', text: 'Veja' },
-        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
-      ],
-    }]));
-    mockAnalyzeTemplate.mockReturnValue({
-      supported: false, unsupported_reason: 'BUTTONS type URL not supported',
-      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Veja',
-      headerMediaFormat: null,
-      buttons: [{ index: 0, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' }],
-    });
+const FAKE_RAW_TEMPLATE_URL_STATIC = {
+  id: 'tpl-url-static',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Veja o site' },
+    {
+      type: 'BUTTONS',
+      buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }],
+    },
+  ],
+};
 
-    const res = makeRes();
-    await handler(makeReq(), res);
-    expect(res._status).toBe(422);
-    expect(res._body.error).toBe('template_unsupported');
-    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
-    expect(mockUploadMedia).not.toHaveBeenCalled();
-    expect(mockValidateParameterValues).not.toHaveBeenCalled();
-  });
-});
+const FAKE_ANALYSIS_URL_STATIC = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Veja o site',
+  headerMediaFormat: null,
+  buttons: [{
+    index: 0, type: 'URL', text: 'Site',
+    url: 'https://example.com/loja', url_kind: 'static',
+  }],
+};
+
+const FAKE_COMPONENTS_URL_STATIC = [];
 
 describe('4C3B-SEND | QR regression continua 1 Graph send', () => {
   it('QUICK_REPLY-only → sendTemplateMessage exatamente 1', async () => {
@@ -3119,5 +3120,165 @@ describe('4C4B-SEND | Graph fail → zero chat insert', () => {
     expect(res._status).toBe(502);
     expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
     expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+});
+
+// =============================================================================
+// MVP4C.5A — URL estática (engine mockado; Graph mockado; snapshot real)
+// =============================================================================
+
+describe('4C5A-SEND | URL estática válida aceita', () => {
+  it('Graph 1x sem component button; snapshot v1 com href aprovado; tracking igual', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_STATIC]));
+    setupEngineOk(FAKE_ANALYSIS_URL_STATIC);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL_STATIC);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {} },
+        components: [{ type: 'button', url: 'https://evil.example/forged' }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    // send-template omite a chave components quando o engine devolve [].
+    expect(tpl.components).toBeUndefined();
+    expect(tpl).not.toHaveProperty('components');
+    expect(JSON.stringify(tpl)).not.toContain('"type":"button"');
+    expect(JSON.stringify(tpl)).not.toContain('https://example.com/loja');
+    expect(JSON.stringify(tpl)).not.toContain('https://evil.example/forged');
+
+    const trackingInsert = mockSvc.from.mock.results[3].value;
+    const trackingArg = trackingInsert.insert.mock.calls[0][0];
+    expect(trackingArg.company_id).toBe(FAKE_COMPANY_ID);
+    expect(trackingArg.instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(trackingArg.meta_message_id).toBe(FAKE_WAMID);
+    expect(trackingArg.status).toBe('accepted');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL',
+        index: 0,
+        text: 'Site',
+        href: 'https://example.com/loja',
+      }],
+    });
+    expect(insertArg).not.toHaveProperty('parameter_values');
+    expect(JSON.stringify(insertArg)).not.toContain('suffix');
+  });
+});
+
+describe('4C5A-SEND | parameter_values.url presente é rejeitado antes do Graph', () => {
+  it('mismatch → 422; send 0; insert 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_STATIC]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_URL_STATIC);
+    mockValidateParameterValues.mockReturnValue({ valid: false, error: 'template_params_mismatch' });
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'x' } } },
+    }), res);
+
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_params_mismatch');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('4C5A-SEND | template misto é rejeitado antes do Graph', () => {
+  it('supported=false → 422 template_unsupported; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL_STATIC,
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
+            { type: 'QUICK_REPLY', text: 'Ok' },
+          ],
+        },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS type URL not supported',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Escolha',
+      headerMediaFormat: null,
+      buttons: [
+        { index: 0, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' },
+        { index: 1, type: 'QUICK_REPLY', text: 'Ok' },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockValidateParameterValues).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  });
+});
+
+describe('4C5A-SEND | URL dinâmica permanece intacta', () => {
+  it('Graph 1x suffix-only; snapshot href dinâmico', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const pv = { body: {}, url: { '0': '12345' } };
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: pv } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components[0].type).toBe('button');
+    expect(tpl.components[0].sub_type).toBe('url');
+    expect(tpl.components[0].parameters[0].text).toBe('12345');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons.buttons[0].href)
+      .toBe('https://example.com/test/12345');
+  });
+});
+
+describe('4C5A-SEND | QR permanece intacto', () => {
+  it('Graph 1x payload backend-only; snapshot sem payload', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage.mock.calls[0][3].components).toEqual(FAKE_COMPONENTS_QR);
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
   });
 });

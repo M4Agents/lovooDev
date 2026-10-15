@@ -1637,7 +1637,7 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
     expect(r.buttons[0]).not.toHaveProperty('url_kind');
   });
 
-  it('4C2A-02 | URL static → url_kind=static; url preservada; supported=false', () => {
+  it('4C2A-02 | URL static → url_kind=static; url preservada; supported=true (4C.5A)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -1648,8 +1648,8 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
         },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons).toEqual([{
       index: 0, type: 'URL', text: 'Abrir',
       url: 'https://example.com/loja', url_kind: 'static',
@@ -2205,7 +2205,7 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
     }]);
   });
 
-  it('4C3B-02 | static → supported=false', () => {
+  it('4C3B-02 | static → supported=true (4C.5A); url_kind=static', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -2213,8 +2213,8 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
         { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
     expect(r.buttons[0].url_kind).toBe('static');
   });
 
@@ -2497,6 +2497,301 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
         ],
         'POSITIONAL',
         { body: {}, url: { '0': '12345' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+});
+
+// =============================================================================
+// MVP4C.5A — 1 URL estática (sem placeholder, sem HEADER media)
+// =============================================================================
+
+const STATIC_URL_COMPS = [
+  { type: 'BODY', text: 'Veja o site' },
+  {
+    type: 'BUTTONS',
+    buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }],
+  },
+];
+
+const STATIC_URL_CTX = {
+  buttons: [{
+    index: 0, type: 'URL', text: 'Site',
+    url: 'https://example.com/loja', url_kind: 'static',
+  }],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.5A static URL', () => {
+
+  it('4C5A-01 | 1 URL estática → supported=true; url_kind=static', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: STATIC_URL_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameters).toEqual([]);
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    }]);
+  });
+
+  it('4C5A-02 | NAMED body + URL estática → supported=true (não exige POSITIONAL)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Olá {{name}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.parameter_format).toBe('NAMED');
+    expect(r.parameters.map(p => p.key)).toEqual(['name']);
+    expect(r.buttons[0].url_kind).toBe('static');
+  });
+
+  it('4C5A-03 | static + QR → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
+            { type: 'QUICK_REPLY', text: 'Ok' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type URL not supported');
+  });
+
+  it('4C5A-04 | static + IMAGE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.buttons[0].url_kind).toBe('static');
+  });
+
+  it('4C5A-05 | 2 URLs estáticas → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'A', url: 'https://example.com/a' },
+            { type: 'URL', text: 'B', url: 'https://example.com/b' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C5A-06 | PHONE_NUMBER / unknown → supported=false', () => {
+    const phone = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Ligue' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Contato' }] },
+      ],
+    });
+    expect(phone.supported).toBe(false);
+
+    const unknown = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Abrir' }] },
+      ],
+    });
+    expect(unknown.supported).toBe(false);
+  });
+
+  it('4C5A-07 | AUTH continua bloqueado', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Código' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('AUTHENTICATION templates not supported');
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['data:', 'data:text/html,hi'],
+    ['relativa', '/loja'],
+    ['credenciais', 'https://user:pass@example.com/loja'],
+    ['comprimento > 2048', `https://example.com/${'a'.repeat(2048)}`],
+  ])('4C5A-08 | URL estática insegura (%s) → supported=false; url_kind=static', (_label, url) => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.buttons[0].url_kind).toBe('static');
+    expect(r.buttons[0].url).toBe(url);
+  });
+
+  it('4C5A-B07 | javascript: estático → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Veja' },
+          { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'javascript:alert(1)' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C5A-V01 | sem parameter_values.url → valid', () => {
+    const r = validateParameterValues([], { body: {} }, STATIC_URL_CTX);
+    expect(r).toEqual({ valid: true });
+  });
+
+  it('4C5A-V02 | parameter_values.url presente (inclusive {}) → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'https://example.com/loja' } },
+      STATIC_URL_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: {} },
+      STATIC_URL_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C5A-V03 | BODY params continuam validados; url ausente', () => {
+    const params = [{ component: 'BODY', key: '1', position: 1, example: null }];
+    expect(validateParameterValues(
+      params,
+      { body: { '1': 'Ana' } },
+      STATIC_URL_CTX,
+    )).toEqual({ valid: true });
+    expect(validateParameterValues(
+      params,
+      { body: {} },
+      STATIC_URL_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C5A-B01 | Graph NÃO emite type=button; BODY/HEADER params preservados', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', text: 'Olá {{1}}' },
+        { type: 'BODY', text: 'Pedido {{2}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+      'POSITIONAL',
+      { header: { '1': 'Ana' }, body: { '2': '99' } },
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'text', text: 'Ana' }] },
+      { type: 'body', parameters: [{ type: 'text', text: '99' }] },
+    ]);
+    expect(JSON.stringify(r)).not.toContain('"type":"button"');
+    expect(JSON.stringify(r)).not.toContain('sub_type');
+    expect(JSON.stringify(r)).not.toContain('https://example.com/loja');
+  });
+
+  it('4C5A-B02 | static sem params textuais → components vazio (sem button)', () => {
+    const r = buildGraphComponents(STATIC_URL_COMPS, 'POSITIONAL', { body: {} });
+    expect(r).toEqual([]);
+  });
+
+  it('4C5A-B03 | URL dinâmica continua com suffix', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': '12345' } },
+    );
+    expect(r).toEqual([URL_GRAPH]);
+    expect(r[0].parameters[0].text).toBe('12345');
+  });
+
+  it('4C5A-B04 | QR continua com payload backend-only', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C5A-B05 | mix static+QR → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Escolha' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
+              { type: 'QUICK_REPLY', text: 'Ok' },
+            ],
+          },
+        ],
+        'POSITIONAL',
+        { body: {} },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C5A-B06 | IMAGE + static URL → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          { type: 'BODY', text: 'Veja' },
+          { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+        { headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' } },
       );
       throw new Error('should_have_thrown');
     } catch (err) {

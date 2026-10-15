@@ -27,7 +27,12 @@
 //   gerado no builder (options.templateIdentity). GET/picker continua gated.
 // MVP4C.3B: 1 URL POSITIONAL com {{1}} no FINAL → supported=true. Runtime
 //   envia somente o suffix em parameter_values.url; Meta aplica à base aprovada.
+// MVP4C.5A: 1 URL estática segura (HTTP/HTTPS absoluto, sem placeholder, sem
+//   HEADER media) → supported=true. Graph NÃO emite component type=button.
+//   Snapshot histórico usa a URL aprovada. URL insegura → supported=false.
 // =============================================================================
+
+import { isSafeHttpUrl } from './templateButtonsSnapshot.js';
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
 const RE_ANY_PLACEHOLDER  = /\{\{([^}]*)\}\}/g;      // qualquer {{...}}
@@ -40,8 +45,8 @@ const RE_NAMED            = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g; // {{name}}
 const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 // Tipos de botão candidatos ao MVP4C. 4C.2B habilita send somente QUICK_REPLY-only.
-// URL send-ready é gated por isSinglePositionalDynamicUrlSendReady — NÃO entra aqui.
-// PHONE_NUMBER / FLOW / outros → fail-closed.
+// URL send-ready é gated por predicados privados (dynamic 4C.3B / static 4C.5A) —
+// NÃO entra aqui. PHONE_NUMBER / FLOW / outros → fail-closed.
 const MVP4C_CANDIDATE_BUTTON_TYPES = new Set(['QUICK_REPLY']);
 
 // Limite defensivo Lovoo — NÃO é limite oficial Meta (desconhecido nesta fatia).
@@ -213,6 +218,26 @@ function isSinglePositionalDynamicUrlSendReady(buttons, parameterFormat, headerM
   if (!b.url.endsWith('{{1}}')) return false;
   const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
   return allInners.size === 1 && allInners.has('1');
+}
+
+/**
+ * True somente para o slice 4C.5A: exatamente 1 URL estática, index 0,
+ * sem placeholders, sem HEADER media, HTTP/HTTPS absoluto seguro
+ * (isSafeHttpUrl). Não exige POSITIONAL.
+ * Mix / 2 URLs / QR adicional / AUTH / media+URL / URL insegura → false.
+ * @private
+ */
+function isSingleStaticUrlSendReady(buttons, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (!Array.isArray(buttons) || buttons.length !== 1) return false;
+  const b = buttons[0];
+  if (b?.type !== 'URL') return false;
+  if (b.index !== 0) return false;
+  if (b.url_kind !== 'static') return false;
+  if (typeof b.url !== 'string' || b.url.trim().length === 0) return false;
+  const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+  if (allInners.size !== 0) return false;
+  return isSafeHttpUrl(b.url);
 }
 
 /**
@@ -541,15 +566,20 @@ export function analyzeTemplate(rawTemplate) {
 
     // 4C.2B: QUICK_REPLY-only com text válido → supported=true.
     // 4C.3B: 1 URL POSITIONAL com {{1}} no FINAL, sem HEADER media → supported=true.
-    // Mix / static / NAMED / media+URL / tipo desconhecido → supported=false.
+    // 4C.5A: 1 URL estática sem placeholder, sem HEADER media → supported=true.
+    // Mix / 2 URLs / NAMED dynamic / media+URL / tipo desconhecido → supported=false.
     if (classifiedButtons !== null) {
-      const qrReady  = isQuickReplyOnlyReady(classifiedButtons);
-      const urlReady = isSinglePositionalDynamicUrlSendReady(
+      const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
+      const dynamicUrlReady = isSinglePositionalDynamicUrlSendReady(
         classifiedButtons,
         fmt,
         headerMediaFormat,
       );
-      const ready = qrReady || urlReady;
+      const staticUrlReady  = isSingleStaticUrlSendReady(
+        classifiedButtons,
+        headerMediaFormat,
+      );
+      const ready = qrReady || dynamicUrlReady || staticUrlReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -688,6 +718,8 @@ export function validateParameterValues(parameters, parameterValues, context = {
   );
   const hasOwnUrl = Object.prototype.hasOwnProperty.call(parameterValues, 'url');
 
+  // URL dinâmica exige parameter_values.url. URL estática (4C.5A) e demais
+  // formatos exigem AUSÊNCIA da chave — inclusive objeto vazio é mismatch.
   if (urlReady) {
     if (!hasOwnUrl) return { valid: false, error: 'template_params_mismatch' };
     const urlValues = parameterValues.url;
@@ -749,7 +781,7 @@ export function validateParameterValues(parameters, parameterValues, context = {
  *   build_media_invalid_input   — mediaId vazio ou whitespace-only
  *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
  *   build_buttons_invalid       — BUTTONS malformado
- *   build_buttons_unsupported   — BUTTONS não é QR-only nem URL dynamic send-ready
+ *   build_buttons_unsupported   — BUTTONS não é QR-only, URL dynamic nem URL static send-ready
  *   build_qr_identity_missing   — templateIdentity ausente/inválido para QR
  *   build_qr_payload_too_long   — payload excede LOVOO_QR_PAYLOAD_MAX_LEN
  */
@@ -903,10 +935,17 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
         continue;
       }
 
+      const headerMediaHint = hasMediaHeader ? 'IMAGE' : null;
+
+      // 4C.5A: URL estática já está na definição aprovada — Graph omite type=button.
+      if (isSingleStaticUrlSendReady(classified.buttons, headerMediaHint)) {
+        continue;
+      }
+
       const urlReady = isSinglePositionalDynamicUrlSendReady(
         classified.buttons,
         parameterFormat,
-        hasMediaHeader ? 'IMAGE' : null,
+        headerMediaHint,
       );
       if (!urlReady) {
         throw makeEngineError(

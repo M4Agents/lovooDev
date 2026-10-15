@@ -40,7 +40,7 @@
 //   TPL-32  HEADER IMAGE → supported=true + header_media_format=IMAGE  (MVP4B.3)
 //   TPL-33  HEADER VIDEO → supported=true + header_media_format=VIDEO  (MVP4B.3)
 //   TPL-34  HEADER DOCUMENT → supported=true + header_media_format=DOCUMENT  (MVP4B.3)
-//   TPL-35  BUTTONS URL → supported=false
+//   TPL-35  BUTTONS URL estática única → supported=true (4C.5A)
 //   TPL-36  CAROUSEL → supported=false
 //   TPL-37  AUTHENTICATION → supported=false
 //   TPL-38  unknown parameter_format → supported=false
@@ -1051,11 +1051,11 @@ describe('TPL-34 HEADER DOCUMENT supported', () => {
 });
 
 // =============================================================================
-// TPL-35  BUTTONS URL → supported=false
+// TPL-35  BUTTONS URL estática única → supported=true (4C.5A)
 // =============================================================================
 
-describe('TPL-35 BUTTONS unsupported', () => {
-  it('componente BUTTONS URL → supported=false', async () => {
+describe('TPL-35 BUTTONS URL static', () => {
+  it('componente BUTTONS URL estática única → supported=true', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-btn',
@@ -1068,8 +1068,12 @@ describe('TPL-35 BUTTONS unsupported', () => {
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
-    expect(res._body.templates[0].supported).toBe(false);
-    expect(res._body.templates[0].unsupported_reason).toBeTruthy();
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].unsupported_reason).toBeNull();
+    expect(res._body.templates[0].buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Site',
+      url: 'https://example.com', url_kind: 'static',
+    }]);
   });
 });
 
@@ -2092,7 +2096,7 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     expect(result.components.some(c => c.type === 'BUTTONS')).toBe(true);
   });
 
-  it('URL → buttons inclui url/url_kind; supported=false', async () => {
+  it('URL → buttons inclui url/url_kind; supported=true (4C.5A)', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c2a-url',
@@ -2110,8 +2114,8 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     await handler(req, res);
 
     const result = res._body.templates[0];
-    expect(result.supported).toBe(false);
-    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.supported).toBe(true);
+    expect(result.unsupported_reason).toBeNull();
     expect(result.buttons).toEqual([{
       index: 0, type: 'URL', text: 'Site',
       url: 'https://example.com/loja', url_kind: 'static',
@@ -2211,7 +2215,7 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     expect(res._body.templates[0].buttons).toEqual([]);
   });
 
-  it('URL, PHONE_NUMBER e mix continuam GET supported=false', async () => {
+  it('URL estática GET supported=true; PHONE_NUMBER e mix continuam false', async () => {
     const urlTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c2c-url',
@@ -2242,7 +2246,7 @@ describe('GET — MVP4C.2C analysis.supported', () => {
         },
       ],
     };
-    expect(analyzeTemplate(urlTpl).supported).toBe(false);
+    expect(analyzeTemplate(urlTpl).supported).toBe(true);
     expect(analyzeTemplate(phoneTpl).supported).toBe(false);
     expect(analyzeTemplate(mixTpl).supported).toBe(false);
 
@@ -2254,8 +2258,9 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     const urlDto = res._body.templates.find(t => t.id === 'tpl-4c2c-url');
     const phoneDto = res._body.templates.find(t => t.id === 'tpl-4c2c-phone');
     const mixDto = res._body.templates.find(t => t.id === 'tpl-4c2c-mix');
-    expect(urlDto.supported).toBe(false);
-    expect(urlDto.unsupported_reason).toBeTruthy();
+    expect(urlDto.supported).toBe(true);
+    expect(urlDto.unsupported_reason).toBeNull();
+    expect(urlDto.buttons[0].url_kind).toBe('static');
     expect(phoneDto.supported).toBe(false);
     expect(phoneDto.unsupported_reason).toBeTruthy();
     expect(mixDto.supported).toBe(false);
@@ -2352,7 +2357,7 @@ describe('GET — MVP4C.3B dynamic URL', () => {
     expect(res._body.templates[0].buttons[0].url_kind).toBe('dynamic');
   });
 
-  it('4C3B-GET-03 | static URL continua supported=false; QR continua true', async () => {
+  it('4C3B-GET-03 | static URL supported=true (4C.5A); QR continua true', async () => {
     const staticTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c3b-static',
@@ -2369,7 +2374,7 @@ describe('GET — MVP4C.3B dynamic URL', () => {
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
       ],
     };
-    expect(analyzeTemplate(staticTpl).supported).toBe(false);
+    expect(analyzeTemplate(staticTpl).supported).toBe(true);
     expect(analyzeTemplate(qrTpl).supported).toBe(true);
 
     mockListMessageTemplates.mockResolvedValue(makeListResult([staticTpl, qrTpl]));
@@ -2378,7 +2383,8 @@ describe('GET — MVP4C.3B dynamic URL', () => {
     await handler(req, res);
     const staticDto = res._body.templates.find(t => t.id === 'tpl-4c3b-static');
     const qrDto = res._body.templates.find(t => t.id === 'tpl-4c3b-qr');
-    expect(staticDto.supported).toBe(false);
+    expect(staticDto.supported).toBe(true);
+    expect(staticDto.unsupported_reason).toBeNull();
     expect(staticDto.buttons[0].url_kind).toBe('static');
     expect(qrDto.supported).toBe(true);
     expect(qrDto.unsupported_reason).toBeNull();

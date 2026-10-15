@@ -32,6 +32,23 @@ function urlAnalysis(overrides = {}) {
   };
 }
 
+function staticUrlAnalysis(overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons: [{
+      index: 0,
+      type: 'URL',
+      text: 'Site',
+      url: 'https://example.com/loja',
+      url_kind: 'static',
+    }],
+    ...overrides,
+  };
+}
+
 describe('buildTemplateButtonsSnapshot — QUICK_REPLY', () => {
   it('1 QR válido → wrapper v1 sem payload', () => {
     const snap = buildTemplateButtonsSnapshot({
@@ -101,6 +118,73 @@ describe('buildTemplateButtonsSnapshot — URL dynamic', () => {
   });
 });
 
+describe('buildTemplateButtonsSnapshot — URL static', () => {
+  it('static segura → v1 com href original da definição aprovada', () => {
+    const original = 'https://Example.COM/loja';
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis({
+        buttons: [{
+          index: 0, type: 'URL', text: 'Site',
+          url: original, url_kind: 'static',
+        }],
+      }),
+      parameterValues: { body: {} },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL',
+        index: 0,
+        text: 'Site',
+        href: original,
+      }],
+    });
+    expect(snap.buttons[0].href).not.toBe(new URL(original).toString());
+    expect(snap.buttons[0]).not.toHaveProperty('url');
+    expect(snap.buttons[0]).not.toHaveProperty('url_kind');
+    expect(JSON.stringify(snap)).not.toContain('parameter_values');
+    expect(JSON.stringify(snap)).not.toContain('suffix');
+  });
+
+  it('ignora parameter_values.url se presente — href vem só da definição', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis(),
+      parameterValues: { body: {}, url: { '0': 'https://evil.example/forged' } },
+    });
+    expect(snap.buttons[0].href).toBe('https://example.com/loja');
+    expect(JSON.stringify(snap)).not.toContain('evil.example');
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['data:', 'data:text/html,hi'],
+    ['relativa', '/loja'],
+    ['credenciais', 'https://user:pass@example.com/loja'],
+    ['comprimento > 2048', `https://example.com/${'a'.repeat(2048)}`],
+  ])('static insegura (%s) → null (fail-closed)', (_label, url) => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis({
+        buttons: [{
+          index: 0, type: 'URL', text: 'Site',
+          url, url_kind: 'static',
+        }],
+      }),
+      parameterValues: { body: {} },
+    })).toBeNull();
+  });
+
+  it('NAMED + static segura → v1 href original (não exige POSITIONAL)', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis({ parameter_format: 'NAMED' }),
+      parameterValues: { body: {} },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [{ type: 'URL', index: 0, text: 'Site', href: 'https://example.com/loja' }],
+    });
+  });
+});
+
 describe('buildTemplateButtonsSnapshot — NULL', () => {
   it.each([
     ['unsupported', { analysis: qrAnalysis([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }], { supported: false }) }],
@@ -116,12 +200,6 @@ describe('buildTemplateButtonsSnapshot — NULL', () => {
         { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
         { index: 1, type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' },
       ]),
-    }],
-    ['static URL', {
-      analysis: urlAnalysis({
-        buttons: [{ index: 0, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' }],
-      }),
-      parameterValues: { body: {}, url: { '0': '12345' } },
     }],
     ['NAMED', {
       analysis: urlAnalysis({ parameter_format: 'NAMED' }),
@@ -221,9 +299,29 @@ describe('buildTemplateButtonsSnapshot — NULL', () => {
     ['invalid QR index', {
       analysis: qrAnalysis([{ index: 10, type: 'QUICK_REPLY', text: 'Sim' }]),
     }],
-    ['media + URL', {
+    ['media + URL dynamic', {
       analysis: urlAnalysis({ headerMediaFormat: 'IMAGE' }),
       parameterValues: { body: {}, url: { '0': '12345' } },
+    }],
+    ['media + URL static', {
+      analysis: staticUrlAnalysis({ headerMediaFormat: 'IMAGE' }),
+      parameterValues: { body: {} },
+    }],
+    ['text sem botões', {
+      analysis: {
+        supported: true,
+        parameter_format: 'POSITIONAL',
+        headerMediaFormat: null,
+        buttons: [],
+      },
+    }],
+    ['media sem botões', {
+      analysis: {
+        supported: true,
+        parameter_format: 'POSITIONAL',
+        headerMediaFormat: 'IMAGE',
+        buttons: [],
+      },
     }],
     ['PHONE_NUMBER', {
       analysis: {
