@@ -30,9 +30,12 @@
 // MVP4C.5A: 1 URL estática segura (HTTP/HTTPS absoluto, sem placeholder, sem
 //   HEADER media) → supported=true. Graph NÃO emite component type=button.
 //   Snapshot histórico usa a URL aprovada. URL insegura → supported=false.
+// MVP4C.5B.A: 1 PHONE_NUMBER válido (index 0, text não vazio, número seguro,
+//   sem HEADER media) → supported=true. Graph omite type=button. Número vem
+//   só da definição aprovada. Mix / media / AUTH / número inválido → false.
 // =============================================================================
 
-import { isSafeHttpUrl } from './templateButtonsSnapshot.js';
+import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
 const RE_ANY_PLACEHOLDER  = /\{\{([^}]*)\}\}/g;      // qualquer {{...}}
@@ -46,7 +49,8 @@ const SUPPORTED_MEDIA_HEADER_FORMATS = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 
 // Tipos de botão candidatos ao MVP4C. 4C.2B habilita send somente QUICK_REPLY-only.
 // URL send-ready é gated por predicados privados (dynamic 4C.3B / static 4C.5A) —
-// NÃO entra aqui. PHONE_NUMBER / FLOW / outros → fail-closed.
+// NÃO entra aqui. PHONE_NUMBER send-ready é gated por isSinglePhoneNumberSendReady.
+// FLOW / outros → fail-closed.
 const MVP4C_CANDIDATE_BUTTON_TYPES = new Set(['QUICK_REPLY']);
 
 // Limite defensivo Lovoo — NÃO é limite oficial Meta (desconhecido nesta fatia).
@@ -140,7 +144,8 @@ function classifyUrlKind(rawUrl, parameterFormat) {
 /**
  * Classifica component.buttons na ordem Meta (index 0-based).
  * Preserva type + text. URL adiciona url (quando string válida) + url_kind.
- * PHONE_NUMBER não expõe phone_number. payload de definição nunca entra no DTO.
+ * PHONE_NUMBER preserva phone_number original da definição aprovada (não normaliza).
+ * payload de definição nunca entra no DTO.
  * @private
  * @returns {{ ok: false, reason: string } | { ok: true, buttons: object[], blockReason: string }}
  */
@@ -175,6 +180,10 @@ function classifyButtons(rawButtons, parameterFormat) {
         entry.url = classified.url;
       }
       entry.url_kind = classified.kind;
+    }
+
+    if (type === 'PHONE_NUMBER' && typeof btn.phone_number === 'string') {
+      entry.phone_number = btn.phone_number;
     }
 
     buttons.push(entry);
@@ -238,6 +247,23 @@ function isSingleStaticUrlSendReady(buttons, headerMediaFormat) {
   const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
   if (allInners.size !== 0) return false;
   return isSafeHttpUrl(b.url);
+}
+
+/**
+ * True somente para o slice 4C.5B.A: exatamente 1 PHONE_NUMBER, index 0,
+ * text não vazio, número seguro, sem HEADER media. Não exige POSITIONAL.
+ * Mix / 2 phones / QR / URL / AUTH / media / número inválido → false.
+ * Política do número: isSafePhoneNumber no snapshot (fonte única).
+ * @private
+ */
+function isSinglePhoneNumberSendReady(buttons, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (!Array.isArray(buttons) || buttons.length !== 1) return false;
+  const b = buttons[0];
+  if (b?.type !== 'PHONE_NUMBER') return false;
+  if (b.index !== 0) return false;
+  if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+  return isSafePhoneNumber(b.phone_number);
 }
 
 /**
@@ -567,7 +593,8 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.2B: QUICK_REPLY-only com text válido → supported=true.
     // 4C.3B: 1 URL POSITIONAL com {{1}} no FINAL, sem HEADER media → supported=true.
     // 4C.5A: 1 URL estática sem placeholder, sem HEADER media → supported=true.
-    // Mix / 2 URLs / NAMED dynamic / media+URL / tipo desconhecido → supported=false.
+    // 4C.5B.A: 1 PHONE_NUMBER válido, sem HEADER media → supported=true.
+    // Mix / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
       const dynamicUrlReady = isSinglePositionalDynamicUrlSendReady(
@@ -579,7 +606,11 @@ export function analyzeTemplate(rawTemplate) {
         classifiedButtons,
         headerMediaFormat,
       );
-      const ready = qrReady || dynamicUrlReady || staticUrlReady;
+      const phoneReady      = isSinglePhoneNumberSendReady(
+        classifiedButtons,
+        headerMediaFormat,
+      );
+      const ready = qrReady || dynamicUrlReady || staticUrlReady || phoneReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -638,8 +669,15 @@ export function validateParameterValues(parameters, parameterValues, context = {
 
   // 4C.2B: chave buttons é runtime proibida — payload nasce só no builder.
   // 4C.3B: chave url é exigida somente no slice send-ready; caso contrário mismatch.
+  // 4C.5B.A: phone / phone_number nunca vêm do frontend.
   // Dívida: demais chaves extras no root (além de header/body/url) ainda não são varridas.
   if (Object.prototype.hasOwnProperty.call(parameterValues, 'buttons')) {
+    return { valid: false, error: 'template_params_mismatch' };
+  }
+  if (Object.prototype.hasOwnProperty.call(parameterValues, 'phone')) {
+    return { valid: false, error: 'template_params_mismatch' };
+  }
+  if (Object.prototype.hasOwnProperty.call(parameterValues, 'phone_number')) {
     return { valid: false, error: 'template_params_mismatch' };
   }
 
@@ -781,7 +819,7 @@ export function validateParameterValues(parameters, parameterValues, context = {
  *   build_media_invalid_input   — mediaId vazio ou whitespace-only
  *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
  *   build_buttons_invalid       — BUTTONS malformado
- *   build_buttons_unsupported   — BUTTONS não é QR-only, URL dynamic nem URL static send-ready
+ *   build_buttons_unsupported   — BUTTONS não é QR-only, URL dynamic/static nem PHONE send-ready
  *   build_qr_identity_missing   — templateIdentity ausente/inválido para QR
  *   build_qr_payload_too_long   — payload excede LOVOO_QR_PAYLOAD_MAX_LEN
  */
@@ -939,6 +977,11 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
 
       // 4C.5A: URL estática já está na definição aprovada — Graph omite type=button.
       if (isSingleStaticUrlSendReady(classified.buttons, headerMediaHint)) {
+        continue;
+      }
+
+      // 4C.5B.A: PHONE_NUMBER já está na definição aprovada — Graph omite type=button.
+      if (isSinglePhoneNumberSendReady(classified.buttons, headerMediaHint)) {
         continue;
       }
 

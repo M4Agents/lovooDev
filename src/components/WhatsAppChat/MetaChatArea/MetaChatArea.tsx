@@ -34,7 +34,10 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
 import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
-import { isSafeHistoricalHref } from '../../../utils/historicalTemplateButtons'
+import {
+  buildHistoricalTelHref,
+  isSafeHistoricalHref,
+} from '../../../utils/historicalTemplateButtons'
 import type {
   MetaChatConversation,
   MetaChatMessage,
@@ -236,7 +239,8 @@ function HistoricalTemplateButtons({
   const ordered = [...buttons].sort((a, b) => a.index - b.index)
   const visible = ordered.filter((button) =>
     button.type === 'QUICK_REPLY' ||
-    (button.type === 'URL' && isSafeHistoricalHref(button.href)),
+    (button.type === 'URL' && isSafeHistoricalHref(button.href)) ||
+    (button.type === 'PHONE_NUMBER' && buildHistoricalTelHref(button.phone_number) != null),
   )
   if (visible.length === 0) return null
 
@@ -260,6 +264,20 @@ function HistoricalTemplateButtons({
             >
               {button.text}
             </span>
+          )
+        }
+        if (button.type === 'PHONE_NUMBER') {
+          const telHref = buildHistoricalTelHref(button.phone_number)
+          if (!telHref) return null
+          return (
+            <a
+              key={key}
+              data-testid={`hist-phone-${button.index}`}
+              href={telHref}
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs ${linkClass}`}
+            >
+              {button.text}
+            </a>
           )
         }
         return (

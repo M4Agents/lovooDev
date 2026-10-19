@@ -209,6 +209,12 @@ export type MetaHistoricalTemplateButton =
       text:  string
       href:  string
     }
+  | {
+      type:         'PHONE_NUMBER'
+      index:        number
+      text:         string
+      phone_number: string
+    }
 
 export interface MetaChatMessage {
   id:                 string

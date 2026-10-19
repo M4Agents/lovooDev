@@ -1755,7 +1755,7 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
     expect(namedPositional.buttons[0].url_kind).toBe('unknown');
   });
 
-  it('4C2A-08 | PHONE_NUMBER → index/type/text; sem phone_number; supported=false', () => {
+  it('4C2A-08 | PHONE_NUMBER → index/type/text; phone_number interno; supported=true (4C.5B.A)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -1766,10 +1766,12 @@ describe('analyzeTemplate — MVP4C.2A BUTTONS definition', () => {
         },
       ],
     });
-    expect(r.supported).toBe(false);
-    expect(r.unsupported_reason).toBe('BUTTONS type PHONE_NUMBER not supported');
-    expect(r.buttons).toEqual([{ index: 0, type: 'PHONE_NUMBER', text: 'Contato' }]);
-    expect(r.buttons[0]).not.toHaveProperty('phone_number');
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'PHONE_NUMBER', text: 'Contato',
+      phone_number: '+5511999999999',
+    }]);
   });
 
   it('4C2A-09 | mixed QUICK_REPLY + URL → ordem/índices; supported=false', () => {
@@ -2797,6 +2799,304 @@ describe('analyzeTemplate / validate / build — MVP4C.5A static URL', () => {
     } catch (err) {
       expect(err.code).toBe('build_buttons_unsupported');
     }
+  });
+
+});
+
+// =============================================================================
+// MVP4C.5B.A — 1 PHONE_NUMBER (sem HEADER media, número da definição aprovada)
+// =============================================================================
+
+const PHONE_COMPS = [
+  { type: 'BODY', text: 'Ligue agora' },
+  {
+    type: 'BUTTONS',
+    buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }],
+  },
+];
+
+const PHONE_CTX = {
+  buttons: [{
+    index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+    phone_number: '+5511999999999',
+  }],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.5B.A PHONE_NUMBER', () => {
+
+  it('4C5B-01 | 1 PHONE_NUMBER válido → supported=true; número original preservado', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: PHONE_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.parameters).toEqual([]);
+    expect(r.buttons).toEqual([{
+      index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    }]);
+  });
+
+  it('4C5B-02 | NAMED body + PHONE_NUMBER → supported=true (não exige POSITIONAL)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Olá {{name}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '15550051310' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.parameter_format).toBe('NAMED');
+    expect(r.parameters.map(p => p.key)).toEqual(['name']);
+    expect(r.buttons[0].phone_number).toBe('15550051310');
+  });
+
+  it.each([
+    ['ausente', { type: 'PHONE_NUMBER', text: 'Ligar' }],
+    ['vazio', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '' }],
+    ['javascript', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: 'javascript:alert(1)' }],
+    ['tel:', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: 'tel:+5511999999999' }],
+    ['espaços', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+55 11999999999' }],
+    ['curto', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '1234567' }],
+    ['excesso', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+55119999999999999999' }],
+    ['letras', { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+55ABC99999' }],
+    ['text vazio', { type: 'PHONE_NUMBER', text: '   ', phone_number: '+5511999999999' }],
+  ])('4C5B-03 | inválido (%s) → supported=false', (_label, button) => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Ligue' },
+        { type: 'BUTTONS', buttons: [button] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C5B-04 | PHONE + QR → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'QUICK_REPLY', text: 'Ok' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('BUTTONS type PHONE_NUMBER not supported');
+  });
+
+  it('4C5B-05 | PHONE + URL → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C5B-06 | 2 PHONE_NUMBER → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Ligue' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'A', phone_number: '+5511999999999' },
+            { type: 'PHONE_NUMBER', text: 'B', phone_number: '+5511888888888' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C5B-07 | IMAGE + PHONE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Ligue' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+  });
+
+  it('4C5B-08 | AUTH + PHONE continua bloqueado', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Código' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }] },
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.unsupported_reason).toBe('AUTHENTICATION templates not supported');
+  });
+
+  it('4C5B-V01 | sem chave phone → valid; BODY params ok', () => {
+    expect(validateParameterValues([], { body: {} }, PHONE_CTX)).toEqual({ valid: true });
+    const params = [{ component: 'BODY', key: '1', position: 1, example: null }];
+    expect(validateParameterValues(params, { body: { '1': 'Ana' } }, PHONE_CTX)).toEqual({ valid: true });
+  });
+
+  it('4C5B-V02 | phone / phone_number runtime → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, phone_number: '+5511999999999' },
+      PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, phone: '+5511999999999' },
+      PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C5B-V03 | url em PHONE → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'x' } },
+      PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C5B-B01 | Graph omite type=button; HEADER/BODY params preservados', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', text: 'Olá {{1}}' },
+        { type: 'BODY', text: 'Pedido {{2}}' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }] },
+      ],
+      'POSITIONAL',
+      { header: { '1': 'Ana' }, body: { '2': '99' } },
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'text', text: 'Ana' }] },
+      { type: 'body', parameters: [{ type: 'text', text: '99' }] },
+    ]);
+    expect(JSON.stringify(r)).not.toContain('"type":"button"');
+    expect(JSON.stringify(r)).not.toContain('+5511999999999');
+    expect(JSON.stringify(r)).not.toContain('phone_number');
+  });
+
+  it('4C5B-B02 | PHONE sem params textuais → components vazio', () => {
+    expect(buildGraphComponents(PHONE_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+  it('4C5B-B03 | mix PHONE+QR → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Escolha' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+              { type: 'QUICK_REPLY', text: 'Ok' },
+            ],
+          },
+        ],
+        'POSITIONAL',
+        { body: {} },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C5B-B04 | IMAGE + PHONE → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          { type: 'BODY', text: 'Ligue' },
+          { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+        { headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C5B-R01 | URL dinâmica continua com suffix', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': '12345' } },
+    );
+    expect(r).toEqual([URL_GRAPH]);
+  });
+
+  it('4C5B-R02 | URL estática continua sem button', () => {
+    const r = buildGraphComponents(STATIC_URL_COMPS, 'POSITIONAL', { body: {} });
+    expect(r).toEqual([]);
+  });
+
+  it('4C5B-R03 | QR continua com payload backend-only', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C5B-R04 | TEXT-only e IMAGE header inalterados', () => {
+    const text = buildGraphComponents(
+      [{ type: 'BODY', text: 'Olá {{1}}' }],
+      'POSITIONAL',
+      { body: { '1': 'Ana' } },
+    );
+    expect(text).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+
+    const media = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      { headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' } },
+    );
+    expect(media).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'mid-1' } }] },
+    ]);
   });
 
 });

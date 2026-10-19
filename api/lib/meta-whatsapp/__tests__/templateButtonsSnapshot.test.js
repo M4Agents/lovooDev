@@ -49,6 +49,22 @@ function staticUrlAnalysis(overrides = {}) {
   };
 }
 
+function phoneAnalysis(overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons: [{
+      index: 0,
+      type: 'PHONE_NUMBER',
+      text: 'Ligar',
+      phone_number: '+5511999999999',
+    }],
+    ...overrides,
+  };
+}
+
 describe('buildTemplateButtonsSnapshot — QUICK_REPLY', () => {
   it('1 QR válido → wrapper v1 sem payload', () => {
     const snap = buildTemplateButtonsSnapshot({
@@ -425,5 +441,174 @@ describe('sanitizeTemplateButtonsSnapshot', () => {
     expect(() => sanitizeTemplateButtonsSnapshot(42)).not.toThrow();
     expect(() => sanitizeTemplateButtonsSnapshot('v1')).not.toThrow();
     expect(sanitizeTemplateButtonsSnapshot(undefined)).toBeNull();
+  });
+});
+
+describe('buildTemplateButtonsSnapshot — PHONE_NUMBER (4C.5B.B)', () => {
+  it('PHONE_NUMBER válido → wrapper v1 com número da definição aprovada', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis(),
+      parameterValues: { body: {}, phone: { '0': '+5511888888888' } },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'PHONE_NUMBER',
+        index: 0,
+        text: 'Ligar',
+        phone_number: '+5511999999999',
+      }],
+    });
+    expect(JSON.stringify(snap)).not.toContain('+5511888888888');
+    expect(JSON.stringify(snap)).not.toContain('parameter_values');
+    expect(snap.buttons[0]).not.toHaveProperty('payload');
+    expect(Object.keys(snap.buttons[0]).sort()).toEqual([
+      'index', 'phone_number', 'text', 'type',
+    ]);
+  });
+
+  it('campos extras do analysis não entram no snapshot', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis({
+        buttons: [{
+          index: 0,
+          type: 'PHONE_NUMBER',
+          text: 'Ligar',
+          phone_number: '+5511999999999',
+          extra: 'nope',
+          payload: 'x',
+        }],
+      }),
+    });
+    expect(snap.buttons[0]).toEqual({
+      type: 'PHONE_NUMBER',
+      index: 0,
+      text: 'Ligar',
+      phone_number: '+5511999999999',
+    });
+    expect(snap.buttons[0]).not.toHaveProperty('extra');
+    expect(snap.buttons[0]).not.toHaveProperty('payload');
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['tel:', 'tel:+5511999999999'],
+    ['espaços', '+55 11 99999-9999'],
+    ['curto', '+55119'],
+    ['longo', `+${'1'.repeat(21)}`],
+    ['vazio', ''],
+    ['letras', '+55ABC99999999'],
+    ['não-string', 5511999999999],
+  ])('número inválido (%s) → null sem lançar', (_label, phone_number) => {
+    expect(() => buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis({
+        buttons: [{
+          index: 0, type: 'PHONE_NUMBER', text: 'Ligar', phone_number,
+        }],
+      }),
+    })).not.toThrow();
+    expect(buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis({
+        buttons: [{
+          index: 0, type: 'PHONE_NUMBER', text: 'Ligar', phone_number,
+        }],
+      }),
+    })).toBeNull();
+  });
+
+  it('QR permanece intacto', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]),
+    })).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+  });
+
+  it('URL dinâmica permanece intacta', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: urlAnalysis(),
+      parameterValues: { body: {}, url: { '0': '12345' } },
+    })).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL', index: 0, text: 'Abrir teste',
+        href: 'https://example.com/test/12345',
+      }],
+    });
+  });
+
+  it('URL estática permanece intacta', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis(),
+      parameterValues: { body: {} },
+    })).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL', index: 0, text: 'Site', href: 'https://example.com/loja',
+      }],
+    });
+  });
+});
+
+describe('sanitizeTemplateButtonsSnapshot — PHONE_NUMBER (4C.5B.B)', () => {
+  it('PHONE_NUMBER v1 válido → whitelist pública sem extras', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      extra_top: 'drop',
+      buttons: [{
+        type: 'PHONE_NUMBER',
+        index: 0,
+        text: 'Ligar',
+        phone_number: '+5511999999999',
+        extra: 'nope',
+        payload: 'x',
+      }],
+    })).toEqual([{
+      type: 'PHONE_NUMBER',
+      index: 0,
+      text: 'Ligar',
+      phone_number: '+5511999999999',
+    }]);
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['tel:', 'tel:+5511999999999'],
+    ['espaços', '+55 11 99999-9999'],
+    ['ausente', undefined],
+  ])('número inválido (%s) → null', (_label, phone_number) => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [{
+        type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number,
+      }],
+    })).toBeNull();
+  });
+
+  it('versão desconhecida → null', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 2,
+      buttons: [{
+        type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+        phone_number: '+5511999999999',
+      }],
+    })).toBeNull();
+  });
+
+  it('QR e URL no mesmo sanitizer permanecem intactos', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'URL', index: 1, text: 'Site',
+          href: 'https://example.com/loja',
+        },
+      ],
+    })).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+      { type: 'URL', index: 1, text: 'Site', href: 'https://example.com/loja' },
+    ]);
   });
 });

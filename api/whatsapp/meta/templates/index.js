@@ -103,12 +103,12 @@ function sanitizeTemplate(raw) {
   // Fonte canônica: component.text — component.example é somente hint de exemplo.
   const analysis = analyzeTemplate(raw);
 
-  // safeComponents: remove `example` top-level de cada componente.
-  // Justificativa: `example` é redundante (já normalizado em analysis.parameters)
-  // e expõe referências internas Meta (header_handle) desnecessariamente.
-  // Não muta o objeto Graph original (spread cria novo objeto por componente).
-  const components    = Array.isArray(raw.components) ? raw.components : [];
-  const safeComponents = components.map(({ example: _ex, ...rest }) => rest);
+  // DTO público: copia sem mutar o Graph original nem analysis.buttons interno.
+  // `example` é redundante (já normalizado em analysis.parameters) e expõe
+  // header_handle. `phone_number` fica só no snapshot histórico / engine interno.
+  const components     = Array.isArray(raw.components) ? raw.components : [];
+  const safeComponents = sanitizePublicComponents(components);
+  const publicButtons  = sanitizePublicAnalysisButtons(analysis.buttons);
 
   return {
     id:                  raw.id,
@@ -122,8 +122,48 @@ function sanitizeTemplate(raw) {
     supported:           analysis.supported,
     unsupported_reason:  analysis.unsupported_reason,
     header_media_format: analysis.headerMediaFormat, // null | 'IMAGE' | 'VIDEO' | 'DOCUMENT' (MVP4B.3)
-    buttons:             analysis.buttons ?? [],     // classificação sanitizada (MVP4C.2A)
+    buttons:             publicButtons,              // classificação sanitizada (MVP4C.2A / 4C.5B.B)
   };
+}
+
+/**
+ * Remove phone_number de um botão sem mutar o original.
+ * Preserva type/index/text/url/url_kind e demais campos já públicos.
+ * @private
+ */
+function omitPhoneNumberFromButton(button) {
+  if (button === null || typeof button !== 'object' || Array.isArray(button)) {
+    return button;
+  }
+  const { phone_number: _phoneNumber, ...rest } = button;
+  return rest;
+}
+
+/**
+ * DTO público de analysis.buttons: type/index/text (e url/url_kind), sem phone_number.
+ * @private
+ */
+function sanitizePublicAnalysisButtons(buttons) {
+  if (!Array.isArray(buttons)) return [];
+  return buttons.map(omitPhoneNumberFromButton);
+}
+
+/**
+ * Copia components Graph para o DTO: strip `example` e `phone_number` aninhado.
+ * Não muta o objeto Graph original usado pelo backend de envio.
+ * @private
+ */
+function sanitizePublicComponents(rawComponents) {
+  if (!Array.isArray(rawComponents)) return [];
+  return rawComponents.map((comp) => {
+    if (comp === null || typeof comp !== 'object' || Array.isArray(comp)) return comp;
+    const { example: _ex, ...rest } = comp;
+    if (!Array.isArray(rest.buttons)) return rest;
+    return {
+      ...rest,
+      buttons: rest.buttons.map(omitPhoneNumberFromButton),
+    };
+  });
 }
 
 // =============================================================================

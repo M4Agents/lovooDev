@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildHistoricalTelHref,
   isSafeHistoricalHref,
+  isSafeHistoricalPhoneNumber,
   sanitizeHistoricalTemplateButtons,
 } from '../historicalTemplateButtons'
 
@@ -10,6 +12,12 @@ const URL_BTN = {
   index: 0,
   text:  'Abrir teste',
   href:  'https://example.com/test/12345',
+}
+const PHONE = {
+  type:         'PHONE_NUMBER' as const,
+  index:        0,
+  text:         'Ligar',
+  phone_number: '+5511999999999',
 }
 
 describe('sanitizeHistoricalTemplateButtons', () => {
@@ -51,16 +59,56 @@ describe('sanitizeHistoricalTemplateButtons', () => {
 
   it('unknown type dropado', () => {
     expect(sanitizeHistoricalTemplateButtons([
-      { type: 'PHONE_NUMBER', index: 0, text: 'Ligar' },
+      { type: 'FLOW', index: 0, text: 'Abrir' },
       QR,
     ])).toEqual([QR])
   })
 
   it('todos inválidos → null', () => {
     expect(sanitizeHistoricalTemplateButtons([
-      { type: 'PHONE_NUMBER', index: 0, text: 'Ligar' },
+      { type: 'FLOW', index: 0, text: 'Abrir' },
       { type: 'QUICK_REPLY', index: 99, text: 'X' },
     ])).toBeNull()
+  })
+
+  it('PHONE_NUMBER válido', () => {
+    expect(sanitizeHistoricalTemplateButtons([PHONE])).toEqual([PHONE])
+  })
+
+  it('PHONE_NUMBER extras descartados por whitelist', () => {
+    const raw = {
+      type:         'PHONE_NUMBER',
+      index:        0,
+      text:         'Ligar',
+      phone_number: '+5511999999999',
+      extra:        'nope',
+      href:         'tel:+5511999999999',
+      payload:      'x',
+    }
+    expect(sanitizeHistoricalTemplateButtons([raw])).toEqual([PHONE])
+    expect(sanitizeHistoricalTemplateButtons([raw])?.[0]).not.toHaveProperty('extra')
+    expect(sanitizeHistoricalTemplateButtons([raw])?.[0]).not.toHaveProperty('href')
+    expect(sanitizeHistoricalTemplateButtons([raw])?.[0]).not.toHaveProperty('payload')
+  })
+
+  it.each([
+    ['ausente', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar' }],
+    ['javascript:', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: 'javascript:alert(1)' }],
+    ['data:', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: 'data:text/html,hi' }],
+    ['tel: pronto', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: 'tel:+5511999999999' }],
+    ['espaços', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: '+55 11 99999-9999' }],
+    ['barra', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: '+5511/99999999' }],
+    ['arroba', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: '+55@1199999999' }],
+    ['longo', { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: `+${'1'.repeat(21)}` }],
+  ])('PHONE_NUMBER inválido (%s) dropado', (_label, raw) => {
+    expect(sanitizeHistoricalTemplateButtons([raw, QR])).toEqual([QR])
+    expect(sanitizeHistoricalTemplateButtons([raw])).toBeNull()
+  })
+
+  it('mixed QR + URL + PHONE preserva ordem de entrada', () => {
+    expect(sanitizeHistoricalTemplateButtons([URL_BTN, PHONE, QR])).toEqual([
+      URL_BTN, PHONE, QR,
+    ])
   })
 
   it('QR com propriedade própria payload → drop', () => {
@@ -172,6 +220,25 @@ describe('sanitizeHistoricalTemplateButtons', () => {
     expect(() => sanitizeHistoricalTemplateButtons(undefined)).not.toThrow()
     expect(() => sanitizeHistoricalTemplateButtons({ v: 1, buttons: [QR] })).not.toThrow()
     expect(() => sanitizeHistoricalTemplateButtons([null, 1, 'x', { type: 'URL' }])).not.toThrow()
+  })
+})
+
+describe('buildHistoricalTelHref / isSafeHistoricalPhoneNumber', () => {
+  it('número válido → tel: sem normalizar', () => {
+    expect(isSafeHistoricalPhoneNumber('+5511999999999')).toBe(true)
+    expect(buildHistoricalTelHref('+5511999999999')).toBe('tel:+5511999999999')
+    expect(buildHistoricalTelHref('5511999999999')).toBe('tel:5511999999999')
+  })
+
+  it('rejeita javascript/data/tel pronto/espaços/barra/arroba/comprimento', () => {
+    expect(buildHistoricalTelHref('javascript:alert(1)')).toBeNull()
+    expect(buildHistoricalTelHref('data:text/html,hi')).toBeNull()
+    expect(buildHistoricalTelHref('tel:+5511999999999')).toBeNull()
+    expect(buildHistoricalTelHref('+55 11 99999-9999')).toBeNull()
+    expect(buildHistoricalTelHref('+5511/99999999')).toBeNull()
+    expect(buildHistoricalTelHref('+55@1199999999')).toBeNull()
+    expect(buildHistoricalTelHref(`+${'1'.repeat(21)}`)).toBeNull()
+    expect(isSafeHistoricalPhoneNumber('javascript:alert(1)')).toBe(false)
   })
 })
 

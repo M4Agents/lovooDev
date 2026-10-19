@@ -7,6 +7,7 @@
 //
 // Exports:
 //   isSafeHttpUrl(href) — predicado HTTP/HTTPS absoluto (WHATWG; nunca toString)
+//   isSafePhoneNumber(value) — predicado do número aprovado PHONE_NUMBER
 //   buildTemplateButtonsSnapshot({ analysis, parameterValues })
 //   sanitizeTemplateButtonsSnapshot(raw)
 // =============================================================================
@@ -17,6 +18,10 @@ const MAX_TEXT    = 64;
 const MAX_HREF    = 2048;
 const PLACEHOLDER = '{{1}}';
 const RE_PLACEHOLDER = /\{\{([^}]*)\}\}/g;
+
+// Teto Meta (20) + E.164 mínimo defensivo (8 dígitos). Não normaliza o valor.
+const RE_SAFE_PHONE_NUMBER = /^\+?[0-9]{8,20}$/;
+const MAX_PHONE_NUMBER_LEN = 20;
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -43,6 +48,18 @@ function firstPlaceholderInner(str) {
   const re = new RegExp(RE_PLACEHOLDER.source, 'g');
   const match = re.exec(str);
   return match ? match[1] : null;
+}
+
+/**
+ * Valida o número aprovado do botão PHONE_NUMBER.
+ * Não trim, não normaliza, não aceita tel:/javascript:/espaços.
+ * Fonte única da política usada pelo snapshot e pelo predicado send-ready.
+ * Não autoriza envio por si só.
+ */
+export function isSafePhoneNumber(value) {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > MAX_PHONE_NUMBER_LEN) return false;
+  return RE_SAFE_PHONE_NUMBER.test(value);
 }
 
 /**
@@ -161,6 +178,35 @@ function buildDynamicUrlSnapshot(analysis, parameterValues) {
 }
 
 /**
+ * Snapshot 4C.5B.B: phone_number = valor original da definição aprovada.
+ * Número inválido → null (fail-closed, sem lançar). Não autoriza send.
+ * @private
+ */
+function buildPhoneNumberSnapshot(analysis) {
+  if (analysis.headerMediaFormat != null) return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length !== 1) return null;
+
+  const button = buttons[0];
+  if (!isPlainObject(button)) return null;
+  if (button.type !== 'PHONE_NUMBER') return null;
+  if (button.index !== 0) return null;
+  if (!isValidText(button.text)) return null;
+  if (!isSafePhoneNumber(button.phone_number)) return null;
+
+  return {
+    v: 1,
+    buttons: [{
+      type:         'PHONE_NUMBER',
+      index:        0,
+      text:         button.text,
+      phone_number: button.phone_number,
+    }],
+  };
+}
+
+/**
  * Constrói wrapper v1 sanitizado ou null.
  * Não lança. Não autoriza send.
  *
@@ -183,6 +229,10 @@ export function buildTemplateButtonsSnapshot(input = {}) {
       return buildStaticUrlSnapshot(analysis);
     }
     return buildDynamicUrlSnapshot(analysis, input.parameterValues);
+  }
+
+  if (buttons.length === 1 && buttons[0]?.type === 'PHONE_NUMBER') {
+    return buildPhoneNumberSnapshot(analysis);
   }
 
   return null;
@@ -224,6 +274,18 @@ export function sanitizeTemplateButtonsSnapshot(raw) {
         index: button.index,
         text:  button.text,
         href:  button.href,
+      });
+      continue;
+    }
+
+    if (button.type === 'PHONE_NUMBER') {
+      if (!isValidIndex(button.index) || !isValidText(button.text)) continue;
+      if (!isSafePhoneNumber(button.phone_number)) continue;
+      out.push({
+        type:         'PHONE_NUMBER',
+        index:        button.index,
+        text:         button.text,
+        phone_number: button.phone_number,
       });
     }
   }

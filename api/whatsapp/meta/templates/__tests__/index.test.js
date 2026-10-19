@@ -2122,7 +2122,7 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     }]);
   });
 
-  it('PHONE_NUMBER → top-level buttons não expõe phone_number; supported=false', async () => {
+  it('PHONE_NUMBER único válido → supported=true; DTO público sem phone_number', async () => {
     const tpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c2a-phone',
@@ -2134,17 +2134,27 @@ describe('GET — MVP4C.2A buttons DTO', () => {
         },
       ],
     };
+    const originalPhone = tpl.components[1].buttons[0].phone_number;
     mockListMessageTemplates.mockResolvedValue(makeListResult([tpl]));
     const req = makeReq();
     const res = makeRes();
     await handler(req, res);
 
     const result = res._body.templates[0];
-    expect(result.supported).toBe(false);
-    expect(result.unsupported_reason).toBeTruthy();
+    expect(result.supported).toBe(true);
+    expect(result.unsupported_reason).toBeNull();
     expect(result.buttons).toEqual([{ index: 0, type: 'PHONE_NUMBER', text: 'Contato' }]);
     expect(result.buttons[0]).not.toHaveProperty('phone_number');
+    expect(result).not.toHaveProperty('analysis');
+    const buttonsComp = result.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0].type).toBe('PHONE_NUMBER');
+    expect(buttonsComp.buttons[0].text).toBe('Contato');
+    expect(buttonsComp.buttons[0]).not.toHaveProperty('phone_number');
     expect(JSON.stringify(result.buttons)).not.toContain('+5511999999999');
+    expect(JSON.stringify(result.components)).not.toContain('+5511999999999');
+    expect(JSON.stringify(result)).not.toContain('"phone_number"');
+    expect(JSON.stringify(result)).not.toContain('+5511999999999');
+    expect(tpl.components[1].buttons[0].phone_number).toBe(originalPhone);
   });
 
   it('paginação intacta com template BUTTONS', async () => {
@@ -2388,6 +2398,142 @@ describe('GET — MVP4C.3B dynamic URL', () => {
     expect(staticDto.buttons[0].url_kind).toBe('static');
     expect(qrDto.supported).toBe(true);
     expect(qrDto.unsupported_reason).toBeNull();
+  });
+
+});
+
+// =============================================================================
+// MVP4C.5B.B — GET PHONE_NUMBER send-ready; DTO público sem phone_number
+// =============================================================================
+
+describe('GET — MVP4C.5B.B PHONE_NUMBER', () => {
+
+  it('PHONE único válido → supported=true; buttons/components sem phone_number', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c5b-phone',
+      components: [
+        { type: 'BODY', text: 'Ligue agora', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }],
+        },
+      ],
+    };
+    const engine = analyzeTemplate(raw);
+    expect(engine.supported).toBe(true);
+    expect(engine.buttons[0].phone_number).toBe('+5511999999999');
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
+    expect(dto.buttons).toEqual([{ index: 0, type: 'PHONE_NUMBER', text: 'Ligar' }]);
+    expect(dto.buttons[0]).not.toHaveProperty('phone_number');
+    expect(dto).not.toHaveProperty('analysis');
+    const buttonsComp = dto.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0]).toEqual({ type: 'PHONE_NUMBER', text: 'Ligar' });
+    expect(JSON.stringify(dto)).not.toContain('"phone_number"');
+    expect(JSON.stringify(dto)).not.toContain('+5511999999999');
+    expect(raw.components[1].buttons[0].phone_number).toBe('+5511999999999');
+    expect(engine.buttons[0].phone_number).toBe('+5511999999999');
+  });
+
+  it('URL dinâmica e estática preservam contratos públicos', async () => {
+    const dynTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c5b-dyn',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }],
+        },
+      ],
+    };
+    const staticTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c5b-static',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([dynTpl, staticTpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dynDto = res._body.templates.find(t => t.id === 'tpl-4c5b-dyn');
+    const staticDto = res._body.templates.find(t => t.id === 'tpl-4c5b-static');
+    expect(dynDto.supported).toBe(true);
+    expect(dynDto.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Abrir teste',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    }]);
+    expect(dynDto.components.find(c => c.type === 'BUTTONS').buttons[0].url)
+      .toBe('https://example.com/test/{{1}}');
+    expect(staticDto.supported).toBe(true);
+    expect(staticDto.buttons).toEqual([{
+      index: 0, type: 'URL', text: 'Site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    }]);
+    expect(staticDto.components.find(c => c.type === 'BUTTONS').buttons[0].url)
+      .toBe('https://example.com/loja');
+  });
+
+  it('mistura PHONE+QR, AUTH e FLOW continuam bloqueados', async () => {
+    const mixTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c5b-mix',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'QUICK_REPLY', text: 'Ok' },
+          ],
+        },
+      ],
+    };
+    const flowTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c5b-flow',
+      components: [
+        { type: 'BODY', text: 'Fluxo', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Abrir' }] },
+      ],
+    };
+    expect(analyzeTemplate(mixTpl).supported).toBe(false);
+    expect(analyzeTemplate(FAKE_TEMPLATE_AUTH).supported).toBe(false);
+    expect(analyzeTemplate(flowTpl).supported).toBe(false);
+
+    mockListMessageTemplates.mockResolvedValue(
+      makeListResult([mixTpl, FAKE_TEMPLATE_AUTH, flowTpl]),
+    );
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const mixDto = res._body.templates.find(t => t.id === 'tpl-4c5b-mix');
+    const authDto = res._body.templates.find(t => t.id === FAKE_TEMPLATE_AUTH.id);
+    const flowDto = res._body.templates.find(t => t.id === 'tpl-4c5b-flow');
+    expect(mixDto.supported).toBe(false);
+    expect(mixDto.unsupported_reason).toBeTruthy();
+    expect(JSON.stringify(mixDto.buttons)).not.toContain('+5511999999999');
+    expect(JSON.stringify(mixDto.components)).not.toContain('+5511999999999');
+    expect(authDto.supported).toBe(false);
+    expect(authDto.unsupported_reason).toContain('AUTHENTICATION');
+    expect(flowDto.supported).toBe(false);
+    expect(flowDto.unsupported_reason).toBeTruthy();
   });
 
 });

@@ -14,6 +14,10 @@ const MAX_INDEX = 9
 const MAX_TEXT  = 64
 const MAX_HREF  = 2048
 
+// Teto Meta (20) + E.164 mínimo defensivo (8 dígitos). Não normaliza o valor.
+const RE_SAFE_PHONE_NUMBER = /^\+?[0-9]{8,20}$/
+const MAX_PHONE_NUMBER_LEN = 20
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -26,6 +30,25 @@ function isValidText(value: unknown): value is string {
   return typeof value === 'string'
     && value.trim().length > 0
     && value.length <= MAX_TEXT
+}
+
+/**
+ * Valida o número histórico PHONE_NUMBER.
+ * Não trim, não normaliza, não aceita tel:/javascript:/espaços.
+ */
+export function isSafeHistoricalPhoneNumber(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  if (value.length === 0 || value.length > MAX_PHONE_NUMBER_LEN) return false
+  return RE_SAFE_PHONE_NUMBER.test(value)
+}
+
+/**
+ * Gera `tel:` somente a partir de número já validado.
+ * Nunca aceita href tel: pronto. Falha → null, sem lançar.
+ */
+export function buildHistoricalTelHref(phoneNumber: string): string | null {
+  if (!isSafeHistoricalPhoneNumber(phoneNumber)) return null
+  return `tel:${phoneNumber}`
 }
 
 /**
@@ -71,6 +94,18 @@ function sanitizeUrl(item: Record<string, unknown>): MetaHistoricalTemplateButto
   }
 }
 
+function sanitizePhoneNumber(item: Record<string, unknown>): MetaHistoricalTemplateButton | null {
+  if (item.type !== 'PHONE_NUMBER') return null
+  if (!isValidIndex(item.index) || !isValidText(item.text)) return null
+  if (!isSafeHistoricalPhoneNumber(item.phone_number)) return null
+  return {
+    type:         'PHONE_NUMBER',
+    index:        item.index,
+    text:         item.text,
+    phone_number: item.phone_number,
+  }
+}
+
 /**
  * Sanitiza o campo público GET `template_buttons`.
  * Aceita somente array público. Wrapper { v, buttons } → null.
@@ -95,6 +130,12 @@ export function sanitizeHistoricalTemplateButtons(
     if (item.type === 'URL') {
       const url = sanitizeUrl(item)
       if (url) out.push(url)
+      continue
+    }
+
+    if (item.type === 'PHONE_NUMBER') {
+      const phone = sanitizePhoneNumber(item)
+      if (phone) out.push(phone)
     }
   }
 

@@ -2050,6 +2050,7 @@ describe('MetaChatArea — historical template buttons', () => {
     expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
     expect(screen.queryByTestId('hist-qr-0')).toBeNull()
     expect(screen.queryByTestId('hist-url-0')).toBeNull()
+    expect(screen.queryByTestId('hist-phone-0')).toBeNull()
   })
 
   it('HB-06: IMAGE + QR → media permanece e QR aparece', () => {
@@ -2079,6 +2080,79 @@ describe('MetaChatArea — historical template buttons', () => {
     expect(img.src).toContain('promo.jpg')
     expect(screen.getByText('Veja a imagem')).toBeTruthy()
     expect(screen.getByTestId('hist-qr-0').textContent).toBe('Quero')
+  })
+
+  it('HB-08: PHONE_NUMBER válido → label aprovado e href tel: sem target blank', () => {
+    const msg: MetaChatMessage = {
+      ...makeMsg('msg-phone-hist', 'outbound', 'template', 'Ligue agora'),
+      template_buttons: [
+        { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: '+5511999999999' },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Ligue agora')).toBeTruthy()
+    const link = screen.getByTestId('hist-phone-0') as HTMLAnchorElement
+    expect(link.textContent).toBe('Ligar')
+    expect(link.getAttribute('href')).toBe('tel:+5511999999999')
+    expect(link.getAttribute('target')).toBeNull()
+    expect(link.rel).not.toContain('noopener')
+
+    link.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(link)
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(mockSendTemplate).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['data:', 'data:text/html,hi'],
+    ['tel: pronto', 'tel:+5511999999999'],
+    ['espaços', '+55 11 99999-9999'],
+    ['barra', '+5511/99999999'],
+    ['arroba', '+55@1199999999'],
+    ['longo', `+${'1'.repeat(21)}`],
+  ])('HB-09: PHONE_NUMBER inválido (%s) → sem link', (_label, phone_number) => {
+    const msg = {
+      ...makeMsg('msg-phone-bad', 'outbound', 'template', 'Body seguro'),
+      template_buttons: [
+        { type: 'PHONE_NUMBER', index: 0, text: 'Exploit', phone_number },
+      ],
+    } as MetaChatMessage
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Body seguro')).toBeTruthy()
+    expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
+    expect(screen.queryByTestId('hist-phone-0')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Exploit' })).toBeNull()
+    expect(mockSendMessage).not.toHaveBeenCalled()
+    expect(mockSendTemplate).not.toHaveBeenCalled()
+  })
+
+  it('HB-10: ordem por index preservada entre PHONE, QR e URL', () => {
+    const msg: MetaChatMessage = {
+      ...makeMsg('msg-mixed-hist', 'outbound', 'template', 'Escolha'),
+      template_buttons: [
+        { type: 'URL', index: 2, text: 'Site', href: 'https://example.com/loja' },
+        { type: 'PHONE_NUMBER', index: 0, text: 'Ligar', phone_number: '+5511999999999' },
+        { type: 'QUICK_REPLY', index: 1, text: 'Ok' },
+      ],
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    const row = screen.getByTestId('hist-template-buttons')
+    const items = Array.from(row.children)
+    expect(items).toHaveLength(3)
+    expect(items[0].getAttribute('data-testid')).toBe('hist-phone-0')
+    expect(items[1].getAttribute('data-testid')).toBe('hist-qr-1')
+    expect(items[2].getAttribute('data-testid')).toBe('hist-url-2')
+    expect((items[0] as HTMLAnchorElement).getAttribute('href')).toBe('tel:+5511999999999')
+    expect(items[1].tagName.toLowerCase()).toBe('span')
+    expect((items[2] as HTMLAnchorElement).getAttribute('href')).toBe('https://example.com/loja')
+    expect((items[2] as HTMLAnchorElement).target).toBe('_blank')
   })
 
   it('HB-07: histórico antigo (QR/URL sem snapshot) → body-only', () => {
