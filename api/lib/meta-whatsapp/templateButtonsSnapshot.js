@@ -207,6 +207,68 @@ function buildPhoneNumberSnapshot(analysis) {
 }
 
 /**
+ * Snapshot 4C.6.B1: QR (sem payload) + exatamente 1 URL estática com href da
+ * definição aprovada. Índices originais. Inválido → null sem lançar.
+ * Não autoriza send.
+ * @private
+ */
+function buildQuickReplyPlusStaticUrlSnapshot(analysis) {
+  if (analysis.headerMediaFormat != null) return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length < 2 || buttons.length > MAX_BUTTONS) {
+    return null;
+  }
+
+  let urlCount = 0;
+  let qrCount = 0;
+  let urlPos = -1;
+  const out = [];
+
+  for (let i = 0; i < buttons.length; i++) {
+    const button = buttons[i];
+    if (!isPlainObject(button)) return null;
+    if (!Number.isInteger(button.index) || button.index !== i) return null;
+
+    if (button.type === 'QUICK_REPLY') {
+      if (!isValidText(button.text)) return null;
+      qrCount += 1;
+      out.push({
+        type:  'QUICK_REPLY',
+        index: button.index,
+        text:  button.text,
+      });
+      continue;
+    }
+
+    if (button.type === 'URL') {
+      urlCount += 1;
+      urlPos = i;
+      if (button.url_kind !== 'static') return null;
+      if (!isValidText(button.text)) return null;
+      if (typeof button.url !== 'string' || button.url.trim().length === 0) return null;
+      if (countPlaceholders(button.url) !== 0) return null;
+      if (!isSafeHttpUrl(button.url)) return null;
+      out.push({
+        type:  'URL',
+        index: button.index,
+        text:  button.text,
+        href:  button.url,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  if (urlCount !== 1) return null;
+  if (qrCount < 1 || qrCount > 9) return null;
+  if (qrCount + urlCount !== buttons.length) return null;
+  if (urlPos !== 0 && urlPos !== buttons.length - 1) return null;
+  return { v: 1, buttons: out };
+}
+
+/**
  * Constrói wrapper v1 sanitizado ou null.
  * Não lança. Não autoriza send.
  *
@@ -235,7 +297,7 @@ export function buildTemplateButtonsSnapshot(input = {}) {
     return buildPhoneNumberSnapshot(analysis);
   }
 
-  return null;
+  return buildQuickReplyPlusStaticUrlSnapshot(analysis);
 }
 
 /**

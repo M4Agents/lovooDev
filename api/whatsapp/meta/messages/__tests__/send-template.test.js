@@ -3201,7 +3201,7 @@ describe('4C5A-SEND | parameter_values.url presente é rejeitado antes do Graph'
 });
 
 describe('4C5A-SEND | template misto é rejeitado antes do Graph', () => {
-  it('supported=false → 422 template_unsupported; send 0', async () => {
+  it('QR separados por URL → 422 template_unsupported; send 0', async () => {
     setupHappyPath();
     mockListMessageTemplates.mockResolvedValue(makeListResult([{
       ...FAKE_RAW_TEMPLATE_URL_STATIC,
@@ -3210,8 +3210,9 @@ describe('4C5A-SEND | template misto é rejeitado antes do Graph', () => {
         {
           type: 'BUTTONS',
           buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
             { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
-            { type: 'QUICK_REPLY', text: 'Ok' },
+            { type: 'QUICK_REPLY', text: 'Não' },
           ],
         },
       ],
@@ -3221,8 +3222,9 @@ describe('4C5A-SEND | template misto é rejeitado antes do Graph', () => {
       parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Escolha',
       headerMediaFormat: null,
       buttons: [
-        { index: 0, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' },
-        { index: 1, type: 'QUICK_REPLY', text: 'Ok' },
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        { index: 1, type: 'URL', text: 'Site', url: 'https://example.com/loja', url_kind: 'static' },
+        { index: 2, type: 'QUICK_REPLY', text: 'Não' },
       ],
     });
 
@@ -3468,5 +3470,197 @@ describe('4C5B-SEND | template inválido é rejeitado antes do Graph', () => {
     expect(res._body.error).toBe('template_unsupported');
     expect(mockSendTemplateMessage).not.toHaveBeenCalled();
     expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// MVP4C.6.B1 — QR + URL estática (engine mockado; Graph mockado; snapshot real)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_QR_STATIC = {
+  id: 'tpl-qr-static',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Escolha' },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'QUICK_REPLY', text: 'Sim' },
+        { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+      ],
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_QR_STATIC = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Escolha',
+  headerMediaFormat: null,
+  buttons: [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/loja', url_kind: 'static',
+    },
+  ],
+};
+
+const FAKE_COMPONENTS_QR_STATIC = [{
+  type: 'button',
+  sub_type: 'quick_reply',
+  index: '0',
+  parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+}];
+
+describe('4C6B1-SEND | QR + URL estática válido aceita', () => {
+  it('Graph 1x só QR no índice original; snapshot misto v1; tracking igual', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_STATIC]));
+    setupEngineOk(FAKE_ANALYSIS_QR_STATIC);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR_STATIC);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {} },
+        components: [{ type: 'button', url: 'https://evil.example/forged' }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_QR_STATIC);
+    expect(tpl.components).toHaveLength(1);
+    expect(tpl.components[0].index).toBe('0');
+    expect(tpl.components[0].sub_type).toBe('quick_reply');
+    expect(JSON.stringify(tpl.components)).not.toContain('"sub_type":"url"');
+    expect(JSON.stringify(tpl)).not.toContain('https://example.com/loja');
+    expect(JSON.stringify(tpl)).not.toContain('https://evil.example/forged');
+    expect(JSON.stringify(tpl)).not.toContain('"parameters":[]');
+
+    const trackingInsert = mockSvc.from.mock.results[3].value;
+    const trackingArg = trackingInsert.insert.mock.calls[0][0];
+    expect(trackingArg.company_id).toBe(FAKE_COMPANY_ID);
+    expect(trackingArg.instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(trackingArg.meta_message_id).toBe(FAKE_WAMID);
+    expect(trackingArg.status).toBe('accepted');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/loja' },
+      ],
+    });
+    expect(insertArg).not.toHaveProperty('parameter_values');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('suffix-runtime');
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('4C6B1-SEND | parâmetros URL do frontend são rejeitados', () => {
+  it('parameter_values.url → 422; send 0; insert 0; Graph 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_STATIC]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_QR_STATIC);
+    mockValidateParameterValues.mockReturnValue({ valid: false, error: 'template_params_mismatch' });
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'suffix-runtime' } } },
+    }), res);
+
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_params_mismatch');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('4C6B1-SEND | combinação inválida é rejeitada antes do Graph', () => {
+  it('QR separados por URL → 422 template_unsupported; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_QR_STATIC,
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS type URL not supported',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Escolha',
+      headerMediaFormat: null,
+      buttons: [
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        { index: 2, type: 'QUICK_REPLY', text: 'Não' },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  });
+});
+
+describe('4C6B1-SEND | regressões QR / URL / PHONE', () => {
+  it('QR-only snapshot e Graph intactos', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage.mock.calls[0][3].components).toEqual(FAKE_COMPONENTS_QR);
+    const insertArg = mockSvc.from.mock.results[4].value.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+  });
+
+  it('URL estática única continua sem button no Graph', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_STATIC]));
+    setupEngineOk(FAKE_ANALYSIS_URL_STATIC);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL_STATIC);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage.mock.calls[0][3]).not.toHaveProperty('components');
   });
 });

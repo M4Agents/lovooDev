@@ -33,6 +33,10 @@
 // MVP4C.5B.A: 1 PHONE_NUMBER válido (index 0, text não vazio, número seguro,
 //   sem HEADER media) → supported=true. Graph omite type=button. Número vem
 //   só da definição aprovada. Mix / media / AUTH / número inválido → false.
+// MVP4C.6.B1: 1 grupo contíguo de QUICK_REPLY (1–9) + exatamente 1 URL estática
+//   (antes ou depois do grupo), índices originais 0..n-1, sem HEADER media →
+//   supported=true. Graph emite button só para cada QR; omite a URL estática.
+//   QR separados, URL dinâmica, PHONE, AUTH, FLOW, mídia → false.
 // =============================================================================
 
 import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
@@ -264,6 +268,56 @@ function isSinglePhoneNumberSendReady(buttons, headerMediaFormat) {
   if (b.index !== 0) return false;
   if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
   return isSafePhoneNumber(b.phone_number);
+}
+
+/**
+ * True somente para o slice 4C.6.B1: 1 grupo contíguo de QUICK_REPLY (1–9)
+ * + exatamente 1 URL estática (antes ou depois do grupo).
+ * Índices inteiros, únicos e iguais às posições originais 0..n-1.
+ * Sem HEADER media, sem PHONE/FLOW/AUTH/URL dinâmica, sem placeholders.
+ * @private
+ */
+function isQuickReplyPlusStaticUrlSendReady(buttons, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (!Array.isArray(buttons)) return false;
+  const n = buttons.length;
+  if (n < 2 || n > 10) return false;
+
+  let urlCount = 0;
+  let qrCount = 0;
+  let urlPos = -1;
+
+  for (let i = 0; i < n; i++) {
+    const b = buttons[i];
+    if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+    if (!Number.isInteger(b.index) || b.index !== i) return false;
+
+    if (b.type === 'QUICK_REPLY') {
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      qrCount += 1;
+      continue;
+    }
+
+    if (b.type === 'URL') {
+      urlCount += 1;
+      urlPos = i;
+      if (b.url_kind !== 'static') return false;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (typeof b.url !== 'string' || b.url.trim().length === 0) return false;
+      const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+      if (allInners.size !== 0) return false;
+      if (!isSafeHttpUrl(b.url)) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  if (urlCount !== 1) return false;
+  if (qrCount < 1 || qrCount > 9) return false;
+  if (qrCount + urlCount !== n) return false;
+  if (urlPos !== 0 && urlPos !== n - 1) return false;
+  return true;
 }
 
 /**
@@ -594,7 +648,8 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.3B: 1 URL POSITIONAL com {{1}} no FINAL, sem HEADER media → supported=true.
     // 4C.5A: 1 URL estática sem placeholder, sem HEADER media → supported=true.
     // 4C.5B.A: 1 PHONE_NUMBER válido, sem HEADER media → supported=true.
-    // Mix / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
+    // 4C.6.B1: 1 grupo QR contíguo + 1 URL estática, sem HEADER media → supported=true.
+    // QR separados / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
       const dynamicUrlReady = isSinglePositionalDynamicUrlSendReady(
@@ -610,7 +665,15 @@ export function analyzeTemplate(rawTemplate) {
         classifiedButtons,
         headerMediaFormat,
       );
-      const ready = qrReady || dynamicUrlReady || staticUrlReady || phoneReady;
+      const mixQrStaticReady = isQuickReplyPlusStaticUrlSendReady(
+        classifiedButtons,
+        headerMediaFormat,
+      );
+      const ready = qrReady
+        || dynamicUrlReady
+        || staticUrlReady
+        || phoneReady
+        || mixQrStaticReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -819,7 +882,7 @@ export function validateParameterValues(parameters, parameterValues, context = {
  *   build_media_invalid_input   — mediaId vazio ou whitespace-only
  *   build_media_header_mismatch — mediaType não corresponde ao formato do HEADER
  *   build_buttons_invalid       — BUTTONS malformado
- *   build_buttons_unsupported   — BUTTONS não é QR-only, URL dynamic/static nem PHONE send-ready
+ *   build_buttons_unsupported   — BUTTONS não é QR-only, URL dynamic/static, PHONE nem QR+URL estática
  *   build_qr_identity_missing   — templateIdentity ausente/inválido para QR
  *   build_qr_payload_too_long   — payload excede LOVOO_QR_PAYLOAD_MAX_LEN
  */
@@ -974,6 +1037,35 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
       }
 
       const headerMediaHint = hasMediaHeader ? 'IMAGE' : null;
+
+      // 4C.6.B1: QR no índice original; URL estática omitida (sem parameters: []).
+      if (isQuickReplyPlusStaticUrlSendReady(classified.buttons, headerMediaHint)) {
+        const identity = resolveTemplateIdentity(options);
+        if (!identity) {
+          throw makeEngineError(
+            'build_qr_identity_missing',
+            'buildGraphComponents: templateIdentity required for QUICK_REPLY',
+          );
+        }
+
+        for (const btn of classified.buttons) {
+          if (btn.type !== 'QUICK_REPLY') continue;
+          const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
+          if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+            throw makeEngineError(
+              'build_qr_payload_too_long',
+              'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+            );
+          }
+          result.push({
+            type:       'button',
+            sub_type:   'quick_reply',
+            index:      String(btn.index),
+            parameters: [{ type: 'payload', payload }],
+          });
+        }
+        continue;
+      }
 
       // 4C.5A: URL estática já está na definição aprovada — Graph omite type=button.
       if (isSingleStaticUrlSendReady(classified.buttons, headerMediaHint)) {

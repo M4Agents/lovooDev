@@ -2225,7 +2225,7 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     expect(res._body.templates[0].buttons).toEqual([]);
   });
 
-  it('URL estática GET supported=true; PHONE_NUMBER e mix continuam false', async () => {
+  it('URL estática GET supported=true; PHONE sem número continua false; QR+URL estática true (4C.6.B1)', async () => {
     const urlTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c2c-url',
@@ -2258,7 +2258,7 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     };
     expect(analyzeTemplate(urlTpl).supported).toBe(true);
     expect(analyzeTemplate(phoneTpl).supported).toBe(false);
-    expect(analyzeTemplate(mixTpl).supported).toBe(false);
+    expect(analyzeTemplate(mixTpl).supported).toBe(true);
 
     mockListMessageTemplates.mockResolvedValue(makeListResult([urlTpl, phoneTpl, mixTpl]));
     const req = makeReq();
@@ -2273,8 +2273,8 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     expect(urlDto.buttons[0].url_kind).toBe('static');
     expect(phoneDto.supported).toBe(false);
     expect(phoneDto.unsupported_reason).toBeTruthy();
-    expect(mixDto.supported).toBe(false);
-    expect(mixDto.unsupported_reason).toBeTruthy();
+    expect(mixDto.supported).toBe(true);
+    expect(mixDto.unsupported_reason).toBeNull();
     expect(JSON.stringify(res._body)).not.toContain('BUTTONS UI not enabled');
   });
 
@@ -2534,6 +2534,183 @@ describe('GET — MVP4C.5B.B PHONE_NUMBER', () => {
     expect(authDto.unsupported_reason).toContain('AUTHENTICATION');
     expect(flowDto.supported).toBe(false);
     expect(flowDto.unsupported_reason).toBeTruthy();
+  });
+
+});
+
+// =============================================================================
+// MVP4C.6.B1 — GET QR + URL estática send-ready
+// =============================================================================
+
+describe('GET — MVP4C.6.B1 QR + URL estática', () => {
+
+  it('QR + URL estática → supported=true; índices e url_kind; sem payload', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-qr-url',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
+    expect(dto.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      {
+        index: 1, type: 'URL', text: 'Abrir',
+        url: 'https://example.com/loja', url_kind: 'static',
+      },
+    ]);
+    expect(dto.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto.buttons)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto.buttons)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+  });
+
+  it('URL estática + QR agrupados → supported=true', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-url-qr',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons.map(b => [b.index, b.type])).toEqual([
+      [0, 'URL'],
+      [1, 'QUICK_REPLY'],
+      [2, 'QUICK_REPLY'],
+    ]);
+  });
+
+  it('QR separados, URL dinâmica, PHONE, FLOW e mídia continuam false', async () => {
+    const splitTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-split',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    };
+    const dynTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-dyn',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+          ],
+        },
+      ],
+    };
+    const phoneTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-phone',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    const mediaTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-media',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(splitTpl).supported).toBe(false);
+    expect(analyzeTemplate(dynTpl).supported).toBe(false);
+    expect(analyzeTemplate(phoneTpl).supported).toBe(false);
+    expect(analyzeTemplate(mediaTpl).supported).toBe(false);
+
+    mockListMessageTemplates.mockResolvedValue(
+      makeListResult([splitTpl, dynTpl, phoneTpl, mediaTpl]),
+    );
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-split').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-dyn').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-phone').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-media').supported).toBe(false);
+  });
+
+  it('QR-only e URL estática única permanecem supported=true', async () => {
+    const qrTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-qr',
+      components: [
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    };
+    const urlTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b1-static',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([qrTpl, urlTpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-qr').supported).toBe(true);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-static').supported).toBe(true);
   });
 
 });

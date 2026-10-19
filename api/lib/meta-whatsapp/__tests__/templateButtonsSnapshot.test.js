@@ -211,7 +211,7 @@ describe('buildTemplateButtonsSnapshot — NULL', () => {
         Array.from({ length: 11 }, (_, i) => ({ index: i, type: 'QUICK_REPLY', text: `B${i}` })),
       ),
     }],
-    ['mixed QR/URL', {
+    ['mixed QR/URL dinâmica', {
       analysis: qrAnalysis([
         { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
         { index: 1, type: 'URL', text: 'Site', url: 'https://example.com/test/{{1}}' },
@@ -609,6 +609,239 @@ describe('sanitizeTemplateButtonsSnapshot — PHONE_NUMBER (4C.5B.B)', () => {
     })).toEqual([
       { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
       { type: 'URL', index: 1, text: 'Site', href: 'https://example.com/loja' },
+    ]);
+  });
+});
+
+function mixQrStaticAnalysis(buttons, overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons,
+    ...overrides,
+  };
+}
+
+const MIX_QR_STATIC_BUTTONS = [
+  { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+  {
+    index: 1, type: 'URL', text: 'Abrir',
+    url: 'https://example.com/loja', url_kind: 'static',
+  },
+];
+
+describe('buildTemplateButtonsSnapshot — QR + URL estática (4C.6.B1)', () => {
+  it('QR + URL estática → wrapper v1 misto; href da definição; sem payload', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis(MIX_QR_STATIC_BUTTONS),
+      parameterValues: { body: {}, url: { '0': 'suffix-runtime' } },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/loja' },
+      ],
+    });
+    expect(JSON.stringify(snap)).not.toContain('payload');
+    expect(JSON.stringify(snap)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(snap)).not.toContain('suffix-runtime');
+    expect(JSON.stringify(snap)).not.toContain('url_kind');
+    expect(snap.buttons[0]).not.toHaveProperty('href');
+    expect(Object.keys(snap.buttons[0]).sort()).toEqual(['index', 'text', 'type']);
+    expect(Object.keys(snap.buttons[1]).sort()).toEqual(['href', 'index', 'text', 'type']);
+  });
+
+  it('URL estática + QR → ordem e índices originais', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        {
+          index: 0, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+      ]),
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'URL', index: 0, text: 'Abrir', href: 'https://example.com/loja' },
+        { type: 'QUICK_REPLY', index: 1, text: 'Sim' },
+      ],
+    });
+  });
+
+  it('dois QR + URL estática → índices 0,1,2', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        { index: 1, type: 'QUICK_REPLY', text: 'Não' },
+        {
+          index: 2, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+      ]),
+    });
+    expect(snap.buttons.map(b => [b.type, b.index])).toEqual([
+      ['QUICK_REPLY', 0],
+      ['QUICK_REPLY', 1],
+      ['URL', 2],
+    ]);
+  });
+
+  it('QR separados por URL → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        { index: 2, type: 'QUICK_REPLY', text: 'Não' },
+      ]),
+    })).toBeNull();
+  });
+
+  it('índice duplicado → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 0, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it('índices não consecutivos → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 2, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['placeholder', 'https://example.com/{{1}}'],
+    ['relativa', '/loja'],
+  ])('URL insegura/placeholder (%s) → null', (_label, url) => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        { index: 1, type: 'URL', text: 'Abrir', url, url_kind: 'static' },
+      ]),
+    })).toBeNull();
+  });
+
+  it('PHONE na mistura → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it('header media → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis(MIX_QR_STATIC_BUTTONS, { headerMediaFormat: 'IMAGE' }),
+    })).toBeNull();
+  });
+
+  it('QR-only / URL estática / PHONE individuais permanecem intactos', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]),
+    })).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: staticUrlAnalysis(),
+    })).toEqual({
+      v: 1,
+      buttons: [{ type: 'URL', index: 0, text: 'Site', href: 'https://example.com/loja' }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis(),
+    })).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+        phone_number: '+5511999999999',
+      }],
+    });
+  });
+});
+
+describe('sanitizeTemplateButtonsSnapshot — QR + URL estática (4C.6.B1)', () => {
+  it('snapshot misto v1 → whitelist; extras e payload dropped', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      extra_top: 'drop',
+      buttons: [
+        {
+          type: 'QUICK_REPLY', index: 0, text: 'Sim',
+          extra: 'nope',
+        },
+        {
+          type: 'URL', index: 1, text: 'Abrir',
+          href: 'https://example.com/loja',
+          url: 'https://evil.example/x',
+          url_kind: 'static',
+          extra: 'nope',
+        },
+      ],
+    })).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+      { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/loja' },
+    ]);
+  });
+
+  it('QR com payload no mix → item QR dropped; URL permanece', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        {
+          type: 'QUICK_REPLY', index: 0, text: 'Sim',
+          payload: 'lovoo:qr:v1:hello:en:0',
+        },
+        {
+          type: 'URL', index: 1, text: 'Abrir',
+          href: 'https://example.com/loja',
+        },
+      ],
+    })).toEqual([
+      { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/loja' },
+    ]);
+  });
+
+  it('href inseguro no mix → URL dropped; QR permanece', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'URL', index: 1, text: 'Abrir',
+          href: 'javascript:alert(1)',
+        },
+      ],
+    })).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
     ]);
   });
 });
