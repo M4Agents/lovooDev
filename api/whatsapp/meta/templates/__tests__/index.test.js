@@ -2091,6 +2091,12 @@ describe('GET — MVP4C.2A buttons DTO', () => {
     expect(result.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(result.buttons[0]).not.toHaveProperty('payload');
     expect(JSON.stringify(result.buttons)).not.toContain('secret-qr-payload');
+    const buttonsComp = result.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0]).toEqual({ type: 'QUICK_REPLY', text: 'Sim' });
+    expect(buttonsComp.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(result.components)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(result)).not.toContain('secret-qr-payload');
+    expect(tpl.components[1].buttons[0].payload).toBe('secret-qr-payload');
     result.components.forEach(comp => expect(comp).not.toHaveProperty('example'));
     expect(result.components.some(c => c.type === 'BODY')).toBe(true);
     expect(result.components.some(c => c.type === 'BUTTONS')).toBe(true);
@@ -2211,8 +2217,11 @@ describe('GET — MVP4C.2C analysis.supported', () => {
     expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
     expect(dto.buttons[0]).not.toHaveProperty('payload');
     expect(JSON.stringify(dto.buttons)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto.components)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto)).not.toContain('secret-qr-payload');
     expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(dto)).not.toContain('BUTTONS UI not enabled');
+    expect(raw.components[1].buttons[0].payload).toBe('secret-qr-payload');
   });
 
   it('sem BUTTONS → GET supported=true intacto', async () => {
@@ -2580,6 +2589,15 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
     expect(JSON.stringify(dto.buttons)).not.toContain('secret-qr-payload');
     expect(JSON.stringify(dto.buttons)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+    const buttonsComp = dto.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0]).toEqual({ type: 'QUICK_REPLY', text: 'Sim' });
+    expect(buttonsComp.buttons[1]).toEqual({
+      type: 'URL', text: 'Abrir', url: 'https://example.com/loja',
+    });
+    expect(buttonsComp.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto.components)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto)).not.toContain('secret-qr-payload');
+    expect(raw.components[1].buttons[0].payload).toBe('secret-qr-payload');
   });
 
   it('URL estática + QR agrupados → supported=true', async () => {
@@ -2711,6 +2729,214 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
     await handler(req, res);
     expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-qr').supported).toBe(true);
     expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-static').supported).toBe(true);
+  });
+
+});
+
+// =============================================================================
+// MVP4C.6.B2 — GET templates: strip payload em components[].buttons[]
+// =============================================================================
+
+describe('GET — MVP4C.6.B2 payload em components[].buttons', () => {
+
+  it('QR com payload Graph → DTO sem payload; buttons intacto; Graph mock não mutado', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-qr',
+      components: [
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    const graphButtons = dto.components.find(c => c.type === 'BUTTONS').buttons;
+    expect(graphButtons).toEqual([{ type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(graphButtons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+    expect(raw.components[1].buttons[0].payload).toBe('secret-qr-payload');
+  });
+
+  it('QR + URL estática → supported=true; payload omitido; url preservada', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-mix',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      {
+        index: 1, type: 'URL', text: 'Abrir',
+        url: 'https://example.com/loja', url_kind: 'static',
+      },
+    ]);
+    const graphButtons = dto.components.find(c => c.type === 'BUTTONS').buttons;
+    expect(graphButtons[0]).toEqual({ type: 'QUICK_REPLY', text: 'Sim' });
+    expect(graphButtons[1]).toEqual({
+      type: 'URL', text: 'Abrir', url: 'https://example.com/loja',
+    });
+    expect(JSON.stringify(dto)).not.toContain('secret-qr-payload');
+    expect(raw.components[1].buttons[0].payload).toBe('secret-qr-payload');
+  });
+
+  it('PHONE, URL estática e dinâmica preservam contratos; phone_number continua omitido', async () => {
+    const phoneTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-phone',
+      components: [
+        { type: 'BODY', text: 'Ligue', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }],
+        },
+      ],
+    };
+    const staticTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-static',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }],
+        },
+      ],
+    };
+    const dynTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-dyn',
+      components: [
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [{ type: 'URL', text: 'Abrir teste', url: 'https://example.com/test/{{1}}' }],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([phoneTpl, staticTpl, dynTpl]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const phoneDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-phone');
+    const staticDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-static');
+    const dynDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-dyn');
+
+    expect(phoneDto.supported).toBe(true);
+    expect(phoneDto.buttons[0]).not.toHaveProperty('phone_number');
+    expect(phoneDto.components.find(c => c.type === 'BUTTONS').buttons[0])
+      .not.toHaveProperty('phone_number');
+    expect(JSON.stringify(phoneDto)).not.toContain('+5511999999999');
+    expect(phoneTpl.components[1].buttons[0].phone_number).toBe('+5511999999999');
+
+    expect(staticDto.supported).toBe(true);
+    expect(staticDto.buttons[0]).toMatchObject({
+      type: 'URL', url: 'https://example.com/loja', url_kind: 'static',
+    });
+    expect(staticDto.components.find(c => c.type === 'BUTTONS').buttons[0].url)
+      .toBe('https://example.com/loja');
+
+    expect(dynDto.supported).toBe(true);
+    expect(dynDto.buttons[0]).toMatchObject({
+      type: 'URL', url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    });
+    expect(dynDto.components.find(c => c.type === 'BUTTONS').buttons[0].url)
+      .toBe('https://example.com/test/{{1}}');
+  });
+
+  it('regressões: QR-only, IMAGE+QR, BODY/HEADER, AUTH/FLOW; sem token no DTO', async () => {
+    const qrTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-qr-only',
+      components: [
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    };
+    const imgQrTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-img-qr',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    };
+    const headerBodyTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-header-body',
+      components: [
+        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}', example: { header_text: ['Loja'] } },
+        { type: 'BODY', text: 'Pedido {{1}}', example: { body_text: [['123']] } },
+        { type: 'FOOTER', text: 'Lovoo' },
+      ],
+    };
+    const flowTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6b2-flow',
+      components: [
+        { type: 'BODY', text: 'Fluxo', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Abrir' }] },
+      ],
+    };
+
+    mockListMessageTemplates.mockResolvedValue(
+      makeListResult([qrTpl, imgQrTpl, headerBodyTpl, FAKE_TEMPLATE_AUTH, flowTpl]),
+    );
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const qrDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-qr-only');
+    const imgDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-img-qr');
+    const textDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-header-body');
+    const authDto = res._body.templates.find(t => t.id === FAKE_TEMPLATE_AUTH.id);
+    const flowDto = res._body.templates.find(t => t.id === 'tpl-4c6b2-flow');
+
+    expect(qrDto.supported).toBe(true);
+    expect(qrDto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+    expect(imgDto.supported).toBe(true);
+    expect(imgDto.header_media_format).toBe('IMAGE');
+    expect(textDto.supported).toBe(true);
+    expect(textDto.components.find(c => c.type === 'HEADER').text).toBe('Olá {{1}}');
+    expect(textDto.components.find(c => c.type === 'BODY').text).toBe('Pedido {{1}}');
+    expect(textDto.components.find(c => c.type === 'FOOTER').text).toBe('Lovoo');
+    textDto.components.forEach(c => expect(c).not.toHaveProperty('example'));
+    expect(authDto.supported).toBe(false);
+    expect(authDto.unsupported_reason).toContain('AUTHENTICATION');
+    expect(flowDto.supported).toBe(false);
+
+    const body = JSON.stringify(res._body);
+    expect(body).not.toContain(FAKE_TOKEN_PLAIN);
+    expect(body).not.toContain(FAKE_TOKEN_ENC);
+    expect(body).not.toContain(FAKE_WABA_ID);
+    expect(body).not.toContain('lovoo:qr:v1');
   });
 
 });

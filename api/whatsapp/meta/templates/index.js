@@ -149,7 +149,20 @@ function sanitizePublicAnalysisButtons(buttons) {
 }
 
 /**
- * Copia components Graph para o DTO: strip `example` e `phone_number` aninhado.
+ * Botão Graph em components[]: omite phone_number e payload, sem mutar o original.
+ * Preserva type/text/url e demais campos já públicos.
+ * @private
+ */
+function omitInternalFieldsFromGraphButton(button) {
+  if (button === null || typeof button !== 'object' || Array.isArray(button)) {
+    return button;
+  }
+  const { phone_number: _phoneNumber, payload: _payload, ...rest } = button;
+  return rest;
+}
+
+/**
+ * Copia components Graph para o DTO: strip `example`, `phone_number` e `payload`.
  * Não muta o objeto Graph original usado pelo backend de envio.
  * @private
  */
@@ -161,7 +174,7 @@ function sanitizePublicComponents(rawComponents) {
     if (!Array.isArray(rest.buttons)) return rest;
     return {
       ...rest,
-      buttons: rest.buttons.map(omitPhoneNumberFromButton),
+      buttons: rest.buttons.map(omitInternalFieldsFromGraphButton),
     };
   });
 }
