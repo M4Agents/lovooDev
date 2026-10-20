@@ -8,6 +8,8 @@
 //   - Filtrar somente supported=true
 //   - Selecionar template + coletar parâmetros HEADER/BODY independentemente
 //   - MVP4C.3C: 1 URL dynamic POSITIONAL — suffix em parameter_values.url["0"]
+//   - MVP4C.8.A3: 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER (qualquer ordem)
+//     — suffix em parameter_values.url[String(url.index)]; sem campo de telefone
 //   - Exibir preview textual local (não porta templateEngine.js)
 //   - Solicitar envio via onSend — parent é responsável pela chamada real
 //
@@ -52,8 +54,9 @@ export interface MetaTemplatePickerProps {
 function initParamValues(tmpl: MetaWhatsAppTemplate): MetaTemplateParameterValues {
   const hasHeader = tmpl.parameters.some(p => p.component === 'HEADER')
   const base: MetaTemplateParameterValues = hasHeader ? { header: {}, body: {} } : { body: {} }
-  if (findSingleDynamicUrlButton(tmpl.buttons)) {
-    return { ...base, url: { '0': '' } }
+  const urlButton = findSendableDynamicUrlButton(tmpl.buttons)
+  if (urlButton) {
+    return { ...base, url: { [String(urlButton.index)]: '' } }
   }
   return base
 }
@@ -71,6 +74,59 @@ function findSingleDynamicUrlButton(
   if (b.url_kind !== 'dynamic') return null
   if (b.index !== 0) return null
   return b
+}
+
+/** URL dinâmica POSITIONAL com {{1}} único no FINAL. Só DTO; sem validar Graph. */
+function isPickerPositionalDynamicUrl(button: MetaTemplateButton): boolean {
+  if (button.type !== 'URL') return false
+  if (button.url_kind !== 'dynamic') return false
+  if (typeof button.url !== 'string' || !button.url.endsWith('{{1}}')) return false
+  const matches = button.url.match(/\{\{([^}]*)\}\}/g)
+  return matches !== null && matches.length === 1
+}
+
+/**
+ * Slice 4C.8.A3: exatamente 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER
+ * (qualquer ordem), índices originais 0 e 1. Devolve o botão URL.
+ * Não autoriza QR/FLOW/URL estática/segunda URL/segundo PHONE.
+ */
+function findDynamicUrlInPhoneMix(
+  buttons: MetaTemplateButton[] | undefined,
+): MetaTemplateButton | null {
+  if (!Array.isArray(buttons) || buttons.length !== 2) return null
+
+  let urlButton: MetaTemplateButton | null = null
+  let phoneCount = 0
+
+  for (let i = 0; i < 2; i++) {
+    const b = buttons[i]
+    if (!Number.isInteger(b.index) || b.index !== i) return null
+
+    if (b.type === 'URL') {
+      if (urlButton) return null
+      if (!isPickerPositionalDynamicUrl(b)) return null
+      urlButton = b
+      continue
+    }
+
+    if (b.type === 'PHONE_NUMBER') {
+      phoneCount += 1
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return null
+      continue
+    }
+
+    return null
+  }
+
+  if (urlButton === null || phoneCount !== 1) return null
+  return urlButton
+}
+
+/** URL dinâmica sendable no picker: single 4C.3C ou mix 4C.8.A3. */
+function findSendableDynamicUrlButton(
+  buttons: MetaTemplateButton[] | undefined,
+): MetaTemplateButton | null {
+  return findSingleDynamicUrlButton(buttons) ?? findDynamicUrlInPhoneMix(buttons)
 }
 
 /** Prefixo visual: remove somente o {{1}} FINAL. Sem concatenar URL de envio. */
@@ -137,8 +193,9 @@ function paramsComplete(tmpl: MetaWhatsAppTemplate, vals: MetaTemplateParameterV
     const v = p.component === 'HEADER' ? (vals.header?.[p.key] ?? '') : (vals.body[p.key] ?? '')
     if (!v.trim()) return false
   }
-  if (findSingleDynamicUrlButton(tmpl.buttons)) {
-    const suffix = vals.url?.['0'] ?? ''
+  const urlButton = findSendableDynamicUrlButton(tmpl.buttons)
+  if (urlButton) {
+    const suffix = vals.url?.[String(urlButton.index)] ?? ''
     if (typeof suffix !== 'string' || !suffix.trim()) return false
   }
   return true
@@ -237,8 +294,8 @@ export function MetaTemplatePicker({
     )
   }, [])
 
-  const handleUrlSuffixChange = useCallback((value: string) => {
-    setParamValues(prev => ({ ...prev, url: { ...(prev.url ?? {}), '0': value } }))
+  const handleUrlSuffixChange = useCallback((indexKey: string, value: string) => {
+    setParamValues(prev => ({ ...prev, url: { [indexKey]: value } }))
   }, [])
 
   // MVP4B: template tem HEADER media se header_media_format for IMAGE/VIDEO/DOCUMENT.
@@ -262,7 +319,7 @@ export function MetaTemplatePicker({
   const canSend      = textComplete && mediaComplete && !sending
   const preview      = selected ? buildPreview(selected.components, selected.parameters, paramValues) : null
   const qrChips      = selected ? previewQuickReplies(selected.buttons) : []
-  const urlButton    = selected ? findSingleDynamicUrlButton(selected.buttons) : null
+  const urlButton    = selected ? findSendableDynamicUrlButton(selected.buttons) : null
   const urlPrefix    = urlButton ? visualUrlPrefix(urlButton.url) : null
   const headerParams = selected?.parameters.filter(p => p.component === 'HEADER') ?? []
   const bodyParams   = selected?.parameters.filter(p => p.component === 'BODY')   ?? []
@@ -406,10 +463,10 @@ export function MetaTemplatePicker({
                         )}
                         <input
                           type="text"
-                          aria-label="Sufixo do botão URL 0"
-                          data-testid="url-suffix-0"
-                          value={paramValues.url?.['0'] ?? ''}
-                          onChange={e => handleUrlSuffixChange(e.target.value)}
+                          aria-label={`Sufixo do botão URL ${urlButton.index}`}
+                          data-testid={`url-suffix-${urlButton.index}`}
+                          value={paramValues.url?.[String(urlButton.index)] ?? ''}
+                          onChange={e => handleUrlSuffixChange(String(urlButton.index), e.target.value)}
                           className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                         />
                       </div>

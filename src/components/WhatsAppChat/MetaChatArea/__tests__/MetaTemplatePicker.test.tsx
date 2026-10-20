@@ -1220,3 +1220,315 @@ describe('MetaTemplatePicker — MVP4C.3C dynamic URL', () => {
     expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': ' 12345 ' } })
   })
 })
+
+// =============================================================================
+// FE-URL-PHONE-01.. — MVP4C.8.A3 dynamic URL + PHONE_NUMBER suffix
+// =============================================================================
+
+const TMPL_DYN_URL_PHONE: MetaWhatsAppTemplate = {
+  id:                  'tpl-4c8a3-url-phone',
+  name:                'lovoo_e2e_url_phone_dynamic',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [
+    {
+      index: 0, type: 'URL', text: 'Abrir link',
+      url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+    },
+    { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+  ],
+  components:          [
+    { type: 'BODY', text: 'Escolha' },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+        { type: 'PHONE_NUMBER', text: 'Ligar' },
+      ],
+    },
+  ],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_PHONE_DYN_URL: MetaWhatsAppTemplate = {
+  ...TMPL_DYN_URL_PHONE,
+  id:   'tpl-4c8a3-phone-url',
+  name: 'lovoo_e2e_phone_url_dynamic',
+  buttons: [
+    { index: 0, type: 'PHONE_NUMBER', text: 'Ligar' },
+    {
+      index: 1, type: 'URL', text: 'Abrir link',
+      url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+    },
+  ],
+}
+
+const TMPL_STATIC_URL_PHONE: MetaWhatsAppTemplate = {
+  id:                  'tpl-4c7-url-phone',
+  name:                'lovoo_e2e_url_phone_static',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [
+    {
+      index: 0, type: 'URL', text: 'Abrir site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    },
+    { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+  ],
+  components:          [{ type: 'BODY', text: 'Escolha' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_QR_PHONE: MetaWhatsAppTemplate = {
+  id:                  'tpl-4c6-qr-phone',
+  name:                'confirm_and_call',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'UTILITY',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+  ],
+  components:          [{ type: 'BODY', text: 'Escolha' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_DYN_URL_PHONE_QR: MetaWhatsAppTemplate = {
+  id:                  'tpl-4c8a3-triple',
+  name:                'url_phone_with_qr',
+  language:            'pt_BR',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir link',
+      url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+    },
+    { index: 2, type: 'PHONE_NUMBER', text: 'Ligar' },
+  ],
+  components:          [{ type: 'BODY', text: 'Escolha' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_DYN_URL_PHONE_BODY: MetaWhatsAppTemplate = {
+  ...TMPL_DYN_URL_PHONE,
+  id:   'tpl-4c8a3-url-phone-body',
+  name: 'order_url_phone_dynamic',
+  components: [
+    { type: 'BODY', text: 'Pedido {{1}}' },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+        { type: 'PHONE_NUMBER', text: 'Ligar' },
+      ],
+    },
+  ],
+  parameters: [
+    { component: 'BODY', key: '1', position: 1, example: '99' },
+  ],
+}
+
+describe('MetaTemplatePicker — MVP4C.8.A3 URL dinâmica + PHONE_NUMBER', () => {
+  it('FE-URL-PHONE-01: URL dinâmica individual continua com url["0"]', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    expect(screen.getByTestId('url-suffix-0')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': '12345' } })
+  })
+
+  it('FE-URL-PHONE-02: URL índice 0 + PHONE índice 1 exibe sufixo', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_PHONE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_dynamic'))
+
+    expect(screen.getByTestId('preview-url-label').textContent).toBe('Abrir link')
+    expect(screen.getByTestId('preview-url-prefix').textContent).toBe('https://example.com/pedido/')
+    expect(screen.getAllByTestId('url-suffix-0')).toHaveLength(1)
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toHaveProperty('value', '')
+    expect(screen.queryByLabelText(/telefone|phone|ligar/i)).toBeNull()
+    expect(screen.queryByTestId('url-suffix-1')).toBeNull()
+  })
+
+  it('FE-URL-PHONE-03: PHONE índice 0 + URL índice 1 exibe sufixo no índice 1', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_PHONE_DYN_URL]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_phone_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_phone_url_dynamic'))
+
+    expect(screen.getByTestId('url-suffix-1')).toBeTruthy()
+    expect(screen.getByLabelText('Sufixo do botão URL 1')).toHaveProperty('value', '')
+    expect(screen.queryByTestId('url-suffix-0')).toBeNull()
+    expect(screen.queryByLabelText(/telefone|phone/i)).toBeNull()
+  })
+
+  it('FE-URL-PHONE-04: payload usa url["0"] na primeira ordem; sem phone', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_PHONE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: 'pedido-123' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': 'pedido-123' } })
+    const pv = JSON.stringify(onSend.mock.calls[0][1])
+    expect(pv).not.toContain('https://example.com/pedido/pedido-123')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone_number')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('buttons')
+    expect(pv).not.toContain('+55')
+    expect(pv).not.toContain('payload')
+  })
+
+  it('FE-URL-PHONE-05: payload usa url["1"] na segunda ordem; sem phone', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_PHONE_DYN_URL]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_phone_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_phone_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 1'), { target: { value: 'pedido-123' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '1': 'pedido-123' } })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone_number')
+    expect(Object.keys(onSend.mock.calls[0][1].url ?? {})).toEqual(['1'])
+  })
+
+  it('FE-URL-PHONE-06: sufixo vazio/whitespace bloqueia envio', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_PHONE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_dynamic'))
+
+    const send = () => screen.getByRole('button', { name: /enviar template/i })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '   ' } })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: 'pedido-123' } })
+    expect(send()).toHaveProperty('disabled', false)
+  })
+
+  it('FE-URL-PHONE-07: BODY + mix coexistentes; troca limpa índice e sufixo', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([
+      TMPL_DYN_URL_PHONE, TMPL_PHONE_DYN_URL, TMPL_DYN_URL_PHONE_BODY,
+    ]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_dynamic'))
+
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: 'pedido-antigo' } })
+
+    fireEvent.click(screen.getByText('lovoo_e2e_phone_url_dynamic'))
+    expect(screen.queryByTestId('url-suffix-0')).toBeNull()
+    expect(screen.getByLabelText('Sufixo do botão URL 1')).toHaveProperty('value', '')
+    expect(screen.getByRole('button', { name: /enviar template/i })).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 1'), { target: { value: 'pedido-123' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '1': 'pedido-123' } })
+    expect(JSON.stringify(onSend.mock.calls[0][1])).not.toContain('pedido-antigo')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone')
+
+    fireEvent.click(screen.getByText('order_url_phone_dynamic'))
+    fireEvent.change(screen.getByLabelText('Parâmetro BODY 1'), { target: { value: '99' } })
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '99' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[1][1]).toEqual({ body: { '1': '99' }, url: { '0': '99' } })
+  })
+
+  it('FE-URL-PHONE-08: URL estática + PHONE sem campo de sufixo', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_STATIC_URL_PHONE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_static'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_static'))
+
+    expect(screen.queryByTestId('preview-url-button')).toBeNull()
+    expect(screen.queryByLabelText(/Sufixo do botão URL/)).toBeNull()
+    expect(screen.queryByLabelText(/telefone|phone/i)).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {} })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('url')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone_number')
+  })
+
+  it('FE-URL-PHONE-09: QR + PHONE permanece sem sufixo e sem campo de telefone', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_PHONE]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('confirm_and_call'))
+    fireEvent.click(screen.getByText('confirm_and_call'))
+
+    expect(screen.getByTestId('preview-button-0')).toBeTruthy()
+    expect(screen.queryByTestId('preview-url-button')).toBeNull()
+    expect(screen.queryByLabelText(/Sufixo do botão URL/)).toBeNull()
+    expect(screen.queryByLabelText(/telefone|phone/i)).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {} })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('url')
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('phone')
+  })
+
+  it('FE-URL-PHONE-10: URL dinâmica + QR + PHONE não abre campo de sufixo', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_PHONE_QR]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('url_phone_with_qr'))
+    fireEvent.click(screen.getByText('url_phone_with_qr'))
+
+    expect(screen.queryByTestId('preview-url-button')).toBeNull()
+    expect(screen.queryByLabelText(/Sufixo do botão URL/)).toBeNull()
+    expect(screen.getByTestId('preview-button-0')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {} })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('url')
+  })
+})

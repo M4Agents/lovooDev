@@ -45,6 +45,11 @@
 //   índices originais 0 e 1, sem HEADER media → supported=true. Graph omite
 //   os dois botões. URL dinâmica, 2 phones, 2 URLs, QR no mix, AUTH, FLOW,
 //   mídia → false.
+// MVP4C.8.A2: exatamente 1 URL dinâmica POSITIONAL ({{1}} no FINAL) +
+//   1 PHONE_NUMBER (qualquer ordem), índices originais 0 e 1, sem HEADER
+//   media → supported=true. Graph emite só sub_type=url no índice original;
+//   omite PHONE. parameter_values.url usa a chave do índice da URL.
+//   2 URLs, 2 phones, QR no mix, AUTH, FLOW, mídia, {{1}} no meio → false.
 // =============================================================================
 
 import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
@@ -419,6 +424,59 @@ function isStaticUrlPlusPhoneNumberSendReady(buttons, headerMediaFormat) {
 }
 
 /**
+ * True somente para o slice 4C.8.A2: exatamente 1 URL dinâmica POSITIONAL
+ * ({{1}} único no FINAL) + 1 PHONE_NUMBER (qualquer ordem).
+ * Índices inteiros iguais às posições originais 0 e 1.
+ * Sem HEADER media, sem QR/FLOW/AUTH, sem URL estática, sem segundo PHONE.
+ * Número: isSafePhoneNumber (definição aprovada).
+ * @private
+ */
+function isDynamicUrlPlusPhoneNumberSendReady(buttons, parameterFormat, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (parameterFormat !== 'POSITIONAL') return false;
+  if (!Array.isArray(buttons) || buttons.length !== 2) return false;
+
+  let urlCount = 0;
+  let phoneCount = 0;
+
+  for (let i = 0; i < 2; i++) {
+    const b = buttons[i];
+    if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+    if (!Number.isInteger(b.index) || b.index !== i) return false;
+
+    if (b.type === 'URL') {
+      urlCount += 1;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (typeof b.url !== 'string') return false;
+      if (!b.url.endsWith('{{1}}')) return false;
+      const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+      if (allInners.size !== 1 || !allInners.has('1')) return false;
+      continue;
+    }
+
+    if (b.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (!isSafePhoneNumber(b.phone_number)) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  return urlCount === 1 && phoneCount === 1;
+}
+
+/** Índice original da URL dinâmica no mix 4C.8.A2, ou null. @private */
+function findMixDynamicUrlIndex(buttons) {
+  if (!Array.isArray(buttons)) return null;
+  for (const b of buttons) {
+    if (b?.type === 'URL' && Number.isInteger(b.index)) return b.index;
+  }
+  return null;
+}
+
+/**
  * Resolve identity backend-only para payload QR.
  * name/language devem ser strings não vazias (após trim).
  * @private
@@ -749,6 +807,7 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.6.B1: 1 grupo QR contíguo + 1 URL estática, sem HEADER media → supported=true.
     // 4C.6.D2: 1 grupo QR contíguo + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // 4C.7.A2: 1 URL estática + 1 PHONE_NUMBER, sem HEADER media → supported=true.
+    // 4C.8.A2: 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // QR separados / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
@@ -777,13 +836,19 @@ export function analyzeTemplate(rawTemplate) {
         classifiedButtons,
         headerMediaFormat,
       );
+      const mixDynamicPhoneReady = isDynamicUrlPlusPhoneNumberSendReady(
+        classifiedButtons,
+        fmt,
+        headerMediaFormat,
+      );
       const ready = qrReady
         || dynamicUrlReady
         || staticUrlReady
         || phoneReady
         || mixQrStaticReady
         || mixQrPhoneReady
-        || mixStaticPhoneReady;
+        || mixStaticPhoneReady
+        || mixDynamicPhoneReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -922,15 +987,23 @@ export function validateParameterValues(parameters, parameterValues, context = {
   const ctx = (context !== null && typeof context === 'object' && !Array.isArray(context))
     ? context
     : {};
-  const urlReady = isSinglePositionalDynamicUrlSendReady(
+  const singleUrlReady = isSinglePositionalDynamicUrlSendReady(
     ctx.buttons,
     ctx.parameterFormat,
     ctx.headerMediaFormat ?? null,
   );
+  const mixDynamicPhoneReady = isDynamicUrlPlusPhoneNumberSendReady(
+    ctx.buttons,
+    ctx.parameterFormat,
+    ctx.headerMediaFormat ?? null,
+  );
+  const urlReady = singleUrlReady || mixDynamicPhoneReady;
   const hasOwnUrl = Object.prototype.hasOwnProperty.call(parameterValues, 'url');
 
-  // URL dinâmica exige parameter_values.url. URL estática (4C.5A) e demais
-  // formatos exigem AUSÊNCIA da chave — inclusive objeto vazio é mismatch.
+  // URL dinâmica (single 4C.3B ou mix 4C.8.A2) exige parameter_values.url
+  // com exatamente a chave do índice original da URL. URL estática (4C.5A)
+  // e demais formatos exigem AUSÊNCIA da chave — inclusive objeto vazio
+  // é mismatch. Dívida A1: suffix com URL completa não é bloqueado aqui.
   if (urlReady) {
     if (!hasOwnUrl) return { valid: false, error: 'template_params_mismatch' };
     const urlValues = parameterValues.url;
@@ -941,13 +1014,16 @@ export function validateParameterValues(parameters, parameterValues, context = {
     ) {
       return { valid: false, error: 'template_params_mismatch' };
     }
-    if (!strictKeyMatch(['0'], Object.keys(urlValues))) {
+    const urlKey = singleUrlReady
+      ? '0'
+      : String(findMixDynamicUrlIndex(ctx.buttons));
+    if (urlKey === 'null' || !strictKeyMatch([urlKey], Object.keys(urlValues))) {
       return { valid: false, error: 'template_params_mismatch' };
     }
-    if (!Object.prototype.hasOwnProperty.call(urlValues, '0')) {
+    if (!Object.prototype.hasOwnProperty.call(urlValues, urlKey)) {
       return { valid: false, error: 'template_params_mismatch' };
     }
-    const urlVal = urlValues['0'];
+    const urlVal = urlValues[urlKey];
     if (typeof urlVal !== 'string') return { valid: false, error: 'template_params_mismatch' };
     if (urlVal.trim().length === 0) return { valid: false, error: 'template_params_mismatch' };
   } else if (hasOwnUrl) {
@@ -1219,6 +1295,32 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
 
       // 4C.5B.A: PHONE_NUMBER já está na definição aprovada — Graph omite type=button.
       if (isSinglePhoneNumberSendReady(classified.buttons, headerMediaHint)) {
+        continue;
+      }
+
+      // 4C.8.A2: URL dinâmica no índice original; PHONE_NUMBER omitido.
+      if (isDynamicUrlPlusPhoneNumberSendReady(
+        classified.buttons,
+        parameterFormat,
+        headerMediaHint,
+      )) {
+        const urlBtn = classified.buttons.find(b => b.type === 'URL');
+        const urlValues = parameterValues?.url;
+        const suffix = urlValues != null && typeof urlValues === 'object' && !Array.isArray(urlValues)
+          ? urlValues[String(urlBtn.index)]
+          : undefined;
+        if (typeof suffix !== 'string') {
+          throw makeEngineError(
+            'build_buttons_unsupported',
+            'buildGraphComponents: BUTTONS type not enabled for send',
+          );
+        }
+        result.push({
+          type:       'button',
+          sub_type:   'url',
+          index:      String(urlBtn.index),
+          parameters: [{ type: 'text', text: suffix }],
+        });
         continue;
       }
 

@@ -385,6 +385,80 @@ function buildStaticUrlPlusPhoneNumberSnapshot(analysis) {
 }
 
 /**
+ * Snapshot 4C.8.A2: exatamente 1 URL dinâmica POSITIONAL (href = prefixo WABA
+ * + suffix validado) + 1 PHONE_NUMBER (número da definição aprovada).
+ * Índices originais. Inválido → null sem lançar. Não autoriza send.
+ * Dívida A1: suffix com URL completa não é bloqueado aqui — só o href final
+ * passa por isSafeHttpUrl.
+ * @private
+ */
+function buildDynamicUrlPlusPhoneNumberSnapshot(analysis, parameterValues) {
+  if (analysis.headerMediaFormat != null) return null;
+  if (analysis.parameter_format !== 'POSITIONAL') return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length !== 2) return null;
+
+  if (!isPlainObject(parameterValues)) return null;
+  const urlValues = parameterValues.url;
+  if (!isPlainObject(urlValues)) return null;
+
+  let urlCount = 0;
+  let phoneCount = 0;
+  const out = [];
+
+  for (let i = 0; i < 2; i++) {
+    const button = buttons[i];
+    if (!isPlainObject(button)) return null;
+    if (!Number.isInteger(button.index) || button.index !== i) return null;
+
+    if (button.type === 'URL') {
+      urlCount += 1;
+      if (!isValidText(button.text)) return null;
+      if (typeof button.url !== 'string') return null;
+      if (!button.url.endsWith(PLACEHOLDER)) return null;
+      if (countPlaceholders(button.url) !== 1) return null;
+      if (firstPlaceholderInner(button.url) !== '1') return null;
+
+      const urlKey = String(button.index);
+      const keys = Object.keys(urlValues);
+      if (keys.length !== 1 || keys[0] !== urlKey) return null;
+      const suffix = urlValues[urlKey];
+      if (typeof suffix !== 'string' || suffix.trim().length === 0) return null;
+
+      const href = button.url.slice(0, -PLACEHOLDER.length) + suffix;
+      if (!isSafeHttpUrl(href)) return null;
+
+      out.push({
+        type:  'URL',
+        index: button.index,
+        text:  button.text,
+        href,
+      });
+      continue;
+    }
+
+    if (button.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      if (!isValidText(button.text)) return null;
+      if (!isSafePhoneNumber(button.phone_number)) return null;
+      out.push({
+        type:         'PHONE_NUMBER',
+        index:        button.index,
+        text:         button.text,
+        phone_number: button.phone_number,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  if (urlCount !== 1 || phoneCount !== 1) return null;
+  return { v: 1, buttons: out };
+}
+
+/**
  * Constrói wrapper v1 sanitizado ou null.
  * Não lança. Não autoriza send.
  *
@@ -415,7 +489,8 @@ export function buildTemplateButtonsSnapshot(input = {}) {
 
   return buildQuickReplyPlusStaticUrlSnapshot(analysis)
     ?? buildQuickReplyPlusPhoneNumberSnapshot(analysis)
-    ?? buildStaticUrlPlusPhoneNumberSnapshot(analysis);
+    ?? buildStaticUrlPlusPhoneNumberSnapshot(analysis)
+    ?? buildDynamicUrlPlusPhoneNumberSnapshot(analysis, input.parameterValues);
 }
 
 /**

@@ -1394,3 +1394,233 @@ describe('sanitizeTemplateButtonsSnapshot — URL estática + PHONE_NUMBER (4C.7
     ]);
   });
 });
+
+function mixDynamicPhoneAnalysis(buttons, overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons,
+    ...overrides,
+  };
+}
+
+const MIX_DYN_PHONE_BUTTONS = [
+  {
+    index: 0, type: 'URL', text: 'Abrir link',
+    url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+  },
+  {
+    index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+    phone_number: '+5511999999999',
+  },
+];
+
+describe('buildTemplateButtonsSnapshot — URL dinâmica + PHONE_NUMBER (4C.8.A2)', () => {
+  it('URL + PHONE → wrapper v1; href = prefixo WABA + suffix; telefone da WABA', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: {
+        body: {},
+        url: { '0': 'pedido-123' },
+        phone_number: '+5511888888888',
+      },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        {
+          type: 'URL', index: 0, text: 'Abrir link',
+          href: 'https://example.com/pedido/pedido-123',
+        },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+    expect(JSON.stringify(snap)).not.toContain('payload');
+    expect(JSON.stringify(snap)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(snap)).not.toContain('+5511888888888');
+    expect(JSON.stringify(snap)).not.toContain('url_kind');
+    expect(JSON.stringify(snap)).not.toContain('{{1}}');
+    expect(Object.keys(snap.buttons[0]).sort()).toEqual(['href', 'index', 'text', 'type']);
+    expect(Object.keys(snap.buttons[1]).sort()).toEqual([
+      'index', 'phone_number', 'text', 'type',
+    ]);
+  });
+
+  it('PHONE + URL → ordem original; href no índice 1', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis([
+        {
+          index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        {
+          index: 1, type: 'URL', text: 'Abrir link',
+          url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+        },
+      ]),
+      parameterValues: { body: {}, url: { '1': 'pedido-123' } },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        {
+          type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        {
+          type: 'URL', index: 1, text: 'Abrir link',
+          href: 'https://example.com/pedido/pedido-123',
+        },
+      ],
+    });
+  });
+
+  it('href final inseguro → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis([
+        {
+          index: 0, type: 'URL', text: 'Abrir',
+          url: 'https://user:pass@example.com/pedido/{{1}}',
+          url_kind: 'dynamic',
+        },
+        {
+          index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+      parameterValues: { body: {}, url: { '0': 'pedido-123' } },
+    })).toBeNull();
+  });
+
+  it('sufixo ausente / vazio → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+    })).toBeNull();
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {} },
+    })).toBeNull();
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {}, url: { '0': '' } },
+    })).toBeNull();
+  });
+
+  it('chave URL incorreta / extras → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {}, url: { '1': 'pedido-123' } },
+    })).toBeNull();
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {}, url: { '0': 'pedido-123', '1': 'extra' } },
+    })).toBeNull();
+  });
+
+  it('telefone inseguro → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis([
+        {
+          index: 0, type: 'URL', text: 'Abrir link',
+          url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+        },
+        {
+          index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: 'javascript:alert(1)',
+        },
+      ]),
+      parameterValues: { body: {}, url: { '0': 'pedido-123' } },
+    })).toBeNull();
+  });
+
+  it('QR + URL dinâmica + PHONE → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir link',
+          url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+        },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+      parameterValues: { body: {}, url: { '1': 'pedido-123' } },
+    })).toBeNull();
+  });
+
+  it('header media → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS, { headerMediaFormat: 'IMAGE' }),
+      parameterValues: { body: {}, url: { '0': 'pedido-123' } },
+    })).toBeNull();
+  });
+
+  it('QR-only / dinâmica única / estática+PHONE permanecem intactos', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]),
+    })).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: urlAnalysis(),
+      parameterValues: { body: {}, url: { '0': '12345' } },
+    })).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'URL', index: 0, text: 'Abrir teste',
+        href: 'https://example.com/test/12345',
+      }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixStaticPhoneAnalysis(MIX_STATIC_PHONE_BUTTONS),
+    })).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'URL', index: 0, text: 'Abrir site', href: 'https://example.com/loja' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+  });
+});
+
+describe('sanitizeTemplateButtonsSnapshot — URL dinâmica + PHONE_NUMBER (4C.8.A2)', () => {
+  it('snapshot misto v1 → whitelist; extras dropped; sanitizer inalterado', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      extra_top: 'drop',
+      buttons: [
+        {
+          type: 'URL', index: 0, text: 'Abrir link',
+          href: 'https://example.com/pedido/pedido-123',
+          url: 'https://evil.example/x',
+          extra: 'nope',
+        },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+          extra: 'nope',
+        },
+      ],
+    })).toEqual([
+      {
+        type: 'URL', index: 0, text: 'Abrir link',
+        href: 'https://example.com/pedido/pedido-123',
+      },
+      {
+        type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+        phone_number: '+5511999999999',
+      },
+    ]);
+  });
+});

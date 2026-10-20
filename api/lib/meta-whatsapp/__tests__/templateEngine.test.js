@@ -2303,6 +2303,7 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
   });
 
   it('4C3B-09 | URL + PHONE → supported=false', () => {
+    // Fixture sem phone_number: 4C.8.A2 exige isSafePhoneNumber. Permanece false.
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -4190,7 +4191,7 @@ describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHON
     expect(r.parameters.map(p => p.key)).toEqual(['name']);
   });
 
-  it('4C7A2-04 | URL dinâmica + PHONE → supported=false', () => {
+  it('4C7A2-04 | URL dinâmica + PHONE → supported=true (4C.8.A2)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -4204,7 +4205,12 @@ describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHON
         },
       ],
     });
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons.map(b => [b.index, b.type, b.url_kind])).toEqual([
+      [0, 'URL', 'dynamic'],
+      [1, 'PHONE_NUMBER', undefined],
+    ]);
   });
 
   it('4C7A2-05 | duas URLs estáticas → supported=false', () => {
@@ -4273,10 +4279,9 @@ describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHON
 
   it.each([
     ['javascript:', 'javascript:alert(1)'],
-    ['placeholder', 'https://example.com/{{1}}'],
     ['relativa', '/loja'],
     ['credenciais', 'https://user:pass@example.com/loja'],
-  ])('4C7A2-09 | URL insegura/placeholder (%s) → supported=false', (_label, url) => {
+  ])('4C7A2-09 | URL insegura (%s) → supported=false', (_label, url) => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -4434,26 +4439,29 @@ describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHON
     expect(JSON.stringify(r)).not.toContain('"type":"button"');
   });
 
-  it('4C7A2-B04 | URL dinâmica + PHONE → build_buttons_unsupported', () => {
-    try {
-      buildGraphComponents(
-        [
-          { type: 'BODY', text: 'Escolha' },
-          {
-            type: 'BUTTONS',
-            buttons: [
-              { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
-              { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
-            ],
-          },
-        ],
-        'POSITIONAL',
-        { body: {}, url: { '0': '123' } },
-      );
-      throw new Error('should_have_thrown');
-    } catch (err) {
-      expect(err.code).toBe('build_buttons_unsupported');
-    }
+  it('4C7A2-B04 | URL dinâmica + PHONE → Graph emite só URL no índice 0 (4C.8.A2)', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { body: {}, url: { '0': '123' } },
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: '123' }],
+    }]);
+    expect(JSON.stringify(r)).not.toContain('phone');
+    expect(JSON.stringify(r)).not.toContain('+5511999999999');
   });
 
   it('4C7A2-B05 | IMAGE + mix → build_buttons_unsupported', () => {
@@ -4532,6 +4540,456 @@ describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHON
       { body: {}, url: { '0': '12345' } },
     );
     expect(r).toEqual([URL_GRAPH]);
+  });
+
+});
+
+// =============================================================================
+// MVP4C.8.A2 — exatamente 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER
+// =============================================================================
+
+const MIX_DYN_URL_PHONE_COMPS = [
+  { type: 'BODY', text: 'Escolha' },
+  {
+    type: 'BUTTONS',
+    buttons: [
+      { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+      { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+    ],
+  },
+];
+
+const MIX_PHONE_DYN_URL_COMPS = [
+  { type: 'BODY', text: 'Escolha' },
+  {
+    type: 'BUTTONS',
+    buttons: [
+      { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+      { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+    ],
+  },
+];
+
+const MIX_DYN_URL_PHONE_CTX = {
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir link',
+      url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+    },
+    {
+      index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    },
+  ],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+const MIX_PHONE_DYN_URL_CTX = {
+  buttons: [
+    {
+      index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    },
+    {
+      index: 1, type: 'URL', text: 'Abrir link',
+      url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+    },
+  ],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+const MIX_DYN_URL_GRAPH_0 = {
+  type: 'button',
+  sub_type: 'url',
+  index: '0',
+  parameters: [{ type: 'text', text: 'pedido-123' }],
+};
+
+const MIX_DYN_URL_GRAPH_1 = {
+  type: 'button',
+  sub_type: 'url',
+  index: '1',
+  parameters: [{ type: 'text', text: 'pedido-123' }],
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.8.A2 URL dinâmica + PHONE_NUMBER', () => {
+
+  it('4C8A2-01 | URL dinâmica, PHONE → supported=true; índices originais 0 e 1', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: MIX_DYN_URL_PHONE_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.buttons).toEqual([
+      {
+        index: 0, type: 'URL', text: 'Abrir link',
+        url: 'https://example.com/pedido/{{1}}', url_kind: 'dynamic',
+      },
+      {
+        index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+        phone_number: '+5511999999999',
+      },
+    ]);
+  });
+
+  it('4C8A2-02 | PHONE, URL dinâmica → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: MIX_PHONE_DYN_URL_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons.map(b => [b.index, b.type, b.url_kind])).toEqual([
+      [0, 'PHONE_NUMBER', undefined],
+      [1, 'URL', 'dynamic'],
+    ]);
+  });
+
+  it('4C8A2-03 | NAMED → supported=false (URL dinâmica exige POSITIONAL)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Olá {{name}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-04 | {{1}} no meio → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/{{1}}/pedido' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-05 | QR + URL dinâmica + PHONE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-06 | duas URLs dinâmicas → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'A', url: 'https://example.com/a/{{1}}' },
+            { type: 'URL', text: 'B', url: 'https://example.com/b/{{1}}' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-07 | URL dinâmica + FLOW → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+            { type: 'FLOW', text: 'Iniciar' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-08 | IMAGE + mix → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        ...MIX_DYN_URL_PHONE_COMPS,
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+  });
+
+  it('4C8A2-09 | AUTHENTICATION + mix → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'AUTHENTICATION', parameter_format: 'POSITIONAL',
+      components: MIX_DYN_URL_PHONE_COMPS,
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-10 | PHONE sem número → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C8A2-V01 | URL índice 0 exige url["0"]; BODY/HEADER preservados', () => {
+    const params = [
+      { component: 'HEADER', key: '1', position: 1, example: null },
+      { component: 'BODY', key: '1', position: 1, example: null },
+    ];
+    expect(validateParameterValues(
+      params,
+      { header: { '1': 'Loja' }, body: { '1': 'Ana' }, url: { '0': 'pedido-123' } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: true });
+  });
+
+  it('4C8A2-V02 | URL índice 1 exige url["1"]', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '1': 'pedido-123' } },
+      MIX_PHONE_DYN_URL_CTX,
+    )).toEqual({ valid: true });
+  });
+
+  it('4C8A2-V03 | sufixo ausente → mismatch', () => {
+    expect(validateParameterValues([], { body: {} }, MIX_DYN_URL_PHONE_CTX))
+      .toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C8A2-V04 | sufixo vazio / whitespace → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': '' } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': '   ' } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C8A2-V05 | chave URL incorreta → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '1': 'pedido-123' } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'pedido-123' } },
+      MIX_PHONE_DYN_URL_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C8A2-V06 | chaves URL extras → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'pedido-123', '1': 'extra' } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C8A2-V07 | phone / phone_number / buttons runtime → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'pedido-123' }, phone: '+5511888888888' },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'pedido-123' }, phone_number: '+5511888888888' },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'pedido-123' }, buttons: [{ payload: 'forged' }] },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C8A2-B01 | URL índice 0 → um componente url; PHONE omitido', () => {
+    const r = buildGraphComponents(
+      MIX_DYN_URL_PHONE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': 'pedido-123' } },
+    );
+    expect(r).toEqual([MIX_DYN_URL_GRAPH_0]);
+    expect(r).toHaveLength(1);
+    expect(JSON.stringify(r)).not.toContain('phone');
+    expect(JSON.stringify(r)).not.toContain('+5511999999999');
+    expect(JSON.stringify(r)).not.toContain('"parameters":[]');
+  });
+
+  it('4C8A2-B02 | URL índice 1 → index "1"; sem deslocar; PHONE omitido', () => {
+    const r = buildGraphComponents(
+      MIX_PHONE_DYN_URL_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '1': 'pedido-123' } },
+    );
+    expect(r).toEqual([MIX_DYN_URL_GRAPH_1]);
+    expect(r[0].index).toBe('1');
+    expect(JSON.stringify(r)).not.toContain('phone');
+  });
+
+  it('4C8A2-B03 | HEADER textual e BODY parametrizados preservados', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}' },
+        { type: 'BODY', text: 'Pedido {{1}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { header: { '1': 'Loja' }, body: { '1': 'Ana' }, url: { '0': 'pedido-123' } },
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'text', text: 'Loja' }] },
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+      MIX_DYN_URL_GRAPH_0,
+    ]);
+    expect(JSON.stringify(r)).not.toContain('phone');
+  });
+
+  it('4C8A2-B04 | QR + URL dinâmica + PHONE → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Escolha' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'QUICK_REPLY', text: 'Sim' },
+              { type: 'URL', text: 'Abrir link', url: 'https://example.com/pedido/{{1}}' },
+              { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            ],
+          },
+        ],
+        'POSITIONAL',
+        { body: {}, url: { '1': 'pedido-123' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C8A2-B05 | IMAGE + mix → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          ...MIX_DYN_URL_PHONE_COMPS,
+        ],
+        'POSITIONAL',
+        { body: {}, url: { '0': 'pedido-123' } },
+        { headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C8A2-R01 | QR-only continua com payload backend-only', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C8A2-R02 | URL dinâmica única continua emitindo suffix runtime', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': '12345' } },
+    );
+    expect(r).toEqual([URL_GRAPH]);
+  });
+
+  it('4C8A2-R03 | URL estática + PHONE continua omitindo os dois', () => {
+    const r = buildGraphComponents(MIX_URL_PHONE_COMPS, 'POSITIONAL', { body: {} });
+    expect(r).toEqual([]);
+  });
+
+  it('4C8A2-R04 | PHONE único continua sem button', () => {
+    expect(buildGraphComponents(PHONE_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+  it('4C8A2-R05 | URL estática única continua sem button', () => {
+    expect(buildGraphComponents(STATIC_URL_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+  it('4C8A2-R06 | QR + PHONE permanece emitindo QR no índice original', () => {
+    const r = buildGraphComponents(
+      MIX_QR_PHONE_COMPS,
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
   });
 
 });
