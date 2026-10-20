@@ -361,11 +361,18 @@ export default async function handler(req, res) {
   );
 
   // Snapshot histórico sanitizado — puro, pré-Graph. null para text/media
-  // e para qualquer shape não reconhecido. Nunca bloqueia o send.
+  // (sem botões) e para shape de botão que o builder recusa.
   const templateButtonsSnapshot = buildTemplateButtonsSnapshot({
     analysis,
     parameterValues,
   });
+
+  // 4C.9: botões send-ready sem snapshot persistível → fail-closed.
+  // Antes de upload, Graph WRITE e qualquer INSERT.
+  const hasButtons = Array.isArray(analysis.buttons) && analysis.buttons.length > 0;
+  if (hasButtons && templateButtonsSnapshot === null) {
+    return res.status(422).json({ error: 'template_params_mismatch' });
+  }
 
   // ── 17A–17B. Validar asset + WRITE 1 (somente para template media) ─────────
   // validateMediaAsset: lookup tenant-safe + download + MIME real. NÃO é Graph WRITE.

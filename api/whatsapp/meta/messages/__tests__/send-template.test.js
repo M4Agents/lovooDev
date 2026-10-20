@@ -4302,3 +4302,212 @@ describe('4C8A2-SEND | parâmetros runtime inválidos são rejeitados antes do G
     expect(mockSvc.from).toHaveBeenCalledTimes(3);
   });
 });
+
+// =============================================================================
+// MVP4C.9.A2 — Gate: botões presentes + snapshot null → 422 pré-WRITE
+// =============================================================================
+
+function expectNoExternalEffects(res) {
+  expect(res._status).toBe(422);
+  expect(res._body.error).toBe('template_params_mismatch');
+  expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  expect(mockUploadMedia).not.toHaveBeenCalled();
+  expect(mockValidateMediaAsset).not.toHaveBeenCalled();
+  expect(mockSvc.from).toHaveBeenCalledTimes(3);
+}
+
+describe('4C9A2-SEND | snapshot null com botões bloqueia Graph e persistência', () => {
+  it('A: URL dinâmica única + sufixo 2100 → 422; Graph 0; upload 0; insert 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'x'.repeat(2100) } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('B: URL dinâmica + PHONE + sufixo 2100 → 422; Graph 0; insert 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_DYN_URL_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_DYN_URL_PHONE);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_DYN_URL_0);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'x'.repeat(2100) } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('C: prefixo vazio {{1}} + sufixo javascript → 422; Graph 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_DYN_URL_PHONE,
+      id: 'tpl-empty-prefix-js',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: '{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    }]));
+    setupEngineOk({
+      supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+      parameters: [], bodyText: 'Escolha', headerMediaFormat: null,
+      buttons: [
+        { index: 0, type: 'URL', text: 'Abrir', url: '{{1}}', url_kind: 'dynamic' },
+        { index: 1, type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {}, url: { '0': 'javascript:alert(1)' } },
+      },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('D: QUICK_REPLY com texto de 65 chars → 422; Graph 0', async () => {
+    const longQr = 'A'.repeat(65);
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_QR,
+      id: 'tpl-qr-65',
+      components: [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: longQr }] },
+      ],
+    }]));
+    setupEngineOk({
+      supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+      parameters: [], bodyText: 'Confirma?', headerMediaFormat: null,
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: longQr }],
+    });
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('E: mix URL dinâmica + PHONE + e2e-001 → 200; snapshot v1 URL@0 PHONE@1', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_DYN_URL_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_DYN_URL_PHONE);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_DYN_URL_0);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'e2e-001' } } },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        {
+          type: 'URL', index: 0, text: 'Abrir link',
+          href: 'https://example.com/pedido/e2e-001',
+        },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+
+  it('F1: URL estática + PHONE → 200; snapshot v1 preservado', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_URL_PHONE);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'URL', index: 0, text: 'Abrir site', href: 'https://example.com/loja' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+  });
+
+  it('F2: QUICK_REPLY + PHONE → 200; snapshot v1 preservado', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_QR_PHONE);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR_PHONE);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+    expect(JSON.stringify(chatInsert.insert.mock.calls[0][0].template_buttons))
+      .not.toContain('payload');
+  });
+
+  it('G: template textual sem botões → 200; template_buttons null', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toBeNull();
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+
+  it('H: template de mídia sem botões → 200; template_buttons null', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toBeNull();
+    expect(chatInsert.insert.mock.calls[0][0].media_asset_id).toBe(FAKE_ASSET_ID);
+  });
+});
