@@ -3089,3 +3089,180 @@ describe('GET — MVP4C.6.D2 QR + PHONE_NUMBER', () => {
   });
 
 });
+
+// =============================================================================
+// MVP4C.7.A2 — GET URL estática + PHONE_NUMBER send-ready
+// =============================================================================
+
+describe('GET — MVP4C.7.A2 URL estática + PHONE_NUMBER', () => {
+
+  it('URL + PHONE → supported=true; DTO sem phone_number; URL pública', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-url-phone',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+    expect(analyzeTemplate(raw).buttons[1].phone_number).toBe('+5511999999999');
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
+    expect(dto.buttons).toEqual([
+      {
+        index: 0, type: 'URL', text: 'Abrir site',
+        url: 'https://example.com/loja', url_kind: 'static',
+      },
+      { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+    ]);
+    expect(dto.buttons[1]).not.toHaveProperty('phone_number');
+    expect(JSON.stringify(dto.buttons)).not.toContain('+5511999999999');
+    expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+    const buttonsComp = dto.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0]).toEqual({
+      type: 'URL', text: 'Abrir site', url: 'https://example.com/loja',
+    });
+    expect(buttonsComp.buttons[1]).toEqual({ type: 'PHONE_NUMBER', text: 'Ligar' });
+    expect(buttonsComp.buttons[1]).not.toHaveProperty('phone_number');
+    expect(JSON.stringify(dto.components)).not.toContain('+5511999999999');
+    expect(raw.components[1].buttons[1].phone_number).toBe('+5511999999999');
+  });
+
+  it('PHONE + URL → supported=true; índices originais', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-phone-url',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons.map(b => [b.index, b.type])).toEqual([
+      [0, 'PHONE_NUMBER'],
+      [1, 'URL'],
+    ]);
+    expect(JSON.stringify(dto)).not.toContain('+5511999999999');
+  });
+
+  it('dinâmica+PHONE, duas URLs, dois PHONE, triplo e mídia continuam false', async () => {
+    const dynTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-dyn',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    const twoUrlTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-two-url',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'A', url: 'https://example.com/a' },
+            { type: 'URL', text: 'B', url: 'https://example.com/b' },
+          ],
+        },
+      ],
+    };
+    const twoPhoneTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-two-phone',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'A', phone_number: '+5511999999999' },
+            { type: 'PHONE_NUMBER', text: 'B', phone_number: '+5511888888888' },
+          ],
+        },
+      ],
+    };
+    const tripleTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-triple',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    const mediaTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c7a2-media',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(dynTpl).supported).toBe(false);
+    expect(analyzeTemplate(twoUrlTpl).supported).toBe(false);
+    expect(analyzeTemplate(twoPhoneTpl).supported).toBe(false);
+    expect(analyzeTemplate(tripleTpl).supported).toBe(false);
+    expect(analyzeTemplate(mediaTpl).supported).toBe(false);
+
+    mockListMessageTemplates.mockResolvedValue(
+      makeListResult([dynTpl, twoUrlTpl, twoPhoneTpl, tripleTpl, mediaTpl]),
+    );
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates.find(t => t.id === 'tpl-4c7a2-dyn').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c7a2-two-url').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c7a2-two-phone').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c7a2-triple').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c7a2-media').supported).toBe(false);
+    expect(JSON.stringify(res._body)).not.toContain('+5511999999999');
+    expect(JSON.stringify(res._body)).not.toContain('+5511888888888');
+  });
+
+});

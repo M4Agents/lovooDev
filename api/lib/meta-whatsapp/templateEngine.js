@@ -41,6 +41,10 @@
 //   (antes ou depois do grupo), índices originais 0..n-1, sem HEADER media →
 //   supported=true. Graph emite button só para cada QR; omite o PHONE_NUMBER.
 //   Intercalação, 2 phones, URL no mix, AUTH, FLOW, mídia → false.
+// MVP4C.7.A2: exatamente 1 URL estática + 1 PHONE_NUMBER (qualquer ordem),
+//   índices originais 0 e 1, sem HEADER media → supported=true. Graph omite
+//   os dois botões. URL dinâmica, 2 phones, 2 URLs, QR no mix, AUTH, FLOW,
+//   mídia → false.
 // =============================================================================
 
 import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
@@ -369,6 +373,49 @@ function isQuickReplyPlusPhoneNumberSendReady(buttons, headerMediaFormat) {
   if (qrCount + phoneCount !== n) return false;
   if (phonePos !== 0 && phonePos !== n - 1) return false;
   return true;
+}
+
+/**
+ * True somente para o slice 4C.7.A2: exatamente 1 URL estática + 1 PHONE_NUMBER
+ * (qualquer ordem). Índices inteiros iguais às posições originais 0 e 1.
+ * Sem HEADER media, sem QR/FLOW/AUTH, sem URL dinâmica, sem segundo PHONE.
+ * URL: isSafeHttpUrl. Número: isSafePhoneNumber (definição aprovada).
+ * @private
+ */
+function isStaticUrlPlusPhoneNumberSendReady(buttons, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (!Array.isArray(buttons) || buttons.length !== 2) return false;
+
+  let urlCount = 0;
+  let phoneCount = 0;
+
+  for (let i = 0; i < 2; i++) {
+    const b = buttons[i];
+    if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+    if (!Number.isInteger(b.index) || b.index !== i) return false;
+
+    if (b.type === 'URL') {
+      urlCount += 1;
+      if (b.url_kind !== 'static') return false;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (typeof b.url !== 'string' || b.url.trim().length === 0) return false;
+      const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+      if (allInners.size !== 0) return false;
+      if (!isSafeHttpUrl(b.url)) return false;
+      continue;
+    }
+
+    if (b.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (!isSafePhoneNumber(b.phone_number)) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  return urlCount === 1 && phoneCount === 1;
 }
 
 /**
@@ -701,6 +748,7 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.5B.A: 1 PHONE_NUMBER válido, sem HEADER media → supported=true.
     // 4C.6.B1: 1 grupo QR contíguo + 1 URL estática, sem HEADER media → supported=true.
     // 4C.6.D2: 1 grupo QR contíguo + 1 PHONE_NUMBER, sem HEADER media → supported=true.
+    // 4C.7.A2: 1 URL estática + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // QR separados / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
@@ -725,12 +773,17 @@ export function analyzeTemplate(rawTemplate) {
         classifiedButtons,
         headerMediaFormat,
       );
+      const mixStaticPhoneReady = isStaticUrlPlusPhoneNumberSendReady(
+        classifiedButtons,
+        headerMediaFormat,
+      );
       const ready = qrReady
         || dynamicUrlReady
         || staticUrlReady
         || phoneReady
         || mixQrStaticReady
-        || mixQrPhoneReady;
+        || mixQrPhoneReady
+        || mixStaticPhoneReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -1150,6 +1203,12 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
             parameters: [{ type: 'payload', payload }],
           });
         }
+        continue;
+      }
+
+      // 4C.7.A2: URL estática e PHONE_NUMBER já estão na definição aprovada —
+      // Graph omite type=button para os dois (sem parameters: []).
+      if (isStaticUrlPlusPhoneNumberSendReady(classified.buttons, headerMediaHint)) {
         continue;
       }
 

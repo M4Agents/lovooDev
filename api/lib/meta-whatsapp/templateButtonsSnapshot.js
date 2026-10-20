@@ -328,6 +328,63 @@ function buildQuickReplyPlusPhoneNumberSnapshot(analysis) {
 }
 
 /**
+ * Snapshot 4C.7.A2: exatamente 1 URL estática (href da definição aprovada) +
+ * 1 PHONE_NUMBER (número da definição aprovada). Índices originais.
+ * Inválido → null sem lançar. Não autoriza send.
+ * @private
+ */
+function buildStaticUrlPlusPhoneNumberSnapshot(analysis) {
+  if (analysis.headerMediaFormat != null) return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length !== 2) return null;
+
+  let urlCount = 0;
+  let phoneCount = 0;
+  const out = [];
+
+  for (let i = 0; i < 2; i++) {
+    const button = buttons[i];
+    if (!isPlainObject(button)) return null;
+    if (!Number.isInteger(button.index) || button.index !== i) return null;
+
+    if (button.type === 'URL') {
+      urlCount += 1;
+      if (button.url_kind !== 'static') return null;
+      if (!isValidText(button.text)) return null;
+      if (typeof button.url !== 'string' || button.url.trim().length === 0) return null;
+      if (countPlaceholders(button.url) !== 0) return null;
+      if (!isSafeHttpUrl(button.url)) return null;
+      out.push({
+        type:  'URL',
+        index: button.index,
+        text:  button.text,
+        href:  button.url,
+      });
+      continue;
+    }
+
+    if (button.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      if (!isValidText(button.text)) return null;
+      if (!isSafePhoneNumber(button.phone_number)) return null;
+      out.push({
+        type:         'PHONE_NUMBER',
+        index:        button.index,
+        text:         button.text,
+        phone_number: button.phone_number,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  if (urlCount !== 1 || phoneCount !== 1) return null;
+  return { v: 1, buttons: out };
+}
+
+/**
  * Constrói wrapper v1 sanitizado ou null.
  * Não lança. Não autoriza send.
  *
@@ -357,7 +414,8 @@ export function buildTemplateButtonsSnapshot(input = {}) {
   }
 
   return buildQuickReplyPlusStaticUrlSnapshot(analysis)
-    ?? buildQuickReplyPlusPhoneNumberSnapshot(analysis);
+    ?? buildQuickReplyPlusPhoneNumberSnapshot(analysis)
+    ?? buildStaticUrlPlusPhoneNumberSnapshot(analysis);
 }
 
 /**

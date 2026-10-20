@@ -2903,7 +2903,7 @@ describe('analyzeTemplate / validate / build — MVP4C.5B.A PHONE_NUMBER', () =>
     expect(r.buttons[0].phone_number).toBe('+5511999999999');
   });
 
-  it('4C5B-05 | PHONE + URL → supported=false', () => {
+  it('4C5B-05 | PHONE + URL estática → supported=true (4C.7.A2)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -2917,7 +2917,16 @@ describe('analyzeTemplate / validate / build — MVP4C.5B.A PHONE_NUMBER', () =>
         },
       ],
     });
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons.map(b => [b.index, b.type])).toEqual([
+      [0, 'PHONE_NUMBER'],
+      [1, 'URL'],
+    ]);
+    expect(r.buttons[0].phone_number).toBe('+5511999999999');
+    expect(r.buttons[1]).toMatchObject({
+      url: 'https://example.com/loja', url_kind: 'static',
+    });
   });
 
   it('4C5B-06 | 2 PHONE_NUMBER → supported=false', () => {
@@ -4082,6 +4091,447 @@ describe('analyzeTemplate / validate / build — MVP4C.6.D2 QR + PHONE_NUMBER', 
 
   it('4C6D2-R04 | URL estática única continua sem button', () => {
     expect(buildGraphComponents(STATIC_URL_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+});
+
+// =============================================================================
+// MVP4C.7.A2 — exatamente 1 URL estática + 1 PHONE_NUMBER (sem HEADER media)
+// =============================================================================
+
+const MIX_URL_PHONE_COMPS = [
+  { type: 'BODY', text: 'Escolha' },
+  {
+    type: 'BUTTONS',
+    buttons: [
+      { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+      { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+    ],
+  },
+];
+
+const MIX_PHONE_URL_COMPS = [
+  { type: 'BODY', text: 'Escolha' },
+  {
+    type: 'BUTTONS',
+    buttons: [
+      { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+      { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+    ],
+  },
+];
+
+const MIX_URL_PHONE_CTX = {
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    },
+    {
+      index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    },
+  ],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.7.A2 URL estática + PHONE_NUMBER', () => {
+
+  it('4C7A2-01 | URL, PHONE → supported=true; índices originais; WABA', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: MIX_URL_PHONE_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.buttons).toEqual([
+      {
+        index: 0, type: 'URL', text: 'Abrir site',
+        url: 'https://example.com/loja', url_kind: 'static',
+      },
+      {
+        index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+        phone_number: '+5511999999999',
+      },
+    ]);
+  });
+
+  it('4C7A2-02 | PHONE, URL → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: MIX_PHONE_URL_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.buttons.map(b => [b.index, b.type])).toEqual([
+      [0, 'PHONE_NUMBER'],
+      [1, 'URL'],
+    ]);
+  });
+
+  it('4C7A2-03 | NAMED body + mix → supported=true (não exige POSITIONAL)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: [
+        { type: 'BODY', text: 'Olá {{name}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.parameter_format).toBe('NAMED');
+    expect(r.parameters.map(p => p.key)).toEqual(['name']);
+  });
+
+  it('4C7A2-04 | URL dinâmica + PHONE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-05 | duas URLs estáticas → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'A', url: 'https://example.com/a' },
+            { type: 'URL', text: 'B', url: 'https://example.com/b' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-06 | dois PHONE_NUMBER → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'A', phone_number: '+5511999999999' },
+            { type: 'PHONE_NUMBER', text: 'B', phone_number: '+5511888888888' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-07 | QR + URL + PHONE → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-08 | IMAGE + mix → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        ...MIX_URL_PHONE_COMPS,
+      ],
+    });
+    expect(r.supported).toBe(false);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['placeholder', 'https://example.com/{{1}}'],
+    ['relativa', '/loja'],
+    ['credenciais', 'https://user:pass@example.com/loja'],
+  ])('4C7A2-09 | URL insegura/placeholder (%s) → supported=false', (_label, url) => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['tel: pronto', 'tel:+5511999999999'],
+    ['espaços', '+55 11 99999-9999'],
+  ])('4C7A2-10 | telefone inseguro (%s) → supported=false', (_label, phone_number) => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-12 | URL + FLOW → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'FLOW', text: 'Iniciar' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C7A2-11 | texto vazio no URL ou PHONE → supported=false', () => {
+    const emptyUrl = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: '   ', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(emptyUrl.supported).toBe(false);
+
+    const emptyPhone = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: '   ', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    });
+    expect(emptyPhone.supported).toBe(false);
+  });
+
+  it('4C7A2-V01 | sem chave url/phone → valid; BODY params ok', () => {
+    expect(validateParameterValues([], { body: {} }, MIX_URL_PHONE_CTX)).toEqual({ valid: true });
+    const params = [{ component: 'BODY', key: '1', position: 1, example: null }];
+    expect(validateParameterValues(params, { body: { '1': 'Ana' } }, MIX_URL_PHONE_CTX))
+      .toEqual({ valid: true });
+  });
+
+  it('4C7A2-V02 | url / phone / phone_number / buttons runtime → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'suffix' } },
+      MIX_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, phone: '+5511888888888' },
+      MIX_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, phone_number: '+5511888888888' },
+      MIX_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+    expect(validateParameterValues(
+      [],
+      { body: {}, buttons: [{ payload: 'forged' }] },
+      MIX_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C7A2-B01 | Graph omite os dois botões; sem href/telefone runtime', () => {
+    const r = buildGraphComponents(MIX_URL_PHONE_COMPS, 'POSITIONAL', { body: {} });
+    expect(r).toEqual([]);
+    expect(JSON.stringify(r)).not.toContain('"type":"button"');
+    expect(JSON.stringify(r)).not.toContain('"sub_type":"url"');
+    expect(JSON.stringify(r)).not.toContain('"sub_type":"phone_number"');
+    expect(JSON.stringify(r)).not.toContain('"parameters":[]');
+    expect(JSON.stringify(r)).not.toContain('https://example.com/loja');
+    expect(JSON.stringify(r)).not.toContain('+5511999999999');
+    expect(JSON.stringify(r)).not.toContain('phone_number');
+  });
+
+  it('4C7A2-B02 | PHONE, URL → Graph também vazio', () => {
+    const r = buildGraphComponents(MIX_PHONE_URL_COMPS, 'POSITIONAL', { body: {} });
+    expect(r).toEqual([]);
+    expect(JSON.stringify(r)).not.toContain('"type":"button"');
+  });
+
+  it('4C7A2-B03 | HEADER textual e BODY parametrizados preservados', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}' },
+        { type: 'BODY', text: 'Confirma {{1}}?' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { header: { '1': 'Loja' }, body: { '1': 'Ana' } },
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'text', text: 'Loja' }] },
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    ]);
+    expect(JSON.stringify(r)).not.toContain('"type":"button"');
+  });
+
+  it('4C7A2-B04 | URL dinâmica + PHONE → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'BODY', text: 'Escolha' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+              { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            ],
+          },
+        ],
+        'POSITIONAL',
+        { body: {}, url: { '0': '123' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C7A2-B05 | IMAGE + mix → build_buttons_unsupported', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          ...MIX_URL_PHONE_COMPS,
+        ],
+        'POSITIONAL',
+        { body: {} },
+        { headerMedia: { mediaId: 'mid-1', mediaType: 'IMAGE' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_buttons_unsupported');
+    }
+  });
+
+  it('4C7A2-R01 | QR-only continua com payload backend-only', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C7A2-R02 | URL estática única continua sem button', () => {
+    expect(buildGraphComponents(STATIC_URL_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+  it('4C7A2-R03 | PHONE único continua sem button', () => {
+    expect(buildGraphComponents(PHONE_COMPS, 'POSITIONAL', { body: {} })).toEqual([]);
+  });
+
+  it('4C7A2-R04 | QR + URL estática permanece emitindo só QR', () => {
+    const r = buildGraphComponents(
+      MIX_QR_URL_COMPS,
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r.map(c => c.sub_type)).toEqual(['quick_reply']);
+    expect(r[0].index).toBe('0');
+  });
+
+  it('4C7A2-R05 | QR + PHONE permanece emitindo QR no índice original', () => {
+    const r = buildGraphComponents(
+      MIX_QR_PHONE_COMPS,
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: '0',
+      parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+    }]);
+  });
+
+  it('4C7A2-R06 | URL dinâmica única continua emitindo suffix runtime', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': '12345' } },
+    );
+    expect(r).toEqual([URL_GRAPH]);
   });
 
 });

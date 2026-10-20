@@ -3833,3 +3833,268 @@ describe('4C6D2-SEND | combinação inválida é rejeitada antes do Graph', () =
     expect(mockBuildGraphComponents).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// MVP4C.7.A2 — URL estática + PHONE_NUMBER (engine mockado; Graph mockado; snapshot real)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_URL_PHONE = {
+  id: 'tpl-url-phone',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Escolha' },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+        { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+      ],
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_URL_PHONE = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Escolha',
+  headerMediaFormat: null,
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    },
+    {
+      index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_PHONE_URL = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Escolha',
+  headerMediaFormat: null,
+  buttons: [
+    {
+      index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+      phone_number: '+5511999999999',
+    },
+    {
+      index: 1, type: 'URL', text: 'Abrir site',
+      url: 'https://example.com/loja', url_kind: 'static',
+    },
+  ],
+};
+
+describe('4C7A2-SEND | URL estática + PHONE_NUMBER válido aceita', () => {
+  it('Graph 1x sem components; snapshot misto v1 da WABA; tracking igual', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_URL_PHONE);
+    mockBuildGraphComponents.mockReturnValue([]);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {} },
+        components: [{
+          type: 'button',
+          sub_type: 'url',
+          url: 'https://evil.example/forged',
+        }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toBeUndefined();
+    expect(tpl).not.toHaveProperty('components');
+    expect(JSON.stringify(tpl)).not.toContain('"type":"button"');
+    expect(JSON.stringify(tpl)).not.toContain('"sub_type":"url"');
+    expect(JSON.stringify(tpl)).not.toContain('"sub_type":"phone_number"');
+    expect(JSON.stringify(tpl)).not.toContain('"parameters":[]');
+    expect(JSON.stringify(tpl)).not.toContain('https://example.com/loja');
+    expect(JSON.stringify(tpl)).not.toContain('https://evil.example/forged');
+    expect(JSON.stringify(tpl)).not.toContain('+5511999999999');
+    expect(JSON.stringify(tpl)).not.toContain('+5511888888888');
+
+    const trackingInsert = mockSvc.from.mock.results[3].value;
+    const trackingArg = trackingInsert.insert.mock.calls[0][0];
+    expect(trackingArg.company_id).toBe(FAKE_COMPANY_ID);
+    expect(trackingArg.instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(trackingArg.meta_message_id).toBe(FAKE_WAMID);
+    expect(trackingArg.status).toBe('accepted');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'URL', index: 0, text: 'Abrir site', href: 'https://example.com/loja' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+    expect(insertArg).not.toHaveProperty('parameter_values');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('+5511888888888');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('https://evil.example/forged');
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+
+  it('PHONE, URL → snapshot na ordem original; Graph sem components', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL_PHONE,
+      id: 'tpl-phone-url',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    }]));
+    setupEngineOk(FAKE_ANALYSIS_PHONE_URL);
+    mockBuildGraphComponents.mockReturnValue([]);
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+
+    expect(res._status).toBe(200);
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl).not.toHaveProperty('components');
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        {
+          type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        { type: 'URL', index: 1, text: 'Abrir site', href: 'https://example.com/loja' },
+      ],
+    });
+  });
+});
+
+describe('4C7A2-SEND | parâmetros runtime do frontend são rejeitados', () => {
+  it.each([
+    ['url', { body: {}, url: { '0': 'suffix' } }],
+    ['phone', { body: {}, phone: '+5511888888888' }],
+    ['phone_number', { body: {}, phone_number: '+5511888888888' }],
+    ['buttons', { body: {}, buttons: [{ payload: 'forged' }] }],
+  ])('parameter_values.%s → 422; send 0; Graph 0', async (_key, parameter_values) => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL_PHONE]));
+    mockAnalyzeTemplate.mockReturnValue(FAKE_ANALYSIS_URL_PHONE);
+    mockValidateParameterValues.mockReturnValue({ valid: false, error: 'template_params_mismatch' });
+
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values } }), res);
+
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_params_mismatch');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('4C7A2-SEND | combinação inválida é rejeitada antes do Graph', () => {
+  it('URL dinâmica + PHONE → 422 template_unsupported; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL_PHONE,
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS send not enabled',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Escolha',
+      headerMediaFormat: null,
+      buttons: [
+        {
+          index: 0, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+        },
+        {
+          index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  });
+
+  it('QR + URL + PHONE → 422 template_unsupported; send 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL_PHONE,
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir site', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    }]));
+    mockAnalyzeTemplate.mockReturnValue({
+      supported: false, unsupported_reason: 'BUTTONS send not enabled',
+      parameter_format: 'POSITIONAL', parameters: [], bodyText: 'Escolha',
+      headerMediaFormat: null,
+      buttons: [
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir site',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(422);
+    expect(res._body.error).toBe('template_unsupported');
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockBuildGraphComponents).not.toHaveBeenCalled();
+  });
+});
