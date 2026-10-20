@@ -36,7 +36,11 @@
 // MVP4C.6.B1: 1 grupo contíguo de QUICK_REPLY (1–9) + exatamente 1 URL estática
 //   (antes ou depois do grupo), índices originais 0..n-1, sem HEADER media →
 //   supported=true. Graph emite button só para cada QR; omite a URL estática.
-//   QR separados, URL dinâmica, PHONE, AUTH, FLOW, mídia → false.
+//   QR separados, URL dinâmica, PHONE no mix URL, AUTH, FLOW, mídia → false.
+// MVP4C.6.D2: 1 grupo contíguo de QUICK_REPLY (1–9) + exatamente 1 PHONE_NUMBER
+//   (antes ou depois do grupo), índices originais 0..n-1, sem HEADER media →
+//   supported=true. Graph emite button só para cada QR; omite o PHONE_NUMBER.
+//   Intercalação, 2 phones, URL no mix, AUTH, FLOW, mídia → false.
 // =============================================================================
 
 import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
@@ -317,6 +321,53 @@ function isQuickReplyPlusStaticUrlSendReady(buttons, headerMediaFormat) {
   if (qrCount < 1 || qrCount > 9) return false;
   if (qrCount + urlCount !== n) return false;
   if (urlPos !== 0 && urlPos !== n - 1) return false;
+  return true;
+}
+
+/**
+ * True somente para o slice 4C.6.D2: 1 grupo contíguo de QUICK_REPLY (1–9)
+ * + exatamente 1 PHONE_NUMBER (antes ou depois do grupo).
+ * Índices inteiros, únicos e iguais às posições originais 0..n-1.
+ * Sem HEADER media, sem URL/FLOW/AUTH, sem segundo PHONE.
+ * Política do número: isSafePhoneNumber (fonte única, definição aprovada).
+ * @private
+ */
+function isQuickReplyPlusPhoneNumberSendReady(buttons, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (!Array.isArray(buttons)) return false;
+  const n = buttons.length;
+  if (n < 2 || n > 10) return false;
+
+  let phoneCount = 0;
+  let qrCount = 0;
+  let phonePos = -1;
+
+  for (let i = 0; i < n; i++) {
+    const b = buttons[i];
+    if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+    if (!Number.isInteger(b.index) || b.index !== i) return false;
+
+    if (b.type === 'QUICK_REPLY') {
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      qrCount += 1;
+      continue;
+    }
+
+    if (b.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      phonePos = i;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (!isSafePhoneNumber(b.phone_number)) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  if (phoneCount !== 1) return false;
+  if (qrCount < 1 || qrCount > 9) return false;
+  if (qrCount + phoneCount !== n) return false;
+  if (phonePos !== 0 && phonePos !== n - 1) return false;
   return true;
 }
 
@@ -649,6 +700,7 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.5A: 1 URL estática sem placeholder, sem HEADER media → supported=true.
     // 4C.5B.A: 1 PHONE_NUMBER válido, sem HEADER media → supported=true.
     // 4C.6.B1: 1 grupo QR contíguo + 1 URL estática, sem HEADER media → supported=true.
+    // 4C.6.D2: 1 grupo QR contíguo + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // QR separados / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
@@ -669,11 +721,16 @@ export function analyzeTemplate(rawTemplate) {
         classifiedButtons,
         headerMediaFormat,
       );
+      const mixQrPhoneReady = isQuickReplyPlusPhoneNumberSendReady(
+        classifiedButtons,
+        headerMediaFormat,
+      );
       const ready = qrReady
         || dynamicUrlReady
         || staticUrlReady
         || phoneReady
-        || mixQrStaticReady;
+        || mixQrStaticReady
+        || mixQrPhoneReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -1040,6 +1097,35 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
 
       // 4C.6.B1: QR no índice original; URL estática omitida (sem parameters: []).
       if (isQuickReplyPlusStaticUrlSendReady(classified.buttons, headerMediaHint)) {
+        const identity = resolveTemplateIdentity(options);
+        if (!identity) {
+          throw makeEngineError(
+            'build_qr_identity_missing',
+            'buildGraphComponents: templateIdentity required for QUICK_REPLY',
+          );
+        }
+
+        for (const btn of classified.buttons) {
+          if (btn.type !== 'QUICK_REPLY') continue;
+          const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
+          if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+            throw makeEngineError(
+              'build_qr_payload_too_long',
+              'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+            );
+          }
+          result.push({
+            type:       'button',
+            sub_type:   'quick_reply',
+            index:      String(btn.index),
+            parameters: [{ type: 'payload', payload }],
+          });
+        }
+        continue;
+      }
+
+      // 4C.6.D2: QR no índice original; PHONE_NUMBER omitido (sem parameters: []).
+      if (isQuickReplyPlusPhoneNumberSendReady(classified.buttons, headerMediaHint)) {
         const identity = resolveTemplateIdentity(options);
         if (!identity) {
           throw makeEngineError(

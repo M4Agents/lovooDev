@@ -2498,7 +2498,7 @@ describe('GET — MVP4C.5B.B PHONE_NUMBER', () => {
       .toBe('https://example.com/loja');
   });
 
-  it('mistura PHONE+QR, AUTH e FLOW continuam bloqueados', async () => {
+  it('intercalação PHONE+QR, AUTH e FLOW continuam bloqueados', async () => {
     const mixTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c5b-mix',
@@ -2507,8 +2507,9 @@ describe('GET — MVP4C.5B.B PHONE_NUMBER', () => {
         {
           type: 'BUTTONS',
           buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
             { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
-            { type: 'QUICK_REPLY', text: 'Ok' },
+            { type: 'QUICK_REPLY', text: 'Não' },
           ],
         },
       ],
@@ -2629,7 +2630,7 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
     ]);
   });
 
-  it('QR separados, URL dinâmica, PHONE, FLOW e mídia continuam false', async () => {
+  it('QR separados, URL dinâmica, QR+URL+PHONE e mídia continuam false', async () => {
     const splitTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c6b1-split',
@@ -2668,6 +2669,7 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
           type: 'BUTTONS',
           buttons: [
             { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
             { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
           ],
         },
@@ -2937,6 +2939,153 @@ describe('GET — MVP4C.6.B2 payload em components[].buttons', () => {
     expect(body).not.toContain(FAKE_TOKEN_ENC);
     expect(body).not.toContain(FAKE_WABA_ID);
     expect(body).not.toContain('lovoo:qr:v1');
+  });
+
+});
+
+// =============================================================================
+// MVP4C.6.D2 — GET QR + PHONE_NUMBER send-ready
+// =============================================================================
+
+describe('GET — MVP4C.6.D2 QR + PHONE_NUMBER', () => {
+
+  it('QR + PHONE → supported=true; sem phone_number nem payload nas duas superfícies', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6d2-qr-phone',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.unsupported_reason).toBeNull();
+    expect(dto.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      { index: 1, type: 'PHONE_NUMBER', text: 'Ligar' },
+    ]);
+    expect(dto.buttons[0]).not.toHaveProperty('payload');
+    expect(dto.buttons[1]).not.toHaveProperty('phone_number');
+    expect(JSON.stringify(dto.buttons)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto.buttons)).not.toContain('+5511999999999');
+    expect(JSON.stringify(dto)).not.toContain('lovoo:qr:v1');
+    const buttonsComp = dto.components.find(c => c.type === 'BUTTONS');
+    expect(buttonsComp.buttons[0]).toEqual({ type: 'QUICK_REPLY', text: 'Sim' });
+    expect(buttonsComp.buttons[1]).toEqual({ type: 'PHONE_NUMBER', text: 'Ligar' });
+    expect(buttonsComp.buttons[0]).not.toHaveProperty('payload');
+    expect(buttonsComp.buttons[1]).not.toHaveProperty('phone_number');
+    expect(JSON.stringify(dto.components)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto.components)).not.toContain('+5511999999999');
+    expect(raw.components[1].buttons[0].payload).toBe('secret-qr-payload');
+    expect(raw.components[1].buttons[1].phone_number).toBe('+5511999999999');
+  });
+
+  it('PHONE + QR agrupados → supported=true', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6d2-phone-qr',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons.map(b => [b.index, b.type])).toEqual([
+      [0, 'PHONE_NUMBER'],
+      [1, 'QUICK_REPLY'],
+      [2, 'QUICK_REPLY'],
+    ]);
+    expect(JSON.stringify(dto)).not.toContain('+5511999999999');
+  });
+
+  it('QR intercalado, dois PHONE e QR+URL+PHONE continuam false', async () => {
+    const splitTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6d2-split',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    };
+    const twoPhoneTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6d2-two-phone',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'PHONE_NUMBER', text: 'A', phone_number: '+5511999999999' },
+            { type: 'PHONE_NUMBER', text: 'B', phone_number: '+5511888888888' },
+          ],
+        },
+      ],
+    };
+    const tripleTpl = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c6d2-triple',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/loja' },
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(splitTpl).supported).toBe(false);
+    expect(analyzeTemplate(twoPhoneTpl).supported).toBe(false);
+    expect(analyzeTemplate(tripleTpl).supported).toBe(false);
+
+    mockListMessageTemplates.mockResolvedValue(
+      makeListResult([splitTpl, twoPhoneTpl, tripleTpl]),
+    );
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6d2-split').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6d2-two-phone').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6d2-triple').supported).toBe(false);
+    expect(JSON.stringify(res._body)).not.toContain('+5511999999999');
+    expect(JSON.stringify(res._body)).not.toContain('+5511888888888');
   });
 
 });

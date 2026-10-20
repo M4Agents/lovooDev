@@ -269,6 +269,65 @@ function buildQuickReplyPlusStaticUrlSnapshot(analysis) {
 }
 
 /**
+ * Snapshot 4C.6.D2: QR (sem payload) + exatamente 1 PHONE_NUMBER com o número
+ * da definição aprovada. Índices originais. Inválido → null sem lançar.
+ * Não autoriza send.
+ * @private
+ */
+function buildQuickReplyPlusPhoneNumberSnapshot(analysis) {
+  if (analysis.headerMediaFormat != null) return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length < 2 || buttons.length > MAX_BUTTONS) {
+    return null;
+  }
+
+  let phoneCount = 0;
+  let qrCount = 0;
+  let phonePos = -1;
+  const out = [];
+
+  for (let i = 0; i < buttons.length; i++) {
+    const button = buttons[i];
+    if (!isPlainObject(button)) return null;
+    if (!Number.isInteger(button.index) || button.index !== i) return null;
+
+    if (button.type === 'QUICK_REPLY') {
+      if (!isValidText(button.text)) return null;
+      qrCount += 1;
+      out.push({
+        type:  'QUICK_REPLY',
+        index: button.index,
+        text:  button.text,
+      });
+      continue;
+    }
+
+    if (button.type === 'PHONE_NUMBER') {
+      phoneCount += 1;
+      phonePos = i;
+      if (!isValidText(button.text)) return null;
+      if (!isSafePhoneNumber(button.phone_number)) return null;
+      out.push({
+        type:         'PHONE_NUMBER',
+        index:        button.index,
+        text:         button.text,
+        phone_number: button.phone_number,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  if (phoneCount !== 1) return null;
+  if (qrCount < 1 || qrCount > 9) return null;
+  if (qrCount + phoneCount !== buttons.length) return null;
+  if (phonePos !== 0 && phonePos !== buttons.length - 1) return null;
+  return { v: 1, buttons: out };
+}
+
+/**
  * Constrói wrapper v1 sanitizado ou null.
  * Não lança. Não autoriza send.
  *
@@ -297,7 +356,8 @@ export function buildTemplateButtonsSnapshot(input = {}) {
     return buildPhoneNumberSnapshot(analysis);
   }
 
-  return buildQuickReplyPlusStaticUrlSnapshot(analysis);
+  return buildQuickReplyPlusStaticUrlSnapshot(analysis)
+    ?? buildQuickReplyPlusPhoneNumberSnapshot(analysis);
 }
 
 /**

@@ -845,3 +845,251 @@ describe('sanitizeTemplateButtonsSnapshot — QR + URL estática (4C.6.B1)', () 
     ]);
   });
 });
+
+function mixQrPhoneAnalysis(buttons, overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons,
+    ...overrides,
+  };
+}
+
+const MIX_QR_PHONE_BUTTONS = [
+  { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+  {
+    index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+    phone_number: '+5511999999999',
+  },
+];
+
+describe('buildTemplateButtonsSnapshot — QR + PHONE_NUMBER (4C.6.D2)', () => {
+  it('QR + PHONE → wrapper v1 misto; número da definição; sem payload', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis(MIX_QR_PHONE_BUTTONS),
+      parameterValues: { body: {}, phone_number: '+5511888888888' },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    });
+    expect(JSON.stringify(snap)).not.toContain('payload');
+    expect(JSON.stringify(snap)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(snap)).not.toContain('+5511888888888');
+    expect(snap.buttons[0]).not.toHaveProperty('phone_number');
+    expect(Object.keys(snap.buttons[0]).sort()).toEqual(['index', 'text', 'type']);
+    expect(Object.keys(snap.buttons[1]).sort()).toEqual([
+      'index', 'phone_number', 'text', 'type',
+    ]);
+  });
+
+  it('PHONE + QR → ordem e índices originais', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        {
+          index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+      ]),
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        {
+          type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        { type: 'QUICK_REPLY', index: 1, text: 'Sim' },
+      ],
+    });
+  });
+
+  it('dois QR + PHONE → índices 0,1,2', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        { index: 1, type: 'QUICK_REPLY', text: 'Não' },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+    });
+    expect(snap.buttons.map(b => [b.type, b.index])).toEqual([
+      ['QUICK_REPLY', 0],
+      ['QUICK_REPLY', 1],
+      ['PHONE_NUMBER', 2],
+    ]);
+  });
+
+  it('QR, PHONE, QR → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+        { index: 2, type: 'QUICK_REPLY', text: 'Não' },
+      ]),
+    })).toBeNull();
+  });
+
+  it('índice duplicado → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it('índices não consecutivos → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['tel: pronto', 'tel:+5511999999999'],
+    ['espaços', '+55 11 99999-9999'],
+  ])('telefone inseguro (%s) → null', (_label, phone_number) => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        { index: 1, type: 'PHONE_NUMBER', text: 'Ligar', phone_number },
+      ]),
+    })).toBeNull();
+  });
+
+  it('QR + URL + PHONE → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/loja', url_kind: 'static',
+        },
+        {
+          index: 2, type: 'PHONE_NUMBER', text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ]),
+    })).toBeNull();
+  });
+
+  it('header media → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrPhoneAnalysis(MIX_QR_PHONE_BUTTONS, { headerMediaFormat: 'IMAGE' }),
+    })).toBeNull();
+  });
+
+  it('QR-only / PHONE / QR+URL individuais permanecem intactos', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]),
+    })).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Sim' }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: phoneAnalysis(),
+    })).toEqual({
+      v: 1,
+      buttons: [{
+        type: 'PHONE_NUMBER', index: 0, text: 'Ligar',
+        phone_number: '+5511999999999',
+      }],
+    });
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrStaticAnalysis(MIX_QR_STATIC_BUTTONS),
+    })).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/loja' },
+      ],
+    });
+  });
+});
+
+describe('sanitizeTemplateButtonsSnapshot — QR + PHONE_NUMBER (4C.6.D2)', () => {
+  it('snapshot misto v1 → whitelist; extras e payload dropped', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      extra_top: 'drop',
+      buttons: [
+        {
+          type: 'QUICK_REPLY', index: 0, text: 'Sim',
+          extra: 'nope',
+        },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+          extra: 'nope',
+          href: 'tel:+5511999999999',
+        },
+      ],
+    })).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+      {
+        type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+        phone_number: '+5511999999999',
+      },
+    ]);
+  });
+
+  it('QR com payload no mix → item QR dropped; PHONE permanece', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        {
+          type: 'QUICK_REPLY', index: 0, text: 'Sim',
+          payload: 'lovoo:qr:v1:hello:en:0',
+        },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: '+5511999999999',
+        },
+      ],
+    })).toEqual([
+      {
+        type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+        phone_number: '+5511999999999',
+      },
+    ]);
+  });
+
+  it('telefone inseguro no mix → PHONE dropped; QR permanece', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'PHONE_NUMBER', index: 1, text: 'Ligar',
+          phone_number: 'javascript:alert(1)',
+        },
+      ],
+    })).toEqual([
+      { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+    ]);
+  });
+});
