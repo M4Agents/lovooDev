@@ -50,6 +50,10 @@
 //   media → supported=true. Graph emite só sub_type=url no índice original;
 //   omite PHONE. parameter_values.url usa a chave do índice da URL.
 //   2 URLs, 2 phones, QR no mix, AUTH, FLOW, mídia, {{1}} no meio → false.
+// MVP4C.11: 1 grupo QR contíguo (1–9) + exatamente 1 URL dinâmica POSITIONAL
+//   ({{1}} no FINAL, antes ou depois do grupo), índices originais, sem HEADER
+//   media → supported=true. Graph emite QR no índice original + sub_type=url
+//   com o suffix. Intercalação, PHONE extra, 2 URLs, NAMED, mídia → false.
 // =============================================================================
 
 import { isSafeHttpUrl, isSafePhoneNumber, isUnsafeDynamicUrlSuffix } from './templateButtonsSnapshot.js';
@@ -320,6 +324,56 @@ function isQuickReplyPlusStaticUrlSendReady(buttons, headerMediaFormat) {
       const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
       if (allInners.size !== 0) return false;
       if (!isSafeHttpUrl(b.url)) return false;
+      continue;
+    }
+
+    return false;
+  }
+
+  if (urlCount !== 1) return false;
+  if (qrCount < 1 || qrCount > 9) return false;
+  if (qrCount + urlCount !== n) return false;
+  if (urlPos !== 0 && urlPos !== n - 1) return false;
+  return true;
+}
+
+/**
+ * True somente para o slice 4C.11: 1 grupo contíguo de QUICK_REPLY (1–9)
+ * + exatamente 1 URL dinâmica POSITIONAL ({{1}} no FINAL, antes ou depois).
+ * Índices inteiros iguais às posições originais 0..n-1.
+ * Sem HEADER media, sem PHONE/FLOW/AUTH/URL estática, sem {{1}} no meio.
+ * @private
+ */
+function isQuickReplyPlusDynamicUrlSendReady(buttons, parameterFormat, headerMediaFormat) {
+  if (headerMediaFormat != null) return false;
+  if (parameterFormat !== 'POSITIONAL') return false;
+  if (!Array.isArray(buttons)) return false;
+  const n = buttons.length;
+  if (n < 2 || n > 10) return false;
+
+  let urlCount = 0;
+  let qrCount = 0;
+  let urlPos = -1;
+
+  for (let i = 0; i < n; i++) {
+    const b = buttons[i];
+    if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+    if (!Number.isInteger(b.index) || b.index !== i) return false;
+
+    if (b.type === 'QUICK_REPLY') {
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      qrCount += 1;
+      continue;
+    }
+
+    if (b.type === 'URL') {
+      urlCount += 1;
+      urlPos = i;
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return false;
+      if (typeof b.url !== 'string') return false;
+      if (!b.url.endsWith('{{1}}')) return false;
+      const allInners = collectInners(b.url, RE_ANY_PLACEHOLDER);
+      if (allInners.size !== 1 || !allInners.has('1')) return false;
       continue;
     }
 
@@ -808,6 +862,7 @@ export function analyzeTemplate(rawTemplate) {
     // 4C.6.D2: 1 grupo QR contíguo + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // 4C.7.A2: 1 URL estática + 1 PHONE_NUMBER, sem HEADER media → supported=true.
     // 4C.8.A2: 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER, sem HEADER media → supported=true.
+    // 4C.11: 1 grupo QR + 1 URL dinâmica POSITIONAL, sem HEADER media → supported=true.
     // QR separados / 2 URLs / NAMED dynamic / media+URL / media+PHONE / tipo desconhecido → false.
     if (classifiedButtons !== null) {
       const qrReady         = isQuickReplyOnlyReady(classifiedButtons);
@@ -841,6 +896,11 @@ export function analyzeTemplate(rawTemplate) {
         fmt,
         headerMediaFormat,
       );
+      const mixQrDynamicReady = isQuickReplyPlusDynamicUrlSendReady(
+        classifiedButtons,
+        fmt,
+        headerMediaFormat,
+      );
       const ready = qrReady
         || dynamicUrlReady
         || staticUrlReady
@@ -848,7 +908,8 @@ export function analyzeTemplate(rawTemplate) {
         || mixQrStaticReady
         || mixQrPhoneReady
         || mixStaticPhoneReady
-        || mixDynamicPhoneReady;
+        || mixDynamicPhoneReady
+        || mixQrDynamicReady;
       return {
         supported:          ready,
         unsupported_reason: ready ? null : buttonsBlockReason,
@@ -997,10 +1058,15 @@ export function validateParameterValues(parameters, parameterValues, context = {
     ctx.parameterFormat,
     ctx.headerMediaFormat ?? null,
   );
-  const urlReady = singleUrlReady || mixDynamicPhoneReady;
+  const mixQrDynamicReady = isQuickReplyPlusDynamicUrlSendReady(
+    ctx.buttons,
+    ctx.parameterFormat,
+    ctx.headerMediaFormat ?? null,
+  );
+  const urlReady = singleUrlReady || mixDynamicPhoneReady || mixQrDynamicReady;
   const hasOwnUrl = Object.prototype.hasOwnProperty.call(parameterValues, 'url');
 
-  // URL dinâmica (single 4C.3B ou mix 4C.8.A2) exige parameter_values.url
+  // URL dinâmica (single 4C.3B, mix 4C.8.A2 ou mix 4C.11) exige parameter_values.url
   // com exatamente a chave do índice original da URL. URL estática (4C.5A)
   // e demais formatos exigem AUSÊNCIA da chave — inclusive objeto vazio
   // é mismatch. 4C.10: sufixo com esquema ou // → mismatch.
@@ -1252,6 +1318,61 @@ export function buildGraphComponents(templateComponents, parameterFormat, parame
             index:      String(btn.index),
             parameters: [{ type: 'payload', payload }],
           });
+        }
+        continue;
+      }
+
+      // 4C.11: QR no índice original + URL dinâmica com suffix no índice WABA.
+      if (isQuickReplyPlusDynamicUrlSendReady(
+        classified.buttons,
+        parameterFormat,
+        headerMediaHint,
+      )) {
+        const identity = resolveTemplateIdentity(options);
+        if (!identity) {
+          throw makeEngineError(
+            'build_qr_identity_missing',
+            'buildGraphComponents: templateIdentity required for QUICK_REPLY',
+          );
+        }
+
+        const urlBtn = classified.buttons.find(b => b.type === 'URL');
+        const urlValues = parameterValues?.url;
+        const suffix = urlValues != null && typeof urlValues === 'object' && !Array.isArray(urlValues)
+          ? urlValues[String(urlBtn.index)]
+          : undefined;
+        if (typeof suffix !== 'string') {
+          throw makeEngineError(
+            'build_buttons_unsupported',
+            'buildGraphComponents: BUTTONS type not enabled for send',
+          );
+        }
+
+        for (const btn of classified.buttons) {
+          if (btn.type === 'QUICK_REPLY') {
+            const payload = buildQuickReplyPayload(identity.name, identity.language, btn.index);
+            if (payload.length > LOVOO_QR_PAYLOAD_MAX_LEN) {
+              throw makeEngineError(
+                'build_qr_payload_too_long',
+                'buildGraphComponents: QUICK_REPLY payload exceeds Lovoo safety limit',
+              );
+            }
+            result.push({
+              type:       'button',
+              sub_type:   'quick_reply',
+              index:      String(btn.index),
+              parameters: [{ type: 'payload', payload }],
+            });
+            continue;
+          }
+          if (btn.type === 'URL') {
+            result.push({
+              type:       'button',
+              sub_type:   'url',
+              index:      String(btn.index),
+              parameters: [{ type: 'text', text: suffix }],
+            });
+          }
         }
         continue;
       }

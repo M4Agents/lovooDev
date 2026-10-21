@@ -4611,3 +4611,214 @@ describe('4C10A2-SEND | sufixo inadequado bloqueia Graph e persistência', () =>
     });
   });
 });
+
+// =============================================================================
+// MVP4C.11.A3 — QR + URL dinâmica (engine mockado; Graph mockado; snapshot real)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_QR_DYN = {
+  id: 'tpl-4c11-qr-dyn',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'BODY', text: 'Escolha' },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'QUICK_REPLY', text: 'Sim' },
+        { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+      ],
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_QR_DYN = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Escolha',
+  headerMediaFormat: null,
+  buttons: [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+  ],
+};
+
+const FAKE_ANALYSIS_DYN_QR = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Escolha',
+  headerMediaFormat: null,
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+    { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+  ],
+};
+
+const FAKE_COMPONENTS_QR_DYN = [
+  {
+    type: 'button',
+    sub_type: 'quick_reply',
+    index: '0',
+    parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+  },
+  {
+    type: 'button',
+    sub_type: 'url',
+    index: '1',
+    parameters: [{ type: 'text', text: 'e2e-001' }],
+  },
+];
+
+const FAKE_COMPONENTS_DYN_QR = [
+  {
+    type: 'button',
+    sub_type: 'url',
+    index: '0',
+    parameters: [{ type: 'text', text: 'campanha/123' }],
+  },
+  {
+    type: 'button',
+    sub_type: 'quick_reply',
+    index: '1',
+    parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:1' }],
+  },
+];
+
+describe('4C11A3-SEND | QR + URL dinâmica válido aceita', () => {
+  it('200; Graph QR@0 + URL@1 só suffix; snapshot v1; frontend payload ignorado', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_DYN]));
+    setupEngineOk(FAKE_ANALYSIS_QR_DYN);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR_DYN);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {}, url: { '1': 'e2e-001' } },
+        components: [{ type: 'button', payload: 'forged-frontend' }],
+      },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_QR_DYN);
+    expect(tpl.components[0].index).toBe('0');
+    expect(tpl.components[0].sub_type).toBe('quick_reply');
+    expect(tpl.components[1].index).toBe('1');
+    expect(tpl.components[1].sub_type).toBe('url');
+    expect(tpl.components[1].parameters[0].text).toBe('e2e-001');
+    expect(JSON.stringify(tpl)).not.toContain('https://example.com/test/');
+    expect(JSON.stringify(tpl)).not.toContain('forged-frontend');
+
+    const trackingInsert = mockSvc.from.mock.results[3].value;
+    expect(trackingInsert.insert.mock.calls[0][0].company_id).toBe(FAKE_COMPANY_ID);
+    expect(trackingInsert.insert.mock.calls[0][0].instance_id).toBe(FAKE_INSTANCE_ID);
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        { type: 'URL', index: 1, text: 'Abrir', href: 'https://example.com/test/e2e-001' },
+      ],
+    });
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+
+  it('URL@0 + QR@1 → 200; Graph índices originais; href no índice 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_QR_DYN,
+      id: 'tpl-4c11-dyn-qr',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'QUICK_REPLY', text: 'Sim' },
+          ],
+        },
+      ],
+    }]));
+    setupEngineOk(FAKE_ANALYSIS_DYN_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_DYN_QR);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': 'campanha/123' } } },
+    }), res);
+
+    expect(res._status).toBe(200);
+    const [, , , tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(tpl.components[0].index).toBe('0');
+    expect(tpl.components[0].sub_type).toBe('url');
+    expect(tpl.components[0].parameters[0].text).toBe('campanha/123');
+    expect(tpl.components[1].index).toBe('1');
+    expect(tpl.components[1].sub_type).toBe('quick_reply');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'URL', index: 0, text: 'Abrir', href: 'https://example.com/test/campanha/123' },
+        { type: 'QUICK_REPLY', index: 1, text: 'Sim' },
+      ],
+    });
+  });
+});
+
+describe('4C11A3-SEND | falhas pré-Graph/INSERT', () => {
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['//evil.example'],
+  ])('sufixo inadequado %s → 422; Graph 0; upload 0; insert 0', async (suffix) => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_DYN]));
+    setupEngineOk(FAKE_ANALYSIS_QR_DYN);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR_DYN);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '1': suffix } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('QR text 65 → 422 pelo gate 4C.9; Graph 0; insert 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR_DYN]));
+    setupEngineOk({
+      ...FAKE_ANALYSIS_QR_DYN,
+      buttons: [
+        { index: 0, type: 'QUICK_REPLY', text: 'A'.repeat(65) },
+        FAKE_ANALYSIS_QR_DYN.buttons[1],
+      ],
+    });
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR_DYN);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '1': 'e2e-001' } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+});

@@ -291,6 +291,84 @@ function buildQuickReplyPlusStaticUrlSnapshot(analysis) {
 }
 
 /**
+ * Snapshot 4C.11: QR (sem payload) + exatamente 1 URL dinâmica POSITIONAL
+ * (href = prefixo WABA + suffix). Índices originais. Inválido → null.
+ * Não autoriza send.
+ * @private
+ */
+function buildQuickReplyPlusDynamicUrlSnapshot(analysis, parameterValues) {
+  if (analysis.headerMediaFormat != null) return null;
+  if (analysis.parameter_format !== 'POSITIONAL') return null;
+
+  const buttons = analysis.buttons;
+  if (!Array.isArray(buttons) || buttons.length < 2 || buttons.length > MAX_BUTTONS) {
+    return null;
+  }
+
+  if (!isPlainObject(parameterValues)) return null;
+  const urlValues = parameterValues.url;
+  if (!isPlainObject(urlValues)) return null;
+
+  let urlCount = 0;
+  let qrCount = 0;
+  let urlPos = -1;
+  const out = [];
+
+  for (let i = 0; i < buttons.length; i++) {
+    const button = buttons[i];
+    if (!isPlainObject(button)) return null;
+    if (!Number.isInteger(button.index) || button.index !== i) return null;
+
+    if (button.type === 'QUICK_REPLY') {
+      if (!isValidText(button.text)) return null;
+      qrCount += 1;
+      out.push({
+        type:  'QUICK_REPLY',
+        index: button.index,
+        text:  button.text,
+      });
+      continue;
+    }
+
+    if (button.type === 'URL') {
+      urlCount += 1;
+      urlPos = i;
+      if (!isValidText(button.text)) return null;
+      if (typeof button.url !== 'string') return null;
+      if (!button.url.endsWith(PLACEHOLDER)) return null;
+      if (countPlaceholders(button.url) !== 1) return null;
+      if (firstPlaceholderInner(button.url) !== '1') return null;
+
+      const urlKey = String(button.index);
+      const keys = Object.keys(urlValues);
+      if (keys.length !== 1 || keys[0] !== urlKey) return null;
+      const suffix = urlValues[urlKey];
+      if (typeof suffix !== 'string' || suffix.trim().length === 0) return null;
+      if (isUnsafeDynamicUrlSuffix(suffix)) return null;
+
+      const href = button.url.slice(0, -PLACEHOLDER.length) + suffix;
+      if (!isSafeHttpUrl(href)) return null;
+
+      out.push({
+        type:  'URL',
+        index: button.index,
+        text:  button.text,
+        href,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  if (urlCount !== 1) return null;
+  if (qrCount < 1 || qrCount > 9) return null;
+  if (qrCount + urlCount !== buttons.length) return null;
+  if (urlPos !== 0 && urlPos !== buttons.length - 1) return null;
+  return { v: 1, buttons: out };
+}
+
+/**
  * Snapshot 4C.6.D2: QR (sem payload) + exatamente 1 PHONE_NUMBER com o número
  * da definição aprovada. Índices originais. Inválido → null sem lançar.
  * Não autoriza send.
@@ -510,6 +588,7 @@ export function buildTemplateButtonsSnapshot(input = {}) {
   }
 
   return buildQuickReplyPlusStaticUrlSnapshot(analysis)
+    ?? buildQuickReplyPlusDynamicUrlSnapshot(analysis, input.parameterValues)
     ?? buildQuickReplyPlusPhoneNumberSnapshot(analysis)
     ?? buildStaticUrlPlusPhoneNumberSnapshot(analysis)
     ?? buildDynamicUrlPlusPhoneNumberSnapshot(analysis, input.parameterValues);

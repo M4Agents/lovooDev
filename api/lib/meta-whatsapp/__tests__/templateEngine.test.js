@@ -2285,7 +2285,7 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
     expect(r.supported).toBe(false);
   });
 
-  it('4C3B-08 | URL + QR → supported=false', () => {
+  it('4C3B-08 | URL + QR → supported=true (4C.11)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -2299,7 +2299,12 @@ describe('analyzeTemplate / validate / build — MVP4C.3B dynamic URL', () => {
         },
       ],
     });
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
+    expect(r.buttons.map(b => [b.type, b.index])).toEqual([
+      ['QUICK_REPLY', 0],
+      ['URL', 1],
+    ]);
+    expect(r.buttons[1].url_kind).toBe('dynamic');
   });
 
   it('4C3B-09 | URL + PHONE → supported=false', () => {
@@ -3281,7 +3286,7 @@ describe('analyzeTemplate / validate / build — MVP4C.6.B1 QR + URL estática',
     expect(r.buttons.map(b => b.index)).toEqual([0, 1, 2]);
   });
 
-  it('4C6B1-07 | URL dinâmica na mistura → supported=false', () => {
+  it('4C6B1-07 | URL dinâmica na mistura → supported=true (4C.11)', () => {
     const r = analyzeTemplate({
       category: 'MARKETING', parameter_format: 'POSITIONAL',
       components: [
@@ -3295,7 +3300,7 @@ describe('analyzeTemplate / validate / build — MVP4C.6.B1 QR + URL estática',
         },
       ],
     });
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
     expect(r.buttons[1].url_kind).toBe('dynamic');
   });
 
@@ -3356,7 +3361,7 @@ describe('analyzeTemplate / validate / build — MVP4C.6.B1 QR + URL estática',
 
   it.each([
     ['javascript:', 'javascript:alert(1)'],
-    ['placeholder', 'https://example.com/{{1}}'],
+    ['placeholder no meio', 'https://example.com/{{1}}/loja'],
     ['relativa', '/loja'],
     ['credenciais', 'https://user:pass@example.com/loja'],
   ])('4C6B1-11 | URL insegura/placeholder (%s) → supported=false', (_label, url) => {
@@ -5100,5 +5105,261 @@ describe('4C10A2 | sufixo de URL dinâmica inadequado', () => {
       parameters: [{ type: 'text', text: 'campanha/123' }],
     }]);
     expect(JSON.stringify(r)).not.toContain('https://example.com');
+  });
+});
+
+const MIX_QR_DYN_COMPS = [
+  { type: 'BODY', text: 'Escolha' },
+  {
+    type: 'BUTTONS',
+    buttons: [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+    ],
+  },
+];
+
+const MIX_QR_DYN_CTX = {
+  buttons: [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+  ],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+const MIX_DYN_QR_CTX = {
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+    { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+  ],
+  parameterFormat: 'POSITIONAL',
+  headerMediaFormat: null,
+};
+
+describe('analyzeTemplate / validate / build — MVP4C.11 QR + URL dinâmica', () => {
+  it('4C11-01 | QR + URL dyn → supported=true; índices originais', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: MIX_QR_DYN_COMPS,
+    });
+    expect(r.supported).toBe(true);
+    expect(r.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      {
+        index: 1, type: 'URL', text: 'Abrir',
+        url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+      },
+    ]);
+  });
+
+  it('4C11-02 | URL dyn + QR → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'QUICK_REPLY', text: 'Sim' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.buttons.map(b => [b.index, b.type])).toEqual([[0, 'URL'], [1, 'QUICK_REPLY']]);
+  });
+
+  it('4C11-03 | 2 QR + URL dyn → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.buttons.map(b => b.index)).toEqual([0, 1, 2]);
+  });
+
+  it('4C11-04 | 9 QR + URL dyn → supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: qrButtons(9, [{ type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' }]),
+        },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.buttons).toHaveLength(10);
+  });
+
+  it.each([
+    ['intercalado', [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+      { type: 'QUICK_REPLY', text: 'Não' },
+    ]],
+    ['PHONE extra', [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+      { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+    ]],
+    ['2 URLs', [
+      { type: 'URL', text: 'A', url: 'https://example.com/a/{{1}}' },
+      { type: 'URL', text: 'B', url: 'https://example.com/b/{{1}}' },
+    ]],
+    ['{{1}} no meio', [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'URL', text: 'Abrir', url: 'https://example.com/{{1}}/x' },
+    ]],
+    ['FLOW', [
+      { type: 'QUICK_REPLY', text: 'Sim' },
+      { type: 'FLOW', text: 'Abrir fluxo' },
+    ]],
+  ])('4C11-U | %s → supported=false', (_label, buttons) => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [{ type: 'BODY', text: 'Escolha' }, { type: 'BUTTONS', buttons }],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C11-05 | NAMED + mix → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'NAMED',
+      components: MIX_QR_DYN_COMPS,
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C11-06 | IMAGE + mix → supported=false', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+          ],
+        },
+      ],
+    });
+    expect(r.supported).toBe(false);
+  });
+
+  it('4C11-V01 | URL no índice 1 exige url["1"]', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '1': 'e2e-001' } },
+      MIX_QR_DYN_CTX,
+    )).toEqual({ valid: true });
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'e2e-001' } },
+      MIX_QR_DYN_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C11-V02 | URL no índice 0 exige url["0"]', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'campanha/123' } },
+      MIX_DYN_QR_CTX,
+    )).toEqual({ valid: true });
+  });
+
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['//evil.example'],
+    [''],
+  ])('4C11-V03 | sufixo inadequado %s → mismatch', (suffix) => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '1': suffix } },
+      MIX_QR_DYN_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('4C11-B01 | Graph QR + URL; payload backend; só suffix', () => {
+    const r = buildGraphComponents(
+      MIX_QR_DYN_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '1': 'e2e-001' } },
+      QR_IDENTITY,
+    );
+    expect(r).toEqual([
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+      },
+      {
+        type: 'button',
+        sub_type: 'url',
+        index: '1',
+        parameters: [{ type: 'text', text: 'e2e-001' }],
+      },
+    ]);
+    expect(JSON.stringify(r)).not.toContain('https://example.com/test/e2e-001');
+  });
+
+  it('4C11-B02 | URL primeiro: índices originais', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Escolha' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'QUICK_REPLY', text: 'Sim' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { body: {}, url: { '0': 'e2e-001' } },
+      QR_IDENTITY,
+    );
+    expect(r.map(c => [c.sub_type, c.index])).toEqual([['url', '0'], ['quick_reply', '1']]);
+  });
+
+  it('4C11-B03 | sem templateIdentity → build_qr_identity_missing', () => {
+    try {
+      buildGraphComponents(
+        MIX_QR_DYN_COMPS,
+        'POSITIONAL',
+        { body: {}, url: { '1': 'e2e-001' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_qr_identity_missing');
+    }
+  });
+
+  it('4C11-R01 | QR + URL estática continua omitindo a URL no Graph', () => {
+    const r = buildGraphComponents(MIX_QR_URL_COMPS, 'POSITIONAL', { body: {} }, QR_IDENTITY);
+    expect(r.map(c => c.sub_type)).toEqual(['quick_reply']);
   });
 });

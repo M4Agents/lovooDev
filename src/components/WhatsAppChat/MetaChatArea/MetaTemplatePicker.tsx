@@ -10,6 +10,8 @@
 //   - MVP4C.3C: 1 URL dynamic POSITIONAL — suffix em parameter_values.url["0"]
 //   - MVP4C.8.A3: 1 URL dinâmica POSITIONAL + 1 PHONE_NUMBER (qualquer ordem)
 //     — suffix em parameter_values.url[String(url.index)]; sem campo de telefone
+//   - MVP4C.11: 1–9 QR contíguos + 1 URL dinâmica POSITIONAL nas pontas
+//     — suffix em parameter_values.url[String(url.index)]
 //   - Exibir preview textual local (não porta templateEngine.js)
 //   - Solicitar envio via onSend — parent é responsável pela chamada real
 //
@@ -122,11 +124,53 @@ function findDynamicUrlInPhoneMix(
   return urlButton
 }
 
-/** URL dinâmica sendable no picker: single 4C.3C ou mix 4C.8.A3. */
+/**
+ * Slice 4C.11: 1 URL dinâmica POSITIONAL nas pontas + 1–9 QUICK_REPLY
+ * contíguos. Devolve o botão URL. Sem PHONE/FLOW/segunda URL/intercalação.
+ */
+function findDynamicUrlInQrMix(
+  buttons: MetaTemplateButton[] | undefined,
+): MetaTemplateButton | null {
+  if (!Array.isArray(buttons) || buttons.length < 2 || buttons.length > 10) return null
+
+  let urlButton: MetaTemplateButton | null = null
+  let urlPos = -1
+  let qrCount = 0
+
+  for (let i = 0; i < buttons.length; i++) {
+    const b = buttons[i]
+    if (!Number.isInteger(b.index) || b.index !== i) return null
+
+    if (b.type === 'QUICK_REPLY') {
+      if (typeof b.text !== 'string' || b.text.trim().length === 0) return null
+      qrCount += 1
+      continue
+    }
+
+    if (b.type === 'URL') {
+      if (urlButton) return null
+      if (!isPickerPositionalDynamicUrl(b)) return null
+      urlButton = b
+      urlPos = i
+      continue
+    }
+
+    return null
+  }
+
+  if (urlButton === null || qrCount < 1 || qrCount > 9) return null
+  if (qrCount + 1 !== buttons.length) return null
+  if (urlPos !== 0 && urlPos !== buttons.length - 1) return null
+  return urlButton
+}
+
+/** URL dinâmica sendable: single 4C.3C, mix 4C.8.A3 ou mix 4C.11. */
 function findSendableDynamicUrlButton(
   buttons: MetaTemplateButton[] | undefined,
 ): MetaTemplateButton | null {
-  return findSingleDynamicUrlButton(buttons) ?? findDynamicUrlInPhoneMix(buttons)
+  return findSingleDynamicUrlButton(buttons)
+    ?? findDynamicUrlInPhoneMix(buttons)
+    ?? findDynamicUrlInQrMix(buttons)
 }
 
 /** Prefixo visual: remove somente o {{1}} FINAL. Sem concatenar URL de envio. */

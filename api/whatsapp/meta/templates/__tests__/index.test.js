@@ -2630,7 +2630,7 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
     ]);
   });
 
-  it('QR separados, URL dinâmica, QR+URL+PHONE e mídia continuam false', async () => {
+  it('QR separados, QR+URL+PHONE e mídia continuam false; QR+URL dyn true (4C.11)', async () => {
     const splitTpl = {
       ...FAKE_TEMPLATE_SIMPLE,
       id: 'tpl-4c6b1-split',
@@ -2691,7 +2691,7 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
       ],
     };
     expect(analyzeTemplate(splitTpl).supported).toBe(false);
-    expect(analyzeTemplate(dynTpl).supported).toBe(false);
+    expect(analyzeTemplate(dynTpl).supported).toBe(true);
     expect(analyzeTemplate(phoneTpl).supported).toBe(false);
     expect(analyzeTemplate(mediaTpl).supported).toBe(false);
 
@@ -2703,7 +2703,7 @@ describe('GET — MVP4C.6.B1 QR + URL estática', () => {
     await handler(req, res);
 
     expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-split').supported).toBe(false);
-    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-dyn').supported).toBe(false);
+    expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-dyn').supported).toBe(true);
     expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-phone').supported).toBe(false);
     expect(res._body.templates.find(t => t.id === 'tpl-4c6b1-media').supported).toBe(false);
   });
@@ -3393,4 +3393,65 @@ describe('GET — MVP4C.8.A2 URL dinâmica + PHONE_NUMBER', () => {
     expect(JSON.stringify(res._body)).not.toContain('+5511999999999');
   });
 
+});
+
+describe('GET — MVP4C.11 QR + URL dinâmica', () => {
+  it('QR + URL dyn → supported=true; url/url_kind; sem payload', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c11-qr-url',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim', payload: 'secret-qr-payload' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+          ],
+        },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.buttons).toEqual([
+      { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+      {
+        index: 1, type: 'URL', text: 'Abrir',
+        url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+      },
+    ]);
+    expect(dto.buttons[0]).not.toHaveProperty('payload');
+    expect(JSON.stringify(dto)).not.toContain('secret-qr-payload');
+    expect(JSON.stringify(dto)).not.toContain('phone_number');
+  });
+
+  it('QR intercalado + URL dyn → supported=false', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4c11-interleaved',
+      components: [
+        { type: 'BODY', text: 'Escolha', example: { body_text: [[]] } },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'URL', text: 'Abrir', url: 'https://example.com/test/{{1}}' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._body.templates[0].supported).toBe(false);
+  });
 });

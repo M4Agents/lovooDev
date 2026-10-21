@@ -1532,3 +1532,124 @@ describe('MetaTemplatePicker — MVP4C.8.A3 URL dinâmica + PHONE_NUMBER', () =>
     expect(onSend.mock.calls[0][1]).not.toHaveProperty('url')
   })
 })
+
+const TMPL_QR_DYN_URL: MetaWhatsAppTemplate = {
+  id:                  'tpl-4c11-qr-dyn',
+  name:                'lovoo_e2e_qr_url_dynamic',
+  language:            'en',
+  status:              'APPROVED',
+  category:            'MARKETING',
+  parameter_format:    'POSITIONAL',
+  header_media_format: null,
+  buttons:             [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+  ],
+  components:          [{ type: 'BODY', text: 'Escolha' }],
+  parameters:          [],
+  supported:           true,
+  unsupported_reason:  null,
+}
+
+const TMPL_DYN_URL_QR: MetaWhatsAppTemplate = {
+  ...TMPL_QR_DYN_URL,
+  id:   'tpl-4c11-dyn-qr',
+  name: 'lovoo_e2e_url_qr_dynamic',
+  buttons: [
+    {
+      index: 0, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+    { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+  ],
+}
+
+describe('MetaTemplatePicker — MVP4C.11 QR + URL dinâmica', () => {
+  it('FE-QR-URL-01: QR + URL exibe sufixo no índice 1 e preview QR', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_DYN_URL]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_qr_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_qr_url_dynamic'))
+
+    expect(screen.getByTestId('url-suffix-1')).toBeTruthy()
+    expect(screen.getByLabelText('Sufixo do botão URL 1')).toHaveProperty('value', '')
+    expect(screen.queryByTestId('url-suffix-0')).toBeNull()
+    expect(screen.getByTestId('preview-url-prefix').textContent).toBe('https://example.com/test/')
+    expect(screen.getByTestId('preview-button-0').textContent).toBe('Sim')
+  })
+
+  it('FE-QR-URL-02: URL + QR exibe sufixo no índice 0 e preview QR', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_QR]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_qr_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_qr_dynamic'))
+
+    expect(screen.getByTestId('url-suffix-0')).toBeTruthy()
+    expect(screen.getByLabelText('Sufixo do botão URL 0')).toHaveProperty('value', '')
+    expect(screen.queryByTestId('url-suffix-1')).toBeNull()
+    expect(screen.getByTestId('preview-button-1').textContent).toBe('Sim')
+  })
+
+  it('FE-QR-URL-03: sufixo vazio desabilita envio; preenchido envia url["1"]', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_QR_DYN_URL]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_qr_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_qr_url_dynamic'))
+
+    const send = () => screen.getByRole('button', { name: /enviar template/i })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 1'), { target: { value: '   ' } })
+    expect(send()).toHaveProperty('disabled', true)
+
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 1'), { target: { value: 'e2e-001' } })
+    expect(send()).toHaveProperty('disabled', false)
+
+    await act(async () => {
+      fireEvent.click(send())
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '1': 'e2e-001' } })
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('buttons')
+    expect(JSON.stringify(onSend.mock.calls[0][1])).not.toContain('payload')
+  })
+
+  it('FE-QR-URL-04: URL + QR envia url["0"]; sem payload', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_QR]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_qr_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_qr_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: 'campanha/123' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': 'campanha/123' } })
+    expect(Object.keys(onSend.mock.calls[0][1].url ?? {})).toEqual(['0'])
+  })
+
+  it('FE-QR-URL-05: URL dinâmica única continua com url["0"]', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_URL_DYNAMIC]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_dynamic'))
+    fireEvent.change(screen.getByLabelText('Sufixo do botão URL 0'), { target: { value: '12345' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend.mock.calls[0][1]).toEqual({ body: {}, url: { '0': '12345' } })
+  })
+
+  it('FE-QR-URL-06: URL dinâmica + PHONE permanece com sufixo no índice 0', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_DYN_URL_PHONE]))
+    renderPicker()
+    await waitFor(() => screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    fireEvent.click(screen.getByText('lovoo_e2e_url_phone_dynamic'))
+    expect(screen.getByTestId('url-suffix-0')).toBeTruthy()
+    expect(screen.queryByTestId('preview-buttons')).toBeNull()
+  })
+})

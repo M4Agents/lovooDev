@@ -1743,3 +1743,95 @@ describe('sanitizeTemplateButtonsSnapshot — URL dinâmica + PHONE_NUMBER (4C.8
     ]);
   });
 });
+
+function mixQrDynamicAnalysis(buttons, overrides = {}) {
+  return {
+    supported: true,
+    unsupported_reason: null,
+    parameter_format: 'POSITIONAL',
+    headerMediaFormat: null,
+    buttons,
+    ...overrides,
+  };
+}
+
+describe('buildTemplateButtonsSnapshot — QR + URL dinâmica (4C.11)', () => {
+  const qrThenUrl = [
+    { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+    {
+      index: 1, type: 'URL', text: 'Abrir',
+      url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+    },
+  ];
+
+  it('QR + URL → v1; href = prefixo + suffix; sem payload', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrDynamicAnalysis(qrThenUrl),
+      parameterValues: { body: {}, url: { '1': 'e2e-001' } },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Sim' },
+        {
+          type: 'URL', index: 1, text: 'Abrir',
+          href: 'https://example.com/test/e2e-001',
+        },
+      ],
+    });
+    expect(JSON.stringify(snap)).not.toContain('payload');
+    expect(JSON.stringify(snap)).not.toContain('{{1}}');
+  });
+
+  it('URL + QR → ordem original; href no índice 0', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixQrDynamicAnalysis([
+        {
+          index: 0, type: 'URL', text: 'Abrir',
+          url: 'https://example.com/test/{{1}}', url_kind: 'dynamic',
+        },
+        { index: 1, type: 'QUICK_REPLY', text: 'Sim' },
+      ]),
+      parameterValues: { body: {}, url: { '0': 'campanha/123' } },
+    });
+    expect(snap.buttons.map(b => [b.type, b.index])).toEqual([
+      ['URL', 0],
+      ['QUICK_REPLY', 1],
+    ]);
+    expect(snap.buttons[0].href).toBe('https://example.com/test/campanha/123');
+  });
+
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['//evil.example'],
+  ])('sufixo inadequado %s → null', (suffix) => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrDynamicAnalysis(qrThenUrl),
+      parameterValues: { body: {}, url: { '1': suffix } },
+    })).toBeNull();
+  });
+
+  it('QR text 65 → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrDynamicAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'A'.repeat(65) },
+        qrThenUrl[1],
+      ]),
+      parameterValues: { body: {}, url: { '1': 'e2e-001' } },
+    })).toBeNull();
+  });
+
+  it('prefixo WABA javascript: + suffix → null', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: mixQrDynamicAnalysis([
+        { index: 0, type: 'QUICK_REPLY', text: 'Sim' },
+        {
+          index: 1, type: 'URL', text: 'Abrir',
+          url: 'javascript:alert(1)//{{1}}', url_kind: 'dynamic',
+        },
+      ]),
+      parameterValues: { body: {}, url: { '1': 'x' } },
+    })).toBeNull();
+  });
+});
