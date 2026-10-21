@@ -1835,3 +1835,68 @@ describe('buildTemplateButtonsSnapshot — QR + URL dinâmica (4C.11)', () => {
     })).toBeNull();
   });
 });
+
+// =============================================================================
+// MVP4D.A2 — snapshot QR com HEADER media (comportamento atual)
+// =============================================================================
+
+describe('buildTemplateButtonsSnapshot — MVP4D.A2 media × QR', () => {
+  it('IMAGE + QR → wrapper v1 type/index/text; sem payload', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis(
+        [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+        { headerMediaFormat: 'IMAGE' },
+      ),
+      parameterValues: { body: {} },
+    });
+    expect(snap).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Quero' }],
+    });
+    expect(JSON.stringify(snap)).not.toContain('payload');
+    expect(JSON.stringify(snap)).not.toContain('lovoo:qr:v1');
+  });
+
+  it('VIDEO + QR e DOCUMENT + QR → snapshot QR (comportamento atual, sem restrição)', () => {
+    const video = buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis(
+        [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+        { headerMediaFormat: 'VIDEO' },
+      ),
+      parameterValues: { body: {} },
+    });
+    const doc = buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis(
+        [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+        { headerMediaFormat: 'DOCUMENT' },
+      ),
+      parameterValues: { body: {} },
+    });
+    expect(video.buttons[0]).toEqual({ type: 'QUICK_REPLY', index: 0, text: 'Quero' });
+    expect(doc.buttons[0]).toEqual({ type: 'QUICK_REPLY', index: 0, text: 'Quero' });
+  });
+
+  it('IMAGE + QR text 65 → null (gate 4C.9)', () => {
+    expect(buildTemplateButtonsSnapshot({
+      analysis: qrAnalysis(
+        [{ index: 0, type: 'QUICK_REPLY', text: 'A'.repeat(65) }],
+        { headerMediaFormat: 'IMAGE' },
+      ),
+      parameterValues: { body: {} },
+    })).toBeNull();
+  });
+
+  it('sanitize descarta botão QR com payload; preserva irmão sem payload', () => {
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Quero', payload: 'lovoo:qr:v1:x:pt_BR:0' }],
+    })).toBeNull();
+    expect(sanitizeTemplateButtonsSnapshot({
+      v: 1,
+      buttons: [
+        { type: 'QUICK_REPLY', index: 0, text: 'Quero', payload: 'secret' },
+        { type: 'QUICK_REPLY', index: 1, text: 'Agora' },
+      ],
+    })).toEqual([{ type: 'QUICK_REPLY', index: 1, text: 'Agora' }]);
+  });
+});

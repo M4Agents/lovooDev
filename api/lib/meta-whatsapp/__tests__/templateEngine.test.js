@@ -5363,3 +5363,286 @@ describe('analyzeTemplate / validate / build — MVP4C.11 QR + URL dinâmica', (
     expect(r.map(c => c.sub_type)).toEqual(['quick_reply']);
   });
 });
+
+// =============================================================================
+// MVP4D.A2 — caracterização HEADER media × QUICK_REPLY (comportamento atual)
+// Não restringe VIDEO/DOCUMENT + QR. Não altera predicados.
+// =============================================================================
+
+const IMAGE_QR_IDENTITY = {
+  headerMedia: { mediaId: 'mid-img-4d', mediaType: 'IMAGE' },
+  templateIdentity: { name: 'hello_world', language: 'pt_BR' },
+};
+
+describe('analyzeTemplate / buildGraphComponents — MVP4D.A2 media × QR', () => {
+
+  it('4D-CH-01 | IMAGE sem botões permanece supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.buttons).toEqual([]);
+  });
+
+  it('4D-CH-02 | VIDEO sem botões permanece supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'VIDEO' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('VIDEO');
+    expect(r.buttons).toEqual([]);
+  });
+
+  it('4D-CH-03 | DOCUMENT sem botões permanece supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'DOCUMENT' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('DOCUMENT');
+    expect(r.buttons).toEqual([]);
+  });
+
+  it('4D-CH-04 | QUICK_REPLY sem mídia permanece supported=true', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBeNull();
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }]);
+  });
+
+  it('4D-CH-05 | IMAGE + 1 QUICK_REPLY → supported=true (comportamento atual)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.unsupported_reason).toBeNull();
+    expect(r.headerMediaFormat).toBe('IMAGE');
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+    expect(r.buttons[0]).not.toHaveProperty('payload');
+  });
+
+  it('4D-CH-06 | VIDEO + QUICK_REPLY → supported=true (comportamento atual, sem restrição)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'VIDEO' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('VIDEO');
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+  });
+
+  it('4D-CH-07 | DOCUMENT + QUICK_REPLY → supported=true (comportamento atual, sem restrição)', () => {
+    const r = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'DOCUMENT' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    });
+    expect(r.supported).toBe(true);
+    expect(r.headerMediaFormat).toBe('DOCUMENT');
+    expect(r.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+  });
+
+  it('4D-CH-08 | IMAGE + URL / PHONE continua unsupported', () => {
+    const url = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Site', url: 'https://example.com/loja' }] },
+      ],
+    });
+    const phone = analyzeTemplate({
+      category: 'MARKETING', parameter_format: 'POSITIONAL',
+      components: [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' }] },
+      ],
+    });
+    expect(url.supported).toBe(false);
+    expect(phone.supported).toBe(false);
+  });
+
+  it('4D-A2-01 | IMAGE + 1 QR → Graph header image + quick_reply no índice 0', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      IMAGE_QR_IDENTITY,
+    );
+    expect(r).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'mid-img-4d' } }] },
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+      },
+    ]);
+  });
+
+  it('4D-A2-02 | IMAGE + BODY POSITIONAL + 2 QR → header + body + índices WABA', () => {
+    const r = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Olá {{1}}' },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'QUICK_REPLY', text: 'Sim' },
+            { type: 'QUICK_REPLY', text: 'Não' },
+          ],
+        },
+      ],
+      'POSITIONAL',
+      { body: { '1': 'Ana' } },
+      IMAGE_QR_IDENTITY,
+    );
+    expect(r[0]).toEqual({
+      type: 'header',
+      parameters: [{ type: 'image', image: { id: 'mid-img-4d' } }],
+    });
+    expect(r[1]).toEqual({
+      type: 'body',
+      parameters: [{ type: 'text', text: 'Ana' }],
+    });
+    expect(r.map(c => [c.type, c.sub_type, c.index])).toEqual([
+      ['header', undefined, undefined],
+      ['body', undefined, undefined],
+      ['button', 'quick_reply', '0'],
+      ['button', 'quick_reply', '1'],
+    ]);
+    expect(r[2].parameters[0].payload).toBe('lovoo:qr:v1:hello_world:pt_BR:0');
+    expect(r[3].parameters[0].payload).toBe('lovoo:qr:v1:hello_world:pt_BR:1');
+  });
+
+  it('4D-A2-03 | IMAGE + QR sem headerMedia → build_media_header_missing', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          { type: 'BODY', text: 'Veja' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+        QR_IDENTITY,
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_media_header_missing');
+    }
+  });
+
+  it('4D-A2-04 | IMAGE + QR sem templateIdentity → build_qr_identity_missing', () => {
+    try {
+      buildGraphComponents(
+        [
+          { type: 'HEADER', format: 'IMAGE' },
+          { type: 'BODY', text: 'Veja' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+        ],
+        'POSITIONAL',
+        { body: {} },
+        { headerMedia: { mediaId: 'mid-img-4d', mediaType: 'IMAGE' } },
+      );
+      throw new Error('should_have_thrown');
+    } catch (err) {
+      expect(err.code).toBe('build_qr_identity_missing');
+    }
+  });
+
+  it('4D-A2-05 | validate IMAGE + QR: body {} válido; url/buttons/header proibidos', () => {
+    const ok = validateParameterValues([], { body: {} }, {
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: 'IMAGE',
+    });
+    expect(ok).toEqual({ valid: true });
+
+    expect(validateParameterValues([], { body: {}, url: { '0': 'x' } }, {
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: 'IMAGE',
+    }).valid).toBe(false);
+
+    expect(validateParameterValues([], { body: {}, buttons: {} }, {
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: 'IMAGE',
+    }).valid).toBe(false);
+
+    expect(validateParameterValues([], { body: {}, header: { '1': 'x' } }, {
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: 'IMAGE',
+    }).valid).toBe(false);
+  });
+
+  it('4D-A2-06 | IMAGE sem botões e QR sem mídia não regressam no Graph', () => {
+    const imageOnly = buildGraphComponents(
+      [
+        { type: 'HEADER', format: 'IMAGE' },
+        { type: 'BODY', text: 'Veja' },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      { headerMedia: { mediaId: 'mid-img-4d', mediaType: 'IMAGE' } },
+    );
+    expect(imageOnly).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'mid-img-4d' } }] },
+    ]);
+
+    const qrOnly = buildGraphComponents(
+      [
+        { type: 'BODY', text: 'Confirma?' },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Sim' }] },
+      ],
+      'POSITIONAL',
+      { body: {} },
+      QR_IDENTITY,
+    );
+    expect(qrOnly).toEqual([
+      {
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+      },
+    ]);
+  });
+});

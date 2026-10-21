@@ -3455,3 +3455,75 @@ describe('GET — MVP4C.11 QR + URL dinâmica', () => {
     expect(res._body.templates[0].supported).toBe(false);
   });
 });
+
+// =============================================================================
+// MVP4D.A2 — GET HEADER media × QUICK_REPLY (comportamento atual)
+// =============================================================================
+
+describe('GET — MVP4D.A2 media × QR', () => {
+  it('IMAGE sem botões permanece supported=true', async () => {
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_TEMPLATE_IMAGE_HEADER]));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].header_media_format).toBe('IMAGE');
+    expect(res._body.templates[0].buttons).toEqual([]);
+  });
+
+  it('VIDEO + QUICK_REPLY → supported=true (comportamento atual, sem restrição)', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4d-vid-qr',
+      components: [
+        { type: 'HEADER', format: 'VIDEO', example: {} },
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    };
+    expect(analyzeTemplate(raw).supported).toBe(true);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].header_media_format).toBe('VIDEO');
+    expect(res._body.templates[0].buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+    expect(JSON.stringify(res._body)).not.toContain('payload');
+  });
+
+  it('DOCUMENT + QUICK_REPLY → supported=true (comportamento atual, sem restrição)', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4d-doc-qr',
+      components: [
+        { type: 'HEADER', format: 'DOCUMENT', example: {} },
+        { type: 'BODY', text: 'Veja', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.templates[0].supported).toBe(true);
+    expect(res._body.templates[0].header_media_format).toBe('DOCUMENT');
+  });
+
+  it('IMAGE + QUICK_REPLY permanece supported=true; sem payload no DTO', async () => {
+    const raw = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-4d-img-qr',
+      components: [
+        { type: 'HEADER', format: 'IMAGE', example: {} },
+        { type: 'BODY', text: 'Confirma?', example: { body_text: [[]] } },
+        { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([raw]));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    const dto = res._body.templates[0];
+    expect(dto.supported).toBe(true);
+    expect(dto.header_media_format).toBe('IMAGE');
+    expect(dto.buttons).toEqual([{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }]);
+    expect(JSON.stringify(dto)).not.toContain('payload');
+  });
+});

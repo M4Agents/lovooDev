@@ -991,6 +991,57 @@ describe('MetaTemplatePicker — MVP4C.2C QUICK_REPLY', () => {
     expect(screen.queryAllByTestId('mas-mock-image')).toHaveLength(1)
   })
 
+  it('FE-QR-07b: IMAGE + QR sem asset → Enviar desabilitado', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE_QR]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_image_qr'))
+    fireEvent.click(screen.getByText('promo_image_qr'))
+    expect((screen.getByRole('button', { name: /enviar template/i }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('FE-QR-07c: IMAGE + QR com asset → onSend asset + { body: {} } sem buttons/payload', async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined)
+    mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_IMAGE_QR]))
+    renderPicker({ onSend })
+    await waitFor(() => screen.getByText('promo_image_qr'))
+    fireEvent.click(screen.getByText('promo_image_qr'))
+    fireEvent.click(screen.getByTestId('mas-select-btn'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enviar template/i }))
+    })
+    expect(onSend).toHaveBeenCalledTimes(1)
+    const [tmpl, params, asset] = onSend.mock.calls[0] as [
+      MetaWhatsAppTemplate,
+      MetaTemplateParameterValues,
+      string | undefined,
+    ]
+    expect(tmpl.name).toBe('promo_image_qr')
+    expect(params).toEqual({ body: {} })
+    expect(params).not.toHaveProperty('buttons')
+    expect(params).not.toHaveProperty('payload')
+    expect(asset).toBe('cml:mock-image-asset-00000000-0000-0000-0000-000000000000')
+    expect(JSON.stringify(onSend.mock.calls[0])).not.toContain('payload')
+  })
+
+  it('FE-QR-07d: VIDEO + QR supported=true → seletor VIDEO + chip (comportamento atual)', async () => {
+    const tmplVideoQr: MetaWhatsAppTemplate = {
+      ...TMPL_IMAGE_QR,
+      id: 'tpl-video-qr-4d',
+      name: 'promo_video_qr',
+      header_media_format: 'VIDEO',
+      components: [
+        { type: 'HEADER', format: 'VIDEO' },
+        { type: 'BODY', text: 'Confira nossa promoção!' },
+      ],
+    }
+    mockListTemplates.mockResolvedValueOnce(makeListResp([tmplVideoQr]))
+    renderPicker()
+    await waitFor(() => screen.getByText('promo_video_qr'))
+    fireEvent.click(screen.getByText('promo_video_qr'))
+    expect(screen.getByTestId('mas-mock-video')).toBeTruthy()
+    expect(screen.getByTestId('preview-button-0').textContent).toBe('Quero')
+  })
+
   it('FE-QR-08: A→B e B→A sem estado stale', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined)
     mockListTemplates.mockResolvedValueOnce(makeListResp([TMPL_POSITIONAL, TMPL_QR_SINGLE]))

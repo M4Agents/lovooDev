@@ -4822,3 +4822,177 @@ describe('4C11A3-SEND | falhas pré-Graph/INSERT', () => {
     expectNoExternalEffects(res);
   });
 });
+
+// =============================================================================
+// MVP4D.A2 — send IMAGE + QUICK_REPLY (engine mockado; snapshot real; Graph mock)
+// =============================================================================
+
+const FAKE_RAW_TEMPLATE_IMAGE_QR = {
+  id: 'tpl-img-qr',
+  name: FAKE_TEMPLATE_NAME,
+  language: FAKE_TEMPLATE_LANG,
+  status: 'APPROVED',
+  category: 'MARKETING',
+  parameter_format: 'POSITIONAL',
+  components: [
+    { type: 'HEADER', format: 'IMAGE' },
+    { type: 'BODY', text: 'Confira a imagem.' },
+    { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Quero' }] },
+  ],
+};
+
+const FAKE_ANALYSIS_IMAGE_QR = {
+  supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+  parameters: [], bodyText: 'Confira a imagem.', headerMediaFormat: 'IMAGE',
+  buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Quero' }],
+};
+
+const FAKE_COMPONENTS_IMAGE_QR = [
+  { type: 'header', parameters: [{ type: 'image', image: { id: FAKE_MEDIA_ID } }] },
+  {
+    type: 'button',
+    sub_type: 'quick_reply',
+    index: '0',
+    parameters: [{ type: 'payload', payload: 'lovoo:qr:v1:hello_world:pt_BR:0' }],
+  },
+];
+
+describe('4D-A2-SEND | IMAGE + QUICK_REPLY', () => {
+  it('upload 1 + send 1; identity do rawTemplate; snapshot v1 sem payload', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: FAKE_ANALYSIS_IMAGE_QR,
+      assetResult: FAKE_ASSET_RESULT_IMAGE,
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    expect(mockValidateMediaAsset).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+
+    const [, , recipient, tpl] = mockSendTemplateMessage.mock.calls[0];
+    expect(recipient).toBe(FAKE_WA_ID);
+    expect(tpl.components).toEqual(FAKE_COMPONENTS_IMAGE_QR);
+
+    const [, , , opts] = mockBuildGraphComponents.mock.calls[0];
+    expect(opts.templateIdentity).toEqual({
+      name: FAKE_RAW_TEMPLATE_IMAGE_QR.name,
+      language: FAKE_RAW_TEMPLATE_IMAGE_QR.language,
+    });
+    expect(opts.headerMedia.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(opts.headerMedia.mediaType).toBe('IMAGE');
+
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    const insertArg = chatInsert.insert.mock.calls[0][0];
+    expect(insertArg.media_asset_id).toBe(FAKE_ASSET_ID);
+    expect(insertArg.template_buttons).toEqual({
+      v: 1,
+      buttons: [{ type: 'QUICK_REPLY', index: 0, text: 'Quero' }],
+    });
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
+    expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
+    expect(JSON.stringify(res._body)).not.toContain('lovoo:qr:v1');
+  });
+
+  it('asset ausente → 400 media_header_required; upload 0; send 0', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: FAKE_ANALYSIS_IMAGE_QR,
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('media_header_required');
+    expect(mockValidateMediaAsset).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+
+  it('QR text 65 → 422 pelo gate 4C.9; upload 0; Graph 0; insert 0', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: {
+        ...FAKE_ANALYSIS_IMAGE_QR,
+        buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'A'.repeat(65) }],
+      },
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expectNoExternalEffects(res);
+  });
+
+  it('upload falha → upload 1; send 0', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: FAKE_ANALYSIS_IMAGE_QR,
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+    mockUploadMedia.mockRejectedValue(makeAssetError('upload_media_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+
+  it('builder lança após upload → send 0', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: FAKE_ANALYSIS_IMAGE_QR,
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+    mockBuildGraphComponents.mockImplementation(() => { throw new Error('bug'); });
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(500);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+
+  it('Graph erro após upload → send 1; insert 0', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_IMAGE_QR,
+      analysis: FAKE_ANALYSIS_IMAGE_QR,
+      components: FAKE_COMPONENTS_IMAGE_QR,
+    });
+    mockSendTemplateMessage.mockRejectedValue(makeAssetError('send_template_failed'));
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(502);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+
+  it('tenant sem auth → 401; upload 0', async () => {
+    setupGuardFail(401, 'Autenticação necessária');
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(401);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+
+  it('IMAGE sem botões permanece sem snapshot', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.results[4].value.insert.mock.calls[0][0].template_buttons).toBeNull();
+  });
+
+  it('QR sem mídia permanece sem upload', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_QR]));
+    setupEngineOk(FAKE_ANALYSIS_QR);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_QR);
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
+    expect(res._status).toBe(200);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
