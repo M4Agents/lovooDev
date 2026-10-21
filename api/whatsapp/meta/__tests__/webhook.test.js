@@ -2165,3 +2165,239 @@ describe('POST — inbound VIDEO', () => {
     expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('image');
   });
 });
+
+// =============================================================================
+// MVP4C.12.A1 — inbound type=button (QUICK_REPLY)
+// =============================================================================
+
+const FAKE_BUTTON_TEXT = 'Confirmar';
+const FAKE_QR_PAYLOAD  = 'lovoo:qr:v1:hello_world:pt_BR:0';
+
+function makeButtonMessage({
+  id        = FAKE_INBOUND_WAMID,
+  from      = FAKE_WA_ID,
+  timestamp = FAKE_TIMESTAMP,
+  text      = FAKE_BUTTON_TEXT,
+  payload   = FAKE_QR_PAYLOAD,
+  button    = undefined,
+} = {}) {
+  const msg = { id, from, type: 'button', timestamp };
+  if (button === null) return msg;
+  if (button !== undefined) {
+    msg.button = button;
+    return msg;
+  }
+  msg.button = {};
+  if (text !== undefined) msg.button.text = text;
+  if (payload !== undefined) msg.button.payload = payload;
+  return msg;
+}
+
+function expectedTextRpcArgs({
+  body = FAKE_BUTTON_TEXT,
+  wamid = FAKE_INBOUND_WAMID,
+} = {}) {
+  return {
+    p_company_id:         FAKE_COMPANY_ID,
+    p_instance_id:        FAKE_INSTANCE_ID,
+    p_wa_id:              FAKE_WA_ID,
+    p_meta_message_id:    wamid,
+    p_body:               body,
+    p_contact_name:       FAKE_CONTACT_NAME,
+    p_provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
+  };
+}
+
+describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
+  it('BTN-01: type=button texto válido → RPC com body do botão; HTTP 200', async () => {
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const req = makePostReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledWith(
+      'process_meta_inbound_message',
+      expectedTextRpcArgs(),
+    );
+    expect(mockSvc.from.mock.calls[0][0]).toBe('meta_whatsapp_instances');
+  });
+
+  it('BTN-02: payload presente não altera body; payload ausente também persiste', async () => {
+    const withPayload = makeInboundPayload({
+      messages: [makeButtonMessage({ text: 'Confirmar', payload: FAKE_QR_PAYLOAD })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(withPayload)));
+    setupInboundDb();
+    await handler(makePostReq(), makeRes());
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe('Confirmar');
+    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_payload');
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain(FAKE_QR_PAYLOAD);
+
+    const noPayload = makeInboundPayload({
+      messages: [makeButtonMessage({ text: 'Confirmar', payload: undefined })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(noPayload)));
+    setupInboundDb();
+    await handler(makePostReq(), makeRes());
+    expect(mockSvc.rpc.mock.calls[1][1].p_body).toBe('Confirmar');
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[1][1])).not.toContain('payload');
+  });
+
+  it('BTN-03: payload não aparece em logs nem na resposta HTTP', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    const logs = [...logSpy.mock.calls, ...errSpy.mock.calls]
+      .map(c => c.join(' '))
+      .join('\n');
+    expect(logs).not.toContain(FAKE_QR_PAYLOAD);
+    expect(logs).not.toContain('payload');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_QR_PAYLOAD);
+    expect(JSON.stringify(res._body)).not.toContain('payload');
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it.each([
+    ['button ausente', makeButtonMessage({ button: null })],
+    ['text ausente', makeButtonMessage({ button: { payload: FAKE_QR_PAYLOAD } })],
+    ['text não-string', makeButtonMessage({ button: { text: 1, payload: FAKE_QR_PAYLOAD } })],
+    ['text vazio', makeButtonMessage({ text: '', payload: FAKE_QR_PAYLOAD })],
+    ['text whitespace', makeButtonMessage({ text: '   ', payload: FAKE_QR_PAYLOAD })],
+  ])('BTN-04: %s → HTTP 200; RPC 0; payload não é fallback', async (_label, msg) => {
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_QR_PAYLOAD);
+  });
+
+  it('BTN-05: HMAC inválido → 401; zero DB; zero RPC', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('BTN-06: instância ausente → HTTP 200; zero RPC; company_id não vem do payload', async () => {
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(null));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_COMPANY_ID);
+  });
+
+  it('BTN-07: RPC erro → HTTP 500; corpo sem payload', async () => {
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb({ rpcResult: makeRpcResult({ error: { message: 'db constraint error' } }) });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_QR_PAYLOAD);
+  });
+
+  it('BTN-08: text inbound continua na RPC existente', async () => {
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledWith('process_meta_inbound_message', {
+      p_company_id:         FAKE_COMPANY_ID,
+      p_instance_id:        FAKE_INSTANCE_ID,
+      p_wa_id:              FAKE_WA_ID,
+      p_meta_message_id:    FAKE_INBOUND_WAMID,
+      p_body:               FAKE_BODY,
+      p_contact_name:       FAKE_CONTACT_NAME,
+      p_provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
+    });
+  });
+
+  it('BTN-09: interactive.button_reply e list_reply continuam skipped', async () => {
+    const messages = [
+      {
+        id: FAKE_INBOUND_WAMID,
+        from: FAKE_WA_ID,
+        type: 'interactive',
+        timestamp: FAKE_TIMESTAMP,
+        interactive: { type: 'button_reply', button_reply: { id: '1', title: 'Confirmar' } },
+      },
+      {
+        id: 'wamid.INBOUND_FAKE_LIST_REPLY',
+        from: FAKE_WA_ID,
+        type: 'interactive',
+        timestamp: FAKE_TIMESTAMP,
+        interactive: { type: 'list_reply', list_reply: { id: '1', title: 'Opção' } },
+      },
+    ];
+    const payload = makeInboundPayload({ messages });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('BTN-10: audio/sticker continuam skipped; document/image/video intactos', async () => {
+    const skipped = makeInboundPayload({
+      messages: [
+        { id: 'wamid_aud_btn', from: FAKE_WA_ID, type: 'audio', audio: { id: '1' }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_stk_btn', from: FAKE_WA_ID, type: 'sticker', sticker: { id: '2' }, timestamp: FAKE_TIMESTAMP },
+      ],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(skipped)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const skipRes = makeRes();
+    await handler(makePostReq(), skipRes);
+    expect(skipRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    const docPayload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(docPayload)));
+    setupDocumentDb();
+    const docRes = makeRes();
+    await handler(makePostReq(), docRes);
+    expect(docRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
+  });
+});

@@ -2,7 +2,8 @@
 // GET|POST /api/whatsapp/meta/webhook
 //
 // GET  → Verificação do challenge Meta (setup do webhook no App Dashboard)
-// POST → Recebimento de eventos: statuses[] outbound (MVP2) + messages[] inbound TEXT (MVP3A)
+// POST → Recebimento de eventos: statuses[] outbound (MVP2) + messages[] inbound
+//        TEXT (MVP3A), DOCUMENT/IMAGE/VIDEO e BUTTON/QUICK_REPLY (MVP4C.12)
 //
 // Segurança:
 //   - GET: timing-safe comparison do verify token (nunca logar)
@@ -22,10 +23,13 @@
 //   - Um mesmo value pode conter ambos — ambos são processados
 //   - Tenant resolution compartilhada (uma query por value)
 //
-// MVP3A escopo (messages[]):
-//   - Somente type='text' persistido
+// MVP3A/MVP4C.12 escopo (messages[]):
+//   - type='text' persistido via process_meta_inbound_message
+//   - type='button' persistido via a mesma RPC, usando somente button.text
+//   - button.payload nunca logado, persistido, retornado ou usado como tenant
 //   - Grupos (message.group_id presente) ignorados silenciosamente
 //   - played ignorado silenciosamente
+//   - interactive e demais tipos continuam type_skipped
 //
 // Decisão UNKNOWN_WAMID (B1):
 //   - Meta retenta não-200 por até 7 dias (documentado oficialmente)
@@ -378,6 +382,37 @@ async function handlePost(req, res) {
           if (rpcErr) {
             // Erro real de DB/RPC — retornar 500 para retry Meta
             // Duplicata (created=false) NÃO é erro — tratada abaixo
+            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+            return res.status(500).json({ error: 'Internal error' });
+          }
+
+          const created = rpcData?.created === true;
+          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+
+        } else if (message.type === 'button') {
+          // ── B.5.1b BUTTON / QUICK_REPLY inbound (MVP4C.12) ───────────────
+          // Somente button.text vira body. payload é ignorado: não é fallback,
+          // não é persistido, não entra em log e não identifica tenant.
+          const body = message.button?.text;
+          if (typeof body !== 'string' || body.trim().length === 0) {
+            console.log('[meta/webhook] event_type=inbound_message invalid_body=true');
+            continue;
+          }
+
+          const { data: rpcData, error: rpcErr } = await svc.rpc(
+            'process_meta_inbound_message',
+            {
+              p_company_id:         instance.company_id,
+              p_instance_id:        instance.id,
+              p_wa_id:              message.from,
+              p_meta_message_id:    message.id,
+              p_body:               body,
+              p_contact_name:       contactName,
+              p_provider_timestamp: providerTimestamp,
+            },
+          );
+
+          if (rpcErr) {
             console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
             return res.status(500).json({ error: 'Internal error' });
           }
