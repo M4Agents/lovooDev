@@ -4993,3 +4993,112 @@ describe('analyzeTemplate / validate / build — MVP4C.8.A2 URL dinâmica + PHON
   });
 
 });
+
+describe('4C10A2 | sufixo de URL dinâmica inadequado', () => {
+  const EMPTY_PREFIX_CTX = {
+    buttons: [{
+      index: 0, type: 'URL', text: 'Abrir',
+      url: '{{1}}', url_kind: 'dynamic',
+    }],
+    parameterFormat: 'POSITIONAL',
+    headerMediaFormat: null,
+  };
+
+  it.each([
+    ['e2e-001'],
+    ['campanha/123'],
+    ['campanha?origem=crm'],
+    ['id=1&x=2'],
+    ['café%20ok'],
+  ])('única: %s → valid', (suffix) => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': suffix } },
+      URL_CTX,
+    )).toEqual({ valid: true });
+  });
+
+  it.each([
+    ['e2e-001'],
+    ['campanha/123'],
+    ['campanha?origem=crm'],
+    ['id=1&x=2'],
+    ['café%20ok'],
+  ])('mix: %s → valid', (suffix) => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': suffix } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: true });
+  });
+
+  it.each([
+    ['https absoluto', 'https://evil.example/x'],
+    ['http absoluto', 'http://evil.example/x'],
+    ['javascript', 'javascript:alert(1)'],
+    ['data', 'data:text/html,hi'],
+    ['protocol-relative', '//evil.example'],
+    ['espaços + https', '  https://evil.example/x  '],
+    ['NUL + https', '\u0000https://evil.example/x'],
+    ['ZWSP + https', '\u200Bhttps://evil.example/x'],
+  ])('única: %s → mismatch', (_label, suffix) => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': suffix } },
+      URL_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['  //evil.example'],
+  ])('mix: %s → mismatch', (suffix) => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': suffix } },
+      MIX_DYN_URL_PHONE_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('prefixo WABA vazio + URL absoluta → mismatch', () => {
+    expect(validateParameterValues(
+      [],
+      { body: {}, url: { '0': 'https://evil.example/x' } },
+      EMPTY_PREFIX_CTX,
+    )).toEqual({ valid: false, error: 'template_params_mismatch' });
+  });
+
+  it('URL estática / PHONE / QR não passam pelo predicado de sufixo', () => {
+    expect(validateParameterValues([], { body: {} }, STATIC_URL_CTX))
+      .toEqual({ valid: true });
+    expect(validateParameterValues([], { body: {} }, {
+      buttons: [{
+        index: 0, type: 'PHONE_NUMBER', text: 'Ligar',
+        phone_number: '+5511999999999',
+      }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: null,
+    })).toEqual({ valid: true });
+    expect(validateParameterValues([], { body: {} }, {
+      buttons: [{ index: 0, type: 'QUICK_REPLY', text: 'Sim' }],
+      parameterFormat: 'POSITIONAL',
+      headerMediaFormat: null,
+    })).toEqual({ valid: true });
+  });
+
+  it('única: sufixo válido continua emitindo só o texto no Graph', () => {
+    const r = buildGraphComponents(
+      URL_FIXTURE_COMPS,
+      'POSITIONAL',
+      { body: {}, url: { '0': 'campanha/123' } },
+    );
+    expect(r).toEqual([{
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: 'campanha/123' }],
+    }]);
+    expect(JSON.stringify(r)).not.toContain('https://example.com');
+  });
+});

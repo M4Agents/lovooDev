@@ -4511,3 +4511,103 @@ describe('4C9A2-SEND | snapshot null com botões bloqueia Graph e persistência'
     expect(chatInsert.insert.mock.calls[0][0].media_asset_id).toBe(FAKE_ASSET_ID);
   });
 });
+
+// =============================================================================
+// MVP4C.10.A2 — Sufixo inadequado: snapshot real → gate 4C.9; Graph/INSERT 0
+// Engine permanece mockado (valid=true); a defesa do snapshot é a autoridade
+// exercitada neste arquivo. validateParameterValues é coberto no engine test.
+// =============================================================================
+
+describe('4C10A2-SEND | sufixo inadequado bloqueia Graph e persistência', () => {
+  it.each([
+    ['https absoluto', 'https://evil.example/x'],
+    ['http absoluto', 'http://evil.example/x'],
+    ['javascript', 'javascript:alert(1)'],
+    ['data', 'data:text/html,hi'],
+    ['protocol-relative', '//evil.example'],
+    ['espaços + https', '  https://evil.example/x'],
+  ])('única: %s → 422; Graph 0; upload 0; insert 0', async (_label, suffix) => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': suffix } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['  //evil.example'],
+  ])('mix: %s → 422; Graph 0; insert 0', async (suffix) => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_DYN_URL_PHONE]));
+    setupEngineOk(FAKE_ANALYSIS_DYN_URL_PHONE);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_DYN_URL_0);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': suffix } } },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it('prefixo WABA vazio + URL absoluta → 422; Graph 0', async () => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([{
+      ...FAKE_RAW_TEMPLATE_URL,
+      id: 'tpl-empty-prefix-abs',
+      components: [
+        { type: 'BODY', text: 'Veja' },
+        { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Abrir', url: '{{1}}' }] },
+      ],
+    }]));
+    setupEngineOk({
+      supported: true, unsupported_reason: null, parameter_format: 'POSITIONAL',
+      parameters: [], bodyText: 'Veja', headerMediaFormat: null,
+      buttons: [
+        { index: 0, type: 'URL', text: 'Abrir', url: '{{1}}', url_kind: 'dynamic' },
+      ],
+    });
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        parameter_values: { body: {}, url: { '0': 'https://evil.example/x' } },
+      },
+    }), res);
+
+    expectNoExternalEffects(res);
+  });
+
+  it.each([
+    ['e2e-001', 'https://example.com/test/e2e-001'],
+    ['campanha/123', 'https://example.com/test/campanha/123'],
+    ['campanha?origem=crm', 'https://example.com/test/campanha?origem=crm'],
+  ])('única válida %s → 200; snapshot href composto', async (suffix, href) => {
+    setupHappyPath();
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE_URL]));
+    setupEngineOk(FAKE_ANALYSIS_URL);
+    mockBuildGraphComponents.mockReturnValue(FAKE_COMPONENTS_URL);
+
+    const res = makeRes();
+    await handler(makeReq({
+      body: { ...HAPPY_BODY, parameter_values: { body: {}, url: { '0': suffix } } },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    const chatInsert = mockSvc.from.mock.results[4].value;
+    expect(chatInsert.insert.mock.calls[0][0].template_buttons).toEqual({
+      v: 1,
+      buttons: [{ type: 'URL', index: 0, text: 'Abrir teste', href }],
+    });
+  });
+});

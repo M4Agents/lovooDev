@@ -8,6 +8,7 @@
 // Exports:
 //   isSafeHttpUrl(href) — predicado HTTP/HTTPS absoluto (WHATWG; nunca toString)
 //   isSafePhoneNumber(value) — predicado do número aprovado PHONE_NUMBER
+//   isUnsafeDynamicUrlSuffix(value) — esquema ou // no sufixo dinâmico
 //   buildTemplateButtonsSnapshot({ analysis, parameterValues })
 //   sanitizeTemplateButtonsSnapshot(raw)
 // =============================================================================
@@ -22,6 +23,11 @@ const RE_PLACEHOLDER = /\{\{([^}]*)\}\}/g;
 // Teto Meta (20) + E.164 mínimo defensivo (8 dígitos). Não normaliza o valor.
 const RE_SAFE_PHONE_NUMBER = /^\+?[0-9]{8,20}$/;
 const MAX_PHONE_NUMBER_LEN = 20;
+
+// Classificação do sufixo dinâmico: esquema WHATWG no início ou //.
+// Trim + lixo de controle/formato só para classificar — o valor original não muda.
+const RE_LEADING_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+const RE_LEADING_CONTROL_OR_FORMAT = /^[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]+/;
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -60,6 +66,21 @@ export function isSafePhoneNumber(value) {
   if (typeof value !== 'string') return false;
   if (value.length === 0 || value.length > MAX_PHONE_NUMBER_LEN) return false;
   return RE_SAFE_PHONE_NUMBER.test(value);
+}
+
+/**
+ * True quando o sufixo de URL dinâmica é inadequado: esquema explícito
+ * (http, https, javascript, data, …) ou referência protocol-relative (//).
+ * Classifica sobre trim + prefixos de controle/formato; nunca altera o valor.
+ * Vazio/whitespace não é "unsafe" aqui — o caller já trata como mismatch.
+ * Não autoriza envio.
+ */
+export function isUnsafeDynamicUrlSuffix(value) {
+  if (typeof value !== 'string') return false;
+  const classified = value.trim().replace(RE_LEADING_CONTROL_OR_FORMAT, '');
+  if (classified.length === 0) return false;
+  if (classified.startsWith('//')) return true;
+  return RE_LEADING_SCHEME.test(classified);
 }
 
 /**
@@ -162,6 +183,7 @@ function buildDynamicUrlSnapshot(analysis, parameterValues) {
 
   const suffix = urlValues['0'];
   if (typeof suffix !== 'string' || suffix.trim().length === 0) return null;
+  if (isUnsafeDynamicUrlSuffix(suffix)) return null;
 
   const href = button.url.slice(0, -PLACEHOLDER.length) + suffix;
   if (!isSafeHttpUrl(href)) return null;
@@ -388,8 +410,7 @@ function buildStaticUrlPlusPhoneNumberSnapshot(analysis) {
  * Snapshot 4C.8.A2: exatamente 1 URL dinâmica POSITIONAL (href = prefixo WABA
  * + suffix validado) + 1 PHONE_NUMBER (número da definição aprovada).
  * Índices originais. Inválido → null sem lançar. Não autoriza send.
- * Dívida A1: suffix com URL completa não é bloqueado aqui — só o href final
- * passa por isSafeHttpUrl.
+ * Sufixo com esquema ou // → null (isUnsafeDynamicUrlSuffix).
  * @private
  */
 function buildDynamicUrlPlusPhoneNumberSnapshot(analysis, parameterValues) {
@@ -425,6 +446,7 @@ function buildDynamicUrlPlusPhoneNumberSnapshot(analysis, parameterValues) {
       if (keys.length !== 1 || keys[0] !== urlKey) return null;
       const suffix = urlValues[urlKey];
       if (typeof suffix !== 'string' || suffix.trim().length === 0) return null;
+      if (isUnsafeDynamicUrlSuffix(suffix)) return null;
 
       const href = button.url.slice(0, -PLACEHOLDER.length) + suffix;
       if (!isSafeHttpUrl(href)) return null;

@@ -52,7 +52,7 @@
 //   2 URLs, 2 phones, QR no mix, AUTH, FLOW, mídia, {{1}} no meio → false.
 // =============================================================================
 
-import { isSafeHttpUrl, isSafePhoneNumber } from './templateButtonsSnapshot.js';
+import { isSafeHttpUrl, isSafePhoneNumber, isUnsafeDynamicUrlSuffix } from './templateButtonsSnapshot.js';
 
 // Regex — uso interno, reutilizadas pelos helpers privados.
 const RE_ANY_PLACEHOLDER  = /\{\{([^}]*)\}\}/g;      // qualquer {{...}}
@@ -1003,7 +1003,7 @@ export function validateParameterValues(parameters, parameterValues, context = {
   // URL dinâmica (single 4C.3B ou mix 4C.8.A2) exige parameter_values.url
   // com exatamente a chave do índice original da URL. URL estática (4C.5A)
   // e demais formatos exigem AUSÊNCIA da chave — inclusive objeto vazio
-  // é mismatch. Dívida A1: suffix com URL completa não é bloqueado aqui.
+  // é mismatch. 4C.10: sufixo com esquema ou // → mismatch.
   if (urlReady) {
     if (!hasOwnUrl) return { valid: false, error: 'template_params_mismatch' };
     const urlValues = parameterValues.url;
@@ -1026,6 +1026,9 @@ export function validateParameterValues(parameters, parameterValues, context = {
     const urlVal = urlValues[urlKey];
     if (typeof urlVal !== 'string') return { valid: false, error: 'template_params_mismatch' };
     if (urlVal.trim().length === 0) return { valid: false, error: 'template_params_mismatch' };
+    if (isUnsafeDynamicUrlSuffix(urlVal)) {
+      return { valid: false, error: 'template_params_mismatch' };
+    }
   } else if (hasOwnUrl) {
     return { valid: false, error: 'template_params_mismatch' };
   }

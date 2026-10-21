@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildTemplateButtonsSnapshot,
+  isUnsafeDynamicUrlSuffix,
   sanitizeTemplateButtonsSnapshot,
 } from '../templateButtonsSnapshot.js';
 
@@ -131,6 +132,84 @@ describe('buildTemplateButtonsSnapshot — URL dynamic', () => {
       parameterValues: { body: {}, url: { '0': ' 12345 ' } },
     });
     expect(snap.buttons[0].href).toBe('https://example.com/test/ 12345 ');
+  });
+
+  it.each([
+    ['e2e-001', 'https://example.com/test/e2e-001'],
+    ['campanha/123', 'https://example.com/test/campanha/123'],
+    ['campanha?origem=crm', 'https://example.com/test/campanha?origem=crm'],
+    ['id=1&x=2', 'https://example.com/test/id=1&x=2'],
+    ['café%20ok', 'https://example.com/test/café%20ok'],
+  ])('4C10: sufixo legítimo %s → href composto', (suffix, href) => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: urlAnalysis(),
+      parameterValues: { body: {}, url: { '0': suffix } },
+    });
+    expect(snap.buttons[0].href).toBe(href);
+  });
+
+  it.each([
+    ['https absoluto', 'https://evil.example/x'],
+    ['http absoluto', 'http://evil.example/x'],
+    ['javascript', 'javascript:alert(1)'],
+    ['data', 'data:text/html,hi'],
+    ['protocol-relative', '//evil.example'],
+    ['https com espaços', '  https://evil.example/x  '],
+    ['// com espaços', '  //evil.example'],
+    ['NUL + https', '\u0000https://evil.example/x'],
+    ['ZWSP + https', '\u200Bhttps://evil.example/x'],
+  ])('4C10: sufixo inadequado (%s) → null', (_label, suffix) => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: urlAnalysis(),
+      parameterValues: { body: {}, url: { '0': suffix } },
+    });
+    expect(snap).toBeNull();
+  });
+
+  it('4C10: prefixo WABA vazio + URL absoluta → null', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: urlAnalysis({
+        buttons: [{
+          index: 0, type: 'URL', text: 'Abrir',
+          url: '{{1}}', url_kind: 'dynamic',
+        }],
+      }),
+      parameterValues: { body: {}, url: { '0': 'https://evil.example/x' } },
+    });
+    expect(snap).toBeNull();
+  });
+});
+
+describe('isUnsafeDynamicUrlSuffix', () => {
+  it.each([
+    'e2e-001',
+    'campanha/123',
+    'campanha?origem=crm',
+    'id=1&x=2',
+    'café%20ok',
+    ' 12345 ',
+    'foo/https://evil.example/x',
+  ])('legítimo %s → false', (suffix) => {
+    expect(isUnsafeDynamicUrlSuffix(suffix)).toBe(false);
+  });
+
+  it.each([
+    'https://evil.example/x',
+    'http://evil.example/x',
+    'javascript:alert(1)',
+    'data:text/html,hi',
+    '//evil.example',
+    '  https://evil.example/x',
+    '\u0000https://evil.example/x',
+    '\u200Bhttps://evil.example/x',
+  ])('inadequado %s → true', (suffix) => {
+    expect(isUnsafeDynamicUrlSuffix(suffix)).toBe(true);
+  });
+
+  it('não-string e vazio → false (caller trata mismatch)', () => {
+    expect(isUnsafeDynamicUrlSuffix('')).toBe(false);
+    expect(isUnsafeDynamicUrlSuffix('   ')).toBe(false);
+    expect(isUnsafeDynamicUrlSuffix(null)).toBe(false);
   });
 });
 
@@ -1449,6 +1528,46 @@ describe('buildTemplateButtonsSnapshot — URL dinâmica + PHONE_NUMBER (4C.8.A2
     expect(Object.keys(snap.buttons[1]).sort()).toEqual([
       'index', 'phone_number', 'text', 'type',
     ]);
+  });
+
+  it.each([
+    ['e2e-001', 'https://example.com/pedido/e2e-001'],
+    ['campanha/123', 'https://example.com/pedido/campanha/123'],
+    ['campanha?origem=crm', 'https://example.com/pedido/campanha?origem=crm'],
+  ])('4C10 mix: sufixo legítimo %s → href composto', (suffix, href) => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {}, url: { '0': suffix } },
+    });
+    expect(snap.buttons[0].href).toBe(href);
+    expect(snap.buttons[1].type).toBe('PHONE_NUMBER');
+  });
+
+  it.each([
+    ['https://evil.example/x'],
+    ['javascript:alert(1)'],
+    ['  //evil.example'],
+    ['\u0000https://evil.example/x'],
+  ])('4C10 mix: sufixo inadequado %s → null', (suffix) => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis(MIX_DYN_PHONE_BUTTONS),
+      parameterValues: { body: {}, url: { '0': suffix } },
+    });
+    expect(snap).toBeNull();
+  });
+
+  it('4C10 mix: prefixo WABA vazio + URL absoluta → null', () => {
+    const snap = buildTemplateButtonsSnapshot({
+      analysis: mixDynamicPhoneAnalysis([
+        {
+          index: 0, type: 'URL', text: 'Abrir link',
+          url: '{{1}}', url_kind: 'dynamic',
+        },
+        MIX_DYN_PHONE_BUTTONS[1],
+      ]),
+      parameterValues: { body: {}, url: { '0': 'https://evil.example/x' } },
+    });
+    expect(snap).toBeNull();
   });
 
   it('PHONE + URL → ordem original; href no índice 1', () => {
