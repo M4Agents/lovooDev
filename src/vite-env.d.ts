@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   /** Opcional: UUID da empresa Pai (deve ser igual a PARENT_COMPANY_ID no servidor). */
   readonly VITE_PARENT_COMPANY_ID?: string
   readonly VITE_FEATURE_TAG_GROUPS?: string
+  /** Só a string "true" exibe Abrir chat na lista de Leads. Definir apenas no LovooDev. */
+  readonly VITE_FEATURE_LEADS_OPEN_CHAT?: string
 }
 
 interface ImportMeta {

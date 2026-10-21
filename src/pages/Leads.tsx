@@ -24,6 +24,7 @@ import { BulkTagModal } from '../components/BulkTagModal';
 import { BulkMergeModal } from '../components/BulkMergeModal';
 import { LeadTableColumnCustomizer } from '../components/LeadTableColumnCustomizer';
 import { LeadReentriesModal } from '../components/LeadReentriesModal';
+import ChatModalSimple from '../components/SalesFunnel/ChatModalSimple';
 import { useLeadTablePreferences } from '../hooks/useLeadTablePreferences';
 import { useAvailableTags } from '../hooks/useAvailableTags';
 import { chatApi } from '../services/chat/chatApi';
@@ -35,6 +36,7 @@ import {
   Upload,
   Settings,
   Eye,
+  MessageCircle,
   Edit,
   Trash2,
   Phone,
@@ -129,6 +131,7 @@ export const Leads: React.FC = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [chatLeadId, setChatLeadId] = useState<number | null>(null);
   const [selectedDuplicateNotification, setSelectedDuplicateNotification] = useState<any>(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [leadPhotos, setLeadPhotos] = useState<Record<string, string>>({});
@@ -1175,6 +1178,23 @@ export const Leads: React.FC = () => {
                   }
                   <td className={`px-4 py-2 whitespace-nowrap text-right text-sm font-medium sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] ${selectedLeadIds.has(lead.id) ? 'bg-blue-50 group-hover:bg-blue-100' : 'bg-white group-hover:bg-gray-50'}`}>
                     <div className="flex items-center justify-end gap-1">
+                      {import.meta.env.VITE_FEATURE_LEADS_OPEN_CHAT === 'true' && (
+                        <button
+                          type="button"
+                          onClick={() => setChatLeadId(lead.id)}
+                          disabled={!company?.id || !user?.id || lead.is_over_plan === true}
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          title={
+                            lead.is_over_plan
+                              ? 'Chat indisponível para lead acima do plano'
+                              : !company?.id || !user?.id
+                                ? 'Chat indisponível sem empresa ou usuário'
+                                : 'Abrir chat'
+                          }
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleViewLead(lead)}
                         className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
@@ -1400,6 +1420,17 @@ export const Leads: React.FC = () => {
         onMergeComplete={handleBulkMergeComplete}
         notifications={bulkMergeNotifications}
       />
+
+      {import.meta.env.VITE_FEATURE_LEADS_OPEN_CHAT === 'true' && chatLeadId != null && company?.id && user?.id && (
+        <ChatModalSimple
+          isOpen
+          onClose={() => setChatLeadId(null)}
+          leadId={chatLeadId}
+          companyId={company.id}
+          userId={user.id}
+          closeLabel="Voltar"
+        />
+      )}
 
       {/* Modal de Reentradas */}
       {showReentriesModal && (

@@ -19,6 +19,7 @@ interface ChatModalSimpleProps {
   leadId: number
   companyId: string
   userId: string
+  closeLabel?: string
 }
 
 export default function ChatModalSimple({
@@ -26,7 +27,8 @@ export default function ChatModalSimple({
   onClose,
   leadId,
   companyId,
-  userId
+  userId,
+  closeLabel = 'Voltar ao Funil'
 }: ChatModalSimpleProps) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -220,7 +222,7 @@ export default function ChatModalSimple({
               onClick={onClose}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Voltar ao Funil
+              {closeLabel}
             </button>
           </div>
         </div>
@@ -263,7 +265,7 @@ export default function ChatModalSimple({
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
             >
-              Voltar ao Funil
+              {closeLabel}
             </button>
             <button
               onClick={handleStartConversation}
@@ -327,7 +329,7 @@ export default function ChatModalSimple({
                   onClick={onClose}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Voltar ao Funil
+                  {closeLabel}
                 </button>
               </div>
             </div>
