@@ -32,3 +32,33 @@ export function canonicalizeBrMobilePhone(phone) {
 
   return digits;
 }
+
+/**
+ * Variantes para achar o mesmo celular com ou sem o 9º dígito.
+ * Espelha public.br_mobile_phone_lookup_values.
+ *
+ * @param {string|null|undefined} phone
+ * @returns {string[]}
+ */
+export function brMobilePhoneLookupValues(phone) {
+  const values = new Set();
+  if (phone == null) return [];
+
+  const clean = String(phone).replace(/\D/g, '');
+  if (clean) values.add(clean);
+
+  const canonical = canonicalizeBrMobilePhone(phone);
+  if (canonical) values.add(canonical);
+
+  if (
+    canonical &&
+    canonical.length === 13 &&
+    canonical.startsWith('55') &&
+    canonical.charAt(4) === '9'
+  ) {
+    values.add(canonical.slice(0, 4) + canonical.slice(5));
+    values.add(canonical.slice(2));
+  }
+
+  return [...values];
+}

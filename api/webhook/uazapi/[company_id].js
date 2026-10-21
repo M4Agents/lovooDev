@@ -7,6 +7,7 @@ import { scheduleAdvancedWebhooks }       from '../../lib/webhook/triggerAdvance
 import { dispatchMessageReceivedTrigger } from '../../lib/automation/dispatchMessageReceivedTrigger.js';
 import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js';
 import { handleLeadReentry } from '../../lib/leads/handleLeadReentry.js';
+import { brMobilePhoneLookupValues } from '../../lib/phone/canonicalizeBrMobile.js';
 
 export default async function handler(req, res) {
   console.error('🚀 WEBHOOK UAZAPI v2.0 - CACHE BUST ATIVO');
@@ -101,6 +102,7 @@ function isPlaceholderName(name) {
     t === '.' ||
     t === 'Lead WhatsApp' ||
     /^Contato \d+$/.test(t) ||
+    /^\d+$/.test(t) ||
     t.length === 0
   );
 }
@@ -475,13 +477,21 @@ async function processMessage(payload) {
     // BUSCAR NOME DO LEAD NO CADASTRO (FONTE DA VERDADE)
     // =====================================================
     // Agora que temos company, buscar nome correto do lead
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('name')
-      .eq('phone', phoneNumber)
-      .eq('company_id', company.id)
-      .is('deleted_at', null)
-      .single();
+    const phoneLookup = brMobilePhoneLookupValues(phoneNumber);
+    let existingLead = null;
+    if (phoneLookup.length > 0) {
+      const { data } = await supabase
+        .from('leads')
+        .select('name')
+        .eq('company_id', company.id)
+        .is('deleted_at', null)
+        .in('phone_normalized', phoneLookup)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      existingLead = data;
+    }
 
     // Resolução final do nome: cadastro real → payload válido → consulta uazapi → placeholder
     let senderName;

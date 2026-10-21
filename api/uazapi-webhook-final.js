@@ -38,6 +38,7 @@ import { acquireLock, releaseLock }               from './lib/automation/executi
 import { getSupabaseAdmin }               from './lib/automation/supabaseAdmin.js';
 import { handleLeadReentry }              from './lib/leads/handleLeadReentry.js';
 import { fetchContactNameFromUazapi, isValidContactName } from './lib/webhook/contactNameResolver.js';
+import { brMobilePhoneLookupValues } from './lib/phone/canonicalizeBrMobile.js';
 
 // =====================================================
 // EXTRAÇÃO DE REPLY ID DO PAYLOAD UAZAPI
@@ -372,12 +373,17 @@ async function processMessage(payload) {
       Boolean(name) && _instanceOwnNames.includes(name.trim().toLowerCase());
 
     // Nomes gerados automaticamente pelo sistema (podem ser sobrescritos por pushName real).
-    const _isPlaceholderName = (name) =>
-      !name ||
-      name === '.' ||
-      name === 'Lead WhatsApp' ||
-      /^Contato \d+$/.test(name) ||
-      _isInstanceOwnName(name);
+    const _isPlaceholderName = (name) => {
+      const trimmed = String(name ?? '').trim();
+      return (
+        !trimmed ||
+        trimmed === '.' ||
+        trimmed === 'Lead WhatsApp' ||
+        /^Contato \d+$/.test(trimmed) ||
+        /^\d+$/.test(trimmed) ||
+        _isInstanceOwnName(trimmed)
+      );
+    };
 
     // pushName real: payload da mensagem ou campos do chat (docs: name > wa_name > wa_contactName).
     const _whatsAppName = [
@@ -422,13 +428,21 @@ async function processMessage(payload) {
     }
 
     // Buscar nome do lead no cadastro (inclui id para possível atualização de placeholder)
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('id, name')
-      .eq('phone', phoneNumber)
-      .eq('company_id', company.id)
-      .is('deleted_at', null)
-      .single();
+    const phoneLookup = brMobilePhoneLookupValues(phoneNumber);
+    let existingLead = null;
+    if (phoneLookup.length > 0) {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .is('deleted_at', null)
+        .in('phone_normalized', phoneLookup)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      existingLead = data;
+    }
 
     const _existingName    = existingLead?.name;
     const _placeholderVisto = _existingName;   // guardado para trava de concorrência

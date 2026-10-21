@@ -7,15 +7,14 @@
  */
 
 import { getSupabaseAdmin } from '../automation/supabaseAdmin.js';
+import { brMobilePhoneLookupValues } from '../phone/canonicalizeBrMobile.js';
 import {
   isPlaceholderName,
   fetchContactNameFromChatDetails,
 } from './contactNameResolver.js';
 
 function phoneLookupValues(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (digits.length < 10) return [];
-  return [...new Set([digits, digits.slice(-11)])];
+  return brMobilePhoneLookupValues(phone).filter((value) => value.length >= 10);
 }
 
 function sleep(ms) {
@@ -31,26 +30,28 @@ export async function refreshPlaceholderLeadNameAfterSend({
   messageId,
 }) {
   if (!companyId || !phone || !token) return { updated: false, reason: 'params' };
-  if (seenContactName && !isPlaceholderName(seenContactName)) {
-    return { updated: false, reason: 'nome_ja_real' };
-  }
 
-  // O chat só é gravado no servidor depois do send — espera + 1 retry.
-  await sleep(600);
-  let resolved = await fetchContactNameFromChatDetails({
-    token,
-    phoneNumber: phone,
-    baseUrl,
-  });
-  if (!resolved) {
-    await sleep(800);
+  let resolved = null;
+  if (seenContactName && !isPlaceholderName(seenContactName)) {
+    resolved = seenContactName.trim();
+  } else {
+    // O chat só é gravado no servidor depois do send — espera + 1 retry.
+    await sleep(600);
     resolved = await fetchContactNameFromChatDetails({
       token,
       phoneNumber: phone,
       baseUrl,
     });
+    if (!resolved) {
+      await sleep(800);
+      resolved = await fetchContactNameFromChatDetails({
+        token,
+        phoneNumber: phone,
+        baseUrl,
+      });
+    }
   }
-  if (!resolved) return { updated: false, reason: 'sem_nome' };
+  if (!resolved || isPlaceholderName(resolved)) return { updated: false, reason: 'sem_nome' };
 
   const lookup = phoneLookupValues(phone);
   if (lookup.length === 0) return { updated: false, reason: 'phone' };

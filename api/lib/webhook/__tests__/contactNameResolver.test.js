@@ -37,6 +37,7 @@ describe('isPlaceholderName', () => {
   it('"João Silva" → false', () => expect(isPlaceholderName('João Silva')).toBe(false));
   it('"Maria" → false', () => expect(isPlaceholderName('Maria')).toBe(false));
   it('"Contato texto" → false (não é número)', () => expect(isPlaceholderName('Contato texto')).toBe(false));
+  it('"5582996128352" → true (só dígitos)', () => expect(isPlaceholderName('5582996128352')).toBe(true));
 });
 
 // ---------------------------------------------------------------------------

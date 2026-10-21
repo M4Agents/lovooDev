@@ -2,7 +2,7 @@
  * Smoke tests locais do helper canônico BR.
  * Executar: node api/lib/phone/canonicalizeBrMobile.test.js
  */
-import { canonicalizeBrMobilePhone } from './canonicalizeBrMobile.js';
+import { brMobilePhoneLookupValues, canonicalizeBrMobilePhone } from './canonicalizeBrMobile.js';
 
 const cases = [
   // Caso Valleron
@@ -53,9 +53,18 @@ if (a !== b || a !== '5547991848974') {
   console.log('OK:   paridade Valleron 11738/11739');
 }
 
+const lookup = brMobilePhoneLookupValues('558288956767').sort();
+const expectedLookup = ['558288956767', '5582988956767', '82988956767'].sort();
+if (lookup.join() !== expectedLookup.join()) {
+  failed += 1;
+  console.error('FAIL: lookup sem 9', { lookup, expectedLookup });
+} else {
+  console.log('OK:   lookup sem 9 inclui o canônico com 9');
+}
+
 if (failed > 0) {
   console.error(`\n${failed} falha(s)`);
   process.exit(1);
 }
 
-console.log(`\nTodos os ${cases.length + 1} checks passaram.`);
+console.log(`\nTodos os ${cases.length + 2} checks passaram.`);

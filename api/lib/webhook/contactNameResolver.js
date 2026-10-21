@@ -12,7 +12,7 @@
 
 /**
  * true se o nome é um placeholder gerado pelo sistema.
- * Rejeita: null, "", ".", "Lead WhatsApp", "Contato 5582996..."
+ * Rejeita: null, "", ".", "Lead WhatsApp", "Contato 5582996...", só dígitos.
  */
 export function isPlaceholderName(name) {
   if (!name) return true;
@@ -21,7 +21,8 @@ export function isPlaceholderName(name) {
     t === '' ||
     t === '.' ||
     t === 'Lead WhatsApp' ||
-    /^Contato \d+$/.test(t)
+    /^Contato \d+$/.test(t) ||
+    /^\d+$/.test(t)
   );
 }
 
