@@ -794,6 +794,7 @@
         "impersonate": "Impersonate companies",
         "viewAllLeads": "View all leads",
         "editAllLeads": "Edit all leads",
+        "reassignOwnLeads": "Transfer own leads",
         "viewFinancial": "View financial data",
         "editFinancial": "Edit financial data"
       },
@@ -857,6 +858,8 @@
       "optgroupCustom": "Custom profiles",
       "fallbackRolesWarning": "⚠️ Using basic roles. Custom profiles are temporarily unavailable.",
       "roleReadonlyWarning": "You do not have permission to change this user's role.",
+      "reassignOwnLeadsTitle": "Can transfer their own leads",
+      "reassignOwnLeadsDesc": "This seller can transfer only leads they already own, to another seller or manager in the company. Open opportunities and chat follow the new owner.",
       "sendInvite": "Send email invite",
       "sendInviteHint": "The user will get instructions to access the system",
       "companySection": "Company",

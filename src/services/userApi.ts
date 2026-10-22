@@ -260,6 +260,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: true,
         view_all_leads: true,
         edit_all_leads: true,
+        reassign_own_leads: false,
         view_financial: true,
         edit_financial: true
       };
@@ -281,6 +282,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: true,
         view_all_leads: true,
         edit_all_leads: true,
+        reassign_own_leads: false,
         view_financial: true,
         edit_financial: true
       };
@@ -300,6 +302,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: false,
         view_all_leads: true,
         edit_all_leads: true,
+        reassign_own_leads: false,
         view_financial: false,
         edit_financial: false
       };
@@ -319,6 +322,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: true, // PODE IMPERSONAR SUAS EMPRESAS
         view_all_leads: true,
         edit_all_leads: true,
+        reassign_own_leads: false,
         view_financial: false, // SEM ACESSO FINANCEIRO
         edit_financial: false  // SEM ACESSO FINANCEIRO
       };
@@ -338,6 +342,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: false,
         view_all_leads: true,
         edit_all_leads: false,
+        reassign_own_leads: false,
         view_financial: false,
         edit_financial: false
       };
@@ -357,6 +362,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: false,
         view_all_leads: false,
         edit_all_leads: false,
+        reassign_own_leads: false,
         view_financial: false,
         edit_financial: false
       };
@@ -376,6 +382,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
         impersonate: false,
         view_all_leads: false,
         edit_all_leads: false,
+        reassign_own_leads: false,
         view_financial: false,
         edit_financial: false
       };

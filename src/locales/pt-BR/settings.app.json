@@ -883,6 +883,7 @@
         "impersonate": "Impersonar empresas",
         "viewAllLeads": "Ver todos os leads",
         "editAllLeads": "Editar todos os leads",
+        "reassignOwnLeads": "Transferir os próprios leads",
         "viewFinancial": "Ver dados financeiros",
         "editFinancial": "Editar dados financeiros"
       },
@@ -946,6 +947,8 @@
       "optgroupCustom": "Perfis Personalizados",
       "fallbackRolesWarning": "⚠️ Usando sistema básico de roles. Perfis personalizados temporariamente indisponíveis.",
       "roleReadonlyWarning": "Você não tem permissão para alterar o perfil deste usuário.",
+      "reassignOwnLeadsTitle": "Pode transferir os próprios leads",
+      "reassignOwnLeadsDesc": "Este vendedor transfere só leads que já são dele, para outro vendedor ou gerente da empresa. Oportunidades abertas e o chat acompanham o novo responsável.",
       "sendInvite": "Enviar convite por email",
       "sendInviteHint": "O usuário receberá instruções para acessar o sistema",
       "companySection": "Empresa",

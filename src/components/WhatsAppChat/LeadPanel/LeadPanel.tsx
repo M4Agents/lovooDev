@@ -587,7 +587,14 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   const [currentResponsibleId, setCurrentResponsibleId] = useState<string>('')
   
   // Hook de permissões
-  const { canEditLead } = useLeadPermissions()
+  const { canEditLead, canAssignLead, canReassignOwnLeads, currentUserId } = useLeadPermissions()
+  const allowAnyAssign = canAssignLead()
+  const allowOwnReassign = canReassignOwnLeads()
+  const ownsCurrentLead =
+    Boolean(currentLeadId) &&
+    Boolean(currentUserId) &&
+    originalResponsibleId === currentUserId
+  const canChangeResponsible = allowAnyAssign || (allowOwnReassign && ownsCurrentLead)
 
   // FASE 5ZD: detectar seller restrito para filtrar instâncias disponíveis
   const { currentRole, company, user } = useAuth()
@@ -652,10 +659,14 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       
       try {
         setLoadingUsers(true)
-        const { data, error } = await supabase
-          .rpc('get_assignable_users', {
-            p_company_id: companyId
-          })
+        const ownOnly = canReassignOwnLeads() && !canAssignLead()
+        const { data, error } = ownOnly
+          ? await supabase.rpc('get_reassign_own_lead_targets', {
+              p_company_id: companyId
+            })
+          : await supabase.rpc('get_assignable_users', {
+              p_company_id: companyId
+            })
         
         if (error) throw error
         setCompanyUsers(data || [])
@@ -668,7 +679,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
     
     loadCompanyUsers()
-  }, [companyId])
+  }, [companyId, allowAnyAssign, allowOwnReassign])
 
   // Buscar informações do lead atual
   useEffect(() => {
@@ -840,7 +851,15 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   // Função para trocar responsável
   const handleChangeResponsible = async (newResponsibleId: string) => {
     if (!companyId || !conversation?.contact_phone) return
-    
+    if (!canChangeResponsible) {
+      alert(t('leadPanel.contact.permissionDenied'))
+      return
+    }
+    if (!allowAnyAssign && !currentLeadId) {
+      alert(t('leadPanel.contact.permissionDenied'))
+      return
+    }
+
     setChangingResponsible(true)
     setResponsibleChangeSuccess(false)
     
@@ -1063,10 +1082,15 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
                 users={companyUsers}
                 selectedUser={currentResponsibleId}
                 onSelectUser={(userId) => handleChangeResponsible(userId)}
-                showNoneOption={true}
-                disabled={changingResponsible}
-                className={changingResponsible ? 'opacity-50 pointer-events-none' : ''}
+                showNoneOption={allowAnyAssign}
+                disabled={changingResponsible || !canChangeResponsible}
+                className={changingResponsible || !canChangeResponsible ? 'opacity-50 pointer-events-none' : ''}
               />
+              {allowOwnReassign && ownsCurrentLead && (
+                <p className="text-xs text-gray-500">
+                  {t('leadPanel.contact.reassignOwnLeadHint')}
+                </p>
+              )}
               
               {/* Aviso se responsável foi alterado */}
               {currentResponsibleId && currentResponsibleId !== originalResponsibleId && (

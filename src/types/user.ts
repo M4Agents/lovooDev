@@ -36,6 +36,8 @@ export interface UserPermissions {
   // Leads
   view_all_leads: boolean;
   edit_all_leads: boolean;
+  /** Seller transfere apenas leads que já são dele, para seller ou manager ativo. */
+  reassign_own_leads: boolean;
 
   // Financeiro
   view_financial: boolean;

@@ -21,6 +21,7 @@ const SUPER_ADMIN_DEFAULT_PERMISSIONS: UserPermissions = {
   impersonate:    true,
   view_all_leads: true,
   edit_all_leads: true,
+  reassign_own_leads: false,
   view_financial: true,
   edit_financial: true,
 };

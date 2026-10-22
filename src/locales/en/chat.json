@@ -207,6 +207,7 @@
       "unknownError": "Unknown error",
       "instanceChangeFailedShort": "Could not switch instance",
       "permissionDenied": "You do not have permission to change this lead’s owner",
+      "reassignOwnLeadHint": "You can transfer this lead to another seller or manager.",
       "responsibleUpdateError": "Could not update owner. Please try again."
     },
     "schedule": {

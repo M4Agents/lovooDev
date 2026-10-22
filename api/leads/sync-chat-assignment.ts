@@ -12,7 +12,8 @@
 //   • JWT validado via getUserFromToken (anon key + Authorization header)
 //   • company_id resolvido a partir do lead (não confiado do payload)
 //   • Membership validado via assertMembership (Trilha 1 + Trilha 2 parent admin)
-//   • RBAC: apenas super_admin / system_admin / admin / manager
+//   • RBAC: super_admin / system_admin / admin / manager
+//   • seller com reassign_own_leads só sincroniza o responsável já gravado no lead
 //   • responsibleUserId validado na empresa (is_active = true) quando não null
 //   • sync via service_role — não-fatal
 // =====================================================
@@ -62,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── 3. Resolver company_id a partir do lead ────────────────────────────────
   const { data: lead, error: leadError } = await svc
     .from('leads')
-    .select('id, company_id')
+    .select('id, company_id, responsible_user_id')
     .eq('id', leadId as number)
     .is('deleted_at', null)
     .maybeSingle()
@@ -71,17 +72,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return jsonError(res, 404, 'Lead não encontrado')
   }
 
-  const companyId = (lead as { id: number; company_id: string }).company_id
+  const leadRow = lead as { id: number; company_id: string; responsible_user_id: string | null }
+  const companyId = leadRow.company_id
 
   // ── 4. Membership + RBAC ──────────────────────────────────────────────────
   const member = await assertMembership(svc, user.id, companyId)
   if (!member) return jsonError(res, 403, 'Acesso negado a esta empresa')
-  if (!ALLOWED_ROLES.has(member.role)) {
+
+  const sellerSync = member.role === 'seller'
+  if (!ALLOWED_ROLES.has(member.role) && !sellerSync) {
     return jsonError(res, 403, 'Permissão insuficiente para sincronização de chat')
   }
 
   // ── 5. Validar responsibleUserId na empresa (quando não null) ─────────────
-  if (resolvedResponsibleId !== null) {
+  if (sellerSync) {
+    const { data: sellerMember } = await svc
+      .from('company_users')
+      .select('permissions')
+      .eq('user_id', user.id)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .eq('role', 'seller')
+      .maybeSingle()
+
+    const canReassign = (sellerMember?.permissions as { reassign_own_leads?: boolean } | null)?.reassign_own_leads === true
+    if (!canReassign) {
+      return jsonError(res, 403, 'Permissão insuficiente para sincronização de chat')
+    }
+
+    if (!resolvedResponsibleId || resolvedResponsibleId !== leadRow.responsible_user_id) {
+      return jsonError(res, 403, 'Sincronização só reflete o responsável já gravado no lead')
+    }
+
+    const { data: targetUser } = await svc
+      .from('company_users')
+      .select('user_id')
+      .eq('user_id', resolvedResponsibleId)
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .in('role', ['seller', 'manager'])
+      .maybeSingle()
+
+    if (!targetUser) {
+      return jsonError(res, 403, 'responsibleUserId não é seller ou manager ativo desta empresa')
+    }
+  } else if (resolvedResponsibleId !== null) {
     const { data: targetUser } = await svc
       .from('company_users')
       .select('user_id')

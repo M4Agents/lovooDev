@@ -203,6 +203,7 @@
       "unknownError": "Error desconocido",
       "instanceChangeFailedShort": "Error al cambiar de instancia",
       "permissionDenied": "No tiene permiso para cambiar el responsable de este lead",
+      "reassignOwnLeadHint": "Puede transferir este lead a otro vendedor o gerente.",
       "responsibleUpdateError": "Error al actualizar el responsable. Inténtelo de nuevo."
     },
     "schedule": {

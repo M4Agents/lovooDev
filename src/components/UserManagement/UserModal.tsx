@@ -75,6 +75,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
   const [selectedTemplate, setSelectedTemplate] = useState<UserTemplate | null>(null);
   const [useAdvancedPermissions, setUseAdvancedPermissions] = useState(false);
   const [customPermissions, setCustomPermissions] = useState<Partial<UserPermissions>>({});
+  const [reassignOwnLeads, setReassignOwnLeads] = useState(false);
   
   // NOVO SISTEMA - Perfis unificados
   const [availableProfiles, setAvailableProfiles] = useState<UserProfile[]>([]);
@@ -191,6 +192,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setSelectedTemplate(findMatchingSystemTemplate(user.role, user.permissions));
         setUseAdvancedPermissions(false);
         setCustomPermissions(user.permissions || {});
+        setReassignOwnLeads(
+          user.role === 'seller' && user.permissions?.reassign_own_leads === true
+        );
         
         // CORREÇÃO: Resetar selectedProfile para forçar nova seleção baseada no role correto
         setSelectedProfile(null);
@@ -207,6 +211,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         // NOVO: Resetar estados avançados para criação
         setUseAdvancedPermissions(false);
         setCustomPermissions({});
+        setReassignOwnLeads(false);
 
         // Fase 2: auto-selecionar template padrão para o role inicial (seller)
         const defaultTemplate = getDefaultTemplateForRole('seller');
@@ -509,6 +514,13 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         });
       }
 
+      // Interruptor por usuário. Aplicado por último para o template não apagar a escolha.
+      // Fora do role seller a chave fica desligada.
+      finalPermissions = {
+        ...finalPermissions,
+        reassign_own_leads: formData.role === 'seller' ? reassignOwnLeads : false,
+      };
+
       if (isEditing && user) {
         // 🔧 NOVO: Upload da foto de perfil se selecionada
         let profilePictureUrl = user.profile_picture_url;
@@ -533,8 +545,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
           profile_picture_url: profilePictureUrl
         };
 
+        const reassignUnchanged = formData.role === 'seller'
+          ? reassignOwnLeads === (user.permissions?.reassign_own_leads === true)
+          : user.permissions?.reassign_own_leads !== true;
+
         // Se apenas atualizando foto, enviar request simplificado
-        if (formData.profilePicture && formData.role === user.role) {
+        if (formData.profilePicture && formData.role === user.role && reassignUnchanged) {
           const photoOnlyRequest: UpdateUserRequest = {
             id: user.id,
             profile_picture_url: profilePictureUrl
@@ -1096,6 +1112,26 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
               </>
             )}
           </div>
+
+          {formData.role === 'seller' && canEditUsers && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-emerald-900">
+                    {t('users.userModal.reassignOwnLeadsTitle')}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    {t('users.userModal.reassignOwnLeadsDesc')}
+                  </p>
+                </div>
+                <Toggle
+                  checked={reassignOwnLeads}
+                  onChange={setReassignOwnLeads}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Modelo de permissões (TemplateSelector) */}
           {availableProfiles.length > 0 && !isRoleReadonly && company?.id && (

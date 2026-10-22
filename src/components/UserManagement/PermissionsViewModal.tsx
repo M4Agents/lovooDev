@@ -46,6 +46,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
         impersonate: false,
         view_all_leads: false,
         edit_all_leads: false,
+        reassign_own_leads: false,
         view_financial: false,
         edit_financial: false,
         ...('customPermissions' in profile ? profile.customPermissions : {})
@@ -219,6 +220,7 @@ export const PermissionsViewModal: React.FC<PermissionsViewModalProps> = ({
               <PermissionItem label={t('users.permissionsView.actions.impersonate')} value={permissions.impersonate} />
               <PermissionItem label={t('users.permissionsView.actions.viewAllLeads')} value={permissions.view_all_leads} />
               <PermissionItem label={t('users.permissionsView.actions.editAllLeads')} value={permissions.edit_all_leads} />
+              <PermissionItem label={t('users.permissionsView.actions.reassignOwnLeads')} value={permissions.reassign_own_leads} />
               <PermissionItem label={t('users.permissionsView.actions.viewFinancial')} value={permissions.view_financial} />
               <PermissionItem label={t('users.permissionsView.actions.editFinancial')} value={permissions.edit_financial} />
             </div>

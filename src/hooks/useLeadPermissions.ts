@@ -11,6 +11,8 @@ interface LeadPermissions {
   canEditLead: (lead: Lead) => boolean;
   canDeleteLead: () => boolean;
   canAssignLead: () => boolean;
+  /** Seller com reassign_own_leads, sem view_all_leads. Só leads que já são dele. */
+  canReassignOwnLeads: () => boolean;
   canViewAllLeads: () => boolean;
   isRestrictedToOwnLeads: () => boolean;
   /** auth.users.id do usuário na empresa ativa. Undefined enquanto userRoles ainda carrega. */
@@ -77,10 +79,19 @@ export const useLeadPermissions = (): LeadPermissions => {
   };
 
   /**
-   * Verifica se o usuário pode atribuir leads a outros usuários.
-   * Equivalente a canViewAllLeads — quem vê tudo pode redistribuir.
+   * Verifica se o usuário pode atribuir qualquer lead da empresa.
+   * Quem vê tudo continua no fluxo atual. Não usa reassign_own_leads.
    */
   const canAssignLead = (): boolean => hasPermission('view_all_leads');
+
+  /**
+   * Seller autorizado pelo admin a transferir somente os próprios leads
+   * para outro seller ou manager. Não abre a carteira inteira.
+   */
+  const canReassignOwnLeads = (): boolean =>
+    currentUserRole === 'seller' &&
+    hasPermission('reassign_own_leads') &&
+    !hasPermission('view_all_leads');
 
   /**
    * Verifica se o usuário pode ver todos os leads (não apenas próprios).
@@ -101,6 +112,7 @@ export const useLeadPermissions = (): LeadPermissions => {
     canEditLead,
     canDeleteLead,
     canAssignLead,
+    canReassignOwnLeads,
     canViewAllLeads,
     isRestrictedToOwnLeads,
     currentUserId,

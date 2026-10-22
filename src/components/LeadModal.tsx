@@ -99,7 +99,9 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   onSave
 }) => {
   const { company, user } = useAuth();
-  const { canAssignLead, canEditLead, currentUserId } = useLeadPermissions();
+  const { canAssignLead, canReassignOwnLeads, canEditLead, currentUserId } = useLeadPermissions();
+  const allowAnyAssign = canAssignLead();
+  const allowOwnReassign = canReassignOwnLeads();
   const { canViewNuvemshopData } = useAccessControl();
   const [loading, setLoading] = useState(false);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -202,13 +204,18 @@ export const LeadModal: React.FC<LeadModalProps> = ({
   // Função para carregar usuários da empresa
   const loadCompanyUsers = async () => {
     if (!company?.id) return;
-    
+
+    const ownOnly = canReassignOwnLeads() && !canAssignLead();
+
     try {
-      const { data, error } = await supabase
-        .rpc('get_company_users_with_details', {
-          p_company_id: company.id
-        });
-      
+      const { data, error } = ownOnly
+        ? await supabase.rpc('get_reassign_own_lead_targets', {
+            p_company_id: company.id
+          })
+        : await supabase.rpc('get_company_users_with_details', {
+            p_company_id: company.id
+          });
+
       if (error) throw error;
       setCompanyUsers(data || []);
     } catch (error) {
@@ -224,7 +231,6 @@ export const LeadModal: React.FC<LeadModalProps> = ({
 
     const hydrate = async () => {
       loadCustomFields();
-      loadCompanyUsers();
       setFormBaseline(null);
 
       if (lead) {
@@ -381,6 +387,11 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       cancelled = true;
     };
   }, [isOpen, lead, company?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !company?.id) return;
+    loadCompanyUsers();
+  }, [isOpen, company?.id, allowAnyAssign, allowOwnReassign]);
 
   // Auto-assignment: preenche responsible_user_id com currentUserId para novos leads.
   // Roda em efeito separado para lidar com carregamento assíncrono de userRoles:
@@ -737,12 +748,24 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         ...companyData,
         company_id: company?.id,
         // Determina o responsável final:
-        // - Edição: preserva o responsável salvo no banco (formData vem do lead existente).
-        // - Criação com canAssignLead: usa a escolha do formulário.
-        // - Criação sem canAssignLead (seller): força currentUserId, independente do estado do form.
+        // - Edição com canAssignLead: escolha do formulário.
+        // - Edição de lead próprio com reassign_own_leads: escolha do formulário, sem limpar o responsável.
+        // - Demais edições: mantém o responsável gravado no lead.
+        // - Criação com canAssignLead: escolha do formulário.
+        // - Criação sem canAssignLead: força o próprio usuário.
         responsible_user_id: (() => {
-          if (activeLead?.id) return formData.responsible_user_id || null;
-          if (canAssignLead()) return formData.responsible_user_id || null;
+          if (activeLead?.id) {
+            if (allowAnyAssign) return formData.responsible_user_id || null;
+            if (
+              allowOwnReassign &&
+              activeLead.responsible_user_id &&
+              activeLead.responsible_user_id === currentUserId
+            ) {
+              return formData.responsible_user_id || currentUserId;
+            }
+            return activeLead.responsible_user_id || null;
+          }
+          if (allowAnyAssign) return formData.responsible_user_id || null;
           return currentUserId || null;
         })(),
         visitor_id: formData.visitor_id || null,
@@ -785,8 +808,8 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         // [chat-sync] Fire-and-forget: propagar responsável para conversas do lead.
         // Não bloqueia UX, nunca lança erro, nunca chega ao catch principal.
         const normalizedResponsibleId =
-          formData.responsible_user_id && formData.responsible_user_id.trim() !== ''
-            ? formData.responsible_user_id
+          leadData.responsible_user_id && String(leadData.responsible_user_id).trim() !== ''
+            ? leadData.responsible_user_id
             : null
 
         if (activeLead.id) {
@@ -1141,7 +1164,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
           <User className="w-4 h-4 inline mr-1" />
           Responsável
         </label>
-        {!activeLead?.id && !canAssignLead() ? (
+        {!activeLead?.id && !allowAnyAssign ? (
           <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
             <div className="w-7 h-7 rounded-full bg-green-200 flex items-center justify-center flex-shrink-0">
               <User className="w-4 h-4 text-green-700" />
@@ -1154,13 +1177,28 @@ export const LeadModal: React.FC<LeadModalProps> = ({
             </div>
           </div>
         ) : (
-          <UserSelector
-            users={companyUsers}
-            selectedUser={formData.responsible_user_id}
-            onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
-            showNoneOption={false}
-            disabled={loading || !canAssignLead()}
-          />
+          <>
+            <UserSelector
+              users={companyUsers}
+              selectedUser={formData.responsible_user_id}
+              onSelectUser={(userId) => handleInputChange('responsible_user_id', userId)}
+              showNoneOption={false}
+              disabled={
+                loading ||
+                (!allowAnyAssign &&
+                  !(
+                    allowOwnReassign &&
+                    activeLead?.responsible_user_id &&
+                    activeLead.responsible_user_id === currentUserId
+                  ))
+              }
+            />
+            {allowOwnReassign && activeLead?.responsible_user_id === currentUserId && (
+              <p className="text-xs text-gray-500">
+                Você pode transferir este lead para outro vendedor ou gerente.
+              </p>
+            )}
+          </>
         )}
       </div>
     </>
