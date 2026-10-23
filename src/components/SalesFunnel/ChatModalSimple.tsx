@@ -358,22 +358,24 @@ export default function ChatModalSimple({
       <div className="bg-white rounded-lg shadow-2xl flex flex-col w-[min(70vw,calc(100vw-2rem))] h-[min(80dvh,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)]">
         {/* Header */}
         <div className="relative z-20 flex items-center justify-between gap-4 rounded-t-lg px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
-          <h2 className="text-xl font-semibold text-gray-900 shrink-0">Chat do Lead</h2>
-          {instanceOptions.length > 1 && conversationId && (
-            <div className="min-w-0 w-full max-w-xs">
-              <InstanceSelector
-                instances={instanceOptions.map(option => ({
-                  ...option.instance,
-                  phone_number: option.instance.phone_number || undefined,
-                  profile_name: option.instance.profile_name || undefined,
-                  profile_picture_url: option.instance.profile_picture_url || undefined,
-                }))}
-                selectedInstance={selectedInstanceId}
-                onSelectInstance={handleSelectLeadInstance}
-                showAllOption={false}
-              />
-            </div>
-          )}
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-xl font-semibold text-gray-900 shrink-0">Chat do Lead</h2>
+            {instanceOptions.length > 1 && conversationId && (
+              <div className="min-w-0 w-72 max-w-[18rem]">
+                <InstanceSelector
+                  instances={instanceOptions.map(option => ({
+                    ...option.instance,
+                    phone_number: option.instance.phone_number || undefined,
+                    profile_name: option.instance.profile_name || undefined,
+                    profile_picture_url: option.instance.profile_picture_url || undefined,
+                  }))}
+                  selectedInstance={selectedInstanceId}
+                  onSelectInstance={handleSelectLeadInstance}
+                  showAllOption={false}
+                />
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/50 rounded-lg transition-colors shrink-0"
