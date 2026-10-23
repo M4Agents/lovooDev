@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react'
 import { X, MessageSquarePlus, WifiOff } from 'lucide-react'
 import ChatArea from '../WhatsAppChat/ChatArea/ChatArea'
 import LeadPanel from '../WhatsAppChat/LeadPanel/LeadPanel'
+import { InstanceSelector } from '../WhatsAppChat/InstanceSelector'
 import { chatApi } from '../../services/chat/chatApi'
 import { supabase } from '../../lib/supabase'
 import { api } from '../../services/api'
 import { crmService } from '../../services/automation/CRMService'
+import { useAuth } from '../../contexts/AuthContext'
+import {
+  instancesVisibleInChat,
+  leadInstanceOptions,
+  type LeadChatInstance,
+  type LeadInstanceOption,
+} from '../../utils/leadChatInstances'
 
 interface ConnectedInstance {
   id: string
@@ -30,58 +38,41 @@ export default function ChatModalSimple({
   userId,
   closeLabel = 'Voltar ao Funil'
 }: ChatModalSimpleProps) {
+  const { company, currentRole } = useAuth()
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [noConversation, setNoConversation] = useState(false)
   const [connectedInstances, setConnectedInstances] = useState<ConnectedInstance[]>([])
+  const [instanceOptions, setInstanceOptions] = useState<LeadInstanceOption[]>([])
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>('')
   const [leadPhone, setLeadPhone] = useState<string>('')
   const [leadName, setLeadName] = useState<string>('')
   const [startingConversation, setStartingConversation] = useState(false)
-
-  useEffect(() => {
-    if (isOpen && leadId) {
-      resetState()
-      loadConversation()
-    }
-  }, [isOpen, leadId])
 
   const resetState = () => {
     setConversationId(null)
     setError(null)
     setNoConversation(false)
     setConnectedInstances([])
+    setInstanceOptions([])
     setSelectedInstanceId('')
     setLeadPhone('')
     setLeadName('')
     setStartingConversation(false)
   }
 
-  const loadConversation = async () => {
-    try {
-      setLoading(true)
-      const convId = await chatApi.getConversationByLeadId(leadId, companyId)
-
-      if (convId) {
-        setConversationId(convId)
-      } else {
-        await loadInstancesAndLead()
-        setNoConversation(true)
-      }
-    } catch (err) {
-      console.error('Erro ao buscar conversa:', err)
-      setError('Erro ao carregar conversa do lead')
-    } finally {
-      setLoading(false)
-    }
+  const visibility = {
+    flag: company?.id === companyId ? (company.chat_visibility_by_assigned_to ?? false) : false,
+    role: company?.id === companyId ? currentRole : null,
+    userId,
   }
 
-  const loadInstancesAndLead = async () => {
+  const loadInstancesAndLead = async (isActive: () => boolean) => {
     const [instancesResult, leadResult] = await Promise.all([
       supabase
         .from('whatsapp_life_instances')
-        .select('id, instance_name, phone_number')
+        .select('id, instance_name, phone_number, status, assigned_user_id, available_to_all')
         .eq('company_id', companyId)
         .eq('status', 'connected')
         .is('deleted_at', null)
@@ -94,10 +85,20 @@ export default function ChatModalSimple({
         .single()
     ])
 
+    if (!isActive()) return
+
     if (!instancesResult.error && instancesResult.data) {
-      setConnectedInstances(instancesResult.data)
-      if (instancesResult.data.length === 1) {
-        setSelectedInstanceId(instancesResult.data[0].id)
+      const visible = instancesVisibleInChat(
+        instancesResult.data as LeadChatInstance[],
+        visibility
+      )
+      setConnectedInstances(visible.map(instance => ({
+        id: instance.id,
+        instance_name: instance.instance_name,
+        phone_number: instance.phone_number ?? null,
+      })))
+      if (visible.length === 1) {
+        setSelectedInstanceId(visible[0].id)
       }
     }
 
@@ -105,6 +106,66 @@ export default function ChatModalSimple({
       setLeadPhone(leadResult.data.phone?.replace(/\D/g, '') || '')
       setLeadName(leadResult.data.name || '')
     }
+  }
+
+  const loadConversation = async (isActive: () => boolean) => {
+    try {
+      setLoading(true)
+      const sameCompany = company?.id === companyId
+
+      if (!sameCompany) {
+        const convId = await chatApi.getConversationByLeadId(leadId, companyId)
+        if (!isActive()) return
+        if (convId) {
+          setConversationId(convId)
+        } else {
+          await loadInstancesAndLead(isActive)
+          if (isActive()) setNoConversation(true)
+        }
+        return
+      }
+
+      const { conversations, instances } = await chatApi.listLeadChatsByInstance(leadId, companyId)
+      if (!isActive()) return
+      const options = leadInstanceOptions(conversations, instances, visibility)
+      setInstanceOptions(options)
+
+      if (options.length === 0) {
+        await loadInstancesAndLead(isActive)
+        if (isActive()) setNoConversation(true)
+        return
+      }
+
+      setConversationId(options[0].conversationId)
+      setSelectedInstanceId(options[0].instance.id)
+    } catch (err) {
+      console.error('Erro ao buscar conversa:', err)
+      if (isActive()) setError('Erro ao carregar conversa do lead')
+    } finally {
+      if (isActive()) setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isOpen || !leadId) return
+    let cancelled = false
+
+    resetState()
+    setLoading(true)
+    void loadConversation(() => !cancelled)
+
+    return () => {
+      cancelled = true
+    }
+    // A busca usa a empresa e o papel ativos. loadConversation lê o estado mais recente desse render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, leadId, companyId, userId, company?.id, company?.chat_visibility_by_assigned_to, currentRole])
+
+  const handleSelectLeadInstance = (instanceId: string) => {
+    const option = instanceOptions.find(item => item.instance.id === instanceId)
+    if (!option) return
+    setSelectedInstanceId(instanceId)
+    setConversationId(option.conversationId)
   }
 
   const ensureLeadAndOpportunity = async (conversationId: string) => {
@@ -294,13 +355,28 @@ export default function ChatModalSimple({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden w-[min(70vw,calc(100vw-2rem))] h-[min(80dvh,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)]">
+      <div className="bg-white rounded-lg shadow-2xl flex flex-col w-[min(70vw,calc(100vw-2rem))] h-[min(80dvh,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
-          <h2 className="text-xl font-semibold text-gray-900">Chat do Lead</h2>
+        <div className="relative z-20 flex items-center justify-between gap-4 rounded-t-lg px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+          <h2 className="text-xl font-semibold text-gray-900 shrink-0">Chat do Lead</h2>
+          {instanceOptions.length > 1 && conversationId && (
+            <div className="min-w-0 w-full max-w-xs">
+              <InstanceSelector
+                instances={instanceOptions.map(option => ({
+                  ...option.instance,
+                  phone_number: option.instance.phone_number || undefined,
+                  profile_name: option.instance.profile_name || undefined,
+                  profile_picture_url: option.instance.profile_picture_url || undefined,
+                }))}
+                selectedInstance={selectedInstanceId}
+                onSelectInstance={handleSelectLeadInstance}
+                showAllOption={false}
+              />
+            </div>
+          )}
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+            className="p-2 hover:bg-white/50 rounded-lg transition-colors shrink-0"
             title="Fechar"
           >
             <X className="w-5 h-5 text-gray-600" />
@@ -308,7 +384,7 @@ export default function ChatModalSimple({
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
+        <div className="flex-1 flex overflow-hidden min-h-0 rounded-b-lg">
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -340,6 +416,7 @@ export default function ChatModalSimple({
               {/* ChatArea - 60% */}
               <div className="flex h-full min-h-0 min-w-0 flex-col bg-white" style={{ width: '60%' }}>
                 <ChatArea
+                  key={conversationId}
                   conversationId={conversationId}
                   companyId={companyId}
                   userId={userId}
@@ -349,6 +426,7 @@ export default function ChatModalSimple({
               {/* LeadPanel - 40% */}
               <div className="h-full min-h-0 overflow-hidden bg-white border-l border-gray-200" style={{ width: '40%' }}>
                 <LeadPanel
+                  key={conversationId}
                   conversationId={conversationId}
                   companyId={companyId}
                   userId={userId}

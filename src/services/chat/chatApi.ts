@@ -6,6 +6,7 @@
 
 import { supabase } from '../../lib/supabase'
 import { brMobilePhoneLookupValues } from '../../lib/phone/canonicalizeBrMobile'
+import type { LeadChatInstance, LeadConversationRef } from '../../utils/leadChatInstances'
 import type {
   ChatConversation,
   ChatMessage,
@@ -1282,6 +1283,91 @@ export class ChatApi {
     } catch (error) {
       console.error('Erro ao buscar conversationId:', error)
       return null
+    }
+  }
+
+  /**
+   * Conversas ativas do lead na empresa, por lead_id e pelo telefone
+   * ainda sem lead vinculado. Conversa de outro lead com o mesmo telefone
+   * fica de fora. Instância apagada não entra. O filtro de acesso fica no
+   * cliente, igual ao chat principal.
+   */
+  static async listLeadChatsByInstance(
+    leadId: number,
+    companyId: string
+  ): Promise<{ conversations: LeadConversationRef[]; instances: LeadChatInstance[] }> {
+    const conversationSelect = 'id, lead_id, instance_id, assigned_to, updated_at'
+
+    const { data: byLead, error: byLeadError } = await supabase
+      .from('chat_conversations')
+      .select(conversationSelect)
+      .eq('lead_id', leadId)
+      .eq('company_id', companyId)
+      .eq('status', 'active')
+
+    if (byLeadError) throw byLeadError
+
+    const { data: lead, error: leadError } = await supabase
+      .from('leads')
+      .select('phone, phone_normalized')
+      .eq('id', leadId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    if (leadError) throw leadError
+
+    let byPhone: Array<LeadConversationRef & { lead_id?: number | null }> = []
+    const phones = [...new Set([
+      ...brMobilePhoneLookupValues(lead?.phone),
+      ...brMobilePhoneLookupValues(lead?.phone_normalized),
+    ])]
+
+    if (phones.length > 0) {
+      const { data, error } = await supabase
+        .from('chat_conversations')
+        .select(conversationSelect)
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .in('contact_phone', phones)
+
+      if (error) throw error
+      byPhone = (data ?? []) as Array<LeadConversationRef & { lead_id?: number | null }>
+    }
+
+    const conversations = new Map<string, LeadConversationRef>()
+    for (const row of [...((byLead ?? []) as Array<LeadConversationRef & { lead_id?: number | null }>), ...byPhone]) {
+      if (!row?.id || conversations.has(row.id)) continue
+      if (row.lead_id != null && Number(row.lead_id) !== leadId) continue
+      conversations.set(row.id, {
+        id: row.id,
+        instance_id: row.instance_id ?? null,
+        assigned_to: row.assigned_to ?? null,
+        updated_at: row.updated_at ?? null,
+      })
+    }
+
+    const instanceIds = [...new Set(
+      [...conversations.values()]
+        .map(item => item.instance_id)
+        .filter((id): id is string => Boolean(id))
+    )]
+
+    if (instanceIds.length === 0) {
+      return { conversations: [...conversations.values()], instances: [] }
+    }
+
+    const { data: instances, error: instancesError } = await supabase
+      .from('whatsapp_life_instances')
+      .select('id, instance_name, phone_number, profile_name, profile_picture_url, status, assigned_user_id, available_to_all')
+      .eq('company_id', companyId)
+      .in('id', instanceIds)
+      .is('deleted_at', null)
+
+    if (instancesError) throw instancesError
+
+    return {
+      conversations: [...conversations.values()],
+      instances: (instances ?? []) as LeadChatInstance[],
     }
   }
 
