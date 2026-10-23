@@ -40,6 +40,15 @@ export interface GetMetaInstancesResponse {
   instances: MetaWhatsAppInstance[]
 }
 
+// ── POST /api/whatsapp/meta/instances/disconnect ─────────────────────────────
+// Resposta pública de desconexão. Sem token, PIN, ciphertext ou deleted_at.
+
+export interface MetaDisconnectInstanceResponse {
+  ok:          true
+  instance_id: string
+  status:      'disconnected'
+}
+
 // ── POST /api/whatsapp/meta/onboarding/start ─────────────────────────────────
 // Resposta inclui App ID, Config ID, state e expires_at (TTL da sessão).
 // App secret nunca aparece aqui.

@@ -320,3 +320,64 @@ describe('metaWhatsAppApi.sendTemplate — MVP4B payload', () => {
     }
   })
 })
+
+// =============================================================================
+// disconnectInstance — MVP5.A4
+// =============================================================================
+
+describe('metaWhatsAppApi.disconnectInstance', () => {
+  const COMPANY_ID  = 'aaaa0000-0000-0000-0000-000000000001'
+  const INSTANCE_ID = 'cccc0000-0000-0000-0000-000000000003'
+
+  it('envia POST com company_id e instance_id apenas', async () => {
+    const fetchSpy = mockFetch({
+      ok: true, instance_id: INSTANCE_ID, status: 'disconnected',
+    })
+    const result = await metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID)
+    expect(result).toEqual({ ok: true, instance_id: INSTANCE_ID, status: 'disconnected' })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe('/api/whatsapp/meta/instances/disconnect')
+    expect((init as RequestInit).method).toBe('POST')
+    const body = JSON.parse((init as RequestInit).body as string)
+    expect(body).toEqual({ company_id: COMPANY_ID, instance_id: INSTANCE_ID })
+    expect(body).not.toHaveProperty('access_token')
+    expect(body).not.toHaveProperty('phone_number_id')
+    expect(body).not.toHaveProperty('waba_id')
+    expect(body).not.toHaveProperty('status')
+  })
+
+  it('propaga 403 / 404 / 409 / 500 sem tratar como sucesso', async () => {
+    mockFetch({ error: 'Permissão insuficiente para esta operação' }, 403)
+    await expect(metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Permissão insuficiente para esta operação')
+
+    mockFetch({ error: 'instance_not_found' }, 404)
+    await expect(metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('instance_not_found')
+
+    mockFetch({ error: 'instance_state_conflict' }, 409)
+    await expect(metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('instance_state_conflict')
+
+    mockFetch({ error: 'internal_error' }, 500)
+    await expect(metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('internal_error')
+  })
+
+  it('200 malformado não é sucesso', async () => {
+    mockFetch({ ok: true, instance_id: INSTANCE_ID, status: 'connected' })
+    await expect(metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID))
+      .rejects.toThrow('Resposta inválida do servidor')
+  })
+
+  it('não envia token no body', async () => {
+    const fetchSpy = mockFetch({
+      ok: true, instance_id: INSTANCE_ID, status: 'disconnected',
+    })
+    await metaWhatsAppApi.disconnectInstance(COMPANY_ID, INSTANCE_ID)
+    const [, init] = fetchSpy.mock.calls[0]
+    const serialized = JSON.stringify(init)
+    expect(serialized).not.toMatch(/EAAAN|access_token_enc|registration_pin/)
+  })
+})

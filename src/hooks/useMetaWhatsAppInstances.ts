@@ -44,9 +44,15 @@ export function useMetaWhatsAppInstances(
   // ou refresh manual que foi substituído por outro antes de completar).
   const fetchCountRef = useRef(0)
 
+  // Empresa à qual instances/error/loading atuais pertencem.
+  // Sem isso, o primeiro render após trocar companyId ainda devolveria
+  // a lista da empresa anterior — useEffect só limpa no commit seguinte.
+  const appliedForRef = useRef<string | undefined>(undefined)
+
   const load = useCallback(() => {
     // companyId ausente → estado inicial limpo, sem chamar API
     if (!companyId) {
+      appliedForRef.current = undefined
       setInstances([])
       setLoading(false)
       setError(null)
@@ -65,10 +71,12 @@ export function useMetaWhatsAppInstances(
       .getInstances(companyId)
       .then((result) => {
         if (currentFetch !== fetchCountRef.current) return  // resposta stale — ignorar
+        appliedForRef.current = companyId
         setInstances(result)
       })
       .catch((err: unknown) => {
         if (currentFetch !== fetchCountRef.current) return  // resposta stale — ignorar
+        appliedForRef.current = companyId
         // Expor somente a mensagem sanitizada do service — nunca o erro bruto de rede.
         const message =
           err instanceof Error
@@ -78,6 +86,7 @@ export function useMetaWhatsAppInstances(
       })
       .finally(() => {
         if (currentFetch !== fetchCountRef.current) return  // resposta stale — ignorar
+        appliedForRef.current = companyId
         setLoading(false)
       })
   }, [companyId])
@@ -87,5 +96,12 @@ export function useMetaWhatsAppInstances(
     load()
   }, [load])
 
-  return { instances, loading, error, refresh: load }
+  const belongsToCurrent = appliedForRef.current === companyId
+
+  return {
+    instances: belongsToCurrent ? instances : [],
+    loading:   belongsToCurrent ? loading : Boolean(companyId),
+    error:     belongsToCurrent ? error : null,
+    refresh:   load,
+  }
 }

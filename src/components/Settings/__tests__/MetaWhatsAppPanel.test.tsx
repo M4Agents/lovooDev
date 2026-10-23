@@ -43,6 +43,7 @@ vi.mock('react-i18next', () => ({
 // ── Mocks dos três boundaries de hook ─────────────────────────────────────────
 
 vi.mock('../../../hooks/useCompany', () => ({ useCompany: vi.fn() }))
+vi.mock('../../../hooks/useAccessControl', () => ({ useAccessControl: vi.fn() }))
 vi.mock('../../../hooks/useMetaWhatsAppInstances', () => ({
   useMetaWhatsAppInstances: vi.fn(),
 }))
@@ -51,6 +52,7 @@ vi.mock('../../../hooks/useMetaOnboarding', () => ({
 }))
 
 import { useCompany }              from '../../../hooks/useCompany'
+import { useAccessControl }        from '../../../hooks/useAccessControl'
 import { useMetaWhatsAppInstances } from '../../../hooks/useMetaWhatsAppInstances'
 import { useMetaOnboarding }        from '../../../hooks/useMetaOnboarding'
 
@@ -111,6 +113,8 @@ beforeEach(() => {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(useCompany).mockReturnValue({ company: COMPANY } as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.mocked(useAccessControl).mockReturnValue({ canConnectMetaWhatsApp: true } as any)
   vi.mocked(useMetaWhatsAppInstances).mockReturnValue({
     instances: [],
     loading:   false,

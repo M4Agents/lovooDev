@@ -1121,6 +1121,24 @@
       "error": "Error",
       "token_revoked": "Token revocado"
     },
+    "disconnect": {
+      "action": "Desconectar",
+      "confirmTitle": "Desconectar WhatsApp Oficial",
+      "confirmDescription": "Esta acción interrumpirá los envíos nuevos por la integración oficial de Lovoo CRM en esta instancia.",
+      "confirmPreserve": "El historial de mensajes se conservará y el número seguirá vinculado a la empresa.",
+      "confirmMeta": "La desconexión en Lovoo no revoca la autorización en Meta.",
+      "confirmReconnect": "La reconexión aún no está disponible en esta versión.",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar desconexión",
+      "confirming": "Desconectando...",
+      "success": "Instancia desconectada. Los envíos por la API oficial quedaron interrumpidos.",
+      "errorInvalid": "Solicitud inválida. Actualice la página e inténtelo de nuevo.",
+      "errorSession": "Sesión inválida o expirada. Inicie sesión de nuevo.",
+      "errorForbidden": "No tiene permiso para desconectar esta instancia.",
+      "errorNotFound": "Instancia no encontrada o no disponible.",
+      "errorConflict": "El estado actual de la instancia no permite la desconexión.",
+      "errorGeneric": "No se pudo desconectar. Inténtelo de nuevo."
+    },
     "onboarding": {
       "preparing": "Preparando conexión...",
       "completing": "Finalizando..."

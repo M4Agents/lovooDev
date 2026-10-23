@@ -3,6 +3,7 @@
 //
 // Endpoints consumidos:
 //   GET  /api/whatsapp/meta/instances?company_id=<uuid>
+//   POST /api/whatsapp/meta/instances/disconnect
 //   POST /api/whatsapp/meta/onboarding/start
 //   POST /api/whatsapp/meta/onboarding/complete
 //   POST /api/whatsapp/meta/messages/send            ← MVP3D
@@ -46,6 +47,7 @@ import type {
   MetaTemplateParameter,
   MetaTemplateParameterValues,
   MetaWabaSelectionOption,
+  MetaDisconnectInstanceResponse,
   MetaWhatsAppInstance,
   MetaTemplateButton,
   MetaWhatsAppTemplate,
@@ -149,6 +151,50 @@ export const metaWhatsAppApi = {
     }
 
     return Array.isArray(data.instances) ? data.instances : []
+  },
+
+  /**
+   * Desconecta uma instância Meta no Lovoo (não revoga autorização na Meta).
+   *
+   * POST /api/whatsapp/meta/instances/disconnect
+   * body: { company_id, instance_id }
+   *
+   * company_id identifica o tenant solicitado — a autorização real é do backend.
+   * Nunca envia token, PIN, phone_number_id, waba_id ou status.
+   */
+  async disconnectInstance(
+    companyId:  string,
+    instanceId: string,
+  ): Promise<MetaDisconnectInstanceResponse> {
+    if (!companyId)  throw new Error('company_id é obrigatório')
+    if (!instanceId) throw new Error('instance_id é obrigatório')
+
+    const headers = await getAuthHeaders()
+    const res = await fetch('/api/whatsapp/meta/instances/disconnect', {
+      method:  'POST',
+      headers,
+      body:    JSON.stringify({
+        company_id:  companyId,
+        instance_id: instanceId,
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>) as MetaDisconnectInstanceResponse & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao desconectar instância Meta WhatsApp')
+    }
+
+    if (
+      data.ok !== true ||
+      typeof data.instance_id !== 'string' ||
+      !data.instance_id ||
+      data.status !== 'disconnected'
+    ) {
+      throw new Error('Resposta inválida do servidor')
+    }
+
+    return { ok: true, instance_id: data.instance_id, status: 'disconnected' }
   },
 
   /**

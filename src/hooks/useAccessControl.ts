@@ -188,6 +188,17 @@ export function useAccessControl() {
   // Esta capability é somente UX — o backend valida a relação parent→client.
   const canProvisionMetaWhatsApp = isSaaSAdmin || isSystemAdmin
 
+  // Conectar/desconectar instância Meta: espelha META_CONNECT_ROLES do backend
+  // (validateMetaCaller). seller e manager visualizam o painel (GET) mas NÃO
+  // veem a ação de desconexão. Partner entra só para UX — assignment ativo é
+  // validado obrigatoriamente no backend. Sem matriz paralela.
+  const canConnectMetaWhatsApp =
+    currentRole === 'admin'        ||
+    currentRole === 'super_admin'  ||
+    currentRole === 'system_admin' ||
+    currentRole === 'partner'      ||
+    isImpersonating
+
   // ── Integração Nuvemshop ────────────────────────────────────
   // Espelha a matriz do backend (validateNuvemshopCaller.js):
   //   VIEW_DATA_ROLES      → ver dados NS em Leads e Oportunidades (inclui seller)
@@ -468,6 +479,9 @@ export function useAccessControl() {
 
     // Meta WhatsApp Cloud API — provisionamento administrativo
     canProvisionMetaWhatsApp,
+
+    // Meta WhatsApp Cloud API — conectar / desconectar instância
+    canConnectMetaWhatsApp,
 
     // Integração Nuvemshop
     canViewNuvemshopData,

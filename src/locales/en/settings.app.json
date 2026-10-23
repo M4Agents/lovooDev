@@ -1121,6 +1121,24 @@
       "error": "Error",
       "token_revoked": "Token revoked"
     },
+    "disconnect": {
+      "action": "Disconnect",
+      "confirmTitle": "Disconnect Official WhatsApp",
+      "confirmDescription": "This action will stop new outbound messages through Lovoo CRM official integration on this instance.",
+      "confirmPreserve": "Message history will be kept and the number will remain linked to the company.",
+      "confirmMeta": "Disconnecting in Lovoo does not revoke Meta authorization.",
+      "confirmReconnect": "Reconnection is not available in this version.",
+      "cancel": "Cancel",
+      "confirm": "Confirm disconnect",
+      "confirming": "Disconnecting...",
+      "success": "Instance disconnected. Official API outbound messages are now blocked.",
+      "errorInvalid": "Invalid request. Refresh the page and try again.",
+      "errorSession": "Invalid or expired session. Sign in again.",
+      "errorForbidden": "You do not have permission to disconnect this instance.",
+      "errorNotFound": "Instance not found or unavailable.",
+      "errorConflict": "The current instance state does not allow disconnect.",
+      "errorGeneric": "Could not disconnect. Try again."
+    },
     "onboarding": {
       "preparing": "Preparing connection...",
       "completing": "Finalizing..."

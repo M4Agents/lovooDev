@@ -18,11 +18,14 @@
 //   - zero window.FB / SDK Meta / Uazapi / feature flag como autorização
 // =============================================================================
 
+import { useEffect, useRef, useState }     from 'react'
 import { useTranslation }                  from 'react-i18next'
-import { AlertCircle, CheckCircle2, Loader2, MessageCircle, Phone, RefreshCw, Wifi, WifiOff } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, MessageCircle, Phone, RefreshCw, Unlink, Wifi, WifiOff, X } from 'lucide-react'
+import { useAccessControl }                from '../../hooks/useAccessControl'
 import { useCompany }                      from '../../hooks/useCompany'
 import { useMetaOnboarding }              from '../../hooks/useMetaOnboarding'
 import { useMetaWhatsAppInstances }        from '../../hooks/useMetaWhatsAppInstances'
+import { metaWhatsAppApi }                 from '../../services/metaWhatsAppApi'
 import type { MetaWhatsAppInstance }       from '../../types/meta-whatsapp'
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -70,17 +73,27 @@ function StatusBadge({ status }: StatusBadgeProps) {
 
 // ── Card de instância ─────────────────────────────────────────────────────────
 
-function InstanceCard({ instance }: { instance: MetaWhatsAppInstance }) {
+function InstanceCard({
+  instance,
+  canDisconnect,
+  onRequestDisconnect,
+}: {
+  instance: MetaWhatsAppInstance
+  canDisconnect: boolean
+  onRequestDisconnect: (instance: MetaWhatsAppInstance) => void
+}) {
+  const { t } = useTranslation('settings.app')
   const displayName = instance.display_name ?? instance.verified_name ?? '—'
+  const showDisconnect = canDisconnect && instance.status === 'connected'
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100">
+    <div className="flex items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-xl">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100 shrink-0">
           <MessageCircle className="w-5 h-5 text-green-600" />
         </div>
-        <div>
-          <p className="text-sm font-medium text-slate-900">{displayName}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-900 truncate">{displayName}</p>
           {instance.phone_number && (
             <p className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
               <Phone className="w-3 h-3" />
@@ -89,7 +102,128 @@ function InstanceCard({ instance }: { instance: MetaWhatsAppInstance }) {
           )}
         </div>
       </div>
-      <StatusBadge status={instance.status} />
+      <div className="flex items-center gap-2 shrink-0">
+        <StatusBadge status={instance.status} />
+        {showDisconnect && (
+          <button
+            type="button"
+            onClick={() => onRequestDisconnect(instance)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+          >
+            <Unlink className="w-3.5 h-3.5" />
+            {t('metaWhatsApp.disconnect.action')}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function mapDisconnectError(message: string, translate: (key: string) => string): string {
+  if (message === 'invalid_request' || message === 'company_id inválido') {
+    return translate('disconnect.errorInvalid')
+  }
+  if (
+    message === 'Autenticação necessária' ||
+    message === 'Sessão inválida ou expirada'
+  ) {
+    return translate('disconnect.errorSession')
+  }
+  if (
+    message === 'instance_not_found'
+  ) {
+    return translate('disconnect.errorNotFound')
+  }
+  if (message === 'instance_state_conflict') {
+    return translate('disconnect.errorConflict')
+  }
+  if (
+    message === 'Permissão insuficiente para esta operação' ||
+    message === 'Partner sem assignment ativo para esta empresa' ||
+    message === 'Meta WhatsApp não habilitado para esta empresa' ||
+    message === 'Acesso negado a esta empresa' ||
+    message === 'Empresa não encontrada ou sem acesso'
+  ) {
+    return translate('disconnect.errorForbidden')
+  }
+  return translate('disconnect.errorGeneric')
+}
+
+function shouldRefreshAfterDisconnectError(message: string): boolean {
+  return message === 'instance_not_found' || message === 'instance_state_conflict'
+}
+
+function DisconnectConfirmModal({
+  loading,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  loading: boolean
+  error:   string | null
+  onConfirm: () => void
+  onCancel:  () => void
+}) {
+  const { t } = useTranslation('settings.app')
+  const mw = (key: string) => t(`metaWhatsApp.${key}`)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meta-disconnect-title"
+        className="bg-white rounded-xl shadow-xl w-full max-w-md"
+      >
+        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <h2 id="meta-disconnect-title" className="text-lg font-semibold text-slate-900">
+            {mw('disconnect.confirmTitle')}
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="text-slate-400 hover:text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Fechar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-3">
+          <p className="text-sm text-slate-600">{mw('disconnect.confirmDescription')}</p>
+          <p className="text-sm text-slate-600">{mw('disconnect.confirmPreserve')}</p>
+          <p className="text-sm text-slate-600">{mw('disconnect.confirmMeta')}</p>
+          <p className="text-sm text-slate-500">{mw('disconnect.confirmReconnect')}</p>
+          {error && (
+            <p className="text-sm text-red-600" role="alert">{error}</p>
+          )}
+        </div>
+
+        <div className="flex gap-3 p-6 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {mw('disconnect.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {mw('disconnect.confirming')}
+              </span>
+            ) : mw('disconnect.confirm')}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -100,8 +234,72 @@ export function MetaWhatsAppPanel() {
   const { t }                             = useTranslation('settings.app')
   const mw = (key: string, opts?: Record<string, unknown>) =>
     t(`metaWhatsApp.${key}`, opts)
+  const { canConnectMetaWhatsApp }        = useAccessControl()
   const { company }                       = useCompany()
   const { instances, loading, error, refresh } = useMetaWhatsAppInstances(company?.id)
+  const [pendingInstance, setPendingInstance] = useState<MetaWhatsAppInstance | null>(null)
+  const [disconnecting, setDisconnecting]     = useState(false)
+  const [disconnectError, setDisconnectError] = useState<string | null>(null)
+  const [disconnectSuccess, setDisconnectSuccess] = useState<string | null>(null)
+
+  // Geração do contexto de desconexão. Incrementa a cada troca de empresa
+  // para que callbacks assíncronos da empresa anterior não atualizem a UI.
+  const disconnectGenerationRef = useRef(0)
+  // Guard síncrono: o estado `disconnecting` só bloqueia no próximo render.
+  const disconnectInFlightRef   = useRef(false)
+
+  useEffect(() => {
+    disconnectGenerationRef.current += 1
+    disconnectInFlightRef.current = false
+    setPendingInstance(null)
+    setDisconnecting(false)
+    setDisconnectError(null)
+    setDisconnectSuccess(null)
+  }, [company?.id])
+
+  const requestDisconnect = (instance: MetaWhatsAppInstance) => {
+    if (disconnecting || disconnectInFlightRef.current) return
+    setDisconnectError(null)
+    setDisconnectSuccess(null)
+    setPendingInstance(instance)
+  }
+
+  const cancelDisconnect = () => {
+    if (disconnecting || disconnectInFlightRef.current) return
+    setPendingInstance(null)
+    setDisconnectError(null)
+  }
+
+  const confirmDisconnect = async () => {
+    if (!pendingInstance || !company?.id || disconnectInFlightRef.current) return
+
+    disconnectInFlightRef.current = true
+    const startedGeneration = disconnectGenerationRef.current
+    const startedCompanyId  = company.id
+    const startedInstanceId = pendingInstance.id
+
+    setDisconnecting(true)
+    setDisconnectError(null)
+    try {
+      await metaWhatsAppApi.disconnectInstance(startedCompanyId, startedInstanceId)
+      if (disconnectGenerationRef.current !== startedGeneration) return
+      setPendingInstance(null)
+      setDisconnectSuccess(mw('disconnect.success'))
+      refresh()
+    } catch (err: unknown) {
+      if (disconnectGenerationRef.current !== startedGeneration) return
+      const message = err instanceof Error ? err.message : 'internal_error'
+      setDisconnectError(mapDisconnectError(message, mw))
+      if (shouldRefreshAfterDisconnectError(message)) {
+        refresh()
+      }
+    } finally {
+      if (disconnectGenerationRef.current === startedGeneration) {
+        disconnectInFlightRef.current = false
+        setDisconnecting(false)
+      }
+    }
+  }
 
   // Onboarding habilitado somente quando company presente, GET concluído e sem erro
   const {
@@ -313,12 +511,32 @@ export function MetaWhatsAppPanel() {
         </button>
       </div>
 
+      {disconnectSuccess && (
+        <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2" role="status">
+          {disconnectSuccess}
+        </p>
+      )}
+
       {/* Lista */}
       <div className="space-y-2">
         {instances.map((instance) => (
-          <InstanceCard key={instance.id} instance={instance} />
+          <InstanceCard
+            key={instance.id}
+            instance={instance}
+            canDisconnect={canConnectMetaWhatsApp}
+            onRequestDisconnect={requestDisconnect}
+          />
         ))}
       </div>
+
+      {pendingInstance && (
+        <DisconnectConfirmModal
+          loading={disconnecting}
+          error={disconnectError}
+          onConfirm={() => { void confirmDisconnect() }}
+          onCancel={cancelDisconnect}
+        />
+      )}
 
       {/* Botão conectar outro número */}
       <button
