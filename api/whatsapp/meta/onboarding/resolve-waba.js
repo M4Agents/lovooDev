@@ -19,7 +19,7 @@
 //   H. RBAC revalidation via validateMetaCaller (membership + role + feature flag)
 //   I. Bounds check: selected_index em [0, opts.length)
 //   J. Extrair selected = payload.opts[selected_index]
-//   K. Persistência atômica via rpc_create_meta_whatsapp_connection
+//   K. Persistência via connectOrReuseMetaWhatsAppConnection (token v2 + oid)
 //   L. Resposta sanitizada (mesmo shape de /complete)
 //
 // Segurança:
@@ -44,6 +44,10 @@
 import { getSupabaseAdmin }                         from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_CONNECT_ROLES }   from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { decryptSelectionPayload }                  from '../../../lib/meta-whatsapp/selectionTokenCrypto.js';
+import { connectOrReuseMetaWhatsAppConnection }     from '../../../lib/meta-whatsapp/connectOrReuseMetaWhatsAppConnection.js';
+
+// UUID v4 básico — mesma regex de complete.js / validateMetaCaller.js.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Campos que NÃO devem estar presentes no body — qualquer um rejeita com 400.
 // Previne que o cliente tente controlar tenant, identidade ou credenciais.
@@ -53,6 +57,9 @@ const _FORBIDDEN_BODY_FIELDS = new Set([
   'waba_id',
   'phone_number_id',
   'access_token',
+  'oid',
+  'onboarding_id',
+  'instance_id',
 ]);
 
 // =============================================================================
@@ -85,6 +92,22 @@ function parseEncVersion(enc) {
   const vNum = Number(vStr);
   if (!Number.isInteger(vNum) || vNum < 1) return null;
   return vNum;
+}
+
+/**
+ * Traduz o erro do helper ({ http, publicError }) para a resposta HTTP.
+ * Não serializa o Error nem expõe SQLSTATE, stack ou mensagem SQL.
+ * @private
+ */
+function mapHelperError(err) {
+  if (
+    err &&
+    typeof err.http === 'number' &&
+    typeof err.publicError === 'string'
+  ) {
+    return { status: err.http, code: err.publicError };
+  }
+  return { status: 500, code: 'internal_error' };
 }
 
 // =============================================================================
@@ -158,6 +181,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_continuation' });
   }
 
+  // Cutover: somente payload v2 com oid autenticado. Sem inventar oid.
+  // Tokens v1 (sem oid) e versões inesperadas → 400 invalid_continuation.
+  if (payload.v !== 2 || typeof payload.oid !== 'string' || !UUID_RE.test(payload.oid)) {
+    return res.status(400).json({ error: 'invalid_continuation' });
+  }
+
   // ── G. uid binding ─────────────────────────────────────────────────────────
   // O token é bound ao usuário que iniciou o /complete.
   // Outro usuário com JWT válido não pode usar o token — previne CSRF cross-user.
@@ -193,38 +222,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_continuation' });
   }
 
-  // ── L. Persistência atômica via RPC ──────────────────────────────────────
-  // Mesmo RPC de /complete — INSERT atômico em instances + credentials.
-  // company_id = payload.cid (do token AEAD — não do body).
-  // connected_by = user.id (do JWT — não do body).
-  // access_token_enc = payload.enc (ciphertext original — nunca em plaintext).
-  const { data: rpcRows, error: rpcErr } = await svc.rpc(
-    'rpc_create_meta_whatsapp_connection',
-    {
-      p_company_id:         payload.cid,
-      p_connected_by:       user.id,
-      p_waba_id:            selected.w,
-      p_phone_number_id:    selected.p,
-      p_phone_number:       selected.d,
-      p_verified_name:      selected.n,
-      p_display_name:       null,
-      p_access_token_enc:   payload.enc,
-      p_encryption_version: encVersion,
-    },
-  );
-
-  if (rpcErr) {
-    // 23505 — phone_number_id já conectado (ativo).
-    // Mesmo comportamento de /complete: sem oracle cross-tenant.
-    if (rpcErr.code === '23505') {
-      return res.status(409).json({ error: 'phone_number_already_connected' });
-    }
-    return res.status(500).json({ error: 'internal_error' });
-  }
-
-  const instance = Array.isArray(rpcRows) ? rpcRows[0] : null;
-  if (!instance) {
-    return res.status(500).json({ error: 'internal_error' });
+  // ── L. Persistência via helper (RPC dispatcher) ───────────────────────────
+  // company_id = payload.cid (token AEAD). connected_by = JWT. oid = payload.oid.
+  // Sem fallback para rpc_create_meta_whatsapp_connection.
+  let instance;
+  try {
+    instance = await connectOrReuseMetaWhatsAppConnection(svc, {
+      companyId:          payload.cid,
+      connectedBy:        user.id,
+      onboardingId:       payload.oid,
+      wabaId:             selected.w,
+      phoneNumberId:      selected.p,
+      phoneNumber:        selected.d ?? null,
+      verifiedName:       selected.n ?? null,
+      displayName:        null,
+      accessTokenEnc:     payload.enc,
+      encryptionVersion:  encVersion,
+    });
+  } catch (err) {
+    const mapped = mapHelperError(err);
+    return res.status(mapped.status).json({ error: mapped.code });
   }
 
   // ── M. Resposta sanitizada ─────────────────────────────────────────────────

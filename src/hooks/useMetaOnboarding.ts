@@ -135,6 +135,8 @@ function mapSelectionError(code: string): string {
   switch (code) {
     case 'invalid_continuation':
       return 'Seleção expirada. Inicie a conexão novamente.'
+    case 'authorization_stale':
+      return 'Esta autorização expirou. Inicie a conexão novamente.'
     case 'phone_number_already_connected':
       return 'Este número já está conectado. Verifique a lista de instâncias.'
     case 'invalid_selection':
@@ -375,6 +377,12 @@ export function useMetaOnboarding(
         isCompletingRef.current = false
         pendingRef.current      = {}
         sessionRef.current      = null             // state consumido — não reutilizar
+        const code = err instanceof Error ? err.message : ''
+        if (code === 'authorization_stale') {
+          setOnboardingError(mapSelectionError(code))
+          setStepAndRef('idle')
+          return
+        }
         setOnboardingError(err instanceof Error ? err.message : 'Erro ao finalizar conexão')
         // Nova sessão somente se ainda habilitado — evitar /start em painel descartado
         if (enabledRef.current) void startNewSession(myGen)

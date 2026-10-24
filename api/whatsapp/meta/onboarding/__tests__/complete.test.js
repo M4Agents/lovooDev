@@ -168,10 +168,10 @@ import handler from '../complete.js';
 // Fixtures
 // =============================================================================
 
-const FAKE_USER_ID       = 'aaaa0000-0000-0000-0000-000000000001';
-const FAKE_COMPANY_ID    = 'bbbb0000-0000-0000-0000-000000000002';
-const FAKE_STATE         = 'cccc0000-0000-0000-0000-000000000003';
-const FAKE_INSTANCE_ID   = 'dddd0000-0000-0000-0000-000000000004';
+const FAKE_USER_ID       = 'aaaa0000-0000-4000-8000-000000000001';
+const FAKE_COMPANY_ID    = 'bbbb0000-0000-4000-8000-000000000002';
+const FAKE_STATE         = 'cccc0000-0000-4000-8000-000000000003';
+const FAKE_INSTANCE_ID   = 'dddd0000-0000-4000-8000-000000000004';
 const FAKE_WABA_ID       = '123456789';
 const FAKE_PHONE_ID      = '987654321';
 const FAKE_PHONE_NUMBER  = '+55 11 91234-5678';
@@ -819,7 +819,7 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
   // ──────────────────────────────────────────────────────────────────────────
   describe('T-41: companyId vem exclusivamente do claim, não do body', () => {
     it('guard recebe o company_id do claim', async () => {
-      const COMPANY_FROM_STATE = 'eeee1111-0000-0000-0000-000000000099';
+      const COMPANY_FROM_STATE = 'eeee1111-0000-4000-8000-000000000099';
       setupAuthOk();
       const chain = makeClaimChain({ company_id: COMPANY_FROM_STATE });
       mockSvc.from = vi.fn().mockReturnValue(chain);
@@ -837,7 +837,7 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
 
   describe('T-42: companyId passado à RPC via p_company_id', () => {
     it('RPC recebe o mesmo company_id do claim', async () => {
-      const COMPANY_FROM_STATE = 'eeee2222-0000-0000-0000-000000000099';
+      const COMPANY_FROM_STATE = 'eeee2222-0000-4000-8000-000000000099';
       setupAuthOk();
       const chain = makeClaimChain({ company_id: COMPANY_FROM_STATE });
       mockSvc.from = vi.fn().mockReturnValue(chain);
@@ -1225,16 +1225,18 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
   // ──────────────────────────────────────────────────────────────────────────
   // T-72 / T-73 / T-74: RPC params
   // ──────────────────────────────────────────────────────────────────────────
-  describe('T-72: RPC recebe todos os 9 parâmetros corretos', () => {
-    it('todos os parâmetros com valores certos', async () => {
+  describe('T-72: helper chama a RPC dispatcher com os 10 parâmetros', () => {
+    it('todos os parâmetros com valores certos e sem a RPC antiga', async () => {
       setupHappyPath();
       await handler(makeReq(), makeRes());
 
       expect(mockSvc.rpc).toHaveBeenCalledOnce();
       const [rpcName, rpcParams] = mockSvc.rpc.mock.calls[0];
-      expect(rpcName).toBe('rpc_create_meta_whatsapp_connection');
+      expect(rpcName).toBe('rpc_connect_or_reuse_meta_whatsapp_connection');
+      expect(rpcName).not.toBe('rpc_create_meta_whatsapp_connection');
       expect(rpcParams.p_company_id).toBe(FAKE_COMPANY_ID);
       expect(rpcParams.p_connected_by).toBe(FAKE_USER_ID);
+      expect(rpcParams.p_onboarding_id).toBe(FAKE_STATE);
       expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID);
       expect(rpcParams.p_phone_number_id).toBe(FAKE_PHONE_ID);
       expect(rpcParams.p_phone_number).toBe(FAKE_PHONE_NUMBER);
@@ -1242,6 +1244,18 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       expect(rpcParams.p_display_name).toBeNull();
       expect(rpcParams.p_access_token_enc).toBe(FAKE_CIPHERTEXT);
       expect(rpcParams.p_encryption_version).toBe(1);
+      expect(Object.keys(rpcParams)).toEqual([
+        'p_company_id',
+        'p_connected_by',
+        'p_onboarding_id',
+        'p_waba_id',
+        'p_phone_number_id',
+        'p_phone_number',
+        'p_verified_name',
+        'p_display_name',
+        'p_access_token_enc',
+        'p_encryption_version',
+      ]);
     });
   });
 
@@ -1288,6 +1302,27 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
       expect(bodyStr).not.toContain('SECRET_SQL_CANARY');
       expect(bodyStr).not.toContain('duplicate key');
       expect(bodyStr).not.toContain('idx_mwi');
+      expect(bodyStr).not.toContain(FAKE_CIPHERTEXT);
+    });
+  });
+
+  describe('T-75b: helper authorization_stale → 409 authorization_stale', () => {
+    it('retorna 409 sem vazar SQL ou ciphertext', async () => {
+      setupHappyPath();
+      mockSvc.rpc.mockResolvedValue({
+        data:  null,
+        error: { code: 'P0003', message: 'authorization_stale' },
+      });
+
+      const res = makeRes();
+      await handler(makeReq(), res);
+
+      expect(res._status).toBe(409);
+      expect(res._body.error).toBe('authorization_stale');
+      const bodyStr = JSON.stringify(res._body);
+      expect(bodyStr).not.toContain('P0003');
+      expect(bodyStr).not.toContain(FAKE_CIPHERTEXT);
+      expect(bodyStr).not.toContain(FAKE_STATE);
     });
   });
 
@@ -1677,7 +1712,8 @@ describe('POST /api/whatsapp/meta/onboarding/complete', () => {
         // encryptSelectionPayload chamado com payload que inclui uid, cid e opts
         expect(mockEncryptSelectionPayload).toHaveBeenCalledTimes(1);
         const selPayload = mockEncryptSelectionPayload.mock.calls[0][0];
-        expect(selPayload.v).toBe(1);
+        expect(selPayload.v).toBe(2);
+        expect(selPayload.oid).toBe(FAKE_STATE);
         expect(selPayload.uid).toBe(FAKE_USER_ID);
         expect(selPayload.cid).toBe(FAKE_COMPANY_ID);
         expect(selPayload.enc).toBe(FAKE_CIPHERTEXT);

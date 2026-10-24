@@ -60,10 +60,11 @@ import handler from '../resolve-waba.js';
 // Fixtures
 // =============================================================================
 
-const FAKE_USER_ID       = 'aaaa0000-0000-0000-0000-000000000001';
-const FAKE_USER_ID_OTHER = 'aaaa0000-0000-0000-0000-000000000099';
-const FAKE_COMPANY_ID    = 'bbbb0000-0000-0000-0000-000000000002';
-const FAKE_INSTANCE_ID   = 'dddd0000-0000-0000-0000-000000000004';
+const FAKE_USER_ID       = 'aaaa0000-0000-4000-8000-000000000001';
+const FAKE_USER_ID_OTHER = 'aaaa0000-0000-4000-8000-000000000099';
+const FAKE_COMPANY_ID    = 'bbbb0000-0000-4000-8000-000000000002';
+const FAKE_ONBOARDING_ID = 'cccc0000-0000-4000-8000-000000000003';
+const FAKE_INSTANCE_ID   = 'dddd0000-0000-4000-8000-000000000004';
 const FAKE_WABA_ID       = '123456789';
 const FAKE_WABA_ID_2     = '999888777666555';
 const FAKE_PHONE_ID      = '987654321';
@@ -84,9 +85,10 @@ const FAKE_RPC_ROW = {
 
 // Payload decriptado típico (dois candidatos)
 const makePayload = (overrides = {}) => ({
-  v:    1,
+  v:    2,
   uid:  FAKE_USER_ID,
   cid:  FAKE_COMPANY_ID,
+  oid:  FAKE_ONBOARDING_ID,
   exp:  Date.now() + 10 * 60 * 1000,
   opts: [
     { w: FAKE_WABA_ID,   p: FAKE_PHONE_ID,   d: FAKE_PHONE_NUMBER, n: FAKE_VERIFIED_NAME },
@@ -259,7 +261,10 @@ describe('POST /api/whatsapp/meta/onboarding/resolve-waba', () => {
 
   // ── R4: Campos proibidos no body → 400 ────────────────────────────────────
   describe('R4: campos proibidos → 400 invalid_request', () => {
-    const forbidden = ['company_id', 'user_id', 'waba_id', 'phone_number_id', 'access_token'];
+    const forbidden = [
+      'company_id', 'user_id', 'waba_id', 'phone_number_id', 'access_token',
+      'oid', 'onboarding_id', 'instance_id',
+    ];
 
     for (const field of forbidden) {
       it(`${field} no body → 400`, async () => {
@@ -316,6 +321,41 @@ describe('POST /api/whatsapp/meta/onboarding/resolve-waba', () => {
       expect(res._status).toBe(400);
       expect(res._body.error).toBe('invalid_continuation');
       // RPC não deve ser chamada
+      expect(mockSvc.rpc).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Cutover: token v1 / sem oid → 400 invalid_continuation ───────────────
+  describe('cutover: token v1 ou sem oid → 400 invalid_continuation', () => {
+    it('payload v:1 → 400 e helper/RPC não são chamados', async () => {
+      setupAuthOk();
+      setupDecryptOk({ v: 1, oid: undefined });
+      setupGuardOk();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toBe('invalid_continuation');
+      expect(mockSvc.rpc).not.toHaveBeenCalled();
+      expect(mockValidateMetaCaller).not.toHaveBeenCalled();
+    });
+
+    it('payload v:2 sem oid → 400 invalid_continuation', async () => {
+      setupAuthOk();
+      setupDecryptOk({ v: 2, oid: undefined });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toBe('invalid_continuation');
+      expect(mockSvc.rpc).not.toHaveBeenCalled();
+    });
+
+    it('payload v:2 com oid inválido → 400 invalid_continuation', async () => {
+      setupAuthOk();
+      setupDecryptOk({ v: 2, oid: 'not-a-uuid' });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toBe('invalid_continuation');
       expect(mockSvc.rpc).not.toHaveBeenCalled();
     });
   });
@@ -415,7 +455,7 @@ describe('POST /api/whatsapp/meta/onboarding/resolve-waba', () => {
 
   // ── R13: index válido → RPC parâmetros corretos ────────────────────────────
   describe('R13: index válido → RPC recebe parâmetros corretos', () => {
-    it('index 0 → RPC usa opts[0] com todos os 9 parâmetros', async () => {
+    it('index 0 → helper usa opts[0] e oid do token', async () => {
       setupHappyPath();
       const res = makeRes();
       await handler(makeReq({ body: { continuation_token: FAKE_TOKEN, selected_index: 0 } }), res);
@@ -423,7 +463,11 @@ describe('POST /api/whatsapp/meta/onboarding/resolve-waba', () => {
       expect(res._status).toBe(200);
       expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
       const [rpcName, rpcParams] = mockSvc.rpc.mock.calls[0];
-      expect(rpcName).toBe('rpc_create_meta_whatsapp_connection');
+      expect(rpcName).toBe('rpc_connect_or_reuse_meta_whatsapp_connection');
+      expect(rpcName).not.toBe('rpc_create_meta_whatsapp_connection');
+      expect(rpcParams.p_company_id).toBe(FAKE_COMPANY_ID);
+      expect(rpcParams.p_connected_by).toBe(FAKE_USER_ID);
+      expect(rpcParams.p_onboarding_id).toBe(FAKE_ONBOARDING_ID);
       expect(rpcParams.p_waba_id).toBe(FAKE_WABA_ID);
       expect(rpcParams.p_phone_number_id).toBe(FAKE_PHONE_ID);
       expect(rpcParams.p_phone_number).toBe(FAKE_PHONE_NUMBER);
@@ -533,6 +577,25 @@ describe('POST /api/whatsapp/meta/onboarding/resolve-waba', () => {
       expect(res._status).toBe(409);
       expect(res._body.error).toBe('phone_number_already_connected');
       expect(JSON.stringify(res._body)).not.toContain('23505');
+    });
+  });
+
+  describe('R17b: authorization_stale → 409 sem vazar SQL', () => {
+    it('P0003 authorization_stale → 409 authorization_stale', async () => {
+      setupAuthOk();
+      setupDecryptOk();
+      setupGuardOk();
+      setupRpcError('P0003', 'authorization_stale');
+
+      const res = makeRes();
+      await handler(makeReq(), res);
+
+      expect(res._status).toBe(409);
+      expect(res._body.error).toBe('authorization_stale');
+      const bodyStr = JSON.stringify(res._body);
+      expect(bodyStr).not.toContain('P0003');
+      expect(bodyStr).not.toContain(FAKE_CIPHERTEXT);
+      expect(bodyStr).not.toContain(FAKE_ONBOARDING_ID);
     });
   });
 

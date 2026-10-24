@@ -16,7 +16,8 @@
 //  10. WABA resolution (normal: body; discovery: debug_token) + phone listing
 //  11. Phone number resolution
 //  12. Token encryption (AES-256-GCM via encryptMetaToken)
-//  13. Persistência atômica via rpc_create_meta_whatsapp_connection
+//  13. Persistência via connectOrReuseMetaWhatsAppConnection
+//      (RPC dispatcher; sem fallback para rpc_create_meta_whatsapp_connection)
 //  14. Resposta sanitizada
 //
 // Segurança:
@@ -43,6 +44,7 @@ import { validateMetaCaller, META_CONNECT_ROLES }     from '../../../lib/meta-wh
 import { exchangeCodeForToken, listWabaPhoneNumbers, discoverAuthorizedWabas } from '../../../lib/meta-whatsapp/graphClient.js';
 import { encryptMetaToken }                           from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { encryptSelectionPayload }                    from '../../../lib/meta-whatsapp/selectionTokenCrypto.js';
+import { connectOrReuseMetaWhatsAppConnection }       from '../../../lib/meta-whatsapp/connectOrReuseMetaWhatsAppConnection.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
@@ -112,6 +114,22 @@ function mapGraphError(err) {
   }
   // code_exchange_failed, code_exchange_no_token, code_exchange_network_error,
   // graph_timeout, graph_network_error, graph_invalid_response → 500
+  return { status: 500, code: 'internal_error' };
+}
+
+/**
+ * Traduz o erro do helper ({ http, publicError }) para a resposta HTTP.
+ * Não serializa o Error nem expõe SQLSTATE, stack ou mensagem SQL.
+ * @private
+ */
+function mapHelperError(err) {
+  if (
+    err &&
+    typeof err.http === 'number' &&
+    typeof err.publicError === 'string'
+  ) {
+    return { status: err.http, code: err.publicError };
+  }
   return { status: 500, code: 'internal_error' };
 }
 
@@ -495,9 +513,10 @@ export default async function handler(req, res) {
         let _continuationToken;
         try {
           _continuationToken = encryptSelectionPayload({
-            v:    1,
+            v:    2,
             uid:  user.id,
             cid:  companyId,
+            oid:  state,
             exp:  Date.now() + 10 * 60 * 1000,
             opts: _uniqueCandidates,
             enc:  _selEnc,
@@ -568,51 +587,44 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
-  // ── 13. Persistência atômica via RPC ──────────────────────────────────────
-  // INSERT atômico em meta_whatsapp_instances + meta_whatsapp_credentials.
-  // RPC retorna TABLE → Supabase JS entrega array; esperamos exatamente 1 row.
-  //
-  // 23505 detectado via rpcErr.code (campo estruturado PostgreSQL) — não regex.
-  // Nenhum detalhe sobre quem possui o número é retornado (anti-oracle cross-tenant).
+  // ── 13. Persistência via helper (RPC dispatcher) ───────────────────────────
+  // companyId / connectedBy / onboardingId vêm do claim + JWT — nunca do body.
+  // Nenhum detalhe sobre quem possui o número é retornado (anti-oracle).
   const _rpcT = Date.now();
   logPhase(_cid, 'connection_rpc_start');
-  const { data: rpcRows, error: rpcErr } = await svc.rpc(
-    'rpc_create_meta_whatsapp_connection',
-    {
-      p_company_id:         companyId,
-      p_connected_by:       user.id,
-      p_waba_id:            resolvedWabaId,
-      p_phone_number_id:    selectedPhone.id,
-      p_phone_number:       selectedPhone.displayPhoneNumber,
-      p_verified_name:      selectedPhone.verifiedName,
-      p_display_name:       null,
-      p_access_token_enc:   ciphertext,
-      p_encryption_version: 1,
-    },
-  );
-
-  if (rpcErr) {
-    // Unique violation (23505) — phone_number_id já conectado (ativo).
-    // Mesmo erro público independente de qual company possui o número.
-    if (rpcErr.code === '23505') {
-      logPhase(_cid, 'connection_rpc_result', { success: false, safeErrorCategory: 'rpc_conflict', durationMs: Date.now() - _rpcT });
-      return res.status(409).json({ error: 'phone_number_already_connected' });
-    }
-    logPhase(_cid, 'connection_rpc_result', { success: false, safeErrorCategory: 'rpc_error', durationMs: Date.now() - _rpcT });
-    return res.status(500).json({ error: 'internal_error' });
-  }
-
-  // Garantia defensiva: RPC deve retornar exatamente 1 row.
-  const instance = Array.isArray(rpcRows) ? rpcRows[0] : null;
-  if (!instance) {
-    logPhase(_cid, 'connection_rpc_result', { success: false, safeErrorCategory: 'rpc_no_rows', durationMs: Date.now() - _rpcT });
-    return res.status(500).json({ error: 'internal_error' });
+  let instance;
+  try {
+    instance = await connectOrReuseMetaWhatsAppConnection(svc, {
+      companyId,
+      connectedBy:        user.id,
+      onboardingId:       state,
+      wabaId:             resolvedWabaId,
+      phoneNumberId:      selectedPhone.id,
+      phoneNumber:        selectedPhone.displayPhoneNumber ?? null,
+      verifiedName:       selectedPhone.verifiedName ?? null,
+      displayName:        null,
+      accessTokenEnc:     ciphertext,
+      encryptionVersion:  1,
+    });
+  } catch (err) {
+    const mapped = mapHelperError(err);
+    const category = mapped.code === 'phone_number_already_connected'
+      ? 'rpc_conflict'
+      : mapped.code === 'authorization_stale'
+        ? 'authorization_stale'
+        : 'rpc_error';
+    logPhase(_cid, 'connection_rpc_result', {
+      success: false,
+      safeErrorCategory: category,
+      durationMs: Date.now() - _rpcT,
+    });
+    return res.status(mapped.status).json({ error: mapped.code });
   }
   logPhase(_cid, 'connection_rpc_result', { success: true, durationMs: Date.now() - _rpcT });
 
   // ── 14. Resposta sanitizada ───────────────────────────────────────────────
   // Campos NUNCA retornados: accessToken, ciphertext, access_token_enc,
-  //   company_id, connected_by (user.id), encryption_version.
+  //   company_id, connected_by (user.id), encryption_version, onboarding_id.
   return res.status(200).json({
     instance: {
       id:              instance.instance_id,

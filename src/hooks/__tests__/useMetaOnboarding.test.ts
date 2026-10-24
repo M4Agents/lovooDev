@@ -1426,6 +1426,43 @@ describe('S7 — WABA selection flow', () => {
     expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
   })
 
+  it('H15b: resolveWabaSelection → authorization_stale → mensagem segura + SEM retry', async () => {
+    const onSuccess = vi.fn()
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockResolvedValueOnce(FAKE_SELECTION_RESULT as never)
+    vi.mocked(metaWhatsAppApi.resolveWabaSelection).mockRejectedValueOnce(
+      new Error('authorization_stale'),
+    )
+    const { result } = await renderReady({ onSuccess })
+    await triggerComplete(result)
+    await act(async () => {})
+
+    act(() => { result.current.selectWaba(FAKE_SELECTION_OPTIONS[0].index) })
+    await act(async () => {})
+
+    expect(result.current.step).toBe('idle')
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(result.current.onboardingError).toContain('autorização expirou')
+    expect(result.current.selectionOptions).toBeNull()
+    expect(vi.mocked(metaWhatsAppApi.resolveWabaSelection)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
+  it('H15c: completeOnboarding → authorization_stale → mensagem segura, sem reusar state', async () => {
+    vi.mocked(metaWhatsAppApi.completeOnboarding).mockRejectedValueOnce(
+      new Error('authorization_stale'),
+    )
+    const onSuccess = vi.fn()
+    const { result } = await renderReady({ onSuccess })
+    await triggerComplete(result)
+    await act(async () => {})
+
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(result.current.step).toBe('idle')
+    expect(result.current.onboardingError).toContain('autorização expirou')
+    expect(vi.mocked(metaWhatsAppApi.completeOnboarding)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(metaWhatsAppApi.startOnboarding)).toHaveBeenCalledTimes(1)
+  })
+
   // ── H16: F3 preservado ────────────────────────────────────────────────────
   it('H16: discovery fallback (F3) preservado — sem wabaId → scheduleDiscoveryFallback', async () => {
     vi.useFakeTimers()
