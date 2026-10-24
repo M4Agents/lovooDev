@@ -5,8 +5,8 @@
  * it.todo() = comportamento a implementar nas etapas seguintes.
  * Nenhum teste ativo altera endpoints, crypto ou RPC.
  *
- * Ativação futura: promover it.todo → it quando helper/crypto/endpoints
- * forem implementados (após aplicar a migration no Supabase compartilhado).
+ * Crypto v2: testes de payload/envelope ativos.
+ * Demais it.todo = helper/endpoints ainda não implementados.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
@@ -80,21 +80,55 @@ describe('contrato: token de continuação v:2 (especificação)', () => {
     expect(isValidUuid('')).toBe(false);
   });
 
-  it('v:1 atual continua criptografável; decrypt legado rejeita payload v:2', () => {
+  it('v:1 e v:2 usam prefixo v1:; decrypt aceita ambos', () => {
     const token = encryptSelectionPayload(v1Payload());
     expect(token.startsWith(SELECTION_TOKEN_CRYPTO_PREFIX)).toBe(true);
     expect(decryptSelectionPayload(token).v).toBe(1);
 
-    const forgedV2 = encryptSelectionPayload(v1Payload({ v: 2, oid: VALID_OID }));
-    expect(forgedV2.startsWith(SELECTION_TOKEN_CRYPTO_PREFIX)).toBe(true);
-    expect(() => decryptSelectionPayload(forgedV2)).toThrow();
+    const v2 = encryptSelectionPayload(v1Payload({ v: 2, oid: VALID_OID }));
+    expect(v2.startsWith(SELECTION_TOKEN_CRYPTO_PREFIX)).toBe(true);
+    const decoded = decryptSelectionPayload(v2);
+    expect(decoded.v).toBe(2);
+    expect(decoded.oid).toBe(VALID_OID);
   });
 
-  it.todo('v:2 válido: decrypt aceita oid UUID e preserva uid/cid/opts/enc/exp');
-  it.todo('v:2 sem oid: rejeitado');
-  it.todo('v:2 com oid inválido: rejeitado');
-  it.todo('token adulterado: rejeitado pela integridade AES-GCM');
-  it.todo('token expirado: rejeitado');
+  it('v:2 válido: decrypt aceita oid UUID e preserva uid/cid/opts/enc/exp', () => {
+    const original = v1Payload({ v: 2, oid: VALID_OID });
+    const decoded = decryptSelectionPayload(encryptSelectionPayload(original));
+    expect(decoded.v).toBe(2);
+    expect(decoded.oid).toBe(VALID_OID);
+    expect(decoded.uid).toBe(original.uid);
+    expect(decoded.cid).toBe(original.cid);
+    expect(decoded.exp).toBe(original.exp);
+    expect(decoded.opts).toEqual(original.opts);
+    expect(decoded.enc).toBe(original.enc);
+  });
+
+  it('v:2 sem oid: rejeitado', () => {
+    const p = v1Payload({ v: 2 });
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(p))).toThrow();
+  });
+
+  it('v:2 com oid inválido: rejeitado', () => {
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(
+      v1Payload({ v: 2, oid: 'not-a-uuid' }),
+    ))).toThrow();
+  });
+
+  it('token adulterado: rejeitado pela integridade AES-GCM', () => {
+    const token = encryptSelectionPayload(v1Payload({ v: 2, oid: VALID_OID }));
+    const b64 = token.slice(SELECTION_TOKEN_CRYPTO_PREFIX.length);
+    const flipped = (b64[4] === 'A' ? 'B' : 'A') + b64.slice(5);
+    expect(() => decryptSelectionPayload(
+      SELECTION_TOKEN_CRYPTO_PREFIX + b64.slice(0, 4) + flipped,
+    )).toThrow();
+  });
+
+  it('token expirado: rejeitado', () => {
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(
+      v1Payload({ v: 2, oid: VALID_OID, exp: Date.now() - 1 }),
+    ))).toThrow();
+  });
   it.todo('uid divergente do JWT: rejeitado no endpoint, não no helper');
   it.todo('cid divergente: rejeitado pelo validateMetaCaller');
   it.todo('v:1 legado após cutover: invalid_continuation (sem inventar oid)');

@@ -11,9 +11,10 @@
 //   C4  ciphertext adulterado (bit flip) → reject (GCM auth tag falha)
 //   C5  versão de token inválida (v2:...) → reject
 //   C6  token malformado (sem prefixo, base64 inválido, vazio) → reject
-//   C7  payload com schema inválido → reject
+//   C7  payload com schema inválido → reject (v desconhecido, não v:2)
 //   C8  token expirado → reject
 //   C9  mensagens de erro não contêm secrets (key, token, payload, IDs)
+//   C10 payload v:2 (oid UUID) + rejeições de oid / prefixo v1: preservado
 // =============================================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -28,6 +29,7 @@ const ALT_KEY_HEX   = 'd'.repeat(64); // chave diferente para teste de mismatch
 
 const FAKE_USER_ID    = 'aaaa0000-0000-0000-0000-000000000001';
 const FAKE_COMPANY_ID = 'bbbb0000-0000-0000-0000-000000000002';
+const FAKE_ONBOARDING_ID = 'cccccccc-0000-4000-8000-000000000003';
 const FAKE_WABA_ID    = '123456789';
 const FAKE_PHONE_ID   = '987654321';
 const FAKE_CIPHERTEXT = 'v1:FAKECIPHERTEXT=='; // simula ciphertext de encryptMetaToken
@@ -249,8 +251,12 @@ describe('C7: schema de payload inválido → reject', () => {
     return encryptSelectionPayload(obj);
   }
 
-  it('v !== 1 → lança', () => {
-    expect(() => decryptSelectionPayload(encryptRaw({ ...validPayload(), v: 2 }))).toThrow();
+  it('v desconhecido (3) → lança', () => {
+    expect(() => decryptSelectionPayload(encryptRaw({ ...validPayload(), v: 3 }))).toThrow();
+  });
+
+  it('v string "2" → lança', () => {
+    expect(() => decryptSelectionPayload(encryptRaw({ ...validPayload(), v: '2' }))).toThrow();
   });
 
   it('uid ausente → lança', () => {
@@ -390,5 +396,81 @@ describe('C9: erros não expõem secrets', () => {
     try { decryptSelectionPayload(token); } catch (e) { errorMsg = e.message; }
     expect(errorMsg).not.toContain(FAKE_USER_ID);
     expect(errorMsg).not.toContain(FAKE_COMPANY_ID);
+  });
+});
+
+// =============================================================================
+// C10 — Payload v:2 (envelope criptográfico permanece v1:)
+// =============================================================================
+describe('C10: payload v:2', () => {
+  function validV2Payload(overrides = {}) {
+    return {
+      ...validPayload(),
+      v: 2,
+      oid: FAKE_ONBOARDING_ID,
+      ...overrides,
+    };
+  }
+
+  it('round-trip v:2 com oid UUID; prefixo criptográfico v1:', () => {
+    const original = validV2Payload();
+    const token = encryptSelectionPayload(original);
+    expect(token).toMatch(/^v1:/);
+
+    const result = decryptSelectionPayload(token);
+    expect(result.v).toBe(2);
+    expect(result.oid).toBe(FAKE_ONBOARDING_ID);
+    expect(result.uid).toBe(original.uid);
+    expect(result.cid).toBe(original.cid);
+    expect(result.exp).toBe(original.exp);
+    expect(result.opts).toEqual(original.opts);
+    expect(result.enc).toBe(original.enc);
+  });
+
+  it('round-trip v:1 continua sem exigir oid', () => {
+    const original = validPayload();
+    const result = decryptSelectionPayload(encryptSelectionPayload(original));
+    expect(result.v).toBe(1);
+    expect(result.oid).toBeUndefined();
+    expect(result.uid).toBe(original.uid);
+    expect(result.cid).toBe(original.cid);
+  });
+
+  it('v:2 sem oid → lança', () => {
+    const p = validV2Payload();
+    delete p.oid;
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(p))).toThrow();
+  });
+
+  it('v:2 com oid inválido → lança', () => {
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(validV2Payload({
+      oid: 'not-a-uuid',
+    })))).toThrow();
+  });
+
+  it('v:2 com oid de tipo incorreto → lança', () => {
+    expect(() => decryptSelectionPayload(encryptSelectionPayload(validV2Payload({
+      oid: 42,
+    })))).toThrow();
+  });
+
+  it('v:2 expirado → lança', () => {
+    const token = encryptSelectionPayload(validV2Payload({ exp: Date.now() - 1 }));
+    expect(() => decryptSelectionPayload(token)).toThrow();
+  });
+
+  it('v:2 adulterado → lança; erro não expõe oid', () => {
+    const token = encryptSelectionPayload(validV2Payload());
+    const b64 = token.slice('v1:'.length);
+    const flipped = b64[4] === 'A'
+      ? b64.slice(0, 4) + 'B' + b64.slice(5)
+      : b64.slice(0, 4) + 'A' + b64.slice(5);
+    let errorMsg = '';
+    try { decryptSelectionPayload('v1:' + flipped); } catch (e) { errorMsg = e.message; }
+    expect(errorMsg).toBeTruthy();
+    expect(errorMsg).not.toContain(FAKE_ONBOARDING_ID);
+    expect(errorMsg).not.toContain(FAKE_USER_ID);
+    expect(errorMsg).not.toContain(FAKE_CIPHERTEXT);
+    expect(errorMsg).not.toContain(VALID_KEY_HEX);
   });
 });

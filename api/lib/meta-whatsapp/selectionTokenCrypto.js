@@ -18,24 +18,21 @@
 //   - Prefixo "v1:" identifica a versão de criptografia.
 //   - Para v2: adicionar getKeyV2() e case 'v2' no decryptSelectionPayload.
 //
-// Payload esperado pelo encryptSelectionPayload:
-//   {
-//     v:    1,
-//     uid:  <string UUID — user.id autenticado>,
-//     cid:  <string UUID — company_id derivado do onboarding state>,
-//     exp:  <number — epoch ms de expiração>,
-//     opts: [{ w, p, d, n }] — candidatos não expostos ao cliente,
-//     enc:  <string — ciphertext do access token Meta, já produzido por encryptMetaToken>,
-//   }
+// Payload v1:
+//   { v: 1, uid, cid, exp, opts, enc }
+// Payload v2 (mesmo envelope criptográfico v1:):
+//   { v: 2, uid, cid, oid, exp, opts, enc }
+//   oid = UUID do onboarding claimado. Não é instance_id. Não é gerado aqui.
 //
 // decryptSelectionPayload valida (nesta ordem):
 //   1. Presença e formato do token (prefixo v1:, base64)
 //   2. Autenticidade GCM (auth tag — tamper-evident)
 //   3. JSON parse
 //   4. Campos obrigatórios (v, uid, cid, exp, opts, enc)
-//   5. Versão: v === 1
+//   5. Versão: v === 1 ou v === 2 (outras → throw)
+//   5b. Se v === 2: oid UUID válido (mesmo regex de uid/cid)
 //   6. exp > Date.now() (expirado → throw)
-//   7. uid e cid: UUID v4 válido
+//   7. uid e cid: UUID válido
 //   8. opts: array não vazio com cada item validado
 //   9. enc: string prefixada com 'v'
 //
@@ -169,7 +166,7 @@ export function encryptSelectionPayload(payload) {
  * 400 { error: 'invalid_continuation' } sem repassar a mensagem.
  *
  * @param {string} token Formato "v1:<base64...>"
- * @returns {{ v: number, uid: string, cid: string, exp: number, opts: Array, enc: string }}
+ * @returns {{ v: number, uid: string, cid: string, exp: number, opts: Array, enc: string, oid?: string }}
  * @throws {Error} Mensagem genérica — caller não deve expô-la ao cliente
  */
 export function decryptSelectionPayload(token) {
@@ -225,9 +222,16 @@ export function decryptSelectionPayload(token) {
     throw new Error('[meta/selectionTokenCrypto] Schema inválido');
   }
 
-  // ── 5. Versão do payload ──────────────────────────────────────────────────
-  if (payload.v !== 1) {
+  // ── 5. Versão do payload (independente do prefixo criptográfico v1:) ──────
+  if (payload.v !== 1 && payload.v !== 2) {
     throw new Error('[meta/selectionTokenCrypto] Versão de payload inválida');
+  }
+
+  // v2: oid obrigatório após GCM + parse. Não inventar. Não aceitar tipo livre.
+  if (payload.v === 2) {
+    if (typeof payload.oid !== 'string' || !UUID_RE.test(payload.oid)) {
+      throw new Error('[meta/selectionTokenCrypto] Campo oid inválido');
+    }
   }
 
   // ── 6. Expiração ──────────────────────────────────────────────────────────
