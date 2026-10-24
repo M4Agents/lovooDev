@@ -1829,7 +1829,7 @@ export const Settings: React.FC = () => {
                   {[
                     { step: '1', color: 'bg-blue-50 border-blue-200', title: 'Monte o JSON', desc: 'Crie um objeto JSON com os dados do lead e sua api_key. Não precisa de header de autenticação.' },
                     { step: '2', color: 'bg-purple-50 border-purple-200', title: 'Envie via POST', desc: 'Faça uma requisição HTTP POST para a URL do endpoint com Content-Type: application/json.' },
-                    { step: '3', color: 'bg-emerald-50 border-emerald-200', title: 'Lead criado!', desc: 'O sistema identifica o lead, processa campos e tags automaticamente e retorna o ID.' },
+                    { step: '3', color: 'bg-emerald-50 border-emerald-200', title: 'Lead criado!', desc: 'O sistema identifica o lead, processa campos, tags e nota automaticamente e retorna o ID.' },
                   ].map(item => (
                     <div key={item.step} className={`border rounded-lg p-4 ${item.color}`}>
                       <div className="w-7 h-7 rounded-full bg-white border-2 border-current flex items-center justify-center text-sm font-bold mb-2">{item.step}</div>
@@ -1868,6 +1868,7 @@ export const Settings: React.FC = () => {
                             ['E-mail', 'email, e-mail, mail', 'Obrigatório (ou nome)'],
                             ['Telefone', 'phone, telefone, tel, celular, whatsapp', ''],
                             ['Interesse', 'interest, interesse, subject, assunto, message', ''],
+                            ['Nota', 'nota, note, anotacao, observacao', 'Até 2.000 caracteres. Nota do lead'],
                             ['Cargo', 'cargo', ''],
                             ['Instagram', 'instagram', ''],
                             ['LinkedIn', 'linkedin', ''],
@@ -2013,6 +2014,20 @@ export const Settings: React.FC = () => {
                       <p className="text-xs text-slate-500">⚡ Novas tags são criadas automaticamente na sua empresa com cor padrão. Você pode ajustar cor e descrição depois em <strong>Configurações → Tags</strong>.</p>
                     </div>
                   </div>
+
+                  {/* Nota */}
+                  <div className="border border-amber-200 rounded-lg overflow-hidden">
+                    <div className="bg-amber-50 px-4 py-2 border-b border-amber-200">
+                      <p className="text-sm font-semibold text-amber-900">📝 Nota do lead</p>
+                    </div>
+                    <div className="p-4 space-y-3 text-sm text-slate-700">
+                      <p>Use a chave <strong className="font-mono">"nota"</strong> para gravar uma anotação na aba Notas do chat. A data e a hora são as da importação. Não envie data nesse campo.</p>
+                      <div className="bg-white border border-amber-100 rounded p-2 font-mono text-xs">
+                        <span className="text-amber-800">"nota": "Cliente pediu retorno na sexta-feira após as 14h."</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Texto puro, até 2.000 caracteres. Aliases: <code className="bg-slate-100 px-1 rounded">note</code>, <code className="bg-slate-100 px-1 rounded">anotacao</code>, <code className="bg-slate-100 px-1 rounded">observacao</code>. Se o lead já existir, a nota entra nele com o horário deste envio.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2047,6 +2062,8 @@ export const Settings: React.FC = () => {
                     <div className="ml-4"><span className="text-red-400">"utm_medium"</span><span className="text-white">: </span><span className="text-green-300">"cpc"</span><span className="text-white">,</span></div>
                     <div className="ml-4"><span className="text-red-400">"utm_content"</span><span className="text-white">: </span><span className="text-green-300">"Grupo PME"</span><span className="text-white">,</span></div>
                     <div className="ml-4"><span className="text-red-400">"utm_term"</span><span className="text-white">: </span><span className="text-green-300">"Banner Principal"</span><span className="text-white">,</span></div>
+                    <div className="ml-4 mt-1 text-slate-400">{'// Nota do lead (data e hora = momento da importação)'}</div>
+                    <div className="ml-4"><span className="text-red-400">"nota"</span><span className="text-white">: </span><span className="text-green-300">"Cliente pediu retorno na sexta-feira após as 14h."</span><span className="text-white">,</span></div>
                     <div className="ml-4 mt-1 text-slate-400">{'// Tags (criadas automaticamente)'}</div>
                     <div className="ml-4"><span className="text-red-400">"tags"</span><span className="text-white">: </span><span className="text-green-300">"Lead Quente, Importação"</span></div>
                     <div className="text-yellow-300">{'}'}</div>
@@ -2069,6 +2086,7 @@ export const Settings: React.FC = () => {
                       <div className="ml-4 text-green-300">{`"api_key": "sua_api_key",`}</div>
                       <div className="ml-4 text-green-300">{`"nome": "Maria Santos",`}</div>
                       <div className="ml-4 text-green-300">{`"email": "maria@email.com",`}</div>
+                      <div className="ml-4 text-green-300">{`"nota": "Cliente pediu retorno na sexta.",`}</div>
                       <div className="ml-4 text-green-300">{`"utm_campaign": "Black Friday",`}</div>
                       <div className="ml-4 text-green-300">{`"utm_medium": "cpc",`}</div>
                       <div className="ml-4 text-green-300">{`"tags": "Lead Quente"`}</div>
@@ -2126,6 +2144,7 @@ export const Settings: React.FC = () => {
                       <li>• <strong>Duplicatas:</strong> Se o mesmo email ou telefone já existir, o sistema registra uma reentrada ao invés de criar duplicata.</li>
                       <li>• <strong>Campos obrigatórios:</strong> Pelo menos <strong>nome</strong> ou <strong>email</strong> devem estar presentes.</li>
                       <li>• <strong>Campos extras:</strong> Qualquer campo desconhecido é ignorado silenciosamente (não gera erro).</li>
+                      <li>• <strong>Nota:</strong> o campo <code className="bg-slate-100 px-1 rounded text-xs">nota</code> cria uma anotação na aba Notas do lead, com a data e hora da importação. Até 2.000 caracteres.</li>
                       <li>• <strong>Tags:</strong> Novas tags são criadas automaticamente. Edite cor e descrição em Configurações → Tags.</li>
                       <li>• <strong>UTMs:</strong> Use <code className="bg-slate-100 px-1 rounded text-xs">utm_campaign</code>, <code className="bg-slate-100 px-1 rounded text-xs">utm_medium</code>, <code className="bg-slate-100 px-1 rounded text-xs">utm_content</code> e <code className="bg-slate-100 px-1 rounded text-xs">utm_term</code>. Aparecem na seção Marketing do lead.</li>
                       <li>• <strong>Campos personalizados:</strong> O ID numérico está visível em Configurações → Campos Personalizados.</li>

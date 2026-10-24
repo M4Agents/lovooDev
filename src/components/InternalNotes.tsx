@@ -262,9 +262,10 @@ export function InternalNotes(props: InternalNotesProps) {
       ) : (
         <div className="flex flex-col gap-3">
           {notes.map(note => {
-            const isAuthor    = note.created_by === currentUserId
-            const isAiNote    = note.is_editable === false
-            const isEditing   = editingId === note.id
+            const isAuthor     = note.created_by === currentUserId
+            const isImportNote = note.source === 'lead_import'
+            const isAiNote     = note.is_editable === false
+            const isEditing    = editingId === note.id
             const isConfirmingDelete = deletingId === note.id
 
             return (
@@ -289,7 +290,7 @@ export function InternalNotes(props: InternalNotesProps) {
                     )}
                     <span className="text-xs text-gray-500 truncate">
                       <span className="font-medium text-gray-700">
-                        {isAiNote ? 'Agente de IA' : isAuthor ? 'Você' : 'Outro membro'}
+                        {isAiNote ? 'Agente de IA' : isImportNote ? 'Importação' : isAuthor ? 'Você' : 'Outro membro'}
                       </span>
                       {' · '}
                       {formatDateTime(note.updated_at !== note.created_at ? note.updated_at : note.created_at)}

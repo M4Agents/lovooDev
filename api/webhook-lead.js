@@ -148,6 +148,12 @@ const FIELD_WHITELIST = new Map([
   ['etiquetas',  { canonical: 'tags',   maxLen: null }],
   ['etiqueta',   { canonical: 'tags',   maxLen: null }],
 
+  // Nota interna do lead — texto puro, gravada em internal_notes após o insert
+  ['nota',        { canonical: 'nota', maxLen: 2000 }],
+  ['note',        { canonical: 'nota', maxLen: 2000 }],
+  ['anotacao',    { canonical: 'nota', maxLen: 2000 }],
+  ['observacao',  { canonical: 'nota', maxLen: 2000 }],
+
   // Referência externa
   ['ref',          { canonical: 'ref',        maxLen: 255 }],
   ['reference',    { canonical: 'ref',        maxLen: 255 }],
@@ -166,6 +172,9 @@ const MAX_CUSTOM_ID  = 99_999;
 const MAX_CUSTOM_VAL = 500;
 const MAX_TAGS       = 20;
 const MAX_TAG_LEN    = 100;
+const MAX_NOTE_LEN   = 2000;
+const IMPORT_NOTE_SOURCE = 'lead_import';
+const IMPORT_NOTE_AUTHOR_ROLES = ['super_admin', 'system_admin', 'admin'];
 const EMAIL_RE       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---------------------------------------------------------------------------
@@ -194,6 +203,42 @@ function normalizeBirthDate(str) {
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (match) return `${match[3]}-${match[2]}-${match[1]}`;
   return '';
+}
+
+function foldLookupKey(key) {
+  return String(key || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function decodeNoteEntities(str) {
+  return str
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&');
+}
+
+// Nota da importação: texto puro, sem HTML, limitado a MAX_NOTE_LEN.
+function normalizeImportNote(value) {
+  let text = String(value ?? '').replace(/\u0000/g, '');
+  for (let i = 0; i < 2; i++) {
+    text = decodeNoteEntities(text)
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\s*\/\s*(p|div|li|tr|h[1-6])\s*>/gi, '\n')
+      .replace(/<[^>]*>/g, ' ');
+  }
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .substring(0, MAX_NOTE_LEN);
 }
 
 // UF do cadastro: somente 2 letras. Nome de estado por extenso é descartado.
@@ -268,8 +313,8 @@ function sanitizePayload(rawBody) {
       continue;
     }
 
-    // 4. Verificar whitelist
-    const spec = FIELD_WHITELIST.get(keyLower);
+    // 4. Verificar whitelist (aceita acento em aliases como anotação / observação)
+    const spec = FIELD_WHITELIST.get(keyLower) || FIELD_WHITELIST.get(foldLookupKey(key));
     if (!spec) {
       ignoredNames.push(key);
       continue;
@@ -291,6 +336,17 @@ function sanitizePayload(rawBody) {
       if (validTags.length > 0 && !canonical.tags) {
         canonical.tags = validTags;
       }
+      continue;
+    }
+
+    // 5b. Nota — texto puro; remove HTML antes de aplicar o limite
+    if (spec.canonical === 'nota') {
+      if (Array.isArray(value)) {
+        errors.push(`Campo ${key} não pode ser um array`);
+        continue;
+      }
+      const plain = normalizeImportNote(value);
+      if (plain && !canonical.nota) canonical.nota = plain;
       continue;
     }
 
@@ -748,10 +804,79 @@ async function logImportEvent(supabase, companyId, status, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// resolveImportNoteAuthor — usuário ativo da empresa para created_by
+//
+// internal_notes.created_by é NOT NULL e referencia auth.users.
+// service_role não tem auth.uid(). Preferimos admin da empresa; se não
+// houver, qualquer membro ativo. Sem usuário ativo, a nota não é gravada.
+// ---------------------------------------------------------------------------
+async function resolveImportNoteAuthor(svc, companyId) {
+  const { data: admin, error: adminError } = await svc
+    .from('company_users')
+    .select('user_id')
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .in('role', IMPORT_NOTE_AUTHOR_ROLES)
+    .limit(1)
+    .maybeSingle();
+
+  if (adminError) {
+    console.error('[webhook-lead] Import note author lookup failed', { message: adminError.message });
+    return null;
+  }
+  if (admin?.user_id) return admin.user_id;
+
+  const { data: member, error: memberError } = await svc
+    .from('company_users')
+    .select('user_id')
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (memberError) {
+    console.error('[webhook-lead] Import note member lookup failed', { message: memberError.message });
+    return null;
+  }
+  return member?.user_id || null;
+}
+
+// ---------------------------------------------------------------------------
+// insertImportLeadNote — nota do lead com data/hora da importação
+//
+// created_at fica a cargo do banco (now()). O payload não define data,
+// autor nem company_id. O trigger de tenant confere lead x empresa.
+// ---------------------------------------------------------------------------
+async function insertImportLeadNote(svc, companyId, leadId, content) {
+  const text = normalizeImportNote(content);
+  if (!text || !leadId) return;
+
+  const authorId = await resolveImportNoteAuthor(svc, companyId);
+  if (!authorId) {
+    console.warn('[webhook-lead] Import note skipped: no active company user');
+    return;
+  }
+
+  const { error } = await svc.from('internal_notes').insert({
+    company_id: companyId,
+    lead_id:    leadId,
+    content:    text,
+    created_by: authorId,
+    source:     IMPORT_NOTE_SOURCE,
+    is_editable: true,
+    metadata:   { imported_at: new Date().toISOString() },
+  });
+
+  if (error) {
+    console.error('[webhook-lead] Import note insert error', { message: error.message });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // executeLeadCriticalPostCreate — etapas essenciais para visualização imediata
 //
 // Executada com await no handler, ANTES do HTTP 200.
-// Garante que custom fields, tags, reentrada e automação estejam executados
+// Garante que custom fields, tags, nota, reentrada e automação estejam executados
 // antes da resposta HTTP. O dispatch de automação é crítico pois o Vercel
 // encerra a Lambda após res.json(), impedindo fire-and-forget confiável.
 // Retorna customFieldsProcessed para reuso no pipeline assíncrono.
@@ -791,6 +916,15 @@ async function executeLeadCriticalPostCreate(lead, canonical, customFieldIds, sv
     }
   } catch (err) {
     console.error('[webhook-lead] Tags pipeline error', { message: err?.message });
+  }
+
+  // 2b. Nota da importação — falha isolada: o lead permanece criado
+  try {
+    if (canonical.nota) {
+      await insertImportLeadNote(svcClient, companyId, lead.lead_id, canonical.nota);
+    }
+  } catch (err) {
+    console.error('[webhook-lead] Import note failed', { message: err?.message });
   }
 
   // 3. Reentrada — somente duplicados (executada antes do HTTP 200 pois o

@@ -100,6 +100,7 @@ const EXAMPLE_REQUEST = `curl -X POST /api/webhook-lead \\
     "email": "exemplo@email.com",
     "phone": "5511999999999",
     "interesse": "Plano Empresarial",
+    "nota": "Cliente pediu retorno na sexta-feira após as 14h.",
     "utm_source": "google",
     "utm_medium": "cpc",
     "tags": "lead-quente,site"
@@ -302,6 +303,7 @@ export const ApiFullDocumentation: React.FC = () => {
                   ['E-mail', 'email, e-mail, mail, email_address, user_email', '255 caracteres'],
                   ['Telefone', 'phone, telefone, tel, celular, whatsapp, mobile', '30 caracteres'],
                   ['Interesse', 'interest, interesse, subject, assunto, message, mensagem', '500 caracteres'],
+                  ['Nota', 'nota, note, anotacao, observacao', '2.000 caracteres. Vira nota do lead'],
                   ['Cargo', 'cargo', '255 caracteres'],
                   ['Instagram', 'instagram', '255 caracteres'],
                   ['LinkedIn', 'linkedin', '255 caracteres'],
@@ -349,6 +351,37 @@ export const ApiFullDocumentation: React.FC = () => {
           O lead criado por esta API entra com status <strong>novo</strong> e origem <strong>webhook_ultra_simples</strong>.
           Data inválida e UF que não tenha 2 letras são descartadas, sem impedir a criação do lead.
         </p>
+
+        <div className="border border-amber-200 rounded-lg overflow-hidden mt-3">
+          <div className="bg-amber-50 px-4 py-2 border-b border-amber-200">
+            <p className="text-xs font-semibold text-amber-900">Nota do lead</p>
+          </div>
+          <div className="px-4 py-3 text-xs text-slate-600 space-y-2">
+            <p>
+              O campo <code className="bg-slate-100 px-1 rounded">nota</code> grava uma anotação
+              na aba Notas do lead. A data e a hora são as da importação, definidas pelo servidor.
+              Não envie data, autor nem empresa nesse campo.
+            </p>
+            <CodeBlock
+              id="lead-note"
+              language="json"
+              code={`{
+  "api_key": "SUA_API_KEY",
+  "nome": "João Silva",
+  "email": "joao@empresa.com",
+  "telefone": "11999999999",
+  "nota": "Cliente pediu retorno na sexta-feira após as 14h."
+}`}
+              copied={copied}
+              onCopy={copy}
+            />
+            <p className="text-slate-500">
+              Texto puro, até 2.000 caracteres. HTML é removido. Nota vazia é ignorada.
+              Se o e-mail ou o telefone já existir, a nota entra no lead existente, com o horário deste envio.
+              A falha ao gravar a nota não impede a criação do lead.
+            </p>
+          </div>
+        </div>
 
         <div className="border border-slate-200 rounded-lg overflow-hidden mt-3">
           <div className="bg-orange-50 px-4 py-2 border-b border-slate-200">
@@ -486,6 +519,10 @@ export const ApiFullDocumentation: React.FC = () => {
           <li className="flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-green-500" />
             <span><strong>Limite de campos:</strong> máximo de 80 campos por requisição.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-green-500" />
+            <span><strong>Nota do lead:</strong> texto puro de até 2.000 caracteres. A data e a hora gravadas são as do recebimento da importação.</span>
           </li>
         </ul>
       </Section>
