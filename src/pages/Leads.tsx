@@ -1057,7 +1057,11 @@ export const Leads: React.FC = () => {
                       <div className="ml-3">
                         <div className="text-xs font-semibold text-gray-900">{lead.name}</div>
                         {lead.interest && (
-                          <div className="text-xs text-gray-400">{lead.interest}</div>
+                          <div className="w-44">
+                            <div className="text-xs text-gray-400 truncate" title={lead.interest}>
+                              {lead.interest}
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1145,8 +1149,16 @@ export const Leads: React.FC = () => {
                     </td>
                   )}
                   {visibleColumns.includes('interesse') && (
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600 max-w-[140px] truncate">
-                      {lead.interest || <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-2 text-xs text-gray-600">
+                      {lead.interest ? (
+                        <div className="w-[140px]">
+                          <div className="truncate" title={lead.interest}>
+                            {lead.interest}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                   )}
                   {visibleColumns.includes('ultimo_contato') && (
