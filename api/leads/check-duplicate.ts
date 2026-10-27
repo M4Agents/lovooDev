@@ -30,6 +30,25 @@ function buildPhoneLookupValues(phone: string): string[] {
   return [...new Set([digits, right11, withoutNinth].filter(Boolean) as string[])]
 }
 
+function pickNonEmpty(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** Nome de exibição vem de auth.users — company_users não tem display_name/email. */
+function nameFromAuthUser(user: {
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+} | null | undefined): string | null {
+  if (!user) return null
+  const metadata = user.user_metadata ?? {}
+  return (
+    pickNonEmpty(metadata.display_name) ||
+    pickNonEmpty(metadata.full_name) ||
+    pickNonEmpty(metadata.name) ||
+    pickNonEmpty(user.email)
+  )
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -124,18 +143,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let responsibleName: string | null = null
     if (found.responsible_user_id) {
-      const { data: responsibleUser } = await svc
-        .from('company_users')
-        .select('display_name, email')
-        .eq('user_id', found.responsible_user_id)
-        .eq('company_id', company_id)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      responsibleName =
-        responsibleUser?.display_name ||
-        responsibleUser?.email ||
-        'usuário não identificado'
+      const { data: authData, error: responsibleError } = await svc.auth.admin.getUserById(
+        found.responsible_user_id
+      )
+      if (responsibleError) {
+        console.error('[check-duplicate] responsible lookup error:', responsibleError.message)
+      }
+      responsibleName = nameFromAuthUser(authData?.user) || 'usuário não identificado'
     }
 
     return res.status(200).json({
