@@ -24,12 +24,13 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  Activity
 } from 'lucide-react';
 
 export const ModernLandingPages: React.FC = () => {
   const { t } = useTranslation('settings.app');
-  const { company, companyTimezone } = useAuth();
+  const { company, companyTimezone, refreshCompany } = useAuth();
   const { canSeeLandingPageOwner } = useAccessControl();
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [conversionsToday, setConversionsToday] = useState(0);
@@ -45,6 +46,7 @@ export const ModernLandingPages: React.FC = () => {
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verifyingPage, setVerifyingPage] = useState<string | null>(null);
+  const [savingBadge, setSavingBadge] = useState(false);
 
   useEffect(() => {
     console.log('ModernLandingPages: useEffect triggered, company:', company);
@@ -121,6 +123,21 @@ export const ModernLandingPages: React.FC = () => {
     } finally {
       console.log('ModernLandingPages: Setting loading to false');
       setLoading(false);
+    }
+  };
+
+  const handleToggleActiveVisitorsBadge = async () => {
+    if (!company?.id || savingBadge) return;
+    const nextValue = company.show_active_visitors === false;
+    setSavingBadge(true);
+    try {
+      await api.updateCompany(company.id, { show_active_visitors: nextValue });
+      await refreshCompany();
+    } catch (error) {
+      console.error('ModernLandingPages: Error saving active visitors badge:', error);
+      alert(t('tracking.activeVisitorsBadge.saveError'));
+    } finally {
+      setSavingBadge(false);
     }
   };
 
@@ -268,6 +285,40 @@ export const ModernLandingPages: React.FC = () => {
           {t('tracking.actions.newLandingPage')}
         </Button>
       </div>
+
+      {company?.id && (
+        <Card>
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-green-50 rounded-lg shrink-0">
+              <Activity className="w-5 h-5 text-green-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900">
+                {t('tracking.activeVisitorsBadge.title')}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {t('tracking.activeVisitorsBadge.description')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleActiveVisitorsBadge}
+              disabled={savingBadge}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 ${
+                company.show_active_visitors !== false ? 'bg-green-600' : 'bg-gray-200'
+              }`}
+              role="switch"
+              aria-checked={company.show_active_visitors !== false}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  company.show_active_visitors !== false ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

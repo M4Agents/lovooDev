@@ -357,8 +357,8 @@ export const ModernLayout: React.FC<ModernLayoutProps> = ({ children }) => {
         </button>
       )}
 
-      {/* Real-time Stats Indicator */}
-      {realtimeStats?.activeVisitors > 0 && (
+      {/* Real-time Stats Indicator — só a visualização; a contabilização segue no hook */}
+      {company?.show_active_visitors !== false && realtimeStats?.activeVisitors > 0 && (
         <div className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4" />

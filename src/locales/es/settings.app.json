@@ -958,7 +958,13 @@
       "trackingCode": "Código de seguimiento",
       "webhookConversions": "Webhook de conversiones",
       "verification": "Verificación de la etiqueta de seguimiento",
-      "installGuide": "📖 Guía de instalación — LovoCRM Analytics"
+      "installGuide": "📖 Guía de instalación — LovoCRM Analytics",
+      "activeVisitorsBadge": "Visitantes activos en el CRM"
+    },
+    "activeVisitorsBadge": {
+      "title": "Mostrar visitantes activos en la esquina de la pantalla",
+      "description": "Muestra el distintivo verde con la cantidad de visitantes activos. El seguimiento de la etiqueta sigue funcionando aunque esta opción esté desactivada.",
+      "saveError": "No se pudo guardar esta configuración."
     },
     "header": {
       "title": "Landing pages",

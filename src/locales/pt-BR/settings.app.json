@@ -1047,7 +1047,13 @@
       "trackingCode": "Código de Tracking",
       "webhookConversions": "Webhook para Conversões",
       "verification": "Verificação da Tag de Tracking",
-      "installGuide": "📖 Guia de Instalação - LovoCRM Analytics"
+      "installGuide": "📖 Guia de Instalação - LovoCRM Analytics",
+      "activeVisitorsBadge": "Visitantes ativos no CRM"
+    },
+    "activeVisitorsBadge": {
+      "title": "Mostrar visitantes ativos no canto da tela",
+      "description": "Exibe o badge verde com a quantidade de visitantes ativos. O rastreamento da tag continua funcionando mesmo com esta opção desligada.",
+      "saveError": "Não foi possível salvar esta configuração."
     },
     "header": {
       "title": "Landing Pages",

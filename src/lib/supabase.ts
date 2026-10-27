@@ -39,6 +39,8 @@ export type Company = {
   restrict_leads_to_owner?: boolean;
   /** Quando true, sellers visualizam apenas conversas de chat onde assigned_to = próprio uid ou assigned_to IS NULL */
   chat_visibility_by_assigned_to?: boolean;
+  /** Quando true, o CRM exibe o badge de visitantes ativos no canto da tela */
+  show_active_visitors?: boolean;
   /** Feature: integração com WhatsApp Cloud API (Meta). Controlado administrativamente pela plataforma. */
   meta_whatsapp_enabled?: boolean;
   created_at: string;

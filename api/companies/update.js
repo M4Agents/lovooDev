@@ -59,6 +59,8 @@ const ALLOWED_FIELDS = new Set([
   // Dashboard — configuração de escopo de dispensa de alertas
   // Restrito a admin/system_admin/super_admin via auth_user_is_company_admin (validado na linha de autorização)
   'alert_dismissal_scope',
+  // Tracking Site — exibir badge de visitantes ativos no CRM
+  'show_active_visitors',
   // Campos para agentes de IA conversacional e Prompt Builder
   'ponto_referencia',
   'horario_atendimento',
@@ -90,6 +92,7 @@ const FIELD_VALIDATORS = {
   ponto_referencia:   (v) => typeof v === 'string' && v.trim().length <= 300,
   horario_atendimento:(v) => typeof v === 'string' && v.trim().length <= 300,
   alert_dismissal_scope: (v) => v === 'company' || v === 'user',
+  show_active_visitors: (v) => v === true || v === false,
 };
 
 function buildSafeUpdates(rawUpdates) {
