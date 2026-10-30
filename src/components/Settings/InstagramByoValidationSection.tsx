@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CheckCircle2 } from 'lucide-react';
 import type { ByoStatusAccount, ByoStatusCredentials } from '../../services/instagramByoApi';
+import { byoMetaConnectedAccounts } from './instagramByoPresentation';
 import {
   associateInstagramByoAccount,
   validateInstagramByoWithMeta,
@@ -42,6 +44,10 @@ function label(account: { instagram_username: string | null; instagram_account_i
   return account.instagram_username ?? account.instagram_account_id;
 }
 
+function atUsername(account: { instagram_username: string | null; instagram_account_id: string }) {
+  return account.instagram_username ? `@${account.instagram_username}` : account.instagram_account_id;
+}
+
 export function InstagramByoValidationSection({
   companyId,
   canWrite,
@@ -56,7 +62,9 @@ export function InstagramByoValidationSection({
   const [discovered, setDiscovered] = useState<ByoDiscoveredAccount[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [version, setVersion] = useState<number | null>(null);
-  const associated = accounts.filter((account) => account.status_reason == null);
+  const connected = byoMetaConnectedAccounts(ready, credentials, accounts);
+  const connectedIds = new Set(connected.map((account) => account.id));
+  const associated = accounts.filter((account) => account.status_reason == null && !connectedIds.has(account.id));
   const canValidate = Boolean(
     canWrite
     && companyId
@@ -124,6 +132,17 @@ export function InstagramByoValidationSection({
 
   return (
     <div className="space-y-3">
+      {connected.map((account) => (
+        <div key={account.id} className="space-y-1">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{t('integrations.instagramByo.statusConnectedMeta')}</span>
+          </div>
+          <p className="text-sm font-medium text-slate-900">{atUsername(account)}</p>
+          <p className="text-sm text-slate-700">{t('integrations.instagramByo.connectedAccountLine')}</p>
+          <p className="text-sm text-slate-600">{t('integrations.instagramByo.operationalPending')}</p>
+        </div>
+      ))}
       {associated.map((account) => (
         <div key={account.id} className="space-y-1 text-sm text-slate-600">
           <p>

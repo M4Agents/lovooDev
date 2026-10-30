@@ -72,7 +72,9 @@ function expectInputsDisabled() {
     expect(field).toHaveProperty('readOnly', true);
     expect(field).toHaveProperty('value', '');
   }
-  expect(document.querySelector('button')).toBeNull();
+  const buttons = screen.getAllByRole('button');
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0].textContent).toContain('integrations.instagramByo.guide.open');
 }
 
 describe('InstagramByoMetaPanel', () => {
@@ -222,9 +224,9 @@ describe('InstagramByoMetaPanel', () => {
     expect(settings).not.toContain('rotate_suat');
 
     const phrases = {
-      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Credenciais validadas', 'Gerenciar credenciais', 'Atualizar token de acesso', 'Mensagens e comentários ainda não usam esta conta.'],
-      en: ['Not configured.', 'Credentials saved', 'Credentials validated', 'Manage credentials', 'Update access token', 'Messages and comments do not use this account yet.'],
-      es: ['No configurado.', 'Credenciales guardadas', 'Credenciales validadas', 'Gestionar credenciales', 'Actualizar token de acceso', 'Los mensajes y los comentarios todavía no usan esta cuenta.'],
+      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Credenciais validadas', 'Conectado à Meta', 'Conta Instagram conectada à Meta', 'Guia de configuração', 'Como conectar seu Instagram ao LovooCRM', 'Gerenciar credenciais', 'Atualizar token de acesso', 'Mensagens e comentários ainda não usam esta conta.'],
+      en: ['Not configured.', 'Credentials saved', 'Credentials validated', 'Connected to Meta', 'Instagram account connected to Meta', 'Setup guide', 'How to connect your Instagram to LovooCRM', 'Manage credentials', 'Update access token', 'Messages and comments do not use this account yet.'],
+      es: ['No configurado.', 'Credenciales guardadas', 'Credenciales validadas', 'Conectado a Meta', 'Cuenta de Instagram conectada a Meta', 'Guía de configuración', 'Cómo conectar tu Instagram al LovooCRM', 'Gestionar credenciales', 'Actualizar token de acceso', 'Los mensajes y los comentarios todavía no usan esta cuenta.'],
     };
     for (const [locale, expected] of Object.entries(phrases)) {
       const copy = JSON.parse(readFileSync(resolve(`src/locales/${locale}/settings.app.json`), 'utf8'));
@@ -232,7 +234,8 @@ describe('InstagramByoMetaPanel', () => {
       for (const phrase of expected) expect(block).toContain(phrase);
       expect(block).not.toContain('Validado pela Meta');
       expect(block).not.toContain('Validated by Meta');
-      expect(block).not.toContain('Conectado');
+      expect(block).not.toMatch(/"Conectado"/);
+      expect(block).not.toMatch(/"Connected"/);
     }
   });
 });

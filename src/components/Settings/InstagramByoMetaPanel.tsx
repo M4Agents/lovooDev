@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstagramByoActionForms } from './InstagramByoActionForms';
+import { InstagramByoSetupGuide } from './InstagramByoSetupGuide';
 import { InstagramByoValidationSection } from './InstagramByoValidationSection';
 import { InstagramByoSetForm } from './InstagramByoSetForm';
 import {
@@ -145,6 +146,7 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
           </h3>
           <p className="text-sm text-slate-500 mt-0.5">{t('integrations.instagramByo.description')}</p>
         </div>
+        <InstagramByoSetupGuide />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-busy={sync === 'initial' || sync === 'refreshing'}>

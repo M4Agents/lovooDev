@@ -1,5 +1,9 @@
-import type { ByoStatusPayload } from '../../services/instagramByoApi';
-import { resolveByoSetMode } from '../../services/instagramByoApi';
+import {
+  resolveByoSetMode,
+  type ByoStatusAccount,
+  type ByoStatusCredentials,
+  type ByoStatusPayload,
+} from '../../services/instagramByoApi';
 
 export type ByoSync = 'initial' | 'ready' | 'refreshing' | 'unconfirmed';
 export type ByoFault = 'unavailable' | 'denied' | 'temporary' | null;
@@ -12,6 +16,15 @@ const STATUS_VALUE: Record<string, string> = {
   revoked: 'integrations.instagramByo.statusRevokedShort',
   not_configured: 'integrations.instagramByo.stateCredentials',
 };
+
+export function byoMetaConnectedAccounts(
+  ready: boolean,
+  credentials: ByoStatusCredentials | null,
+  accounts: ByoStatusAccount[],
+): ByoStatusAccount[] {
+  if (!ready || credentials?.validation_status !== 'valid') return [];
+  return accounts.filter((account) => account.status === 'poc_disabled' && account.status_reason == null);
+}
 
 export function byoStatusValueKey(validationStatus: string): string {
   return STATUS_VALUE[validationStatus] ?? 'integrations.instagramByo.statusRegistered';
