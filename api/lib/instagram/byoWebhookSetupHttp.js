@@ -9,6 +9,7 @@ import {
 
 const ELIGIBLE = new Set(['saved', 'pending', 'valid', 'failed']);
 const ACTIONS = new Set(['generate', 'rotate']);
+const HASH_64 = /^[0-9a-f]{64}$/;
 
 function reject(res, status, error) {
   return res.status(status).json({ error });
@@ -54,11 +55,16 @@ export async function handleByoWebhookSetup(req, res) {
 
   const current = await svc
     .from('instagram_byo_company_credentials')
-    .select('company_id, validation_status, webhook_route_id, webhook_enabled')
+    .select('company_id, validation_status, webhook_route_id, webhook_enabled, webhook_verify_token_hash')
     .eq('company_id', gate.companyId)
     .maybeSingle();
   if (current.error) return reject(res, 503, 'unavailable');
   if (!current.data || !ELIGIBLE.has(current.data.validation_status)) return reject(res, 409, 'conflict');
+
+  const previousHash = current.data.webhook_verify_token_hash;
+  if (body.action === 'rotate' && (typeof previousHash !== 'string' || !HASH_64.test(previousHash))) {
+    return reject(res, 409, 'conflict');
+  }
 
   const verifyToken = createWebhookSecret();
   const verifyHash = hashWebhookVerifyToken(verifyToken);
@@ -77,7 +83,10 @@ export async function handleByoWebhookSetup(req, res) {
 
   update = body.action === 'generate'
     ? update.is('webhook_route_id', null)
-    : update.eq('webhook_route_id', routeId).eq('webhook_enabled', true);
+    : update
+      .eq('webhook_route_id', routeId)
+      .eq('webhook_enabled', true)
+      .eq('webhook_verify_token_hash', previousHash);
 
   const saved = await update.select('company_id').maybeSingle();
   if (saved.error) return reject(res, 503, 'unavailable');
