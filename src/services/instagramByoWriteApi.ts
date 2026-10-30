@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { ByoStatusCredentials } from './instagramByoApi';
 
 const CREDENTIALS_PATH = '/api/instagram/byo-poc/credentials';
+const REVOKE_PATH = '/api/instagram/byo-poc/revoke';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const APP_ID_RE = /^[0-9]{5,32}$/;
 const MAX_SECRET_BYTES = 4096;
@@ -35,6 +36,12 @@ export type ByoRotateSuatInput = {
   suat: string;
 };
 
+export type ByoRevokeInput = {
+  companyId: string;
+  requestId: string;
+  expectedVersion: number;
+};
+
 export type ByoReplaceSuccess = {
   ok: true;
   result: 'applied' | 'idempotent' | 'already_revoked';
@@ -62,6 +69,7 @@ export type ByoReplaceResult =
 
 export type ByoRotateSecretResult = ByoReplaceResult;
 export type ByoRotateSuatResult = ByoReplaceResult;
+export type ByoRevokeResult = ByoReplaceResult;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -111,6 +119,10 @@ export function resolveByoRotateSuatMode(credentials: ByoStatusCredentials): Byo
   return resolveActiveCredentialMode(credentials);
 }
 
+export function resolveByoRevokeMode(credentials: ByoStatusCredentials): ByoReplaceMode {
+  return resolveActiveCredentialMode(credentials);
+}
+
 function rotateSecretPayload(input: ByoRotateSecretInput): Record<string, string | number> | null {
   if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
   if (!validVersion(input.expectedVersion)) return null;
@@ -134,6 +146,16 @@ function rotateSuatPayload(input: ByoRotateSuatInput): Record<string, string | n
     operation: 'rotate_suat',
     expected_version: input.expectedVersion,
     suat: input.suat,
+  };
+}
+
+function revokePayload(input: ByoRevokeInput): Record<string, string | number> | null {
+  if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
+  if (!validVersion(input.expectedVersion)) return null;
+  return {
+    company_id: input.companyId.toLowerCase(),
+    request_id: input.requestId.toLowerCase(),
+    expected_version: input.expectedVersion,
   };
 }
 
@@ -185,6 +207,7 @@ async function errorCode(response: Response): Promise<string | null> {
 
 async function postByoCredentials(
   payload: Record<string, string | number> | null,
+  path = CREDENTIALS_PATH,
 ): Promise<ByoReplaceResult> {
   if (!payload) return { kind: 'rejected' };
 
@@ -199,7 +222,7 @@ async function postByoCredentials(
 
   let response: Response;
   try {
-    response = await fetch(CREDENTIALS_PATH, {
+    response = await fetch(path, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -246,4 +269,8 @@ export function rotateInstagramByoSecret(input: ByoRotateSecretInput): Promise<B
 
 export function rotateInstagramByoSuat(input: ByoRotateSuatInput): Promise<ByoRotateSuatResult> {
   return postByoCredentials(rotateSuatPayload(input));
+}
+
+export function revokeInstagramByoCredentials(input: ByoRevokeInput): Promise<ByoRevokeResult> {
+  return postByoCredentials(revokePayload(input), REVOKE_PATH);
 }

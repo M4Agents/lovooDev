@@ -15,7 +15,8 @@ export type ByoWriteNotice =
   | 'too_large'
   | 'unsupported_media'
   | 'service_unavailable'
-  | 'unknown';
+  | 'unknown'
+  | 'already_revoked';
 
 export type ByoAttemptResult =
   | {
@@ -84,7 +85,9 @@ export function decideByoAttempt(
       ? 'stale'
       : result.body.result === 'idempotent'
         ? 'idempotent'
-        : 'applied';
+        : result.body.result === 'already_revoked'
+          ? 'already_revoked'
+          : 'applied';
     return { type: 'stop', notice, clearFields: true, refresh: true };
   }
   const notice: ByoWriteNotice = result.kind === 'temporary' ? 'rejected' : result.kind;

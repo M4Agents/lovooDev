@@ -24,6 +24,7 @@ const NOTICE_KEY: Record<ByoWriteNotice, string> = {
   applied: 'integrations.instagramByo.rotateSuatApplied',
   idempotent: 'integrations.instagramByo.rotateSuatIdempotent',
   stale: 'integrations.instagramByo.rotateSuatStale',
+  already_revoked: 'integrations.instagramByo.alreadyRevoked',
   conflict: 'integrations.instagramByo.rotateSuatConflict',
   request_reused: 'integrations.instagramByo.rotateSuatRequestReused',
   rejected: 'integrations.instagramByo.rotateSuatRejected',
