@@ -23,7 +23,8 @@
     "webhookAdvanced": "Advanced webhook",
     "salesFunnel": "Sales funnel",
     "openai": "OpenAI",
-    "elevenlabs": "ElevenLabs"
+    "elevenlabs": "ElevenLabs",
+    "instagramByo": "Instagram BYO Meta"
   },
   "integrations": {
     "cards": {
@@ -50,6 +51,25 @@
       "elevenlabs": {
         "badge": "Voice",
         "description": "Base integration with the ElevenLabs API"
+      },
+      "instagramByo": {
+        "badge": "In preparation",
+        "description": "The company's own Meta app"
+      }
+    },
+    "instagramByo": {
+      "title": "Instagram BYO Meta",
+      "description": "Connect a Meta app that belongs to the company.",
+      "badgePreparing": "In preparation",
+      "stateTitle": "Integration in preparation",
+      "stateCredentials": "Credentials have not been registered yet.",
+      "stateUnavailable": "Registration and validation are unavailable in this version.",
+      "encryptionNotice": "App Secret and the System User Access Token will be stored encrypted in a later phase.",
+      "officialIndependent": "The official Instagram connection stays independent of this screen.",
+      "fields": {
+        "app-id": "App ID",
+        "app-secret": "App Secret",
+        "suat": "System User Access Token"
       }
     },
     "whatsappNav": {

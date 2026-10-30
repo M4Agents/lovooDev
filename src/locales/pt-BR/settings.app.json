@@ -64,7 +64,8 @@
     "salesFunnel": "Funil de Vendas",
     "openai": "OpenAI",
     "elevenlabs": "ElevenLabs",
-    "instagram": "Instagram"
+    "instagram": "Instagram",
+    "instagramByo": "Instagram BYO Meta"
   },
   "integrations": {
     "cards": {
@@ -88,6 +89,10 @@
         "badge": "DM + Comentários",
         "description": "Conecte contas Instagram Business"
       },
+      "instagramByo": {
+        "badge": "Em preparação",
+        "description": "Aplicativo Meta próprio da empresa"
+      },
       "openai": {
         "badge": "IA",
         "description": "Modelos e conexão com a API OpenAI"
@@ -95,6 +100,21 @@
       "elevenlabs": {
         "badge": "Voz",
         "description": "Integração base com a API ElevenLabs"
+      }
+    },
+    "instagramByo": {
+      "title": "Instagram BYO Meta",
+      "description": "Conecte um aplicativo Meta próprio da empresa.",
+      "badgePreparing": "Em preparação",
+      "stateTitle": "Integração em preparação",
+      "stateCredentials": "Credenciais ainda não cadastradas.",
+      "stateUnavailable": "Cadastro e validação indisponíveis nesta versão.",
+      "encryptionNotice": "App Secret e o System User Access Token serão armazenados de forma cifrada em uma fase posterior.",
+      "officialIndependent": "A conexão Instagram oficial continua independente desta tela.",
+      "fields": {
+        "app-id": "App ID",
+        "app-secret": "App Secret",
+        "suat": "System User Access Token"
       }
     },
     "whatsappNav": {
