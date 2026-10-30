@@ -191,3 +191,183 @@ export async function getInstagramByoStatus(
     return { kind: 'temporary' };
   }
 }
+
+const CREDENTIALS_PATH = '/api/instagram/byo-poc/credentials';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const APP_ID_RE = /^[0-9]{5,32}$/;
+const MAX_SECRET_BYTES = 4096;
+const MAX_VERSION = 2147483647;
+
+export type ByoSetMode =
+  | { kind: 'initial' }
+  | { kind: 'revoked'; expectedVersion: number }
+  | { kind: 'blocked' };
+
+export type ByoSetInput = {
+  companyId: string;
+  requestId: string;
+  metaAppId: string;
+  appSecret: string;
+  suat: string;
+  expectedVersion?: number;
+};
+
+export type ByoSetSuccess = {
+  ok: true;
+  result: 'applied' | 'idempotent' | 'already_revoked';
+  company_id: string;
+  validation_status: string;
+  credential_version: number;
+  configured: boolean;
+  stale: boolean;
+};
+
+export type ByoSetResult =
+  | { kind: 'ok'; body: ByoSetSuccess }
+  | { kind: 'rejected' }
+  | { kind: 'unauthorized' }
+  | { kind: 'forbidden' }
+  | { kind: 'unavailable' }
+  | { kind: 'conflict' }
+  | { kind: 'request_reused' }
+  | { kind: 'too_large' }
+  | { kind: 'unsupported_media' }
+  | { kind: 'service_unavailable' }
+  | { kind: 'network' }
+  | { kind: 'session_unavailable' }
+  | { kind: 'temporary' };
+
+export function resolveByoSetMode(credentials: ByoStatusCredentials): ByoSetMode {
+  if (credentials.configured) return { kind: 'blocked' };
+  if (credentials.validation_status === 'revoked') {
+    const version = credentials.credential_version;
+    if (typeof version === 'number' && Number.isInteger(version) && version >= 1 && version <= MAX_VERSION) {
+      return { kind: 'revoked', expectedVersion: version };
+    }
+    return { kind: 'blocked' };
+  }
+  if (credentials.validation_status === 'not_configured' && credentials.credential_version == null) {
+    return { kind: 'initial' };
+  }
+  return { kind: 'blocked' };
+}
+
+function wellFormed(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0xd800 || code > 0xdfff) continue;
+    const next = value.charCodeAt(index + 1);
+    if (code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+      index += 1;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function validSecret(value: string): boolean {
+  if (!wellFormed(value) || value.includes('\u0000')) return false;
+  const size = new TextEncoder().encode(value).length;
+  return size >= 1 && size <= MAX_SECRET_BYTES;
+}
+
+function setPayload(input: ByoSetInput): Record<string, string | number> | null {
+  if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
+  if (!APP_ID_RE.test(input.metaAppId)) return null;
+  if (!validSecret(input.appSecret) || !validSecret(input.suat)) return null;
+  const payload: Record<string, string | number> = {
+    company_id: input.companyId.toLowerCase(),
+    request_id: input.requestId.toLowerCase(),
+    operation: 'set',
+    meta_app_id: input.metaAppId,
+    app_secret: input.appSecret,
+    suat: input.suat,
+  };
+  if (input.expectedVersion === undefined) return payload;
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1 || input.expectedVersion > MAX_VERSION) {
+    return null;
+  }
+  payload.expected_version = input.expectedVersion;
+  return payload;
+}
+
+function projectSetSuccess(value: unknown, companyId: string): ByoSetSuccess | null {
+  if (!isRecord(value) || value.ok !== true || value.company_id !== companyId) return null;
+  if (value.result !== 'applied' && value.result !== 'idempotent' && value.result !== 'already_revoked') return null;
+  if (typeof value.validation_status !== 'string' || value.validation_status.length === 0) return null;
+  const version = value.credential_version;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return null;
+  if (typeof value.configured !== 'boolean' || typeof value.stale !== 'boolean') return null;
+  return {
+    ok: true,
+    result: value.result,
+    company_id: companyId,
+    validation_status: value.validation_status,
+    credential_version: version,
+    configured: value.configured,
+    stale: value.stale,
+  };
+}
+
+async function errorCode(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    if (isRecord(body) && typeof body.error === 'string') return body.error;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export async function setInstagramByoCredentials(input: ByoSetInput): Promise<ByoSetResult> {
+  const payload = setPayload(input);
+  if (!payload) return { kind: 'rejected' };
+
+  let token = '';
+  try {
+    const { data } = await supabase.auth.getSession();
+    token = data.session?.access_token ?? '';
+  } catch {
+    return { kind: 'session_unavailable' };
+  }
+  if (!token) return { kind: 'session_unavailable' };
+
+  let response: Response;
+  try {
+    response = await fetch(CREDENTIALS_PATH, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { kind: 'network' };
+  }
+
+  if (response.status === 400) return { kind: 'rejected' };
+  if (response.status === 401) return { kind: 'unauthorized' };
+  if (response.status === 403) return { kind: 'forbidden' };
+  if (response.status === 404) return { kind: 'unavailable' };
+  if (response.status === 413) return { kind: 'too_large' };
+  if (response.status === 415) return { kind: 'unsupported_media' };
+  if (response.status === 503) return { kind: 'service_unavailable' };
+  if (response.status === 409) {
+    const code = await errorCode(response);
+    if (code === 'conflict') return { kind: 'conflict' };
+    if (code === 'request_reused') return { kind: 'request_reused' };
+    return { kind: 'temporary' };
+  }
+  if (response.status !== 200) return { kind: 'temporary' };
+
+  try {
+    const body: unknown = await response.json();
+    const success = projectSetSuccess(body, payload.company_id as string);
+    if (!success) return { kind: 'temporary' };
+    return { kind: 'ok', body: success };
+  } catch {
+    return { kind: 'temporary' };
+  }
+}

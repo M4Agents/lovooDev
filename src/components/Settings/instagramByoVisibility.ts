@@ -7,6 +7,7 @@ import type { CompanyUser, UserRole } from '../../types/user';
 export const INSTAGRAM_BYO_PILOT_COMPANY_ID = '3cbe5c11-d834-40d1-b1cf-425e6377f099';
 
 const DIRECT_VIEW_ROLES: UserRole[] = ['admin', 'manager', 'super_admin', 'system_admin'];
+const DIRECT_WRITE_ROLES: UserRole[] = ['admin', 'super_admin', 'system_admin'];
 
 type RoleRow = Pick<CompanyUser, 'company_id' | 'role' | 'companies' | 'company'>;
 
@@ -50,4 +51,25 @@ export function canViewInstagramByoMeta(input: {
   if (!assigned || !assigned.includes(input.companyId)) return false;
 
   return input.roles.some((role) => isParentOperator(role, role.company_id, ['partner']));
+}
+
+/**
+ * Apresentação dos botões de escrita. Não autoriza o POST.
+ * Membership direta prevalece: manager, partner e seller na empresa não escrevem,
+ * mesmo que também exista papel de pai. Sem membership direta, só super_admin
+ * ou system_admin da empresa pai.
+ */
+export function canWriteInstagramByoMeta(input: {
+  companyId?: string | null;
+  parentCompanyId?: string | null;
+  roles: RoleRow[];
+}): boolean {
+  if (!input.companyId || input.companyId !== INSTAGRAM_BYO_PILOT_COMPANY_ID) return false;
+
+  const direct = input.roles.find((role) => role.company_id === input.companyId);
+  if (direct) return DIRECT_WRITE_ROLES.includes(direct.role);
+
+  const parentCompanyId = input.parentCompanyId ?? '';
+  if (!parentCompanyId) return false;
+  return input.roles.some((role) => isParentOperator(role, parentCompanyId, ['super_admin', 'system_admin']));
 }

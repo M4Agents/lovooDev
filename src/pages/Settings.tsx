@@ -30,7 +30,7 @@ import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegration
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { InstagramConnectionPanel } from '../components/Settings/InstagramConnectionPanel';
 import { InstagramByoMetaPanel } from '../components/Settings/InstagramByoMetaPanel';
-import { canViewInstagramByoMeta } from '../components/Settings/instagramByoVisibility';
+import { canViewInstagramByoMeta, canWriteInstagramByoMeta } from '../components/Settings/instagramByoVisibility';
 import {
   leaveInstagramByoSearchParams,
   openInstagramByoSearchParams,
@@ -307,15 +307,19 @@ export const Settings: React.FC = () => {
     navigate('/settings', { replace: true });
   }, [searchParams, authLoading, isLoadingCompany, navigate]);
 
-  const canViewInstagramByo = canViewInstagramByoMeta({
+  const instagramByoAccess = {
     companyId: company?.id,
     parentCompanyId: company?.parent_company_id,
     roles: userRoles,
+  };
+  const canViewInstagramByo = canViewInstagramByoMeta({
+    ...instagramByoAccess,
     partnerAssignedCompanyIds: userRoles.some((role) => role.role === 'partner' && (role.companies?.company_type ?? role.company?.company_type) === 'parent')
       && !userRoles.some((role) => (role.role === 'super_admin' || role.role === 'system_admin') && (role.companies?.company_type ?? role.company?.company_type) === 'parent')
       ? availableCompanies.map((item) => item.id)
       : undefined,
   });
+  const canWriteInstagramByo = canWriteInstagramByoMeta(instagramByoAccess);
 
   const instagramByoWasShown = useRef(false);
 
@@ -3109,6 +3113,7 @@ export const Settings: React.FC = () => {
               <InstagramByoMetaPanel
                 key={company?.id ?? 'no-company'}
                 companyId={company?.id ?? null}
+                canWrite={canWriteInstagramByo}
               />
             </div>
           )}

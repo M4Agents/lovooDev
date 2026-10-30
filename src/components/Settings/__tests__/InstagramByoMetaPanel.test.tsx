@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstagramByoMetaPanel } from '../InstagramByoMetaPanel';
-import { getInstagramByoStatus, type ByoStatusResult } from '../../../services/instagramByoApi';
+import { getInstagramByoStatus, setInstagramByoCredentials, type ByoStatusResult } from '../../../services/instagramByoApi';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -12,9 +12,16 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../services/instagramByoApi', () => ({
-  getInstagramByoStatus: vi.fn(),
-}));
+vi.mock('../../../services/instagramByoApi', async () => {
+  const actual = await vi.importActual<typeof import('../../../services/instagramByoApi')>(
+    '../../../services/instagramByoApi',
+  );
+  return {
+    ...actual,
+    getInstagramByoStatus: vi.fn(),
+    setInstagramByoCredentials: vi.fn(),
+  };
+});
 
 const COMPANY_A = 'cccccccc-0000-4000-8000-000000000003';
 const COMPANY_B = 'dddddddd-0000-4000-8000-000000000004';
@@ -40,11 +47,12 @@ function status(companyId: string, configured: boolean, appId: string | null): B
   };
 }
 
-function ByoPanelHost({ companyId }: { companyId: string | null }) {
+function ByoPanelHost({ companyId, canWrite = false }: { companyId: string | null; canWrite?: boolean }) {
   return (
     <InstagramByoMetaPanel
       key={companyId ?? 'no-company'}
       companyId={companyId}
+      canWrite={canWrite}
     />
   );
 }
@@ -201,5 +209,395 @@ describe('InstagramByoMetaPanel', () => {
     expect(settings).toContain('<InstagramConnectionPanel companyId={company.id} />');
     expect(settings).toContain("key={company?.id ?? 'no-company'}");
     expect(settings).toContain('companyId={company?.id ?? null}');
+    expect(settings).toContain('canWrite={canWriteInstagramByo}');
+    expect(settings).not.toContain('replace_app');
+    expect(settings).not.toContain('rotate_secret');
+    expect(settings).not.toContain('rotate_suat');
+  });
+});
+
+const SECRET = 'segredo-de-teste';
+const SUAT = 'suat-de-teste';
+
+function notConfigured(companyId: string): ByoStatusResult {
+  return status(companyId, false, null);
+}
+
+function revoked(companyId: string): ByoStatusResult {
+  const base = status(companyId, false, null);
+  if (base.kind !== 'ok') return base;
+  return {
+    kind: 'ok',
+    status: {
+      ...base.status,
+      credentials: {
+        ...base.status.credentials,
+        configured: false,
+        validation_status: 'revoked',
+        credential_version: 4,
+        revoked_at: '2026-10-30T13:00:00.000Z',
+      },
+    },
+  };
+}
+
+function applied(companyId: string, stale = false) {
+  return {
+    kind: 'ok' as const,
+    body: {
+      ok: true as const,
+      result: stale ? 'idempotent' as const : 'applied' as const,
+      company_id: companyId,
+      validation_status: 'saved',
+      credential_version: stale ? 99 : 1,
+      configured: true,
+      stale,
+    },
+  };
+}
+
+async function fillAndConfirm() {
+  fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-id'), {
+    target: { value: '1234567890' },
+  });
+  fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-secret'), {
+    target: { value: SECRET },
+  });
+  fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.suat'), {
+    target: { value: SUAT },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' }));
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setConfirm' }));
+}
+
+describe('cadastro set do Instagram BYO', () => {
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it('mostra o botão para quem pode escrever e o oculta para leitura', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    const writer = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    writer.unmount();
+
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
+    expect(await screen.findByText('integrations.instagramByo.stateCredentials')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expectInputsDisabled();
+  });
+
+  it('mantém os campos bloqueados no HTTP 404 mesmo com permissão de escrita', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue({ kind: 'unavailable' });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText('integrations.instagramByo.statusUnavailable')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expectInputsDisabled();
+    expect(setInstagramByoCredentials).not.toHaveBeenCalled();
+  });
+
+  it('envia set sem expected_version no cadastro inicial e só um POST no clique duplo', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    let resolveSend: (value: ReturnType<typeof applied>) => void = () => undefined;
+    vi.mocked(setInstagramByoCredentials).mockImplementation(() => new Promise((resolve) => {
+      resolveSend = resolve;
+    }));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-id'), {
+      target: { value: '1234567890' },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-secret'), {
+      target: { value: SECRET },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.suat'), {
+      target: { value: SUAT },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' }));
+    const confirm = screen.getByRole('button', { name: 'integrations.instagramByo.setConfirm' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(setInstagramByoCredentials).toHaveBeenCalledTimes(1);
+    const first = vi.mocked(setInstagramByoCredentials).mock.calls[0][0];
+    expect(first.expectedVersion).toBeUndefined();
+    expect(first.companyId).toBe(COMPANY_A);
+    resolveSend(applied(COMPANY_A));
+  });
+
+  it('inclui expected_version quando o status é revogado', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(revoked(COMPANY_A));
+    vi.mocked(setInstagramByoCredentials).mockResolvedValue(applied(COMPANY_A));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText('integrations.instagramByo.statusRevoked')).toBeTruthy();
+    expect(screen.getByText('4')).toBeTruthy();
+    await fillAndConfirm();
+    expect(vi.mocked(setInstagramByoCredentials).mock.calls[0][0].expectedVersion).toBe(4);
+  });
+
+  it.each(['network', 'service_unavailable'] as const)('reutiliza request_id e payload no retry manual de %s', async (kind) => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    vi.mocked(setInstagramByoCredentials)
+      .mockResolvedValueOnce({ kind })
+      .mockResolvedValueOnce(applied(COMPANY_A));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    expect(await screen.findByText('integrations.instagramByo.setUnknownOutcome')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setRetry' }));
+    expect(setInstagramByoCredentials).toHaveBeenCalledTimes(2);
+    const [first, second] = vi.mocked(setInstagramByoCredentials).mock.calls;
+    expect(second[0].requestId).toBe(first[0].requestId);
+    expect(second[0].appSecret).toBe(first[0].appSecret);
+    expect(second[0].suat).toBe(first[0].suat);
+  });
+
+  it.each(['conflict', 'request_reused'] as const)('limpa os segredos no 409 %s', async (kind) => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    vi.mocked(setInstagramByoCredentials).mockResolvedValue({ kind });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    const key = kind === 'conflict'
+      ? 'integrations.instagramByo.setConflict'
+      : 'integrations.instagramByo.setRequestReused';
+    expect(await screen.findByText(key)).toBeTruthy();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+    expect(screen.queryByDisplayValue(SUAT)).toBeNull();
+  });
+
+  it.each(['applied', 'idempotent'] as const)('mostra sucesso %s e consulta o status de novo', async (resultName) => {
+    let reads = 0;
+    vi.mocked(getInstagramByoStatus).mockImplementation(async () => {
+      reads += 1;
+      if (reads === 1) return notConfigured(COMPANY_A);
+      return status(COMPANY_A, true, '1234567890');
+    });
+    const success = applied(COMPANY_A);
+    vi.mocked(setInstagramByoCredentials).mockResolvedValue({
+      kind: 'ok',
+      body: { ...success.body, result: resultName, stale: false, credential_version: 1 },
+    });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    const key = resultName === 'applied'
+      ? 'integrations.instagramByo.setApplied'
+      : 'integrations.instagramByo.setIdempotent';
+    expect(await screen.findByText(key)).toBeTruthy();
+    expect(await screen.findByText('2')).toBeTruthy();
+    expect(screen.queryByText('1')).toBeNull();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+  });
+
+  it('mostra sucesso applied e idempotent com stale sem usar a versão retornada', async () => {
+    let reads = 0;
+    vi.mocked(getInstagramByoStatus).mockImplementation(async () => {
+      reads += 1;
+      if (reads === 1) return notConfigured(COMPANY_A);
+      return status(COMPANY_A, true, '1234567890');
+    });
+    vi.mocked(setInstagramByoCredentials).mockResolvedValue(applied(COMPANY_A, true));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    expect(await screen.findByText('integrations.instagramByo.setStale')).toBeTruthy();
+    expect(await screen.findByText('2')).toBeTruthy();
+    expect(screen.queryByText('99')).toBeNull();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+  });
+
+  it('não mostra o resultado nem o segredo da empresa anterior', async () => {
+    vi.mocked(getInstagramByoStatus).mockImplementation(async (companyId: string) => notConfigured(companyId));
+    let resolveSend: (value: ReturnType<typeof applied>) => void = () => undefined;
+    vi.mocked(setInstagramByoCredentials).mockImplementation(() => new Promise((resolve) => {
+      resolveSend = resolve;
+    }));
+    const view = render(<ByoPanelHost companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-secret'), {
+      target: { value: SECRET },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-id'), {
+      target: { value: '1234567890' },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.suat'), {
+      target: { value: SUAT },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setConfirm' }));
+    view.rerender(<ByoPanelHost companyId={COMPANY_B} canWrite />);
+    resolveSend(applied(COMPANY_A));
+    await Promise.resolve();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+    expect(screen.queryByText('integrations.instagramByo.setApplied')).toBeNull();
+  });
+
+  async function openConfirm() {
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-id'), {
+      target: { value: '1234567890' },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.app-secret'), {
+      target: { value: SECRET },
+    });
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.fields.suat'), {
+      target: { value: SUAT },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' }));
+  }
+
+  it.each(['unauthorized', 'session_unavailable'] as const)(
+    'preserva request_id quando o retry encontra %s e a sessão volta',
+    async (kind) => {
+      vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+      let resolveAuth: (value: { kind: typeof kind }) => void = () => undefined;
+      vi.mocked(setInstagramByoCredentials)
+        .mockResolvedValueOnce({ kind: 'network' })
+        .mockImplementationOnce(() => new Promise((resolve) => {
+          resolveAuth = resolve;
+        }))
+        .mockResolvedValueOnce(applied(COMPANY_A));
+      render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+      expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+      await fillAndConfirm();
+      expect(await screen.findByText('integrations.instagramByo.setUnknownOutcome')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setRetry' }));
+      expect(await screen.findByText('integrations.instagramByo.setSending')).toBeTruthy();
+      resolveAuth({ kind });
+      expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setRetry' })).toBeTruthy();
+      expect(screen.queryByText('integrations.instagramByo.setApplied')).toBeNull();
+      expect(screen.queryByText('integrations.instagramByo.setUnauthorized')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setRetry' }));
+      await vi.waitFor(() => {
+        expect(setInstagramByoCredentials).toHaveBeenCalledTimes(3);
+      });
+      const calls = vi.mocked(setInstagramByoCredentials).mock.calls.map((call) => call[0]);
+      expect(calls[1].requestId).toBe(calls[0].requestId);
+      expect(calls[2].requestId).toBe(calls[0].requestId);
+      expect(calls[2].appSecret).toBe(calls[0].appSecret);
+      expect(calls[2].suat).toBe(calls[0].suat);
+      expect(calls[2].metaAppId).toBe(calls[0].metaAppId);
+    },
+  );
+
+  it('não dispara POST ao trocar de empresa com a confirmação aberta', async () => {
+    vi.mocked(getInstagramByoStatus).mockImplementation(async (companyId: string) => notConfigured(companyId));
+    const view = render(<ByoPanelHost companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await openConfirm();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.setConfirm' })).toBeTruthy();
+    view.rerender(<ByoPanelHost companyId={COMPANY_B} canWrite />);
+    expect(setInstagramByoCredentials).not.toHaveBeenCalled();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setConfirm' })).toBeNull();
+  });
+
+  it('cancela a confirmação sem POST', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await openConfirm();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setCancel' }));
+    expect(setInstagramByoCredentials).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setConfirm' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+  });
+
+  it('descarta a tentativa explícita e remove os segredos da tela', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    vi.mocked(setInstagramByoCredentials).mockResolvedValue({ kind: 'network' });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setDiscard' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setDiscard' }));
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+    expect(screen.queryByDisplayValue(SUAT)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setRetry' })).toBeNull();
+  });
+
+  it('ignora a resposta quando o painel é desmontado durante o POST', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    let resolveSend: (value: ReturnType<typeof applied>) => void = () => undefined;
+    vi.mocked(setInstagramByoCredentials).mockImplementation(() => new Promise((resolve) => {
+      resolveSend = resolve;
+    }));
+    const view = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    expect(setInstagramByoCredentials).toHaveBeenCalledTimes(1);
+    view.unmount();
+    resolveSend(applied(COMPANY_A));
+    await Promise.resolve();
+    expect(screen.queryByText('integrations.instagramByo.setApplied')).toBeNull();
+    expect(screen.queryByDisplayValue(SECRET)).toBeNull();
+  });
+
+  it.each([0, 1.5, 2147483648])('bloqueia set quando a versão revogada é %s', async (version) => {
+    const base = revoked(COMPANY_A);
+    if (base.kind !== 'ok') throw new Error('status invalido');
+    vi.mocked(getInstagramByoStatus).mockResolvedValue({
+      kind: 'ok',
+      status: {
+        ...base.status,
+        credentials: { ...base.status.credentials, credential_version: version },
+      },
+    });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText('integrations.instagramByo.statusSetBlocked')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expectInputsDisabled();
+  });
+
+  it.each([
+    { http: '401', result: { kind: 'denied' as const }, message: 'integrations.instagramByo.statusDenied' },
+    { http: '403', result: { kind: 'denied' as const }, message: 'integrations.instagramByo.statusDenied' },
+    { http: '500', result: { kind: 'temporary' as const }, message: 'integrations.instagramByo.statusTemporary' },
+    { http: 'rede', result: { kind: 'temporary' as const }, message: 'integrations.instagramByo.statusTemporary' },
+  ])('mantém os campos bloqueados no GET $http com escrita habilitada', async ({ result, message }) => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(result);
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expectInputsDisabled();
+    expect(setInstagramByoCredentials).not.toHaveBeenCalled();
+  });
+
+  it('impede set quando as credenciais já estão configuradas', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(status(COMPANY_A, true, '1234567890'));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expectInputsDisabled();
+  });
+
+  it.each(['unauthorized', 'session_unavailable'] as const)(
+    'encerra o primeiro envio em %s sem apresentar sucesso',
+    async (kind) => {
+      vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+      vi.mocked(setInstagramByoCredentials).mockResolvedValue({ kind });
+      render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+      expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+      await fillAndConfirm();
+      expect(await screen.findByText('integrations.instagramByo.setUnauthorized')).toBeTruthy();
+      expect(screen.queryByText('integrations.instagramByo.setApplied')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setRetry' })).toBeNull();
+    },
+  );
+
+  it('encerra a tentativa quando a validação recusa o retry', async () => {
+    vi.mocked(getInstagramByoStatus).mockResolvedValue(notConfigured(COMPANY_A));
+    vi.mocked(setInstagramByoCredentials)
+      .mockResolvedValueOnce({ kind: 'network' })
+      .mockResolvedValueOnce({ kind: 'rejected' });
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    await fillAndConfirm();
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setRetry' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.setRetry' }));
+    expect(await screen.findByText('integrations.instagramByo.setRejected')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setRetry' })).toBeNull();
+    expect(screen.queryByText('integrations.instagramByo.setApplied')).toBeNull();
   });
 });

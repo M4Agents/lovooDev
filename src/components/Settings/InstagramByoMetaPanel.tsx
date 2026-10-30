@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { InstagramByoSetForm } from './InstagramByoSetForm';
 import {
   getInstagramByoStatus,
+  resolveByoSetMode,
   type ByoStatusPayload,
   type ByoStatusResult,
 } from '../../services/instagramByoApi';
@@ -18,6 +20,7 @@ type PanelView =
 
 type Props = {
   companyId?: string | null;
+  canWrite?: boolean;
 };
 
 function statusTextKey(view: PanelView): string | null {
@@ -26,19 +29,25 @@ function statusTextKey(view: PanelView): string | null {
   if (view.kind === 'denied') return 'integrations.instagramByo.statusDenied';
   if (view.kind === 'temporary') return 'integrations.instagramByo.statusTemporary';
   if (view.kind === 'ok' && !view.status.credentials.configured) {
-    return 'integrations.instagramByo.stateCredentials';
+    const mode = resolveByoSetMode(view.status.credentials);
+    if (mode.kind === 'initial') return 'integrations.instagramByo.stateCredentials';
+    if (mode.kind === 'revoked') return 'integrations.instagramByo.statusRevoked';
+    return 'integrations.instagramByo.statusSetBlocked';
   }
   if (view.kind === 'ok') return 'integrations.instagramByo.statusConfigured';
   return null;
 }
 
-export function InstagramByoMetaPanel({ companyId = null }: Props) {
+export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Props) {
   const { t } = useTranslation('settings.app');
   const [view, setView] = useState<PanelView>({ kind: 'idle' });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) {
       setView({ kind: 'idle' });
+      setNotice(null);
       return;
     }
 
@@ -55,12 +64,15 @@ export function InstagramByoMetaPanel({ companyId = null }: Props) {
       active = false;
       controller.abort();
     };
-  }, [companyId]);
+  }, [companyId, reloadKey]);
 
   const messageKey = statusTextKey(view);
-  const credentials = view.kind === 'ok' && view.status.credentials.configured
+  const configured = view.kind === 'ok' && view.status.credentials.configured
     ? view.status.credentials
     : null;
+  const setMode = view.kind === 'ok' ? resolveByoSetMode(view.status.credentials) : { kind: 'blocked' as const };
+  const showSetForm = Boolean(canWrite && companyId && setMode.kind !== 'blocked');
+  const revoked = setMode.kind === 'revoked' && view.kind === 'ok' ? view.status.credentials : null;
 
   return (
     <section className="space-y-6" aria-labelledby="instagram-byo-title">
@@ -79,36 +91,63 @@ export function InstagramByoMetaPanel({ companyId = null }: Props) {
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-busy={view.kind === 'loading'}>
         <p className="text-sm font-medium text-slate-900">{t('integrations.instagramByo.stateTitle')}</p>
         {messageKey && <p className="text-sm text-slate-600">{t(messageKey)}</p>}
-        {credentials && (
+        {notice && <p className="text-sm text-slate-600">{t(notice)}</p>}
+        {configured && (
           <dl className="space-y-1 text-sm text-slate-600">
             <div>
               <dt className="inline">{t('integrations.instagramByo.metaAppId')}: </dt>
-              <dd className="inline">{credentials.meta_app_id ?? ''}</dd>
+              <dd className="inline">{configured.meta_app_id ?? ''}</dd>
             </div>
             <div>
               <dt className="inline">{t('integrations.instagramByo.validationStatus')}: </dt>
-              <dd className="inline">{credentials.validation_status}</dd>
+              <dd className="inline">{configured.validation_status}</dd>
             </div>
             <div>
               <dt className="inline">{t('integrations.instagramByo.credentialVersion')}: </dt>
-              <dd className="inline">{credentials.credential_version ?? ''}</dd>
+              <dd className="inline">{configured.credential_version ?? ''}</dd>
             </div>
-            {credentials.validated_at && (
+            {configured.validated_at && (
               <div>
                 <dt className="inline">{t('integrations.instagramByo.validatedAt')}: </dt>
-                <dd className="inline">{credentials.validated_at}</dd>
+                <dd className="inline">{configured.validated_at}</dd>
               </div>
             )}
-            {credentials.revoked_at && (
+            {configured.revoked_at && (
               <div>
                 <dt className="inline">{t('integrations.instagramByo.revokedAt')}: </dt>
-                <dd className="inline">{credentials.revoked_at}</dd>
+                <dd className="inline">{configured.revoked_at}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+        {revoked && (
+          <dl className="space-y-1 text-sm text-slate-600">
+            <div>
+              <dt className="inline">{t('integrations.instagramByo.validationStatus')}: </dt>
+              <dd className="inline">{revoked.validation_status}</dd>
+            </div>
+            <div>
+              <dt className="inline">{t('integrations.instagramByo.credentialVersion')}: </dt>
+              <dd className="inline">{revoked.credential_version}</dd>
+            </div>
+            {revoked.revoked_at && (
+              <div>
+                <dt className="inline">{t('integrations.instagramByo.revokedAt')}: </dt>
+                <dd className="inline">{revoked.revoked_at}</dd>
               </div>
             )}
           </dl>
         )}
       </div>
 
+      {showSetForm && companyId && setMode.kind !== 'blocked' ? (
+        <InstagramByoSetForm
+          companyId={companyId}
+          mode={setMode}
+          onRefresh={() => setReloadKey((current) => current + 1)}
+          onNotice={setNotice}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4">
         {FIELD_IDS.map((field) => (
           <label key={field} className="block" htmlFor={`instagram-byo-${field}`}>
@@ -127,6 +166,7 @@ export function InstagramByoMetaPanel({ companyId = null }: Props) {
           </label>
         ))}
       </div>
+      )}
 
       <p className="text-sm text-slate-600">{t('integrations.instagramByo.encryptionNotice')}</p>
       <p className="text-sm text-slate-600">{t('integrations.instagramByo.officialIndependent')}</p>

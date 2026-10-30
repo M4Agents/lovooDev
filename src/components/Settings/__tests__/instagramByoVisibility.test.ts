@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   INSTAGRAM_BYO_PILOT_COMPANY_ID,
   canViewInstagramByoMeta,
+  canWriteInstagramByoMeta,
 } from '../instagramByoVisibility';
 
 const PILOT = INSTAGRAM_BYO_PILOT_COMPANY_ID;
@@ -73,6 +74,65 @@ describe('canViewInstagramByoMeta', () => {
 
   it('oculta outra empresa mesmo com admin', () => {
     expect(canViewInstagramByoMeta({
+      companyId: OTHER,
+      roles: [role(OTHER, 'admin')],
+    })).toBe(false);
+  });
+});
+
+describe('canWriteInstagramByoMeta', () => {
+  it('permite escrita direta de admin, super_admin e system_admin', () => {
+    for (const roleName of ['admin', 'super_admin', 'system_admin'] as const) {
+      expect(canWriteInstagramByoMeta({
+        companyId: PILOT,
+        roles: [role(PILOT, roleName)],
+      })).toBe(true);
+    }
+  });
+
+  it('deixa manager, partner e seller somente sem escrita', () => {
+    for (const roleName of ['manager', 'partner', 'seller'] as const) {
+      expect(canWriteInstagramByoMeta({
+        companyId: PILOT,
+        parentCompanyId: PARENT,
+        roles: [role(PILOT, roleName)],
+      })).toBe(false);
+    }
+  });
+
+  it('permite super_admin e system_admin da empresa pai e recusa admin ou partner da pai', () => {
+    expect(canWriteInstagramByoMeta({
+      companyId: PILOT,
+      parentCompanyId: PARENT,
+      roles: [role(PARENT, 'super_admin', 'parent')],
+    })).toBe(true);
+    expect(canWriteInstagramByoMeta({
+      companyId: PILOT,
+      parentCompanyId: PARENT,
+      roles: [role(PARENT, 'system_admin', 'parent')],
+    })).toBe(true);
+    expect(canWriteInstagramByoMeta({
+      companyId: PILOT,
+      parentCompanyId: PARENT,
+      roles: [role(PARENT, 'admin', 'parent')],
+    })).toBe(false);
+    expect(canWriteInstagramByoMeta({
+      companyId: PILOT,
+      parentCompanyId: PARENT,
+      roles: [role(PARENT, 'partner', 'parent')],
+    })).toBe(false);
+  });
+
+  it('faz a membership direta prevalecer sobre o papel da empresa pai', () => {
+    expect(canWriteInstagramByoMeta({
+      companyId: PILOT,
+      parentCompanyId: PARENT,
+      roles: [role(PILOT, 'manager'), role(PARENT, 'super_admin', 'parent')],
+    })).toBe(false);
+  });
+
+  it('recusa outra empresa', () => {
+    expect(canWriteInstagramByoMeta({
       companyId: OTHER,
       roles: [role(OTHER, 'admin')],
     })).toBe(false);
