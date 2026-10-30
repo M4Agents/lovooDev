@@ -1,6 +1,8 @@
 // Interpreta respostas do Graph API para um System User Access Token.
 // Não chama a rede. Um type diferente de SYSTEM_USER é recusado.
 
+import { metaErrorNumbers } from './byoValidationDiagnostic.js';
+
 const ID_RE = /^[0-9]{5,32}$/;
 const SCOPE_RE = /^[a-z0-9_]{1,64}$/;
 const USERNAME_RE = /^[A-Za-z0-9._]{1,30}$/;
@@ -28,7 +30,16 @@ export function interpretDebugToken(body, expectedAppId) {
     return { ok: false, code: 'temporary', definitive: false };
   }
   if (data.is_valid !== true) {
-    return { ok: false, code: 'token_invalid', definitive: true };
+    return {
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        stage: 'debug_token',
+        reason: 'is_valid_false',
+        ...metaErrorNumbers(data.error),
+      },
+    };
   }
   if (String(data.app_id ?? '') !== String(expectedAppId)) {
     return { ok: false, code: 'token_wrong_app', definitive: true };
@@ -38,7 +49,17 @@ export function interpretDebugToken(body, expectedAppId) {
   }
   const systemUserId = String(data.user_id ?? '');
   if (!ID_RE.test(systemUserId)) {
-    return { ok: false, code: 'token_invalid', definitive: true };
+    return {
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        stage: 'user_id_validation',
+        reason: 'user_id_invalid',
+        meta_error_code: null,
+        meta_error_subcode: null,
+      },
+    };
   }
   const scopes = scopesOf(data);
   if (REQUIRED_SCOPES.some((scope) => !scopes.includes(scope))) {
@@ -70,7 +91,15 @@ export function interpretAssignedPages(body) {
 export function classifyMetaFailure(status, body) {
   const code = body?.error?.code;
   if (code === 190 || code === 102) {
-    return { ok: false, code: 'token_invalid', definitive: true };
+    return {
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        reason: 'meta_oauth_error',
+        ...metaErrorNumbers(body?.error),
+      },
+    };
   }
   if (status === 429 || status >= 500 || code === 1 || code === 2 || code === 4 || code === 17) {
     return { ok: false, code: 'temporary', definitive: false };

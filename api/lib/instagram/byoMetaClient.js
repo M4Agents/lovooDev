@@ -11,6 +11,11 @@ function temporary() {
   return { ok: false, code: 'temporary', definitive: false };
 }
 
+function stampStage(failure, stage) {
+  if (!failure?.diagnostic || failure.diagnostic.stage) return failure;
+  return { ...failure, diagnostic: { ...failure.diagnostic, stage } };
+}
+
 function safeNext(value) {
   if (typeof value !== 'string' || !value.startsWith(`${GRAPH_ORIGIN}/`)) return null;
   return value;
@@ -52,7 +57,7 @@ export async function inspectByoSystemUser({
   debugUrl.searchParams.set('input_token', suat);
   debugUrl.searchParams.set('access_token', `${appId}|${appSecret}`);
   const debug = await readJson(fetchImpl, debugUrl);
-  if (!debug.ok) return debug.failure;
+  if (!debug.ok) return stampStage(debug.failure, 'debug_token');
 
   const token = interpretDebugToken(debug.body, appId);
   if (!token.ok) return token;
@@ -67,7 +72,7 @@ export async function inspectByoSystemUser({
   let next = first.toString();
   for (let page = 0; page < MAX_PAGES && next; page += 1) {
     const payload = await readJson(fetchImpl, next);
-    if (!payload.ok) return payload.failure;
+    if (!payload.ok) return stampStage(payload.failure, 'assigned_pages');
     const parsed = interpretAssignedPages(payload.body);
     if (!parsed.ok) return parsed;
     for (const account of parsed.accounts) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { interpretAssignedPages, interpretDebugToken } from '../byoMetaDiscovery.js';
+import { classifyMetaFailure, interpretAssignedPages, interpretDebugToken } from '../byoMetaDiscovery.js';
 
 const APP = '1234567890';
 
@@ -23,12 +23,57 @@ describe('descoberta do System User BYO', () => {
     expect(result.systemUserId).toBe('99887766');
   });
 
-  it('recusa token inválido', () => {
-    expect(interpretDebugToken(token({ is_valid: false }), APP)).toMatchObject({
+  it('recusa token inválido e registra a etapa debug_token', () => {
+    const result = interpretDebugToken(token({
+      is_valid: false,
+      error: { code: 190, error_subcode: 463, message: 'fixture-suat-not-real' },
+    }), APP);
+    expect(result).toEqual({
       ok: false,
       code: 'token_invalid',
       definitive: true,
+      diagnostic: {
+        stage: 'debug_token',
+        reason: 'is_valid_false',
+        meta_error_code: 190,
+        meta_error_subcode: 463,
+      },
     });
+    expect(JSON.stringify(result)).not.toContain('fixture-suat-not-real');
+  });
+
+  it('recusa user_id fora do formato sem gravar o valor', () => {
+    const result = interpretDebugToken(token({ user_id: 'nao-numerico' }), APP);
+    expect(result).toEqual({
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        stage: 'user_id_validation',
+        reason: 'user_id_invalid',
+        meta_error_code: null,
+        meta_error_subcode: null,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('nao-numerico');
+  });
+
+  it('normaliza erro 190 ou 102 sem a mensagem da Meta', () => {
+    const result = classifyMetaFailure(400, {
+      error: { code: 190, error_subcode: 460, message: 'fixture-suat-not-real' },
+    });
+    expect(result).toEqual({
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        reason: 'meta_oauth_error',
+        meta_error_code: 190,
+        meta_error_subcode: 460,
+      },
+    });
+    expect(classifyMetaFailure(401, { error: { code: 102, subcode: 12 } }).diagnostic.meta_error_code).toBe(102);
+    expect(JSON.stringify(result)).not.toContain('fixture-suat-not-real');
   });
 
   it('recusa token de outro aplicativo', () => {

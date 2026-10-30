@@ -222,6 +222,42 @@ describe('validação e associação BYO', () => {
     expect(res.body.error).toBe('conflict');
   });
 
+  it('registra a origem de token_invalid sem segredo e sem alterar a resposta', async () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    state.inspection = {
+      ok: false,
+      code: 'token_invalid',
+      definitive: true,
+      diagnostic: {
+        stage: 'assigned_pages',
+        reason: 'meta_oauth_error',
+        meta_error_code: 102,
+        meta_error_subcode: 12,
+        message: SUAT,
+        access_token: SECRET,
+      },
+    };
+    state.rpc = applied('failed', 3, 'token_invalid');
+    const res = await post('validate', {
+      company_id: COMPANY,
+      request_id: REQUEST,
+      expected_version: 2,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.validation_error_code).toBe('token_invalid');
+    expect(res.body.diagnostic).toBeUndefined();
+    const logged = spy.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+    expect(logged).toContain(`"request_id":"${REQUEST}"`);
+    expect(logged).toContain('"stage":"assigned_pages"');
+    expect(logged).toContain('"reason":"meta_oauth_error"');
+    expect(logged).toContain('"meta_error_code":102');
+    expect(logged).toContain('"public_code":"token_invalid"');
+    expect(logged).not.toContain(SUAT);
+    expect(logged).not.toContain(SECRET);
+    expect(JSON.stringify(res.body)).not.toContain(SUAT);
+    spy.mockRestore();
+  });
+
   it('não grava status quando a Meta falha de forma temporária', async () => {
     state.inspection = { ok: false, code: 'temporary', definitive: false };
     const res = await post('validate', {

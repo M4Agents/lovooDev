@@ -6,6 +6,7 @@ import { authorizeByoCredentialWrite } from './byoCredentialAuth.js';
 import { inspectByoSystemUser } from './byoMetaClient.js';
 import { evaluateByoPocAccess } from './byoPocGate.js';
 import { decryptByoSecret } from './byoTokenCrypto.js';
+import { recordByoTokenInvalid } from './byoValidationDiagnostic.js';
 import { fingerprintByoValidation } from './byoValidationFingerprint.js';
 
 const BODY_LIMIT = 4096;
@@ -153,6 +154,13 @@ export async function handleByoValidationPost(req, res, mode) {
   });
   if (!inspection.ok && !inspection.definitive) {
     return send(res, 503, { ok: false, error: 'meta_unavailable' });
+  }
+  if (!inspection.ok && inspection.code === 'token_invalid') {
+    recordByoTokenInvalid({
+      requestId: parsed.value.requestId,
+      companyId: gate.companyId,
+      diagnostic: inspection.diagnostic,
+    });
   }
 
   if (mode === 'associate') {
