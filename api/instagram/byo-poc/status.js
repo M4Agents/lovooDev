@@ -24,6 +24,9 @@ function presentCredentials(row) {
       revoked_at: null,
       credential_version: null,
       validation_error_code: null,
+      webhook_route_id: null,
+      webhook_enabled: false,
+      webhook_verify_configured: false,
     };
   }
 
@@ -37,6 +40,10 @@ function presentCredentials(row) {
     validation_error_code: row.validation_status === 'failed'
       ? (row.validation_error_code ?? null)
       : null,
+    webhook_route_id: typeof row.webhook_route_id === 'string' ? row.webhook_route_id : null,
+    webhook_enabled: row.webhook_enabled === true,
+    webhook_verify_configured: typeof row.webhook_verify_token_hash === 'string'
+      && row.webhook_verify_token_hash.length === 64,
   };
 }
 

@@ -224,9 +224,9 @@ describe('InstagramByoMetaPanel', () => {
     expect(settings).not.toContain('rotate_suat');
 
     const phrases = {
-      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Credenciais validadas', 'Conectado à Meta', 'Conta Instagram conectada à Meta', 'Guia de configuração', 'Como conectar seu Instagram ao LovooCRM', 'Gerenciar credenciais', 'Atualizar token de acesso', 'Mensagens e comentários ainda não usam esta conta.'],
-      en: ['Not configured.', 'Credentials saved', 'Credentials validated', 'Connected to Meta', 'Instagram account connected to Meta', 'Setup guide', 'How to connect your Instagram to LovooCRM', 'Manage credentials', 'Update access token', 'Messages and comments do not use this account yet.'],
-      es: ['No configurado.', 'Credenciales guardadas', 'Credenciales validadas', 'Conectado a Meta', 'Cuenta de Instagram conectada a Meta', 'Guía de configuración', 'Cómo conectar tu Instagram al LovooCRM', 'Gestionar credenciales', 'Actualizar token de acceso', 'Los mensajes y los comentarios todavía no usan esta cuenta.'],
+      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Credenciais validadas', 'Conectado à Meta', 'Conta Instagram conectada à Meta', 'Guia de configuração', 'Como conectar seu Instagram ao LovooCRM', 'Webhook Meta', 'Gerar configuração', 'Gerenciar credenciais', 'Atualizar token de acesso', 'Mensagens e comentários ainda não usam esta conta.'],
+      en: ['Not configured.', 'Credentials saved', 'Credentials validated', 'Connected to Meta', 'Instagram account connected to Meta', 'Setup guide', 'How to connect your Instagram to LovooCRM', 'Meta webhook', 'Generate configuration', 'Manage credentials', 'Update access token', 'Messages and comments do not use this account yet.'],
+      es: ['No configurado.', 'Credenciales guardadas', 'Credenciales validadas', 'Conectado a Meta', 'Cuenta de Instagram conectada a Meta', 'Guía de configuración', 'Cómo conectar tu Instagram al LovooCRM', 'Webhook de Meta', 'Generar configuración', 'Gestionar credenciales', 'Actualizar token de acceso', 'Los mensajes y los comentarios todavía no usan esta cuenta.'],
     };
     for (const [locale, expected] of Object.entries(phrases)) {
       const copy = JSON.parse(readFileSync(resolve(`src/locales/${locale}/settings.app.json`), 'utf8'));

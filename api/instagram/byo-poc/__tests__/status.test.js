@@ -306,6 +306,9 @@ describe('GET /api/instagram/byo-poc/status', () => {
       revoked_at: null,
       credential_version: null,
       validation_error_code: null,
+      webhook_route_id: null,
+      webhook_enabled: false,
+      webhook_verify_configured: false,
     });
     expect(res.body.account_status).toBe('not_connected');
     const read = calls.find((call) => call.table === 'instagram_byo_company_credentials');
@@ -441,6 +444,9 @@ describe('GET /api/instagram/byo-poc/status', () => {
       credential_version: 2,
       app_secret_enc: 'byo1:fixture-secret-not-real',
       suat_enc: 'byo1:fixture-suat-not-real',
+      webhook_route_id: 'ab'.repeat(32),
+      webhook_enabled: true,
+      webhook_verify_token_hash: 'cd'.repeat(32),
     };
     const res = response();
     await handler(request(), res);
@@ -457,6 +463,9 @@ describe('GET /api/instagram/byo-poc/status', () => {
     expect(serialized).not.toContain('fixture-suat-not-real');
     expect(serialized).not.toContain('app_secret_enc');
     expect(serialized).not.toContain('suat_enc');
+    expect(serialized).not.toContain('webhook_verify_token_hash');
+    expect(serialized).not.toContain('cd'.repeat(32));
+    expect(res.body.credentials.webhook_verify_configured).toBe(true);
   });
 
   it.each([

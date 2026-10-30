@@ -10,6 +10,9 @@ export type ByoStatusCredentials = {
   revoked_at: string | null;
   credential_version: number | null;
   validation_error_code: string | null;
+  webhook_route_id?: string | null;
+  webhook_enabled?: boolean;
+  webhook_verify_configured?: boolean;
 };
 
 export type ByoStatusAccount = {
@@ -59,6 +62,12 @@ function projectCredentials(value: unknown): ByoStatusCredentials | null {
   if (!isNullableString(value.validation_error_code)) return null;
   const version = value.credential_version;
   if (!(version === null || (typeof version === 'number' && Number.isInteger(version)))) return null;
+  const routeId = value.webhook_route_id;
+  if (!(routeId === undefined || routeId === null || (typeof routeId === 'string' && /^[0-9a-f]{64}$/.test(routeId)))) {
+    return null;
+  }
+  if (value.webhook_enabled !== undefined && typeof value.webhook_enabled !== 'boolean') return null;
+  if (value.webhook_verify_configured !== undefined && typeof value.webhook_verify_configured !== 'boolean') return null;
 
   return {
     configured: value.configured,
@@ -68,6 +77,9 @@ function projectCredentials(value: unknown): ByoStatusCredentials | null {
     revoked_at: value.revoked_at,
     credential_version: version,
     validation_error_code: value.validation_error_code,
+    webhook_route_id: typeof routeId === 'string' ? routeId : null,
+    webhook_enabled: value.webhook_enabled === true,
+    webhook_verify_configured: value.webhook_verify_configured === true,
   };
 }
 

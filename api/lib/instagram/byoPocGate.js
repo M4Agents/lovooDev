@@ -30,6 +30,9 @@ export const SAFE_CREDENTIAL_FIELDS = [
   'validated_at',
   'revoked_at',
   'credential_version',
+  'webhook_route_id',
+  'webhook_enabled',
+  'webhook_verify_token_hash',
 ].join(', ');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

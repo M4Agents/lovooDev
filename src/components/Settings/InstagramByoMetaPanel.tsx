@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { InstagramByoActionForms } from './InstagramByoActionForms';
 import { InstagramByoSetupGuide } from './InstagramByoSetupGuide';
 import { InstagramByoValidationSection } from './InstagramByoValidationSection';
+import { InstagramByoWebhookSection } from './InstagramByoWebhookSection';
 import { InstagramByoSetForm } from './InstagramByoSetForm';
 import {
   getInstagramByoStatus,
@@ -220,6 +221,17 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
           </dl>
         )}
       </div>
+
+      {companyId && configured && (
+        <InstagramByoWebhookSection
+          companyId={companyId}
+          canWrite={Boolean(canWrite)}
+          routeId={configured.webhook_route_id ?? null}
+          enabled={configured.webhook_enabled === true}
+          verifyConfigured={configured.webhook_verify_configured === true}
+          onRefresh={() => setReloadKey((current) => current + 1)}
+        />
+      )}
 
       {shown.set && companyId && (
         <div hidden={!setVisible}>

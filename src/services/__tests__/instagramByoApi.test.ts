@@ -198,6 +198,9 @@ describe('getInstagramByoStatus', () => {
       'revoked_at',
       'credential_version',
       'validation_error_code',
+      'webhook_route_id',
+      'webhook_enabled',
+      'webhook_verify_configured',
     ]);
     expect(JSON.stringify(result)).not.toContain('app_secret');
     expect(JSON.stringify(result)).not.toContain(SECRET);
