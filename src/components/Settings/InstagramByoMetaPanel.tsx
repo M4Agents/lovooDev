@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstagramByoReplaceForm } from './InstagramByoReplaceForm';
+import { InstagramByoRotateSecretForm } from './InstagramByoRotateSecretForm';
 import { InstagramByoSetForm } from './InstagramByoSetForm';
 import {
   getInstagramByoStatus,
@@ -8,7 +9,7 @@ import {
   type ByoStatusPayload,
   type ByoStatusResult,
 } from '../../services/instagramByoApi';
-import { resolveByoReplaceMode } from '../../services/instagramByoWriteApi';
+import { resolveByoReplaceMode, resolveByoRotateSecretMode } from '../../services/instagramByoWriteApi';
 
 const FIELD_IDS = ['app-id', 'app-secret', 'suat'] as const;
 
@@ -74,8 +75,10 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
     : null;
   const setMode = view.kind === 'ok' ? resolveByoSetMode(view.status.credentials) : { kind: 'blocked' as const };
   const replaceMode = view.kind === 'ok' ? resolveByoReplaceMode(view.status.credentials) : { kind: 'blocked' as const };
+  const rotateSecretMode = view.kind === 'ok' ? resolveByoRotateSecretMode(view.status.credentials) : { kind: 'blocked' as const };
   const showSetForm = Boolean(canWrite && companyId && setMode.kind !== 'blocked');
   const showReplaceForm = Boolean(canWrite && companyId && replaceMode.kind === 'ready');
+  const showRotateSecretForm = Boolean(canWrite && companyId && rotateSecretMode.kind === 'ready');
   const revoked = setMode.kind === 'revoked' && view.kind === 'ok' ? view.status.credentials : null;
 
   return (
@@ -151,13 +154,25 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
           onRefresh={() => setReloadKey((current) => current + 1)}
           onNotice={setNotice}
         />
-      ) : showReplaceForm && companyId && replaceMode.kind === 'ready' ? (
-        <InstagramByoReplaceForm
-          companyId={companyId}
-          expectedVersion={replaceMode.expectedVersion}
-          onRefresh={() => setReloadKey((current) => current + 1)}
-          onNotice={setNotice}
-        />
+      ) : (showReplaceForm || showRotateSecretForm) && companyId ? (
+        <div className="space-y-8">
+          {showReplaceForm && replaceMode.kind === 'ready' && (
+            <InstagramByoReplaceForm
+              companyId={companyId}
+              expectedVersion={replaceMode.expectedVersion}
+              onRefresh={() => setReloadKey((current) => current + 1)}
+              onNotice={setNotice}
+            />
+          )}
+          {showRotateSecretForm && rotateSecretMode.kind === 'ready' && (
+            <InstagramByoRotateSecretForm
+              companyId={companyId}
+              expectedVersion={rotateSecretMode.expectedVersion}
+              onRefresh={() => setReloadKey((current) => current + 1)}
+              onNotice={setNotice}
+            />
+          )}
+        </div>
       ) : (
       <div className="grid grid-cols-1 gap-4">
         {FIELD_IDS.map((field) => (

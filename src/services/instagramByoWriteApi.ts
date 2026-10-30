@@ -21,6 +21,13 @@ export type ByoReplaceInput = {
   suat: string;
 };
 
+export type ByoRotateSecretInput = {
+  companyId: string;
+  requestId: string;
+  expectedVersion: number;
+  appSecret: string;
+};
+
 export type ByoReplaceSuccess = {
   ok: true;
   result: 'applied' | 'idempotent' | 'already_revoked';
@@ -45,6 +52,8 @@ export type ByoReplaceResult =
   | { kind: 'network' }
   | { kind: 'session_unavailable' }
   | { kind: 'temporary' };
+
+export type ByoRotateSecretResult = ByoReplaceResult;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -74,12 +83,33 @@ function validVersion(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= MAX_VERSION;
 }
 
-export function resolveByoReplaceMode(credentials: ByoStatusCredentials): ByoReplaceMode {
+function resolveActiveCredentialMode(credentials: ByoStatusCredentials): ByoReplaceMode {
   if (credentials.configured !== true) return { kind: 'blocked' };
   if (!ACTIVE_STATUS.has(credentials.validation_status)) return { kind: 'blocked' };
   const version = credentials.credential_version;
   if (typeof version !== 'number' || !validVersion(version)) return { kind: 'blocked' };
   return { kind: 'ready', expectedVersion: version };
+}
+
+export function resolveByoReplaceMode(credentials: ByoStatusCredentials): ByoReplaceMode {
+  return resolveActiveCredentialMode(credentials);
+}
+
+export function resolveByoRotateSecretMode(credentials: ByoStatusCredentials): ByoReplaceMode {
+  return resolveActiveCredentialMode(credentials);
+}
+
+function rotateSecretPayload(input: ByoRotateSecretInput): Record<string, string | number> | null {
+  if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
+  if (!validVersion(input.expectedVersion)) return null;
+  if (!validSecret(input.appSecret)) return null;
+  return {
+    company_id: input.companyId.toLowerCase(),
+    request_id: input.requestId.toLowerCase(),
+    operation: 'rotate_secret',
+    expected_version: input.expectedVersion,
+    app_secret: input.appSecret,
+  };
 }
 
 function replacePayload(input: ByoReplaceInput): Record<string, string | number> | null {
@@ -128,8 +158,9 @@ async function errorCode(response: Response): Promise<string | null> {
   return null;
 }
 
-export async function replaceInstagramByoApp(input: ByoReplaceInput): Promise<ByoReplaceResult> {
-  const payload = replacePayload(input);
+async function postByoCredentials(
+  payload: Record<string, string | number> | null,
+): Promise<ByoReplaceResult> {
   if (!payload) return { kind: 'rejected' };
 
   let token = '';
@@ -178,4 +209,12 @@ export async function replaceInstagramByoApp(input: ByoReplaceInput): Promise<By
   } catch {
     return { kind: 'temporary' };
   }
+}
+
+export function replaceInstagramByoApp(input: ByoReplaceInput): Promise<ByoReplaceResult> {
+  return postByoCredentials(replacePayload(input));
+}
+
+export function rotateInstagramByoSecret(input: ByoRotateSecretInput): Promise<ByoRotateSecretResult> {
+  return postByoCredentials(rotateSecretPayload(input));
 }

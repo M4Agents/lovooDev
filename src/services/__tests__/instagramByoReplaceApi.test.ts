@@ -198,7 +198,6 @@ describe('replaceInstagramByoApp', () => {
     const setForm = readFileSync(resolve('src/components/Settings/InstagramByoSetForm.tsx'), 'utf8');
     expect(source).toContain("operation: 'replace_app'");
     expect(source).not.toContain('...');
-    expect(source).not.toContain('rotate_secret');
     expect(source).not.toContain('rotate_suat');
     expect(source).not.toContain('byo-poc/revoke');
     expect(form).not.toContain('rotate_secret');
