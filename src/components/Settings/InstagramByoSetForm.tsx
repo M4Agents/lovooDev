@@ -1,25 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   setInstagramByoCredentials,
   type ByoSetMode,
-  type ByoSetResult,
 } from '../../services/instagramByoApi';
-
-type Notice =
-  | 'applied'
-  | 'idempotent'
-  | 'stale'
-  | 'conflict'
-  | 'request_reused'
-  | 'rejected'
-  | 'unauthorized'
-  | 'forbidden'
-  | 'unavailable'
-  | 'too_large'
-  | 'unsupported_media'
-  | 'service_unavailable'
-  | 'unknown';
+import {
+  useByoCredentialAttempt,
+  type ByoWriteNotice,
+} from './useByoCredentialAttempt';
 
 type Attempt = {
   companyId: string;
@@ -30,8 +18,6 @@ type Attempt = {
   expectedVersion?: number;
 };
 
-type Phase = 'edit' | 'confirm' | 'sending' | 'retryable';
-
 type Props = {
   companyId: string;
   mode: Exclude<ByoSetMode, { kind: 'blocked' }>;
@@ -39,7 +25,7 @@ type Props = {
   onNotice: (notice: string | null) => void;
 };
 
-const NOTICE_KEY: Record<Notice, string> = {
+const NOTICE_KEY: Record<ByoWriteNotice, string> = {
   applied: 'integrations.instagramByo.setApplied',
   idempotent: 'integrations.instagramByo.setIdempotent',
   stale: 'integrations.instagramByo.setStale',
@@ -55,121 +41,40 @@ const NOTICE_KEY: Record<Notice, string> = {
   unknown: 'integrations.instagramByo.setUnknownOutcome',
 };
 
-function createRequestId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Props) {
   const { t } = useTranslation('settings.app');
   const [appId, setAppId] = useState('');
   const [appSecret, setAppSecret] = useState('');
   const [suat, setSuat] = useState('');
-  const [phase, setPhase] = useState<Phase>('edit');
-  const [attempt, setAttempt] = useState<Attempt | null>(null);
-  const sendingRef = useRef(false);
-  const mountedRef = useRef(true);
-  const companyRef = useRef(companyId);
-  companyRef.current = companyId;
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setAppId('');
-    setAppSecret('');
-    setSuat('');
-    setPhase('edit');
-    setAttempt(null);
-  }, [companyId]);
-
-  function clearSecrets() {
-    setAppId('');
-    setAppSecret('');
-    setSuat('');
-    setAttempt(null);
-    setPhase('edit');
-  }
+  const flow = useByoCredentialAttempt<Attempt>({
+    companyId,
+    onNotice: (notice) => onNotice(notice ? NOTICE_KEY[notice] : null),
+    onRefresh,
+    onClearFields: () => {
+      setAppId('');
+      setAppSecret('');
+      setSuat('');
+    },
+    execute: (current) => setInstagramByoCredentials({
+      companyId: current.companyId,
+      requestId: current.requestId,
+      metaAppId: current.metaAppId,
+      appSecret: current.appSecret,
+      suat: current.suat,
+      expectedVersion: current.expectedVersion,
+    }),
+  });
+  const { phase, attempt } = flow;
 
   function prepare() {
     if (!appId || !appSecret || !suat) return;
-    setAttempt({
+    flow.confirm({
       companyId,
-      requestId: createRequestId(),
       metaAppId: appId,
       appSecret,
       suat,
       expectedVersion: mode.kind === 'revoked' ? mode.expectedVersion : undefined,
     });
-    setPhase('confirm');
-    onNotice(null);
-  }
-
-  async function send(current: Attempt) {
-    if (sendingRef.current) return;
-    const retryingUnknown = phase === 'retryable';
-    sendingRef.current = true;
-    setPhase('sending');
-    let result: ByoSetResult;
-    try {
-      result = await setInstagramByoCredentials({
-        companyId: current.companyId,
-        requestId: current.requestId,
-        metaAppId: current.metaAppId,
-        appSecret: current.appSecret,
-        suat: current.suat,
-        expectedVersion: current.expectedVersion,
-      });
-    } finally {
-      sendingRef.current = false;
-    }
-    if (!mountedRef.current || current.companyId !== companyRef.current) return;
-
-    const sessionLost = result.kind === 'unauthorized' || result.kind === 'session_unavailable';
-    if (
-      result.kind === 'network'
-      || result.kind === 'service_unavailable'
-      || (retryingUnknown && sessionLost)
-    ) {
-      setPhase('retryable');
-      onNotice(NOTICE_KEY.unknown);
-      return;
-    }
-    if (sessionLost) {
-      setPhase('edit');
-      setAttempt(null);
-      onNotice(NOTICE_KEY.unauthorized);
-      return;
-    }
-    if (result.kind === 'conflict' || result.kind === 'request_reused') {
-      clearSecrets();
-      onNotice(NOTICE_KEY[result.kind]);
-      onRefresh();
-      return;
-    }
-    if (result.kind === 'ok') {
-      const notice: Notice = result.body.stale
-        ? 'stale'
-        : result.body.result === 'idempotent'
-          ? 'idempotent'
-          : 'applied';
-      clearSecrets();
-      onNotice(NOTICE_KEY[notice]);
-      onRefresh();
-      return;
-    }
-    const notice = result.kind === 'temporary' ? 'rejected' : result.kind;
-    setPhase('edit');
-    setAttempt(null);
-    onNotice(NOTICE_KEY[notice]);
   }
 
   const locked = phase === 'confirm' || phase === 'sending' || phase === 'retryable';
@@ -240,17 +145,14 @@ export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Pr
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => send(attempt)}
+            onClick={() => flow.send(attempt)}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
           >
             {t('integrations.instagramByo.setConfirm')}
           </button>
           <button
             type="button"
-            onClick={() => {
-              setPhase('edit');
-              setAttempt(null);
-            }}
+            onClick={flow.cancel}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
           >
             {t('integrations.instagramByo.setCancel')}
@@ -259,10 +161,10 @@ export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Pr
       )}
       {phase === 'retryable' && attempt && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => send(attempt)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">
+          <button type="button" onClick={() => flow.send(attempt)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">
             {t('integrations.instagramByo.setRetry')}
           </button>
-          <button type="button" onClick={clearSecrets} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">
+          <button type="button" onClick={flow.discard} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">
             {t('integrations.instagramByo.setDiscard')}
           </button>
         </div>

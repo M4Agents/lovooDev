@@ -569,7 +569,8 @@ describe('cadastro set do Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
-    expectInputsDisabled();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    expect(screen.getByLabelText('integrations.instagramByo.replaceFields.app-secret')).toHaveProperty('value', '');
   });
 
   it.each(['unauthorized', 'session_unavailable'] as const)(
