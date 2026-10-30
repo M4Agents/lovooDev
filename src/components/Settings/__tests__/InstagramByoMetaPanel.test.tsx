@@ -222,9 +222,9 @@ describe('InstagramByoMetaPanel', () => {
     expect(settings).not.toContain('rotate_suat');
 
     const phrases = {
-      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Gerenciar credenciais', 'Atualizar token de acesso'],
-      en: ['Not configured.', 'Credentials saved', 'Manage credentials', 'Update access token'],
-      es: ['No configurado.', 'Credenciales guardadas', 'Gestionar credenciales', 'Actualizar token de acceso'],
+      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Credenciais validadas', 'Gerenciar credenciais', 'Atualizar token de acesso', 'Mensagens e comentários ainda não usam esta conta.'],
+      en: ['Not configured.', 'Credentials saved', 'Credentials validated', 'Manage credentials', 'Update access token', 'Messages and comments do not use this account yet.'],
+      es: ['No configurado.', 'Credenciales guardadas', 'Credenciales validadas', 'Gestionar credenciales', 'Actualizar token de acceso', 'Los mensajes y los comentarios todavía no usan esta cuenta.'],
     };
     for (const [locale, expected] of Object.entries(phrases)) {
       const copy = JSON.parse(readFileSync(resolve(`src/locales/${locale}/settings.app.json`), 'utf8'));

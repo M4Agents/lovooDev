@@ -7,7 +7,7 @@ export type ByoFault = 'unavailable' | 'denied' | 'temporary' | null;
 const STATUS_VALUE: Record<string, string> = {
   saved: 'integrations.instagramByo.statusSaved',
   pending: 'integrations.instagramByo.statusPending',
-  valid: 'integrations.instagramByo.statusRegistered',
+  valid: 'integrations.instagramByo.statusValidated',
   failed: 'integrations.instagramByo.statusFailed',
   revoked: 'integrations.instagramByo.statusRevokedShort',
   not_configured: 'integrations.instagramByo.stateCredentials',

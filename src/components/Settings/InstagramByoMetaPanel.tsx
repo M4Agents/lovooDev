@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstagramByoActionForms } from './InstagramByoActionForms';
+import { InstagramByoValidationSection } from './InstagramByoValidationSection';
 import { InstagramByoSetForm } from './InstagramByoSetForm';
 import {
   getInstagramByoStatus,
@@ -190,6 +191,14 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
             )}
           </dl>
         )}
+        <InstagramByoValidationSection
+          companyId={companyId}
+          canWrite={Boolean(canWrite)}
+          ready={sync === 'ready'}
+          credentials={snapshot?.credentials ?? null}
+          accounts={snapshot?.accounts ?? []}
+          onRefresh={() => setReloadKey((current) => current + 1)}
+        />
         {revoked && (
           <dl className="space-y-1 text-sm text-slate-600">
             <div>
