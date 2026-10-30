@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstagramByoReplaceForm } from './InstagramByoReplaceForm';
 import { InstagramByoRotateSecretForm } from './InstagramByoRotateSecretForm';
@@ -20,54 +20,98 @@ import {
 
 const FIELD_IDS = ['app-id', 'app-secret', 'suat'] as const;
 
-type PanelView =
-  | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'unavailable' }
-  | { kind: 'denied' }
-  | { kind: 'temporary' }
-  | { kind: 'ok'; status: ByoStatusPayload };
+type Sync = 'initial' | 'ready' | 'refreshing' | 'unconfirmed';
+type Fault = 'unavailable' | 'denied' | 'temporary' | null;
+type Shown = { set: boolean; replace: boolean; rotateSecret: boolean; rotateSuat: boolean; revoke: boolean };
+type Notices = Record<keyof Shown, string | null>;
+const NONE_SHOWN: Shown = { set: false, replace: false, rotateSecret: false, rotateSuat: false, revoke: false };
+const EMPTY_NOTICES: Notices = { set: null, replace: null, rotateSecret: null, rotateSuat: null, revoke: null };
 
 type Props = {
   companyId?: string | null;
   canWrite?: boolean;
 };
 
-function statusTextKey(view: PanelView): string | null {
-  if (view.kind === 'loading') return 'integrations.instagramByo.statusLoading';
-  if (view.kind === 'unavailable') return 'integrations.instagramByo.statusUnavailable';
-  if (view.kind === 'denied') return 'integrations.instagramByo.statusDenied';
-  if (view.kind === 'temporary') return 'integrations.instagramByo.statusTemporary';
-  if (view.kind === 'ok' && !view.status.credentials.configured) {
-    const mode = resolveByoSetMode(view.status.credentials);
+function latchShown(shown: Shown, status: ByoStatusPayload, canWrite: boolean): Shown {
+  if (!canWrite) return shown;
+  const credentials = status.credentials;
+  return {
+    set: shown.set || resolveByoSetMode(credentials).kind !== 'blocked',
+    replace: shown.replace || resolveByoReplaceMode(credentials).kind === 'ready',
+    rotateSecret: shown.rotateSecret || resolveByoRotateSecretMode(credentials).kind === 'ready',
+    rotateSuat: shown.rotateSuat || resolveByoRotateSuatMode(credentials).kind === 'ready',
+    revoke: shown.revoke || resolveByoRevokeMode(credentials).kind === 'ready',
+  };
+}
+
+function fallbackVersion(status: ByoStatusPayload | null): number {
+  const version = status?.credentials.credential_version;
+  return typeof version === 'number' && Number.isInteger(version) && version >= 1 ? version : 1;
+}
+
+function messageKey(sync: Sync, fault: Fault, snapshot: ByoStatusPayload | null): string | null {
+  if (!snapshot && fault === 'unavailable') return 'integrations.instagramByo.statusUnavailable';
+  if (!snapshot && fault === 'denied') return 'integrations.instagramByo.statusDenied';
+  if (!snapshot && fault === 'temporary') return 'integrations.instagramByo.statusTemporary';
+  if (!snapshot) return 'integrations.instagramByo.statusLoading';
+  if (sync === 'refreshing') return 'integrations.instagramByo.statusRefreshing';
+  if (sync === 'unconfirmed') return 'integrations.instagramByo.statusUnconfirmed';
+  if (!snapshot.credentials.configured) {
+    const mode = resolveByoSetMode(snapshot.credentials);
     if (mode.kind === 'initial') return 'integrations.instagramByo.stateCredentials';
     if (mode.kind === 'revoked') return 'integrations.instagramByo.statusRevoked';
     return 'integrations.instagramByo.statusSetBlocked';
   }
-  if (view.kind === 'ok') return 'integrations.instagramByo.statusConfigured';
-  return null;
+  return 'integrations.instagramByo.statusConfigured';
 }
 
 export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Props) {
   const { t } = useTranslation('settings.app');
-  const [view, setView] = useState<PanelView>({ kind: 'idle' });
+  const [snapshot, setSnapshot] = useState<ByoStatusPayload | null>(null);
+  const [sync, setSync] = useState<Sync>('initial');
+  const [fault, setFault] = useState<Fault>(null);
+  const [shown, setShown] = useState<Shown>(NONE_SHOWN);
+  const [notices, setNotices] = useState<Notices>(EMPTY_NOTICES);
   const [reloadKey, setReloadKey] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
+  const snapshotRef = useRef<ByoStatusPayload | null>(null);
+  const seenCompany = useRef<string | null | undefined>(undefined);
+  const canWriteRef = useRef(canWrite);
+  canWriteRef.current = canWrite;
 
   useEffect(() => {
-    if (!companyId) {
-      setView({ kind: 'idle' });
-      setNotice(null);
-      return;
+    const companyChanged = seenCompany.current !== companyId;
+    seenCompany.current = companyId;
+    if (!companyId || companyChanged) {
+      snapshotRef.current = null;
+      setSnapshot(null);
+      setSync('initial');
+      setFault(null);
+      setShown(NONE_SHOWN);
+      setNotices(EMPTY_NOTICES);
     }
+    if (!companyId) return undefined;
 
     const controller = new AbortController();
     let active = true;
-    setView({ kind: 'loading' });
+    const keep = snapshotRef.current !== null;
+    setSync(keep ? 'refreshing' : 'initial');
 
     getInstagramByoStatus(companyId, controller.signal).then((result: ByoStatusResult) => {
       if (!active || result.kind === 'cancelled') return;
-      setView(result);
+      if (result.kind === 'ok') {
+        snapshotRef.current = result.status;
+        setSnapshot(result.status);
+        setSync('ready');
+        setFault(null);
+        setShown((current) => latchShown(current, result.status, canWriteRef.current));
+        return;
+      }
+      if (snapshotRef.current) {
+        setSync('unconfirmed');
+        return;
+      }
+      setSync('initial');
+      setFault(result.kind);
     });
 
     return () => {
@@ -76,21 +120,22 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
     };
   }, [companyId, reloadKey]);
 
-  const messageKey = statusTextKey(view);
-  const configured = view.kind === 'ok' && view.status.credentials.configured
-    ? view.status.credentials
-    : null;
-  const setMode = view.kind === 'ok' ? resolveByoSetMode(view.status.credentials) : { kind: 'blocked' as const };
-  const replaceMode = view.kind === 'ok' ? resolveByoReplaceMode(view.status.credentials) : { kind: 'blocked' as const };
-  const rotateSecretMode = view.kind === 'ok' ? resolveByoRotateSecretMode(view.status.credentials) : { kind: 'blocked' as const };
-  const rotateSuatMode = view.kind === 'ok' ? resolveByoRotateSuatMode(view.status.credentials) : { kind: 'blocked' as const };
-  const revokeMode = view.kind === 'ok' ? resolveByoRevokeMode(view.status.credentials) : { kind: 'blocked' as const };
-  const showSetForm = Boolean(canWrite && companyId && setMode.kind !== 'blocked');
-  const showReplaceForm = Boolean(canWrite && companyId && replaceMode.kind === 'ready');
-  const showRotateSecretForm = Boolean(canWrite && companyId && rotateSecretMode.kind === 'ready');
-  const showRotateSuatForm = Boolean(canWrite && companyId && rotateSuatMode.kind === 'ready');
-  const showRevokeForm = Boolean(canWrite && companyId && revokeMode.kind === 'ready');
-  const revoked = setMode.kind === 'revoked' && view.kind === 'ok' ? view.status.credentials : null;
+  const credentials = snapshot?.credentials ?? null;
+  const setMode = credentials ? resolveByoSetMode(credentials) : { kind: 'blocked' as const };
+  const replaceMode = credentials ? resolveByoReplaceMode(credentials) : { kind: 'blocked' as const };
+  const rotateSecretMode = credentials ? resolveByoRotateSecretMode(credentials) : { kind: 'blocked' as const };
+  const rotateSuatMode = credentials ? resolveByoRotateSuatMode(credentials) : { kind: 'blocked' as const };
+  const revokeMode = credentials ? resolveByoRevokeMode(credentials) : { kind: 'blocked' as const };
+  const openForNew = sync === 'ready' && Boolean(canWrite && companyId);
+  const version = fallbackVersion(snapshot);
+  const textKey = messageKey(sync, fault, snapshot);
+  const showVersion = sync === 'ready' && snapshot !== null;
+  const configured = showVersion && snapshot.credentials.configured ? snapshot.credentials : null;
+  const revoked = showVersion && setMode.kind === 'revoked' ? snapshot.credentials : null;
+  const anyForm = shown.set || shown.replace || shown.rotateSecret || shown.rotateSuat || shown.revoke;
+  const noticeSetter = (slot: keyof Notices) => (notice: string | null) => {
+    setNotices((current) => ({ ...current, [slot]: notice }));
+  };
 
   return (
     <section className="space-y-6" aria-labelledby="instagram-byo-title">
@@ -106,10 +151,22 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
         </span>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-busy={view.kind === 'loading'}>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-busy={sync === 'initial' || sync === 'refreshing'}>
         <p className="text-sm font-medium text-slate-900">{t('integrations.instagramByo.stateTitle')}</p>
-        {messageKey && <p className="text-sm text-slate-600">{t(messageKey)}</p>}
-        {notice && <p className="text-sm text-slate-600">{t(notice)}</p>}
+        {textKey && <p className="text-sm text-slate-600">{t(textKey)}</p>}
+        {(Object.keys(notices) as (keyof Notices)[]).map((slot) => (
+          notices[slot] ? <p key={slot} className="text-sm text-slate-600">{t(notices[slot])}</p> : null
+        ))}
+        {sync === 'unconfirmed' && (
+          <button
+            type="button"
+            data-testid="instagram-byo-refresh-status"
+            onClick={() => setReloadKey((current) => current + 1)}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+          >
+            {t('integrations.instagramByo.refreshStatus')}
+          </button>
+        )}
         {configured && (
           <dl className="space-y-1 text-sm text-slate-600">
             <div>
@@ -158,67 +215,74 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
         )}
       </div>
 
-      {showSetForm && companyId && setMode.kind !== 'blocked' ? (
+      {shown.set && companyId && (
         <InstagramByoSetForm
           companyId={companyId}
           mode={setMode}
+          acceptNewAttempt={openForNew && setMode.kind !== 'blocked'}
           onRefresh={() => setReloadKey((current) => current + 1)}
-          onNotice={setNotice}
+          onNotice={noticeSetter('set')}
         />
-      ) : (showReplaceForm || showRotateSecretForm || showRotateSuatForm || showRevokeForm) && companyId ? (
+      )}
+      {(shown.replace || shown.rotateSecret || shown.rotateSuat || shown.revoke) && companyId && (
         <div className="space-y-8">
-          {showReplaceForm && replaceMode.kind === 'ready' && (
+          {shown.replace && (
             <InstagramByoReplaceForm
               companyId={companyId}
-              expectedVersion={replaceMode.expectedVersion}
+              expectedVersion={replaceMode.kind === 'ready' ? replaceMode.expectedVersion : version}
+              acceptNewAttempt={openForNew && replaceMode.kind === 'ready'}
               onRefresh={() => setReloadKey((current) => current + 1)}
-              onNotice={setNotice}
+              onNotice={noticeSetter('replace')}
             />
           )}
-          {showRotateSecretForm && rotateSecretMode.kind === 'ready' && (
+          {shown.rotateSecret && (
             <InstagramByoRotateSecretForm
               companyId={companyId}
-              expectedVersion={rotateSecretMode.expectedVersion}
+              expectedVersion={rotateSecretMode.kind === 'ready' ? rotateSecretMode.expectedVersion : version}
+              acceptNewAttempt={openForNew && rotateSecretMode.kind === 'ready'}
               onRefresh={() => setReloadKey((current) => current + 1)}
-              onNotice={setNotice}
+              onNotice={noticeSetter('rotateSecret')}
             />
           )}
-          {showRotateSuatForm && rotateSuatMode.kind === 'ready' && (
+          {shown.rotateSuat && (
             <InstagramByoRotateSuatForm
               companyId={companyId}
-              expectedVersion={rotateSuatMode.expectedVersion}
+              expectedVersion={rotateSuatMode.kind === 'ready' ? rotateSuatMode.expectedVersion : version}
+              acceptNewAttempt={openForNew && rotateSuatMode.kind === 'ready'}
               onRefresh={() => setReloadKey((current) => current + 1)}
-              onNotice={setNotice}
+              onNotice={noticeSetter('rotateSuat')}
             />
           )}
-          {showRevokeForm && revokeMode.kind === 'ready' && (
+          {shown.revoke && (
             <InstagramByoRevokeForm
               companyId={companyId}
-              expectedVersion={revokeMode.expectedVersion}
+              expectedVersion={revokeMode.kind === 'ready' ? revokeMode.expectedVersion : version}
+              acceptNewAttempt={openForNew && revokeMode.kind === 'ready'}
               onRefresh={() => setReloadKey((current) => current + 1)}
-              onNotice={setNotice}
+              onNotice={noticeSetter('revoke')}
             />
           )}
         </div>
-      ) : (
-      <div className="grid grid-cols-1 gap-4">
-        {FIELD_IDS.map((field) => (
-          <label key={field} className="block" htmlFor={`instagram-byo-${field}`}>
-            <span className="block text-sm font-medium text-slate-700 mb-1">
-              {t(`integrations.instagramByo.fields.${field}`)}
-            </span>
-            <input
-              id={`instagram-byo-${field}`}
-              type={field === 'app-id' ? 'text' : 'password'}
-              defaultValue=""
-              disabled
-              readOnly
-              autoComplete="off"
-              className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
-            />
-          </label>
-        ))}
-      </div>
+      )}
+      {!anyForm && (
+        <div className="grid grid-cols-1 gap-4">
+          {FIELD_IDS.map((field) => (
+            <label key={field} className="block" htmlFor={`instagram-byo-${field}`}>
+              <span className="block text-sm font-medium text-slate-700 mb-1">
+                {t(`integrations.instagramByo.fields.${field}`)}
+              </span>
+              <input
+                id={`instagram-byo-${field}`}
+                type={field === 'app-id' ? 'text' : 'password'}
+                defaultValue=""
+                disabled
+                readOnly
+                autoComplete="off"
+                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500"
+              />
+            </label>
+          ))}
+        </div>
       )}
 
       <p className="text-sm text-slate-600">{t('integrations.instagramByo.encryptionNotice')}</p>

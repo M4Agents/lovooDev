@@ -14,6 +14,7 @@ type Attempt = {
 type Props = {
   companyId: string;
   expectedVersion: number;
+  acceptNewAttempt?: boolean;
   onRefresh: () => void;
   onNotice: (notice: string | null) => void;
 };
@@ -38,6 +39,7 @@ const NOTICE_KEY: Record<ByoWriteNotice, string> = {
 export function InstagramByoRevokeForm({
   companyId,
   expectedVersion,
+  acceptNewAttempt = true,
   onRefresh,
   onNotice,
 }: Props) {
@@ -72,7 +74,11 @@ export function InstagramByoRevokeForm({
       {phase === 'edit' && (
         <button
           type="button"
-          onClick={() => flow.confirm({ companyId, expectedVersion })}
+          disabled={!acceptNewAttempt}
+          onClick={() => {
+            if (!acceptNewAttempt) return;
+            flow.confirm({ companyId, expectedVersion });
+          }}
           className="rounded-lg border border-slate-900 px-4 py-2 text-sm text-slate-900"
         >
           {t('integrations.instagramByo.revokeSubmit')}

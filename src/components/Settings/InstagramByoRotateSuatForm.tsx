@@ -16,6 +16,7 @@ type Attempt = {
 type Props = {
   companyId: string;
   expectedVersion: number;
+  acceptNewAttempt?: boolean;
   onRefresh: () => void;
   onNotice: (notice: string | null) => void;
 };
@@ -40,6 +41,7 @@ const NOTICE_KEY: Record<ByoWriteNotice, string> = {
 export function InstagramByoRotateSuatForm({
   companyId,
   expectedVersion,
+  acceptNewAttempt = true,
   onRefresh,
   onNotice,
 }: Props) {
@@ -60,6 +62,7 @@ export function InstagramByoRotateSuatForm({
   const { phase, attempt } = flow;
 
   function prepare() {
+    if (!acceptNewAttempt) return;
     if (!suat) return;
     flow.confirm({
       companyId,
@@ -101,7 +104,7 @@ export function InstagramByoRotateSuatForm({
       {phase === 'edit' && (
         <button
           type="button"
-          disabled={!suat}
+          disabled={!acceptNewAttempt || !suat}
           onClick={prepare}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:bg-slate-300"
         >

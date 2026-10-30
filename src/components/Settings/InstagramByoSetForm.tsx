@@ -20,7 +20,8 @@ type Attempt = {
 
 type Props = {
   companyId: string;
-  mode: Exclude<ByoSetMode, { kind: 'blocked' }>;
+  mode: ByoSetMode;
+  acceptNewAttempt?: boolean;
   onRefresh: () => void;
   onNotice: (notice: string | null) => void;
 };
@@ -42,7 +43,13 @@ const NOTICE_KEY: Record<ByoWriteNotice, string> = {
   unknown: 'integrations.instagramByo.setUnknownOutcome',
 };
 
-export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Props) {
+export function InstagramByoSetForm({
+  companyId,
+  mode,
+  acceptNewAttempt = true,
+  onRefresh,
+  onNotice,
+}: Props) {
   const { t } = useTranslation('settings.app');
   const [appId, setAppId] = useState('');
   const [appSecret, setAppSecret] = useState('');
@@ -68,6 +75,7 @@ export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Pr
   const { phase, attempt } = flow;
 
   function prepare() {
+    if (!acceptNewAttempt || mode.kind === 'blocked') return;
     if (!appId || !appSecret || !suat) return;
     flow.confirm({
       companyId,
@@ -135,7 +143,7 @@ export function InstagramByoSetForm({ companyId, mode, onRefresh, onNotice }: Pr
       {phase === 'edit' && (
         <button
           type="button"
-          disabled={!appId || !appSecret || !suat}
+          disabled={!acceptNewAttempt || mode.kind === 'blocked' || !appId || !appSecret || !suat}
           onClick={prepare}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:bg-slate-300"
         >
