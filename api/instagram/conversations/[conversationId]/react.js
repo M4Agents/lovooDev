@@ -23,6 +23,7 @@
 import { getSupabaseAdmin }        from '../../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller } from '../../../lib/instagram/validateInstagramCaller.js';
 import { decryptInstagramToken }   from '../../../lib/instagram/tokenCrypto.js';
+import { isByoConversation, rejectByoSend } from '../../../lib/instagram/byoConversationGuard.js';
 
 const GRAPH_API_VERSION = 'v21.0';
 const META_TIMEOUT_MS   = 10_000;
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
   // ── 1. Resolver conversa ───────────────────────────────────────────────────
   const { data: conversation, error: convErr } = await svc
     .from('instagram_conversations')
-    .select('id, company_id, connection_id, ig_participant_id')
+    .select('id, company_id, connection_id, byo_account_id, ig_participant_id')
     .eq('id', conversationId)
     .maybeSingle();
 
@@ -71,6 +72,10 @@ export default async function handler(req, res) {
   const auth = await validateInstagramCaller(req, svc, conversation.company_id);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
+  }
+
+  if (isByoConversation(conversation)) {
+    return rejectByoSend(res);
   }
 
   // ── 3. Buscar conexão ──────────────────────────────────────────────────────

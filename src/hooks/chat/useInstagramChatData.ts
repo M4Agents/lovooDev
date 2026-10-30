@@ -242,7 +242,7 @@ export function useInstagramChatData(
 
     // Enriquecer perfil do participante se ainda não preenchido
     const conv = conversationsRef.current.find(c => c.id === selectedConversationId)
-    if (conv && !conv.participant_name) {
+    if (conv && !conv.byo_account_id && conv.connection_id && !conv.participant_name) {
       postWithAuth<{
         participant_name:     string | null
         participant_username: string | null
@@ -502,6 +502,8 @@ export function useInstagramChatData(
 
   const sendMessage = useCallback(async ({ text, reply_to_ig_message_id }: InstagramSendMessagePayload) => {
     if (!selectedConversationId) return
+    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    if (current && (current.byo_account_id || current.connection_id == null)) return
     setSendLoading(true)
     setSendError(undefined)
     try {
@@ -536,6 +538,8 @@ export function useInstagramChatData(
 
   const sendMedia = useCallback(async ({ media_url, media_type, reply_to_ig_message_id }: InstagramSendMediaPayload) => {
     if (!selectedConversationId) return
+    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    if (current && (current.byo_account_id || current.connection_id == null)) return
     setSendMediaLoading(true)
     setSendError(undefined)
     try {
@@ -566,6 +570,8 @@ export function useInstagramChatData(
 
   const reactToMessage = useCallback(async ({ ig_message_id, emoji, action }: InstagramReactPayload) => {
     if (!selectedConversationId) return
+    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    if (current && (current.byo_account_id || current.connection_id == null)) return
     try {
       await postWithAuth(
         `/api/instagram/conversations/${selectedConversationId}/react`,

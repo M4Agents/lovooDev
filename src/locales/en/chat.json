@@ -332,5 +332,8 @@
   "dates": {
     "today": "Today",
     "yesterday": "Yesterday"
+  },
+  "instagram": {
+    "byoSendUnavailable": "Sending messages through Instagram BYO is not available yet."
   }
 }

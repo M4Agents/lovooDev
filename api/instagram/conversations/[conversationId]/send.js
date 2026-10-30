@@ -19,6 +19,7 @@
 
 import { getSupabaseAdmin }        from '../../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller } from '../../../lib/instagram/validateInstagramCaller.js';
+import { isByoConversation, rejectByoSend } from '../../../lib/instagram/byoConversationGuard.js';
 import { sendInstagramMessage }    from '../../../lib/instagram/instagramMessageService.js';
 
 export default async function handler(req, res) {
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
   // ── 1. Buscar conversa para validar company_id antes do RBAC ──────────────
   const { data: conversation, error: convErr } = await svc
     .from('instagram_conversations')
-    .select('id, company_id, connection_id, ig_participant_id')
+    .select('id, company_id, connection_id, byo_account_id, ig_participant_id')
     .eq('id', conversationId)
     .maybeSingle();
 
@@ -55,6 +56,10 @@ export default async function handler(req, res) {
   const auth = await validateInstagramCaller(req, svc, conversation.company_id);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
+  }
+
+  if (isByoConversation(conversation)) {
+    return rejectByoSend(res);
   }
 
   // ── 3. Delegar envio ao serviço compartilhado ──────────────────────────────
@@ -74,6 +79,7 @@ export default async function handler(req, res) {
     // Mapear errorType para código HTTP compatível com a resposta anterior da API
     const statusMap = {
       validation:          400,
+      byo_send_disabled:   422,
       connection_inactive: 422,
       token_error:         500,
       meta_window_expired: 422,

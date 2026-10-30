@@ -18,6 +18,7 @@ import { getSupabaseAdmin }        from '../../../lib/automation/supabaseAdmin.j
 import { validateInstagramCaller } from '../../../lib/instagram/validateInstagramCaller.js';
 import { decryptInstagramToken }   from '../../../lib/instagram/tokenCrypto.js';
 import { uploadAvatarToStorage }   from '../../../lib/instagram/uploadAvatarToStorage.js';
+import { isByoConversation } from '../../../lib/instagram/byoConversationGuard.js';
 
 const GRAPH_API_VERSION = 'v21.0';
 const ALLOWED_ROLES     = ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'];
@@ -38,7 +39,7 @@ export default async function handler(req, res) {
   // ── 1. Buscar conversa (resolve company_id e connection_id no backend) ──────
   const { data: conv, error: convErr } = await svc
     .from('instagram_conversations')
-    .select('id, company_id, connection_id, ig_participant_id, participant_name, participant_username, participant_avatar')
+    .select('id, company_id, connection_id, byo_account_id, ig_participant_id, participant_name, participant_username, participant_avatar')
     .eq('id', conversationId)
     .maybeSingle();
 
@@ -50,6 +51,14 @@ export default async function handler(req, res) {
   const auth = await validateInstagramCaller(req, svc, conv.company_id, ALLOWED_ROLES);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
+  }
+
+  if (isByoConversation(conv)) {
+    return res.status(200).json({
+      participant_name:     conv.participant_name,
+      participant_username: conv.participant_username,
+      participant_avatar:   conv.participant_avatar,
+    });
   }
 
   // ── 3. Se já tem nome E avatar, retornar sem chamar a Meta ─────────────────

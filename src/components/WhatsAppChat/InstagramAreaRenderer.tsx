@@ -147,7 +147,11 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
     : undefined
 
   const igConnectionActive = selectedIgConversation
-    ? (igChatDataRaw.connections.find(c => c.id === selectedIgConversation.connection_id)?.status === 'active')
+    ? (
+      selectedIgConversation.byo_account_id == null
+      && selectedIgConversation.connection_id != null
+      && igChatDataRaw.connections.find(c => c.id === selectedIgConversation.connection_id)?.status === 'active'
+    )
     : true
 
   if (!selectedIgConversation) {
@@ -193,6 +197,7 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
       onRetryLoadMessages={() => igChatDataRaw.setSelectedConversation(selectedIgConversation.id)}
       onClearSendError={igChatDataRaw.clearSendError}
       connectionActive={igConnectionActive}
+      byoConversation={selectedIgConversation.byo_account_id != null}
       companyId={companyId}
     />
   )

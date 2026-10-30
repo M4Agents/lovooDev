@@ -70,7 +70,8 @@ const InstagramConversationList: React.FC<InstagramConversationListProps> = ({ i
     )
   }
 
-  if (igData.connections.filter(c => c.status === 'active').length === 0) {
+  const hasActiveOfficial = igData.connections.some(c => c.status === 'active')
+  if (!hasActiveOfficial && igData.conversations.length === 0) {
     return (
       <div className="text-center py-12 px-6">
         <div className="mb-4">
@@ -203,6 +204,11 @@ const IgConvItem: React.FC<IgConvItemProps> = ({ conversation, isSelected, onCli
               )}
             </div>
           </div>
+          {conversation.byo_account_id && (
+            <p className="text-xs text-slate-500 truncate">
+              Instagram BYO{conversation.byo_instagram_username ? ` @${conversation.byo_instagram_username}` : ''}
+            </p>
+          )}
           {conversation.participant_username && conversation.participant_name && (
             <p className="text-xs text-slate-400 truncate">@{conversation.participant_username}</p>
           )}

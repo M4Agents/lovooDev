@@ -25,6 +25,7 @@
 //   - sent_by = null para automação (nunca string constante)
 // =====================================================
 
+import { isByoConversation } from './byoConversationGuard.js';
 import { decryptInstagramToken } from './tokenCrypto.js';
 
 const GRAPH_API_VERSION   = 'v21.0';
@@ -47,7 +48,7 @@ const META_FETCH_TIMEOUT_MS = 15_000;
  *
  * @returns {Promise<SendResult>}
  *   { ok: bool, igMessageId, savedMessage, error, errorCode, errorType }
- *   errorType: 'validation' | 'connection_inactive' | 'token_error' | 'meta_error' |
+ *   errorType: 'validation' | 'byo_send_disabled' | 'connection_inactive' | 'token_error' | 'meta_error' |
  *              'meta_timeout' | 'meta_window_expired' | 'token_expired' | 'rate_limit' |
  *              'user_blocked' | 'db_error'
  */
@@ -78,13 +79,17 @@ export async function sendInstagramMessage({
   // ── 2. Buscar conversa (company_id obrigatório — multi-tenant) ─────────────
   const { data: conversation, error: convErr } = await supabase
     .from('instagram_conversations')
-    .select('id, company_id, connection_id, ig_participant_id')
+    .select('id, company_id, connection_id, byo_account_id, ig_participant_id')
     .eq('id', conversationId)
     .eq('company_id', companyId)  // guard multi-tenant
     .maybeSingle()
 
   if (convErr || !conversation) {
     return failure('validation', 'Conversa não encontrada ou não pertence à empresa')
+  }
+
+  if (isByoConversation(conversation)) {
+    return failure('byo_send_disabled', 'byo_send_disabled')
   }
 
   // ── 3. Buscar conexão com validação de company_id ──────────────────────────

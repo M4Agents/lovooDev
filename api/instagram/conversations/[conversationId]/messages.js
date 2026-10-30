@@ -52,6 +52,7 @@ export default async function handler(req, res) {
       'reply_to_ig_message_id', 'reply_to_content', 'reply_to_direction',
     ].join(', '))
     .eq('conversation_id', conversationId)
+    .eq('company_id', conversation.company_id)
     .order('timestamp', { ascending: true })
     .limit(limit);
 

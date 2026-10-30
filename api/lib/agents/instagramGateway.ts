@@ -31,6 +31,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendInstagramMessage } from '../instagram/instagramMessageService.js'
+import { isByoConversation } from '../instagram/byoConversationGuard.js'
 
 // ── Tipos públicos ─────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export async function sendInstagramGateway(input: GatewayInput): Promise<Gateway
   // ── 2. Revalidar conversa: company_id + ai_state + ai_assignment_id ────────
   const { data: conv, error: convErr } = await svc
     .from('instagram_conversations')
-    .select('id, company_id, ai_state, ai_assignment_id, connection_id')
+    .select('id, company_id, ai_state, ai_assignment_id, connection_id, byo_account_id')
     .eq('id', instagram_conversation_id)
     .eq('company_id', company_id)
     .maybeSingle()
@@ -108,6 +109,10 @@ export async function sendInstagramGateway(input: GatewayInput): Promise<Gateway
       expected: assignment_id, actual: conv.ai_assignment_id, run_id,
     })
     return { success: false, skip_reason: 'assignment_changed' }
+  }
+
+  if (isByoConversation(conv)) {
+    return { success: false, skip_reason: 'byo_send_disabled' }
   }
 
   // ── 3. Revalidar conexão: ativa + pertence à empresa ──────────────────────

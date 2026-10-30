@@ -17,6 +17,25 @@ import { getSupabaseAdmin }        from '../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller } from '../../lib/instagram/validateInstagramCaller.js';
 
 const ALLOWED_FILTERS = ['all', 'unread', 'assigned', 'unassigned'];
+const CONVERSATION_FIELDS = [
+  'id', 'company_id', 'connection_id', 'byo_account_id', 'ig_thread_id',
+  'ig_participant_id', 'participant_name', 'participant_username',
+  'participant_avatar', 'lead_id', 'status', 'unread_count',
+  'last_message_at', 'last_message_preview', 'assigned_to',
+  'created_at', 'updated_at',
+].join(', ');
+const BYO_ACCOUNT_FIELD = 'byo_account:instagram_byo_poc_accounts!fk_igconv_byo_account_company(instagram_username)';
+
+function presentConversation(row) {
+  const username = row.byo_account?.instagram_username;
+  const { byo_account, ...conversation } = row;
+  return {
+    ...conversation,
+    connection_id: conversation.connection_id ?? null,
+    byo_account_id: conversation.byo_account_id ?? null,
+    byo_instagram_username: typeof username === 'string' ? username : null,
+  };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -40,13 +59,7 @@ export default async function handler(req, res) {
 
   let query = svc
     .from('instagram_conversations')
-    .select([
-      'id', 'company_id', 'connection_id', 'ig_thread_id',
-      'ig_participant_id', 'participant_name', 'participant_username',
-      'participant_avatar', 'lead_id', 'status', 'unread_count',
-      'last_message_at', 'last_message_preview', 'assigned_to',
-      'created_at', 'updated_at',
-    ].join(', '))
+    .select(`${CONVERSATION_FIELDS}, ${BYO_ACCOUNT_FIELD}`)
     .eq('company_id', companyId)
     .eq('status', 'active')
     .order('last_message_at', { ascending: false, nullsLast: true });
@@ -77,5 +90,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Erro ao buscar conversas Instagram' });
   }
 
-  return res.status(200).json({ conversations: data ?? [] });
+  return res.status(200).json({
+    conversations: (data ?? []).map(presentConversation),
+  });
 }

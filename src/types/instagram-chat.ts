@@ -32,7 +32,9 @@ export type InstagramConnectionStatus =
 export interface InstagramChatConversation {
   id: string
   company_id: string
-  connection_id: string
+  connection_id: string | null
+  byo_account_id: string | null
+  byo_instagram_username: string | null
   ig_thread_id: string
   /** IGSID — recipient.id usado para envio de mensagem via Meta API */
   ig_participant_id: string

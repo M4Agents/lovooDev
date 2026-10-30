@@ -12,6 +12,7 @@
 // =====================================================
 
 import React, { useRef, useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import Picker from '@emoji-mart/react'
 import data   from '@emoji-mart/data'
 import { supabase } from '../../../lib/supabase'
@@ -47,6 +48,7 @@ export interface InstagramMessageInputProps {
   sendLoading: boolean
   sendMediaLoading: boolean
   connectionActive: boolean
+  byoConversation?: boolean
   replyingTo: InstagramChatMessage | null
   onSetReplyingTo: (msg: InstagramChatMessage | null) => void
   onSend: (text: string, replyToIgMessageId?: string | null) => Promise<void>
@@ -97,11 +99,13 @@ export const InstagramMessageInput: React.FC<InstagramMessageInputProps> = ({
   sendLoading,
   sendMediaLoading,
   connectionActive,
+  byoConversation = false,
   replyingTo,
   onSetReplyingTo,
   onSend,
   onSendMedia,
 }) => {
+  const { t } = useTranslation('chat')
   const [text, setText]                     = useState('')
   const [isEmojiOpen, setIsEmojiOpen]       = useState(false)
   const [isSuggestionOpen, setIsSuggestion] = useState(false)
@@ -279,7 +283,9 @@ export const InstagramMessageInput: React.FC<InstagramMessageInputProps> = ({
   if (!connectionActive) {
     return (
       <div className="text-center text-sm text-amber-600 py-2">
-        Conexão Instagram inativa. Vá em Configurações para reconectar.
+        {byoConversation
+          ? t('instagram.byoSendUnavailable')
+          : 'Conexão Instagram inativa. Vá em Configurações para reconectar.'}
       </div>
     )
   }
