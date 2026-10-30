@@ -138,9 +138,6 @@ function mapRpc(data, companyId) {
 export async function handleByoCredentialPost(req, res, mode) {
   res.setHeader('Cache-Control', 'private, no-store');
 
-  if (process.env.INSTAGRAM_BYO_POC_ENABLED !== 'true') {
-    return send(res, 404, { error: 'not_found' });
-  }
   if (req?.method !== 'POST') {
     return send(res, 405, { error: 'method_not_allowed' });
   }

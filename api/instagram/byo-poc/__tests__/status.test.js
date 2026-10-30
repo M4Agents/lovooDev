@@ -131,7 +131,6 @@ const ALLOWED_COMPANY = 'cccccccc-0000-4000-8000-000000000003';
 const OTHER_COMPANY = 'dddddddd-0000-4000-8000-000000000004';
 const PARENT_OK = 'aaaaaaaa-0000-4000-8000-000000000001';
 const PARENT_OTHER = 'bbbbbbbb-0000-4000-8000-000000000002';
-const ALLOWED_PROJECT = 'prj_test_byo_poc';
 const FIXTURE_SECRET = 'fixture-secret-not-real';
 
 const OFFICIAL_TABLES = [
@@ -145,10 +144,6 @@ const OFFICIAL_TABLES = [
 ];
 
 const ENV_KEYS = [
-  'INSTAGRAM_BYO_POC_ENABLED',
-  'INSTAGRAM_BYO_ALLOWED_COMPANY_ID',
-  'INSTAGRAM_BYO_ALLOWED_VERCEL_PROJECT_ID',
-  'VERCEL_PROJECT_ID',
   'INSTAGRAM_BYO_APP_ID',
   'INSTAGRAM_BYO_APP_SECRET',
   'INSTAGRAM_BYO_TOKEN_ENC_KEY_V1',
@@ -177,10 +172,9 @@ function response() {
 }
 
 function arm() {
-  process.env.INSTAGRAM_BYO_POC_ENABLED = 'true';
-  process.env.INSTAGRAM_BYO_ALLOWED_COMPANY_ID = ALLOWED_COMPANY;
-  process.env.INSTAGRAM_BYO_ALLOWED_VERCEL_PROJECT_ID = ALLOWED_PROJECT;
-  process.env.VERCEL_PROJECT_ID = ALLOWED_PROJECT;
+  delete process.env.INSTAGRAM_BYO_POC_ENABLED;
+  delete process.env.INSTAGRAM_BYO_ALLOWED_COMPANY_ID;
+  delete process.env.INSTAGRAM_BYO_ALLOWED_VERCEL_PROJECT_ID;
 }
 
 function resetState() {
@@ -219,31 +213,50 @@ afterEach(() => {
 });
 
 describe('GET /api/instagram/byo-poc/status', () => {
-  it('nega quando a flag está desligada', async () => {
-    const res = response();
-    await handler(request(), res);
-    expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ error: 'not_found' });
-    expect(client.auth.getUser).not.toHaveBeenCalled();
-    expect(calls).toEqual([]);
-  });
-
-  it('nega projeto Vercel incorreto', async () => {
-    arm();
-    process.env.VERCEL_PROJECT_ID = 'prj_other';
+  it('segue para a autorização sem flag, projeto ou empresa fixa', async () => {
     const res = response();
     await handler(request(), res);
     expect(res.statusCode).toBe(403);
-    expect(calls).toEqual([]);
+    expect(res.body.error).toBe('Acesso negado a esta empresa');
+    expect(client.auth.getUser).toHaveBeenCalled();
+    expect(calls.some((call) => call.table === 'instagram_byo_company_credentials')).toBe(false);
+    assertOfficialUntouched();
   });
 
-  it('nega empresa diferente da allowlist', async () => {
+  it('libera outra empresa para o admin vinculado e filtra o company_id', async () => {
     arm();
+    state.direct = { role: 'admin', companyId: OTHER_COMPANY };
+    state.credential = {
+      meta_app_id: '12345',
+      validation_status: 'saved',
+      validation_error_code: null,
+      validated_at: null,
+      revoked_at: null,
+      credential_version: 2,
+      app_secret_enc: FIXTURE_SECRET,
+      suat_enc: FIXTURE_SECRET,
+    };
+    const res = response();
+    await handler(request(OTHER_COMPANY), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.company_id).toBe(OTHER_COMPANY);
+    expect(JSON.stringify(res.body)).not.toContain(FIXTURE_SECRET);
+    expect(JSON.stringify(res.body)).not.toContain('app_secret');
+    expect(JSON.stringify(res.body)).not.toContain('suat');
+    const credentialRead = calls.find((call) => call.table === 'instagram_byo_company_credentials');
+    expect(credentialRead.filters).toContainEqual(['eq', 'company_id', OTHER_COMPANY]);
+  });
+
+  it('nega usuário sem vínculo na empresa pedida sem ler credenciais', async () => {
+    arm();
+    state.direct = { role: 'admin', companyId: ALLOWED_COMPANY };
     const res = response();
     await handler(request(OTHER_COMPANY), res);
     expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ error: 'forbidden' });
-    expect(calls).toEqual([]);
+    expect(res.body.error).toBe('Acesso negado a esta empresa');
+    expect(calls.some((call) => call.table === 'instagram_byo_company_credentials')).toBe(false);
+    expect(calls.some((call) => call.table === 'instagram_byo_poc_accounts')).toBe(false);
+    assertOfficialUntouched();
   });
 
   it('nega usuário não autenticado', async () => {

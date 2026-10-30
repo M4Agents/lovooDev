@@ -4,10 +4,7 @@ import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstagramByoMetaPanel } from '../InstagramByoMetaPanel';
-import {
-  INSTAGRAM_BYO_PILOT_COMPANY_ID,
-  canWriteInstagramByoMeta,
-} from '../instagramByoVisibility';
+import { canWriteInstagramByoMeta } from '../instagramByoVisibility';
 import { getInstagramByoStatus, type ByoStatusResult } from '../../../services/instagramByoApi';
 import { replaceInstagramByoApp } from '../../../services/instagramByoWriteApi';
 
@@ -165,7 +162,7 @@ describe('substituição replace_app do Instagram BYO', () => {
   });
 
   it('mostra a ação para admin e a oculta para manager e partner', async () => {
-    const pilot = INSTAGRAM_BYO_PILOT_COMPANY_ID;
+    const pilot = COMPANY_A;
     expect(canWriteInstagramByoMeta({
       companyId: pilot,
       roles: [role(pilot, 'manager')],

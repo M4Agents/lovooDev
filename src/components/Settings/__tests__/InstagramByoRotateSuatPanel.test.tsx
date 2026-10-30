@@ -5,7 +5,6 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstagramByoMetaPanel } from '../InstagramByoMetaPanel';
 import {
-  INSTAGRAM_BYO_PILOT_COMPANY_ID,
   canViewInstagramByoMeta,
   canWriteInstagramByoMeta,
 } from '../instagramByoVisibility';
@@ -122,7 +121,7 @@ describe('rotação do SUAT Instagram BYO', () => {
   });
 
   it('mostra a rotação para admin e a oculta para manager, partner e seller', async () => {
-    const pilot = INSTAGRAM_BYO_PILOT_COMPANY_ID;
+    const pilot = COMPANY_A;
     expect(canViewInstagramByoMeta({ companyId: pilot, roles: [role(pilot, 'seller')] })).toBe(false);
     expect(canWriteInstagramByoMeta({ companyId: pilot, roles: [role(pilot, 'manager')] })).toBe(false);
     expect(canWriteInstagramByoMeta({ companyId: pilot, roles: [role(pilot, 'partner')] })).toBe(false);

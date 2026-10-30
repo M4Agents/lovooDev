@@ -10,7 +10,7 @@ const SUAT_ENC = 'byo1:Y2lwaGVyLXN1YXQ=';
 const H1 = `h1:${'ab'.repeat(32)}`;
 const S1 = `s1:${'cd'.repeat(32)}`;
 const ORIGIN = 'prj_Backend01';
-const ENV_KEYS = ['INSTAGRAM_BYO_POC_ENABLED', 'VERCEL_PROJECT_ID', 'INSTAGRAM_BYO_TOKEN_ENC_KEY_V1'];
+const ENV_KEYS = ['VERCEL_PROJECT_ID', 'INSTAGRAM_BYO_TOKEN_ENC_KEY_V1'];
 
 const { state, calls, realFingerprint } = vi.hoisted(() => ({
   state: {
@@ -32,8 +32,10 @@ vi.mock('../byoPocGate.js', () => ({
     const requested = typeof input?.requestedCompanyId === 'string'
       ? input.requestedCompanyId.trim().toLowerCase()
       : '';
-    if (requested !== COMPANY) return { ok: false, status: 403, error: 'forbidden' };
-    return { ok: true, companyId: COMPANY };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(requested)) {
+      return { ok: false, status: 400, error: 'company_id_invalid' };
+    }
+    return { ok: true, companyId: requested };
   }),
 }));
 
@@ -192,7 +194,7 @@ describe('handleByoCredentialPost', () => {
 
   beforeEach(() => {
     saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
-    process.env.INSTAGRAM_BYO_POC_ENABLED = 'true';
+    delete process.env.INSTAGRAM_BYO_POC_ENABLED;
     process.env.VERCEL_PROJECT_ID = ORIGIN;
     delete process.env.INSTAGRAM_BYO_TOKEN_ENC_KEY_V1;
     state.gate = null;
@@ -213,23 +215,23 @@ describe('handleByoCredentialPost', () => {
     }
   });
 
-  it('responde 404 com a flag desligada sem ler o body', async () => {
-    process.env.INSTAGRAM_BYO_POC_ENABLED = 'false';
-    const res = response();
-    const req = {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      get body() {
-        throw new Error('body-lido');
-      },
-    };
-    await handleByoCredentialPost(req, res, 'credentials');
-    expect(res.statusCode).toBe(404);
-    expect(res.body).toEqual({ error: 'not_found' });
-    expect(res.headers['Cache-Control']).toBe('private, no-store');
-    expect(evaluateByoPocAccess).not.toHaveBeenCalled();
-    expect(encryptByoSecret).not.toHaveBeenCalled();
+  it('grava sem a flag antiga e responde 503 quando a chave falta', async () => {
+    delete process.env.INSTAGRAM_BYO_POC_ENABLED;
+    delete process.env.INSTAGRAM_BYO_ALLOWED_COMPANY_ID;
+    delete process.env.INSTAGRAM_BYO_ALLOWED_VERCEL_PROJECT_ID;
+    const open = await run('credentials', setBody());
+    expect(open.statusCode).toBe(200);
+    expect(evaluateByoPocAccess).toHaveBeenCalledWith({ requestedCompanyId: COMPANY });
+    expect(open.body).not.toHaveProperty('error');
+
+    state.keyMissing = true;
+    calls.rpc.length = 0;
+    const missingKey = await run('credentials', setBody());
+    expect(missingKey.statusCode).toBe(503);
+    expect(missingKey.body).toEqual({ error: 'unavailable' });
+    assertClean(missingKey.body);
     expect(calls.rpc).toHaveLength(0);
+    state.keyMissing = false;
   });
 
   it('recusa método, content-type, tamanho e JSON antes do gate', async () => {

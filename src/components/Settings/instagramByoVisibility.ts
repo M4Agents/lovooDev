@@ -1,11 +1,9 @@
 import type { CompanyUser, UserRole } from '../../types/user';
 
 /**
- * Filtro visual da prévia Instagram BYO.
- * Não autoriza API, não substitui company_users nem a allowlist do servidor.
+ * Filtro visual do Instagram BYO na empresa ativa.
+ * Não autoriza API e não substitui company_users.
  */
-export const INSTAGRAM_BYO_PILOT_COMPANY_ID = '3cbe5c11-d834-40d1-b1cf-425e6377f099';
-
 const DIRECT_VIEW_ROLES: UserRole[] = ['admin', 'manager', 'super_admin', 'system_admin'];
 const DIRECT_WRITE_ROLES: UserRole[] = ['admin', 'super_admin', 'system_admin'];
 
@@ -33,7 +31,7 @@ export function canViewInstagramByoMeta(input: {
    */
   partnerAssignedCompanyIds?: readonly string[] | null;
 }): boolean {
-  if (!input.companyId || input.companyId !== INSTAGRAM_BYO_PILOT_COMPANY_ID) return false;
+  if (!input.companyId) return false;
 
   const direct = input.roles.find((role) => role.company_id === input.companyId);
   if (direct?.role === 'seller') return false;
@@ -64,7 +62,7 @@ export function canWriteInstagramByoMeta(input: {
   parentCompanyId?: string | null;
   roles: RoleRow[];
 }): boolean {
-  if (!input.companyId || input.companyId !== INSTAGRAM_BYO_PILOT_COMPANY_ID) return false;
+  if (!input.companyId) return false;
 
   const direct = input.roles.find((role) => role.company_id === input.companyId);
   if (direct) return DIRECT_WRITE_ROLES.includes(direct.role);
