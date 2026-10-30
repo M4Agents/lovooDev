@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstagramByoMetaPanel } from '../InstagramByoMetaPanel';
 import {
@@ -135,6 +135,9 @@ function expectInputsDisabled() {
 }
 
 async function fillAndOpenConfirm() {
+  await act(async () => {
+    await Promise.resolve();
+  });
   fireEvent.change(screen.getByLabelText('integrations.instagramByo.replaceFields.app-id'), {
     target: { value: '1234567890' },
   });

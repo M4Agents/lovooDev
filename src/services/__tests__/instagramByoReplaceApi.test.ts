@@ -191,14 +191,14 @@ describe('replaceInstagramByoApp', () => {
     expect(second).toEqual(first);
   });
 
-  it('não implementa rotate nem revoke', () => {
+  it('isola replace_app de revoke e mantém rotate_suat fora do formulário', () => {
     const source = readFileSync(resolve('src/services/instagramByoWriteApi.ts'), 'utf8');
     const form = readFileSync(resolve('src/components/Settings/InstagramByoReplaceForm.tsx'), 'utf8');
     const setApi = readFileSync(resolve('src/services/instagramByoApi.ts'), 'utf8');
     const setForm = readFileSync(resolve('src/components/Settings/InstagramByoSetForm.tsx'), 'utf8');
     expect(source).toContain("operation: 'replace_app'");
+    expect(source).toContain("operation: 'rotate_suat'");
     expect(source).not.toContain('...');
-    expect(source).not.toContain('rotate_suat');
     expect(source).not.toContain('byo-poc/revoke');
     expect(form).not.toContain('rotate_secret');
     expect(form).not.toContain('rotate_suat');

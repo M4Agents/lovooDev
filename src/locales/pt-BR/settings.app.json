@@ -192,6 +192,30 @@
       "rotateSecretFields": {
         "app-secret": "Novo App Secret"
       },
+      "rotateSuatSubmit": "Substituir token de acesso",
+      "rotateSuatConfirm": "Confirmar substituição do token de acesso",
+      "rotateSuatCancel": "Cancelar",
+      "rotateSuatSending": "Enviando o novo token de acesso.",
+      "rotateSuatRetry": "Tentar novamente",
+      "rotateSuatDiscard": "Descartar e limpar",
+      "rotateSuatUnknownOutcome": "Não foi possível confirmar se o token de acesso foi gravado. Tente novamente sem alterar o token.",
+      "rotateSuatApplied": "Token de acesso atualizado. Esta etapa não valida o token na Meta.",
+      "rotateSuatIdempotent": "Esta substituição do token de acesso já tinha sido registrada. Esta etapa não valida o token na Meta.",
+      "rotateSuatStale": "A substituição do token de acesso já tinha sido registrada, mas a versão atual mudou. O status será consultado de novo.",
+      "rotateSuatConflict": "A substituição do token de acesso conflitou com o status atual. O campo foi limpo.",
+      "rotateSuatRequestReused": "Esta tentativa já foi usada com outros dados. O campo foi limpo.",
+      "rotateSuatRejected": "O token de acesso foi recusado.",
+      "rotateSuatUnauthorized": "Sessão inválida para substituir o token de acesso.",
+      "rotateSuatForbidden": "Sem permissão para substituir o token de acesso.",
+      "rotateSuatWriteUnavailable": "A substituição do token de acesso ainda não está habilitada.",
+      "rotateSuatTooLarge": "O token de acesso excede o tamanho permitido.",
+      "rotateSuatUnsupported": "O formato da substituição não foi aceito.",
+      "rotateSuatServiceUnavailable": "O serviço de substituição do token de acesso está indisponível.",
+      "rotateSuatWarning": "O SUAT atual será substituído. Todas as contas Instagram BYO associadas à empresa serão desativadas. Os tokens dessas contas serão removidos. Uma nova validação e uma nova conexão poderão ser necessárias.",
+      "rotateSuatVersion": "A versão {{version}} será enviada como versão esperada.",
+      "rotateSuatFields": {
+        "suat": "Novo System User Access Token"
+      },
       "fields": {
         "app-id": "App ID",
         "app-secret": "App Secret",

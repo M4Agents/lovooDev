@@ -28,6 +28,13 @@ export type ByoRotateSecretInput = {
   appSecret: string;
 };
 
+export type ByoRotateSuatInput = {
+  companyId: string;
+  requestId: string;
+  expectedVersion: number;
+  suat: string;
+};
+
 export type ByoReplaceSuccess = {
   ok: true;
   result: 'applied' | 'idempotent' | 'already_revoked';
@@ -54,6 +61,7 @@ export type ByoReplaceResult =
   | { kind: 'temporary' };
 
 export type ByoRotateSecretResult = ByoReplaceResult;
+export type ByoRotateSuatResult = ByoReplaceResult;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -99,6 +107,10 @@ export function resolveByoRotateSecretMode(credentials: ByoStatusCredentials): B
   return resolveActiveCredentialMode(credentials);
 }
 
+export function resolveByoRotateSuatMode(credentials: ByoStatusCredentials): ByoReplaceMode {
+  return resolveActiveCredentialMode(credentials);
+}
+
 function rotateSecretPayload(input: ByoRotateSecretInput): Record<string, string | number> | null {
   if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
   if (!validVersion(input.expectedVersion)) return null;
@@ -109,6 +121,19 @@ function rotateSecretPayload(input: ByoRotateSecretInput): Record<string, string
     operation: 'rotate_secret',
     expected_version: input.expectedVersion,
     app_secret: input.appSecret,
+  };
+}
+
+function rotateSuatPayload(input: ByoRotateSuatInput): Record<string, string | number> | null {
+  if (!UUID_RE.test(input.companyId) || !UUID_RE.test(input.requestId)) return null;
+  if (!validVersion(input.expectedVersion)) return null;
+  if (!validSecret(input.suat)) return null;
+  return {
+    company_id: input.companyId.toLowerCase(),
+    request_id: input.requestId.toLowerCase(),
+    operation: 'rotate_suat',
+    expected_version: input.expectedVersion,
+    suat: input.suat,
   };
 }
 
@@ -217,4 +242,8 @@ export function replaceInstagramByoApp(input: ByoReplaceInput): Promise<ByoRepla
 
 export function rotateInstagramByoSecret(input: ByoRotateSecretInput): Promise<ByoRotateSecretResult> {
   return postByoCredentials(rotateSecretPayload(input));
+}
+
+export function rotateInstagramByoSuat(input: ByoRotateSuatInput): Promise<ByoRotateSuatResult> {
+  return postByoCredentials(rotateSuatPayload(input));
 }
