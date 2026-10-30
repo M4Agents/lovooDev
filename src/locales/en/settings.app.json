@@ -53,7 +53,7 @@
         "description": "Base integration with the ElevenLabs API"
       },
       "instagramByo": {
-        "badge": "In preparation",
+        "badge": "Meta",
         "description": "The company's own Meta app"
       }
     },
@@ -61,8 +61,8 @@
       "title": "Instagram BYO Meta",
       "description": "Connect a Meta app that belongs to the company.",
       "badgePreparing": "In preparation",
-      "stateTitle": "Integration in preparation",
-      "stateCredentials": "Credentials have not been registered yet.",
+      "stateTitle": "Status",
+      "stateCredentials": "Not configured.",
       "stateUnavailable": "Registration and validation are unavailable in this version.",
       "encryptionNotice": "The App Secret and the System User Access Token are sent only after confirmation and stay encrypted on the server.",
       "officialIndependent": "The official Instagram connection stays independent of this screen.",
@@ -73,7 +73,17 @@
       "statusRefreshing": "Refreshing the status. The current version is not confirmed yet.",
       "statusUnconfirmed": "The current version could not be confirmed. New attempts stay blocked.",
       "refreshStatus": "Refresh status",
-      "statusConfigured": "Credentials are configured.",
+      "statusConfigured": "Credentials are registered.",
+      "statusSaved": "Credentials saved",
+      "statusPending": "Registration pending",
+      "statusRegistered": "Credentials registered",
+      "statusFailed": "Registration failure recorded",
+      "statusRevokedShort": "Revoked",
+      "manageTitle": "Manage credentials",
+      "manageReplace": "Replace app",
+      "manageRotateSecret": "Update App Secret",
+      "manageRotateSuat": "Update access token",
+      "manageRevoke": "Revoke credentials",
       "statusRevoked": "Credentials were revoked. Registration can be done again with the current version.",
       "statusSetBlocked": "Registration is not available for this status.",
       "metaAppId": "Meta App ID",

@@ -121,20 +121,16 @@ function applied(companyId: string, stale = false) {
 }
 
 function expectInputsDisabled() {
-  const fields = document.querySelectorAll('input');
-  expect(fields).toHaveLength(3);
-  for (const field of fields) {
-    expect(field).toHaveProperty('disabled', true);
-    expect(field).toHaveProperty('readOnly', true);
-    expect(field).toHaveProperty('value', '');
-  }
-  expect(document.querySelector('button')).toBeNull();
+  expect(document.querySelectorAll('input')).toHaveLength(0);
+  expect(screen.queryByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeNull();
 }
 
 async function fillAndOpenConfirm() {
   await act(async () => {
     await Promise.resolve();
   });
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
   fireEvent.change(screen.getByLabelText('integrations.instagramByo.replaceFields.app-id'), {
     target: { value: '1234567890' },
   });
@@ -179,14 +175,15 @@ describe('substituição replace_app do Instagram BYO', () => {
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     const reader = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeNull();
     expectInputsDisabled();
     reader.unmount();
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     expect(screen.getByLabelText('integrations.instagramByo.replaceFields.app-secret')).toHaveProperty('value', '');
     expect(screen.getByLabelText('integrations.instagramByo.replaceFields.suat')).toHaveProperty('value', '');
   });
@@ -225,7 +222,7 @@ describe('substituição replace_app do Instagram BYO', () => {
       },
     });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeNull();
     expectInputsDisabled();
   });
@@ -239,7 +236,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndOpenConfirm();
     const confirm = screen.getByRole('button', { name: 'integrations.instagramByo.replaceConfirm' });
     fireEvent.click(confirm);
@@ -270,7 +268,8 @@ describe('substituição replace_app do Instagram BYO', () => {
       .mockResolvedValueOnce({ kind })
       .mockResolvedValueOnce(applied(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndConfirm();
     expect(await screen.findByText('integrations.instagramByo.replaceUnknownOutcome')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.replaceRetry' }));
@@ -291,7 +290,8 @@ describe('substituição replace_app do Instagram BYO', () => {
         }))
         .mockResolvedValueOnce(applied(COMPANY_A));
       render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-      expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+      fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
       await fillAndConfirm();
       expect(await screen.findByText('integrations.instagramByo.replaceUnknownOutcome')).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.replaceRetry' }));
@@ -317,7 +317,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     });
     vi.mocked(replaceInstagramByoApp).mockResolvedValue({ kind });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndConfirm();
     const key = kind === 'conflict'
       ? 'integrations.instagramByo.replaceConflict'
@@ -337,7 +338,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     });
     vi.mocked(replaceInstagramByoApp).mockResolvedValue(applied(COMPANY_A, true));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndConfirm();
     expect(await screen.findByText('integrations.instagramByo.replaceStale')).toBeTruthy();
     expect(await screen.findByText('5')).toBeTruthy();
@@ -350,7 +352,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     const view = render(
       <InstagramByoMetaPanel key={COMPANY_A} companyId={COMPANY_A} canWrite />,
     );
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndOpenConfirm();
     view.rerender(<InstagramByoMetaPanel key={COMPANY_B} companyId={COMPANY_B} canWrite />);
     expect(replaceInstagramByoApp).not.toHaveBeenCalled();
@@ -367,7 +370,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     const view = render(
       <InstagramByoMetaPanel key={COMPANY_A} companyId={COMPANY_A} canWrite />,
     );
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndConfirm();
     view.rerender(<InstagramByoMetaPanel key={COMPANY_B} companyId={COMPANY_B} canWrite />);
     resolveSend(applied(COMPANY_A));
@@ -376,7 +380,8 @@ describe('substituição replace_app do Instagram BYO', () => {
     expect(screen.queryByText('integrations.instagramByo.replaceApplied')).toBeNull();
 
     vi.mocked(replaceInstagramByoApp).mockClear();
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
     await fillAndConfirm();
     view.unmount();
     resolveSend(applied(COMPANY_B));

@@ -57,6 +57,13 @@ function ByoPanelHost({ companyId, canWrite = false }: { companyId: string | nul
   );
 }
 
+function expectQuietStatus() {
+  expect(document.querySelectorAll('input')).toHaveLength(0);
+  expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeNull();
+  expect(screen.queryByText('integrations.instagramByo.stateCredentials')).toBeNull();
+}
+
 function expectInputsDisabled() {
   const fields = document.querySelectorAll('input');
   expect(fields).toHaveLength(3);
@@ -81,7 +88,7 @@ describe('InstagramByoMetaPanel', () => {
     render(<InstagramByoMetaPanel />);
 
     expect(screen.getByRole('heading', { name: 'integrations.instagramByo.title' })).toBeTruthy();
-    expect(screen.getByText('integrations.instagramByo.badgePreparing')).toBeTruthy();
+    expect(screen.queryByText('integrations.instagramByo.badgePreparing')).toBeNull();
     expect(screen.queryByText('integrations.instagramByo.stateCredentials')).toBeNull();
     expectInputsDisabled();
     expect(getInstagramByoStatus).not.toHaveBeenCalled();
@@ -99,7 +106,7 @@ describe('InstagramByoMetaPanel', () => {
 
     expect(await screen.findByText('integrations.instagramByo.statusUnavailable')).toBeTruthy();
     expect(screen.queryByText('integrations.instagramByo.stateCredentials')).toBeNull();
-    expectInputsDisabled();
+    expectQuietStatus();
   });
 
   it('mostra não configurado somente com configured false', async () => {
@@ -117,11 +124,11 @@ describe('InstagramByoMetaPanel', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} />);
 
     expect(await screen.findByText('1234567890')).toBeTruthy();
-    expect(screen.getByText('saved')).toBeTruthy();
+    expect(screen.getAllByText('integrations.instagramByo.statusSaved').length).toBeGreaterThan(0);
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('2026-10-30T12:00:00.000Z')).toBeTruthy();
     expect(screen.getByText('2026-10-30T13:00:00.000Z')).toBeTruthy();
-    expectInputsDisabled();
+    expectQuietStatus();
   });
 
   it.each(['denied', 'temporary'] as const)('mostra o estado %s', async (kind) => {
@@ -172,7 +179,7 @@ describe('InstagramByoMetaPanel', () => {
     resolveNext(status(COMPANY_B, true, '99999'));
     expect(await screen.findByText('99999')).toBeTruthy();
     expect(screen.queryByText('11111')).toBeNull();
-    expectInputsDisabled();
+    expectQuietStatus();
   });
 
   it('troca de empresa sem exibir a resposta antiga', async () => {
@@ -213,6 +220,20 @@ describe('InstagramByoMetaPanel', () => {
     expect(settings).not.toContain('replace_app');
     expect(settings).not.toContain('rotate_secret');
     expect(settings).not.toContain('rotate_suat');
+
+    const phrases = {
+      'pt-BR': ['Não configurado.', 'Credenciais salvas', 'Gerenciar credenciais', 'Atualizar token de acesso'],
+      en: ['Not configured.', 'Credentials saved', 'Manage credentials', 'Update access token'],
+      es: ['No configurado.', 'Credenciales guardadas', 'Gestionar credenciales', 'Actualizar token de acceso'],
+    };
+    for (const [locale, expected] of Object.entries(phrases)) {
+      const copy = JSON.parse(readFileSync(resolve(`src/locales/${locale}/settings.app.json`), 'utf8'));
+      const block = JSON.stringify(copy.integrations.instagramByo);
+      for (const phrase of expected) expect(block).toContain(phrase);
+      expect(block).not.toContain('Validado pela Meta');
+      expect(block).not.toContain('Validated by Meta');
+      expect(block).not.toContain('Conectado');
+    }
   });
 });
 
@@ -286,7 +307,7 @@ describe('cadastro set do Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
     expect(await screen.findByText('integrations.instagramByo.stateCredentials')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
-    expectInputsDisabled();
+    expect(document.querySelectorAll('input')).toHaveLength(0);
   });
 
   it('mantém os campos bloqueados no HTTP 404 mesmo com permissão de escrita', async () => {
@@ -294,7 +315,7 @@ describe('cadastro set do Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByText('integrations.instagramByo.statusUnavailable')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
-    expectInputsDisabled();
+    expectQuietStatus();
     expect(setInstagramByoCredentials).not.toHaveBeenCalled();
   });
 
@@ -547,7 +568,7 @@ describe('cadastro set do Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByText('integrations.instagramByo.statusSetBlocked')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
-    expectInputsDisabled();
+    expectQuietStatus();
   });
 
   it.each([
@@ -560,17 +581,21 @@ describe('cadastro set do Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
-    expectInputsDisabled();
+    expectQuietStatus();
     expect(setInstagramByoCredentials).not.toHaveBeenCalled();
   });
 
   it('impede set quando as credenciais já estão configuradas', async () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(status(COMPANY_A, true, '1234567890'));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageReplace' }));
     expect(screen.getByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeNull();
     expect(screen.getByLabelText('integrations.instagramByo.replaceFields.app-secret')).toHaveProperty('value', '');
+    expect(setInstagramByoCredentials).not.toHaveBeenCalled();
   });
 
   it.each(['unauthorized', 'session_unavailable'] as const)(

@@ -100,6 +100,7 @@ async function openConfirm() {
   await act(async () => {
     await Promise.resolve();
   });
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
   fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret'), {
     target: { value: SECRET },
   });
@@ -141,13 +142,14 @@ describe('rotação do App Secret Instagram BYO', () => {
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     const reader = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeNull();
     reader.unmount();
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
     const field = screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret');
     expect(field).toHaveProperty('type', 'password');
     expect(field).toHaveProperty('value', '');
@@ -184,7 +186,7 @@ describe('rotação do App Secret Instagram BYO', () => {
       },
     });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeNull();
   });
 
@@ -197,7 +199,8 @@ describe('rotação do App Secret Instagram BYO', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
     await openConfirm();
     const confirm = screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' });
     fireEvent.click(confirm);
@@ -231,7 +234,8 @@ describe('rotação do App Secret Instagram BYO', () => {
       }))
       .mockResolvedValueOnce(applied(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
     await confirmSend();
     expect(await screen.findByText('integrations.instagramByo.rotateSecretUnknownOutcome')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' }));
@@ -249,7 +253,8 @@ describe('rotação do App Secret Instagram BYO', () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue({ kind });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
     await confirmSend();
     const key = kind === 'conflict'
       ? 'integrations.instagramByo.rotateSecretConflict'
@@ -266,7 +271,8 @@ describe('rotação do App Secret Instagram BYO', () => {
     });
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue(applied(COMPANY_A, true));
     const view = render(<InstagramByoMetaPanel key={COMPANY_A} companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
     await confirmSend();
     expect(await screen.findByText('integrations.instagramByo.rotateSecretStale')).toBeTruthy();
     expect(await screen.findByText('5')).toBeTruthy();

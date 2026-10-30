@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { revokeInstagramByoCredentials } from '../../services/instagramByoWriteApi';
 import {
   useByoCredentialAttempt,
+  type ByoAttemptPhase,
   type ByoWriteNotice,
 } from './useByoCredentialAttempt';
+import { useReportByoPhase } from './useReportByoPhase';
 
 type Attempt = {
   companyId: string;
@@ -17,6 +19,7 @@ type Props = {
   acceptNewAttempt?: boolean;
   onRefresh: () => void;
   onNotice: (notice: string | null) => void;
+  onPhase?: (phase: ByoAttemptPhase) => void;
 };
 
 const NOTICE_KEY: Record<ByoWriteNotice, string> = {
@@ -42,6 +45,7 @@ export function InstagramByoRevokeForm({
   acceptNewAttempt = true,
   onRefresh,
   onNotice,
+  onPhase,
 }: Props) {
   const { t } = useTranslation('settings.app');
   const flow = useByoCredentialAttempt<Attempt>({
@@ -56,6 +60,7 @@ export function InstagramByoRevokeForm({
     }),
   });
   const { phase, attempt } = flow;
+  useReportByoPhase(phase, onPhase);
 
   return (
     <div className="space-y-4" data-testid="instagram-byo-revoke">

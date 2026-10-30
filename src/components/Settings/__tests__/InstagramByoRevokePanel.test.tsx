@@ -96,6 +96,7 @@ async function openConfirm() {
   await act(async () => {
     await Promise.resolve();
   });
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
   fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' }));
   expect(screen.getByText('integrations.instagramByo.revokeWarning')).toBeTruthy();
   expect(screen.getByText('integrations.instagramByo.revokeVersion')).toBeTruthy();
@@ -117,13 +118,14 @@ describe('revogação Instagram BYO', () => {
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     const reader = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeNull();
     reader.unmount();
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     expect(screen.getByTestId('instagram-byo-revoke').querySelector('input')).toBeNull();
     expect(revokeInstagramByoCredentials).not.toHaveBeenCalled();
   });
@@ -157,7 +159,7 @@ describe('revogação Instagram BYO', () => {
       },
     });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeNull();
   });
 
@@ -168,7 +170,8 @@ describe('revogação Instagram BYO', () => {
       resolveSend = resolve;
     }));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     await openConfirm();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeCancel' }));
     expect(revokeInstagramByoCredentials).not.toHaveBeenCalled();
@@ -198,7 +201,8 @@ describe('revogação Instagram BYO', () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue(outcome(result));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     await openConfirm();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByText(notice)).toBeTruthy();
@@ -218,7 +222,8 @@ describe('revogação Instagram BYO', () => {
       }))
       .mockResolvedValueOnce(outcome('applied'));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     await openConfirm();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeRetry' })).toBeTruthy();
@@ -240,7 +245,8 @@ describe('revogação Instagram BYO', () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue({ kind });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     await openConfirm();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
     const key = kind === 'conflict'
@@ -258,7 +264,8 @@ describe('revogação Instagram BYO', () => {
     });
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue(outcome('idempotent', true));
     const view = render(<InstagramByoMetaPanel key={COMPANY_A} companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
     await openConfirm();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByText('integrations.instagramByo.revokeStale')).toBeTruthy();

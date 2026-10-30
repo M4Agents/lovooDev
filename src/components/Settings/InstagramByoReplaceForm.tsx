@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { replaceInstagramByoApp } from '../../services/instagramByoWriteApi';
 import {
   useByoCredentialAttempt,
+  type ByoAttemptPhase,
   type ByoWriteNotice,
 } from './useByoCredentialAttempt';
+import { useReportByoPhase } from './useReportByoPhase';
 
 type Attempt = {
   companyId: string;
@@ -21,6 +23,7 @@ type Props = {
   acceptNewAttempt?: boolean;
   onRefresh: () => void;
   onNotice: (notice: string | null) => void;
+  onPhase?: (phase: ByoAttemptPhase) => void;
 };
 
 const NOTICE_KEY: Record<ByoWriteNotice, string> = {
@@ -46,6 +49,7 @@ export function InstagramByoReplaceForm({
   acceptNewAttempt = true,
   onRefresh,
   onNotice,
+  onPhase,
 }: Props) {
   const { t } = useTranslation('settings.app');
   const [appId, setAppId] = useState('');
@@ -70,6 +74,7 @@ export function InstagramByoReplaceForm({
     }),
   });
   const { phase, attempt } = flow;
+  useReportByoPhase(phase, onPhase);
 
   function prepare() {
     if (!acceptNewAttempt) return;

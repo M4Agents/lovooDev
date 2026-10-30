@@ -100,6 +100,7 @@ async function openConfirm() {
   await act(async () => {
     await Promise.resolve();
   });
+  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
   fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat'), {
     target: { value: SUAT },
   });
@@ -129,13 +130,14 @@ describe('rotação do SUAT Instagram BYO', () => {
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     const reader = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite={false} />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeNull();
     reader.unmount();
 
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
     const field = screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat');
     expect(field).toHaveProperty('type', 'password');
     expect(field).toHaveProperty('value', '');
@@ -172,7 +174,7 @@ describe('rotação do SUAT Instagram BYO', () => {
       },
     });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByText('integrations.instagramByo.statusConfigured')).toBeTruthy();
+    expect(await screen.findAllByText('integrations.instagramByo.statusSaved')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeNull();
   });
 
@@ -185,7 +187,8 @@ describe('rotação do SUAT Instagram BYO', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
     await openConfirm();
     const confirm = screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatConfirm' });
     fireEvent.click(confirm);
@@ -219,7 +222,8 @@ describe('rotação do SUAT Instagram BYO', () => {
       }))
       .mockResolvedValueOnce(applied(COMPANY_A));
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
     await confirmSend();
     expect(await screen.findByText('integrations.instagramByo.rotateSuatUnknownOutcome')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatRetry' }));
@@ -237,7 +241,8 @@ describe('rotação do SUAT Instagram BYO', () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(configured(COMPANY_A));
     vi.mocked(rotateInstagramByoSuat).mockResolvedValue({ kind });
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
     await confirmSend();
     const key = kind === 'conflict'
       ? 'integrations.instagramByo.rotateSuatConflict'
@@ -254,7 +259,8 @@ describe('rotação do SUAT Instagram BYO', () => {
     });
     vi.mocked(rotateInstagramByoSuat).mockResolvedValue(applied(COMPANY_A, true));
     const view = render(<InstagramByoMetaPanel key={COMPANY_A} companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
     await confirmSend();
     expect(await screen.findByText('integrations.instagramByo.rotateSuatStale')).toBeTruthy();
     expect(await screen.findByText('5')).toBeTruthy();

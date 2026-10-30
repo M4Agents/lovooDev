@@ -53,7 +53,7 @@
         "description": "Integración base con la API ElevenLabs"
       },
       "instagramByo": {
-        "badge": "En preparación",
+        "badge": "Meta",
         "description": "Aplicación Meta propia de la empresa"
       }
     },
@@ -61,8 +61,8 @@
       "title": "Instagram BYO Meta",
       "description": "Conecta una aplicación Meta propia de la empresa.",
       "badgePreparing": "En preparación",
-      "stateTitle": "Integración en preparación",
-      "stateCredentials": "Las credenciales aún no están registradas.",
+      "stateTitle": "Estado",
+      "stateCredentials": "No configurado.",
       "stateUnavailable": "El registro y la validación no están disponibles en esta versión.",
       "encryptionNotice": "App Secret y el System User Access Token se envían solo después de la confirmación y quedan cifrados en el servidor.",
       "officialIndependent": "La conexión oficial de Instagram sigue independiente de esta pantalla.",
@@ -73,7 +73,17 @@
       "statusUnconfirmed": "No fue posible confirmar la versión actual. Los intentos nuevos quedan bloqueados.",
       "statusRefreshing": "Actualizando el estado. La versión actual todavía no fue confirmada.",
       "refreshStatus": "Actualizar estado",
-      "statusConfigured": "Credenciales configuradas.",
+      "statusConfigured": "Credenciales registradas.",
+      "statusSaved": "Credenciales guardadas",
+      "statusPending": "Registro pendiente",
+      "statusRegistered": "Credenciales registradas",
+      "statusFailed": "Fallo registrado en el alta",
+      "statusRevokedShort": "Revocadas",
+      "manageTitle": "Gestionar credenciales",
+      "manageReplace": "Sustituir aplicación",
+      "manageRotateSecret": "Actualizar App Secret",
+      "manageRotateSuat": "Actualizar token de acceso",
+      "manageRevoke": "Revocar credenciales",
       "statusRevoked": "Credenciales revocadas. El registro puede rehacerse con la versión actual.",
       "statusSetBlocked": "El registro no está disponible para este estado.",
       "metaAppId": "Meta App ID",

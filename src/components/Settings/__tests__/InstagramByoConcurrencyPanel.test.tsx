@@ -86,16 +86,18 @@ async function ready(version = 2) {
   await flush();
 }
 async function openRotate() {
-  fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret'), {
+  fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.manageRotateSecret' }));
+  fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret', { hidden: true }), {
     target: { value: SECRET },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' }));
-  expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretSubmit' }));
+  expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' })).toBeTruthy();
 }
 
 async function openRevoke() {
-  fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' }));
-  expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.manageRevoke' }));
+  fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeSubmit' }));
+  expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' })).toBeTruthy();
 }
 
 describe('concorrência visual Instagram BYO', () => {
@@ -113,8 +115,8 @@ describe('concorrência visual Instagram BYO', () => {
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue(outcome('conflict'));
     await openRotate();
     await openRevoke();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByText('integrations.instagramByo.revokeConflict')).toBeTruthy();
     expect(vi.mocked(rotateInstagramByoSecret).mock.calls[0][0].expectedVersion).toBe(2);
     expect(vi.mocked(revokeInstagramByoCredentials).mock.calls[0][0].expectedVersion).toBe(2);
@@ -132,8 +134,8 @@ describe('concorrência visual Instagram BYO', () => {
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue(outcome('applied'));
     await openRotate();
     await openRevoke();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByText('integrations.instagramByo.rotateSecretApplied')).toBeTruthy();
     resolveRevoke(outcome('conflict'));
     expect(await screen.findByText('integrations.instagramByo.revokeConflict')).toBeTruthy();
@@ -153,28 +155,28 @@ describe('concorrência visual Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByText('2')).toBeTruthy();
     await flush();
-    fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat'), {
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat', { hidden: true }), {
       target: { value: ' token-ficticio ' },
     });
     await openRotate();
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue({ kind: 'network' });
     await openRevoke();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.revokeRetry' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
+    expect(await screen.findByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeRetry' })).toBeTruthy();
     const firstRevoke = vi.mocked(revokeInstagramByoCredentials).mock.calls[0][0];
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue(outcome('applied'));
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
     expect(await screen.findByText('integrations.instagramByo.statusRefreshing')).toBeTruthy();
     expect(screen.queryByText('2')).toBeNull();
-    expect(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat')).toHaveProperty('value', ' token-ficticio ');
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeRetry' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toHaveProperty('disabled', true);
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeRetry' }));
+    expect(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat', { hidden: true })).toHaveProperty('value', ' token-ficticio ');
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeRetry' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSuatSubmit' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeRetry' }));
     expect(vi.mocked(revokeInstagramByoCredentials).mock.calls[1][0]).toEqual(firstRevoke);
     releaseRefresh({ kind: 'temporary' });
     expect(await screen.findByText('integrations.instagramByo.statusUnconfirmed')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toHaveProperty('disabled', true);
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeRetry' }));
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSuatSubmit' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeRetry' }));
     expect(vi.mocked(revokeInstagramByoCredentials).mock.calls[2][0]).toEqual(firstRevoke);
     const callsBeforeRefresh = vi.mocked(getInstagramByoStatus).mock.calls.length;
     fireEvent.click(screen.getByTestId('instagram-byo-refresh-status'));
@@ -195,9 +197,9 @@ describe('concorrência visual Instagram BYO', () => {
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue(outcome('applied'));
     await openRevoke();
     await openRotate();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     await screen.findByText('integrations.instagramByo.statusRefreshing');
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
     await vi.waitFor(() => expect(pending).toHaveLength(3));
     pending[2](status(COMPANY_A, 7));
     expect(await screen.findByText('7')).toBeTruthy();
@@ -205,8 +207,8 @@ describe('concorrência visual Instagram BYO', () => {
     await flush();
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.queryByText('5')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' }));
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeSubmit' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     expect(vi.mocked(revokeInstagramByoCredentials).mock.calls.at(-1)?.[0].expectedVersion).toBe(7);
   });
 
@@ -226,24 +228,24 @@ describe('concorrência visual Instagram BYO', () => {
     await openRotate();
     vi.mocked(revokeInstagramByoCredentials).mockResolvedValue(outcome('applied'));
     await openRevoke();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     expect(await screen.findByText('integrations.instagramByo.statusRefreshing')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' })).toHaveProperty('disabled', false);
     vi.mocked(rotateInstagramByoSecret).mockResolvedValue({ kind: 'network' });
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
     expect(vi.mocked(rotateInstagramByoSecret).mock.calls[0][0].expectedVersion).toBe(2);
     pending[0](status(COMPANY_A, 4, true));
     expect(await screen.findByText('4')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretDiscard' }));
-    fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret'), {
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretRetry' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretDiscard' }));
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSecretFields.app-secret', { hidden: true }), {
       target: { value: SECRET },
     });
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toHaveProperty('disabled', true);
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' }));
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' }));
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretSubmit' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeSubmit' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeSubmit' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretSubmit' }));
     expect(vi.mocked(revokeInstagramByoCredentials)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(rotateInstagramByoSecret)).toHaveBeenCalledTimes(1);
   });
@@ -260,7 +262,7 @@ describe('concorrência visual Instagram BYO', () => {
     expect(await screen.findByText('2')).toBeTruthy();
     await flush();
     await openRevoke();
-    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
     view.rerender(<InstagramByoMetaPanel key={COMPANY_B} companyId={COMPANY_B} canWrite />);
     expect(await screen.findByText('8')).toBeTruthy();
     resolveSend(outcome('applied'));
@@ -272,10 +274,11 @@ describe('concorrência visual Instagram BYO', () => {
   it('mostra set, replace, rotações e revoke nos estados elegíveis', async () => {
     vi.mocked(getInstagramByoStatus).mockResolvedValue(status(COMPANY_A, 2));
     const active = render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
-    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeTruthy();
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.manageRotateSecret' })).toBeTruthy();
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.manageRotateSuat' })).toBeTruthy();
+    expect(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.manageRevoke' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.replaceSubmit' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
     expect(replaceInstagramByoApp).not.toHaveBeenCalled();
     expect(rotateInstagramByoSuat).not.toHaveBeenCalled();
@@ -303,5 +306,91 @@ describe('concorrência visual Instagram BYO', () => {
     render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
     expect(await screen.findByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeNull();
+  });
+
+  it('mantém a recuperação acessível depois da revogação', async () => {
+    let reads = 0;
+    vi.mocked(getInstagramByoStatus).mockImplementation(() => {
+      reads += 1;
+      return Promise.resolve(status(COMPANY_A, reads === 1 ? 2 : 3, reads > 1));
+    });
+    vi.mocked(rotateInstagramByoSecret).mockResolvedValue({ kind: 'network' });
+    vi.mocked(revokeInstagramByoCredentials).mockResolvedValue(outcome('applied'));
+    render(<InstagramByoMetaPanel companyId={COMPANY_A} canWrite />);
+    expect(await screen.findByText('2')).toBeTruthy();
+    await flush();
+    await openRotate();
+    await openRevoke();
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.revokeConfirm' }));
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' })).toBeTruthy();
+    expect(await screen.findByText('integrations.instagramByo.statusRevoked')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageRevoke' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toHaveProperty('disabled', true);
+    const frozen = vi.mocked(rotateInstagramByoSecret).mock.calls[0][0];
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' }));
+    expect(vi.mocked(rotateInstagramByoSecret).mock.calls[1][0]).toEqual(frozen);
+    expect(vi.mocked(revokeInstagramByoCredentials)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(rotateInstagramByoSecret)).toHaveBeenCalledTimes(2);
+  });
+
+  it('permite acessar duas recuperações sem perder a tentativa', async () => {
+    await ready();
+    vi.mocked(rotateInstagramByoSecret).mockResolvedValue({ kind: 'network' });
+    vi.mocked(rotateInstagramByoSuat).mockResolvedValue({ kind: 'network' });
+    await openRotate();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    fireEvent.change(screen.getByLabelText('integrations.instagramByo.rotateSuatFields.suat'), {
+      target: { value: ' token-ficticio ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatSubmit' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatConfirm' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { hidden: true, name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatConfirm' }));
+    expect(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSuatRetry' })).toBeTruthy();
+    const secretRequest = vi.mocked(rotateInstagramByoSecret).mock.calls[0][0].requestId;
+    const suatRequest = vi.mocked(rotateInstagramByoSuat).mock.calls[0][0].requestId;
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSuatRetry' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' }));
+    expect(vi.mocked(rotateInstagramByoSecret).mock.calls[1][0].requestId).toBe(secretRequest);
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSuat' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatRetry' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSuatRetry' }));
+    expect(vi.mocked(rotateInstagramByoSuat).mock.calls[1][0].requestId).toBe(suatRequest);
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.manageRevoke' })).toBeNull();
+  });
+
+  it('troca a seleção sem perder a confirmação e sem disparar POST', async () => {
+    await ready();
+    await openRotate();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRevoke' }));
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.revokeSubmit' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' }));
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' })).toBeTruthy();
+    expect(rotateInstagramByoSecret).not.toHaveBeenCalled();
+    expect(revokeInstagramByoCredentials).not.toHaveBeenCalled();
+  });
+
+  it('volta à apresentação normal depois de resolver a tentativa', async () => {
+    await ready();
+    vi.mocked(rotateInstagramByoSecret).mockResolvedValue({ kind: 'network' });
+    await openRotate();
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.instagramByo.rotateSecretConfirm' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'integrations.instagramByo.rotateSecretDiscard' }));
+    await flush();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretRetry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.rotateSecretSubmit' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.manageReplace' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.manageRotateSecret' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'integrations.instagramByo.manageRevoke' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'integrations.instagramByo.setSubmit' })).toBeNull();
+    expect(vi.mocked(rotateInstagramByoSecret)).toHaveBeenCalledTimes(1);
   });
 });
