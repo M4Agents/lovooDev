@@ -3106,7 +3106,10 @@ export const Settings: React.FC = () => {
 
           {integracoesTab === 'instagram-byo' && canViewInstagramByo && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <InstagramByoMetaPanel />
+              <InstagramByoMetaPanel
+                key={company?.id ?? 'no-company'}
+                companyId={company?.id ?? null}
+              />
             </div>
           )}
 

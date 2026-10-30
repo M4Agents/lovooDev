@@ -1,9 +1,66 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  getInstagramByoStatus,
+  type ByoStatusPayload,
+  type ByoStatusResult,
+} from '../../services/instagramByoApi';
 
 const FIELD_IDS = ['app-id', 'app-secret', 'suat'] as const;
 
-export function InstagramByoMetaPanel() {
+type PanelView =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'unavailable' }
+  | { kind: 'denied' }
+  | { kind: 'temporary' }
+  | { kind: 'ok'; status: ByoStatusPayload };
+
+type Props = {
+  companyId?: string | null;
+};
+
+function statusTextKey(view: PanelView): string | null {
+  if (view.kind === 'loading') return 'integrations.instagramByo.statusLoading';
+  if (view.kind === 'unavailable') return 'integrations.instagramByo.statusUnavailable';
+  if (view.kind === 'denied') return 'integrations.instagramByo.statusDenied';
+  if (view.kind === 'temporary') return 'integrations.instagramByo.statusTemporary';
+  if (view.kind === 'ok' && !view.status.credentials.configured) {
+    return 'integrations.instagramByo.stateCredentials';
+  }
+  if (view.kind === 'ok') return 'integrations.instagramByo.statusConfigured';
+  return null;
+}
+
+export function InstagramByoMetaPanel({ companyId = null }: Props) {
   const { t } = useTranslation('settings.app');
+  const [view, setView] = useState<PanelView>({ kind: 'idle' });
+
+  useEffect(() => {
+    if (!companyId) {
+      setView({ kind: 'idle' });
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setView({ kind: 'loading' });
+
+    getInstagramByoStatus(companyId, controller.signal).then((result: ByoStatusResult) => {
+      if (!active || result.kind === 'cancelled') return;
+      setView(result);
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [companyId]);
+
+  const messageKey = statusTextKey(view);
+  const credentials = view.kind === 'ok' && view.status.credentials.configured
+    ? view.status.credentials
+    : null;
 
   return (
     <section className="space-y-6" aria-labelledby="instagram-byo-title">
@@ -19,10 +76,37 @@ export function InstagramByoMetaPanel() {
         </span>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-busy={view.kind === 'loading'}>
         <p className="text-sm font-medium text-slate-900">{t('integrations.instagramByo.stateTitle')}</p>
-        <p className="text-sm text-slate-600">{t('integrations.instagramByo.stateCredentials')}</p>
-        <p className="text-sm text-slate-600">{t('integrations.instagramByo.stateUnavailable')}</p>
+        {messageKey && <p className="text-sm text-slate-600">{t(messageKey)}</p>}
+        {credentials && (
+          <dl className="space-y-1 text-sm text-slate-600">
+            <div>
+              <dt className="inline">{t('integrations.instagramByo.metaAppId')}: </dt>
+              <dd className="inline">{credentials.meta_app_id ?? ''}</dd>
+            </div>
+            <div>
+              <dt className="inline">{t('integrations.instagramByo.validationStatus')}: </dt>
+              <dd className="inline">{credentials.validation_status}</dd>
+            </div>
+            <div>
+              <dt className="inline">{t('integrations.instagramByo.credentialVersion')}: </dt>
+              <dd className="inline">{credentials.credential_version ?? ''}</dd>
+            </div>
+            {credentials.validated_at && (
+              <div>
+                <dt className="inline">{t('integrations.instagramByo.validatedAt')}: </dt>
+                <dd className="inline">{credentials.validated_at}</dd>
+              </div>
+            )}
+            {credentials.revoked_at && (
+              <div>
+                <dt className="inline">{t('integrations.instagramByo.revokedAt')}: </dt>
+                <dd className="inline">{credentials.revoked_at}</dd>
+              </div>
+            )}
+          </dl>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4">
