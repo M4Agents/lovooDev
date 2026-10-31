@@ -4,17 +4,29 @@
 // Lista conversas Instagram de uma empresa com filtros.
 //
 // Query params:
-//   company_id    (obrigatório)
-//   connection_id (opcional)  — filtrar por conta Instagram; 'all' = todas
-//   filter        (opcional)  — all | unread | assigned | unassigned (padrão: all)
-//   search        (opcional)  — busca em username/nome/preview
+//   company_id     (obrigatório)
+//   owner          all | official:<uuid> | byo:<uuid>
+//   connection_id  (legado) uuid de conexão oficial, ou all
+//   filter         all | unread | assigned | unassigned
+//   search         busca em username/nome/preview
+//   cursor_at      página seguinte; "null" continua entre last_message_at nulos
+//   cursor_id      desempate da página seguinte
 //
+// owner e connection_id/byo_account_id juntos respondem 400.
 // RBAC: ALLOWED_ROLES (seller+)
-// Segurança: company_id resolvido do banco via JWT, nunca do frontend.
+// company_id autorizado pelo JWT, nunca aceito como prova de tenant.
 // =============================================================================
 
 import { getSupabaseAdmin }        from '../../lib/automation/supabaseAdmin.js';
 import { validateInstagramCaller } from '../../lib/instagram/validateInstagramCaller.js';
+import {
+  CONVERSATION_PAGE_SIZE,
+  applyConversationScope,
+  applyConversationWindow,
+  nextConversationCursor,
+  parseConversationCursor,
+  parseConversationOwner,
+} from '../../lib/instagram/instagramConversationList.js';
 
 const ALLOWED_FILTERS = ['all', 'unread', 'assigned', 'unassigned'];
 const CONVERSATION_FIELDS = [
@@ -42,55 +54,53 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { company_id: companyId, connection_id: connectionId, filter = 'all', search } = req.query;
-
+  const companyId = req.query?.company_id;
   if (!companyId) {
     return res.status(400).json({ error: 'company_id é obrigatório' });
   }
 
-  const filterType = ALLOWED_FILTERS.includes(filter) ? filter : 'all';
-
+  const filterType = ALLOWED_FILTERS.includes(req.query.filter) ? req.query.filter : 'all';
   const svc = getSupabaseAdmin();
-
   const auth = await validateInstagramCaller(req, svc, companyId);
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
   }
 
-  let query = svc
-    .from('instagram_conversations')
-    .select(`${CONVERSATION_FIELDS}, ${BYO_ACCOUNT_FIELD}`)
-    .eq('company_id', companyId)
-    .eq('status', 'active')
-    .order('last_message_at', { ascending: false, nullsLast: true });
+  const owner = parseConversationOwner(req.query);
+  if (!owner.ok) return res.status(400).json({ error: 'invalid_owner' });
+  const cursor = parseConversationCursor(req.query);
+  if (!cursor.ok) return res.status(400).json({ error: 'invalid_cursor' });
 
-  if (connectionId && connectionId !== 'all') {
-    query = query.eq('connection_id', connectionId);
-  }
+  const scope = { companyId, owner, filterType };
+  const page = applyConversationWindow(
+    applyConversationScope(
+      svc.from('instagram_conversations').select(`${CONVERSATION_FIELDS}, ${BYO_ACCOUNT_FIELD}`),
+      scope,
+    ),
+    { search: req.query.search, cursor: cursor.cursor },
+  )
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(CONVERSATION_PAGE_SIZE);
 
-  if (filterType === 'unread') {
-    query = query.gt('unread_count', 0);
-  } else if (filterType === 'assigned') {
-    query = query.not('assigned_to', 'is', null);
-  } else if (filterType === 'unassigned') {
-    query = query.is('assigned_to', null);
-  }
+  const counted = applyConversationWindow(
+    applyConversationScope(
+      svc.from('instagram_conversations').select('id', { count: 'exact', head: true }),
+      scope,
+    ),
+    { search: req.query.search, cursor: null },
+  );
 
-  if (search && search.trim()) {
-    const s = search.trim();
-    query = query.or(
-      `participant_username.ilike.%${s}%,participant_name.ilike.%${s}%,last_message_preview.ilike.%${s}%`
-    );
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('[ig/conversations] query error:', error.message);
+  const [listed, totalResult] = await Promise.all([page, counted]);
+  if (listed.error || totalResult.error) {
+    console.error('[ig/conversations] query error:', listed.error?.message || totalResult.error?.message);
     return res.status(500).json({ error: 'Erro ao buscar conversas Instagram' });
   }
 
+  const conversations = (listed.data ?? []).map(presentConversation);
   return res.status(200).json({
-    conversations: (data ?? []).map(presentConversation),
+    conversations,
+    total: typeof totalResult.count === 'number' ? totalResult.count : conversations.length,
+    next_cursor: nextConversationCursor(conversations),
   });
 }

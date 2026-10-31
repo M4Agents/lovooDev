@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InstagramSidebarContent } from '../InstagramSidebarContent';
 import { InstagramMainArea } from '../InstagramAreaRenderer';
@@ -143,5 +143,56 @@ describe('caixa Instagram com origem BYO', () => {
     );
     expect(screen.getByTestId('ig-composer').getAttribute('data-active')).toBe('true');
     expect(screen.getByTestId('ig-composer').getAttribute('data-byo')).toBe('false');
+  });
+
+  it('não dispara outra página depois do erro e repete só pelo botão', () => {
+    let constructed = 0
+    class Observer {
+      callback: IntersectionObserverCallback
+      constructor(callback: IntersectionObserverCallback) {
+        constructed += 1
+        this.callback = callback
+      }
+      observe() {
+        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+      }
+      disconnect() {}
+    }
+    vi.stubGlobal('IntersectionObserver', Observer)
+    const onLoadMore = vi.fn()
+    const onRetryPage = vi.fn()
+    const { rerender } = render(
+      <InstagramSidebarContent
+        activeTab="all"
+        igData={{
+          ...sidebar([conversation({})]),
+          hasMoreConversations: true,
+          loadingMoreConversations: false,
+          conversationPageError: true,
+          onLoadMore,
+          onRetryPage,
+        }}
+      />,
+    )
+    expect(constructed).toBe(0)
+    expect(onLoadMore).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+    expect(onRetryPage).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <InstagramSidebarContent
+        activeTab="all"
+        igData={{
+          ...sidebar([conversation({})]),
+          hasMoreConversations: true,
+          loadingMoreConversations: false,
+          conversationPageError: false,
+          onLoadMore,
+          onRetryPage,
+        }}
+      />,
+    )
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
   });
 });

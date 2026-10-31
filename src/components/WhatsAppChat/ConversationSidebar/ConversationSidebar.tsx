@@ -20,6 +20,7 @@ import { InstanceSelector } from '../InstanceSelector'
 import { ChannelSelector } from '../ChannelSelector/ChannelSelector'
 import { InstagramAccountSelector } from '../InstagramAccountSelector/InstagramAccountSelector'
 import { InstagramSidebarContent } from '../InstagramSidebarContent'
+import { officialConnectionIdFromSelection } from '../../../hooks/chat/instagramChatSelection'
 import { resolvePhotoUrl } from '../../../utils/imageUtils'
 import { chatApi } from '../../../services/chat/chatApi'
 
@@ -46,8 +47,13 @@ export interface MetaSidebarData {
 /** Dados do canal Instagram passados do ChatLayout */
 export interface InstagramSidebarData {
   connections: InstagramConnection[]
+  byoAccounts?: import('../../../types/instagram-chat').InstagramByoChatAccount[]
   conversations: import('../../../types/instagram-chat').InstagramChatConversation[]
   filteredConversations: import('../../../types/instagram-chat').InstagramChatConversation[]
+  conversationTotal?: number
+  hasMoreConversations?: boolean
+  loadingMoreConversations?: boolean
+  conversationPageError?: boolean
   selectedConnectionId: string
   selectedConversationId?: string
   filter: InstagramChannelFilter
@@ -56,6 +62,8 @@ export interface InstagramSidebarData {
   onSelectConversation: (id: string) => void
   onFilterChange: (f: InstagramChannelFilter) => void
   onRefresh: () => void
+  onLoadMore?: () => void
+  onRetryPage?: () => void
 }
 
 interface ConversationSidebarProps {
@@ -232,7 +240,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   const handleIgFilterChange = (type: typeof filter.type) => {
     // Para tabs de comentário, atualizar o filtro de comentários também
     if (type === 'comments' || type === 'pending') {
-      igCommentsData?.setFilter({ tab: type, connection_id: igData?.selectedConnectionId !== 'all' ? igData?.selectedConnectionId : undefined })
+      igCommentsData?.setFilter({
+        tab: type,
+        connection_id: officialConnectionIdFromSelection(igData?.selectedConnectionId ?? 'all'),
+      })
     }
     igData?.onFilterChange({ ...igData.filter, type: type as any })
   }
@@ -309,9 +320,10 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <div className="mb-2">
             <InstagramAccountSelector
               connections={igData?.connections ?? []}
+              byoAccounts={igData?.byoAccounts ?? []}
               selectedConnectionId={igData?.selectedConnectionId ?? 'all'}
               onSelectConnection={igData?.onSelectConnection ?? (() => {})}
-              conversationCount={igData?.filteredConversations.length ?? 0}
+              conversationCount={igData?.conversationTotal ?? igData?.filteredConversations.length ?? 0}
             />
           </div>
         )}

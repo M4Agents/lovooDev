@@ -54,9 +54,11 @@ function response() {
 function chain(result) {
   const query = {
     filters: [],
+    ors: [],
+    limits: [],
     fields: '',
     select(fields) {
-      query.fields = fields;
+      query.fields = typeof fields === 'string' ? fields : '';
       return query;
     },
     eq(column, value) {
@@ -64,11 +66,24 @@ function chain(result) {
       return query;
     },
     order() { return query; },
-    limit() { return query; },
-    or() { return query; },
+    limit(value) {
+      query.limits.push(value);
+      return query;
+    },
+    or(value) {
+      query.ors.push(value);
+      return query;
+    },
     gt() { return query; },
     not() { return query; },
-    is() { return query; },
+    is(column, value) {
+      query.filters.push(['is', column, value]);
+      return query;
+    },
+    lt(column, value) {
+      query.filters.push(['lt', column, value]);
+      return query;
+    },
     in() { return query; },
     insert() { return Promise.resolve({ error: null }); },
     maybeSingle: async () => result,
@@ -138,6 +153,85 @@ describe('lista e mensagens Direct BYO', () => {
     expect(res.statusCode).toBe(200);
     expect(query.filters).toContainEqual(['company_id', COMPANY]);
     expect(query.filters).toContainEqual(['connection_id', CONNECTION]);
+  });
+
+  it('filtra a conta BYO e recusa dono inválido ou misturado', async () => {
+    const queries = [];
+    getSupabaseAdmin.mockReturnValue({
+      from() {
+        const query = chain({ data: [], error: null, count: 0 });
+        queries.push(query);
+        return query;
+      },
+    });
+    const listed = response();
+    await listHandler({
+      method: 'GET',
+      query: { company_id: COMPANY, owner: `byo:${BYO_ACCOUNT}` },
+    }, listed);
+    expect(listed.statusCode).toBe(200);
+    expect(queries[0].filters).toContainEqual(['company_id', COMPANY]);
+    expect(queries[0].filters).toContainEqual(['byo_account_id', BYO_ACCOUNT]);
+    expect(queries[0].filters).toContainEqual(['is', 'connection_id', null]);
+    expect(queries[0].limits).toEqual([100]);
+
+    const invalid = response();
+    const from = vi.fn();
+    getSupabaseAdmin.mockReturnValue({ from });
+    await listHandler({
+      method: 'GET',
+      query: { company_id: COMPANY, owner: 'official:nao-uuid', connection_id: CONNECTION },
+    }, invalid);
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.body.error).toBe('invalid_owner');
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('pede a página seguinte sem repetir o cursor no total', async () => {
+    const rows = Array.from({ length: 100 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      company_id: COMPANY,
+      connection_id: null,
+      byo_account_id: BYO_ACCOUNT,
+      byo_account: null,
+      last_message_at: index === 99 ? '2026-10-01T00:00:00.000Z' : '2026-10-31T00:00:00.000Z',
+    }));
+    const queries = [];
+    getSupabaseAdmin.mockReturnValue({
+      from() {
+        const query = chain(
+          queries.length === 0
+            ? { data: rows, error: null }
+            : { data: null, error: null, count: 1644 },
+        );
+        queries.push(query);
+        return query;
+      },
+    });
+    const res = response();
+    await listHandler({
+      method: 'GET',
+      query: {
+        company_id: COMPANY,
+        owner: 'all',
+        cursor_at: '2026-10-31T12:00:00.000Z',
+        cursor_id: BYO_ACCOUNT,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.total).toBe(1644);
+    expect(res.body.conversations).toHaveLength(100);
+    expect(res.body.next_cursor).toEqual({
+      at: '2026-10-01T00:00:00.000Z',
+      id: rows[99].id,
+    });
+    expect(queries[0].limits).toEqual([100]);
+    expect(queries[0].ors[0]).toContain('last_message_at.lt.');
+    expect(queries[0].ors[0]).toContain('id.lt.');
+    expect(queries[0].ors[0]).toContain('last_message_at.is.null');
+    expect(queries[1].ors).toEqual([]);
+    expect(queries[1].limits).toEqual([]);
   });
 
   it('lista mensagens da conversa BYO pela empresa, sem conexão oficial', async () => {

@@ -79,7 +79,7 @@ async function readCompanyActive(svc, companyId) {
   return { ok: true, active: data.status === 'active' && data.deleted_at == null };
 }
 
-async function loadModality(svc, companyId) {
+export async function loadModality(svc, companyId) {
   const company = await readCompanyActive(svc, companyId);
   if (!company.ok) return { ok: false };
 

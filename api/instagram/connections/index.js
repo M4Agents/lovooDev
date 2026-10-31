@@ -15,10 +15,14 @@
 // =============================================================================
 
 import { getSupabaseAdmin }      from '../../lib/automation/supabaseAdmin.js';
+import { selectableByoAccounts } from '../../lib/instagram/instagramChatAccounts.js';
+import { loadModality } from '../../lib/instagram/instagramModalityHttp.js';
 import { validateInstagramCaller } from '../../lib/instagram/validateInstagramCaller.js';
 
 const SAFE_FIELDS = [
   'id',
+  'instagram_user_id',
+  'ig_webhook_id',
   'instagram_username',
   'profile_picture_url',
   'status',
@@ -65,5 +69,16 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Erro ao buscar conexões Instagram' });
   }
 
-  return res.status(200).json({ connections: data ?? [] });
+  let byoAccounts = [];
+  try {
+    const modality = await loadModality(svc, companyId);
+    if (modality.ok) byoAccounts = selectableByoAccounts(modality.accounts);
+  } catch {
+    byoAccounts = [];
+  }
+
+  return res.status(200).json({
+    connections: data ?? [],
+    byo_accounts: byoAccounts,
+  });
 }

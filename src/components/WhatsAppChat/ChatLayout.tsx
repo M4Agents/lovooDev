@@ -180,8 +180,13 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   // igSidebarData memoizado para evitar re-render do Sidebar a cada render do ChatLayout
   const igSidebarData: InstagramSidebarData = useMemo(() => ({
     connections:            igChatData.connections,
+    byoAccounts:            igChatData.byoAccounts,
     conversations:          igChatData.conversations,
     filteredConversations:  igChatData.filteredConversations,
+    conversationTotal:      igChatData.conversationTotal,
+    hasMoreConversations:   igChatData.hasMoreConversations,
+    loadingMoreConversations: igChatData.loadingMoreConversations,
+    conversationPageError:  igChatData.conversationPageError,
     selectedConnectionId:   igChatData.selectedConnectionId,
     selectedConversationId: igChatData.selectedConversationId,
     filter:                 igChatData.filter,
@@ -190,15 +195,24 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
     onSelectConversation:   igChatData.setSelectedConversation,
     onFilterChange:         igChatData.setFilter,
     onRefresh:              igChatData.refreshConversations,
+    onLoadMore:             igChatData.loadMoreConversations,
+    onRetryPage:            igChatData.retryLoadMoreConversations,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
     igChatData.connections,
+    igChatData.byoAccounts,
     igChatData.conversations,
     igChatData.filteredConversations,
+    igChatData.conversationTotal,
+    igChatData.hasMoreConversations,
+    igChatData.loadingMoreConversations,
+    igChatData.conversationPageError,
     igChatData.selectedConnectionId,
     igChatData.selectedConversationId,
     igChatData.filter,
     igChatData.conversationsLoading,
+    igChatData.loadMoreConversations,
+    igChatData.retryLoadMoreConversations,
   ])
 
   // MVP3C.3 — metaSidebarData construído exclusivamente a partir de metaChatData

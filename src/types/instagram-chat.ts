@@ -10,6 +10,7 @@
 export interface InstagramConnection {
   id: string
   instagram_user_id: string
+  ig_webhook_id?: string | null
   instagram_username: string
   profile_picture_url: string | null
   status: InstagramConnectionStatus
@@ -20,6 +21,14 @@ export interface InstagramConnection {
   last_error_at: string | null
   created_at: string
 }
+
+export interface InstagramByoChatAccount {
+  id: string
+  instagram_account_id: string
+  username: string | null
+}
+
+export type InstagramChatSelection = 'all' | `official:${string}` | `byo:${string}`
 
 export type InstagramConnectionStatus =
   | 'active'

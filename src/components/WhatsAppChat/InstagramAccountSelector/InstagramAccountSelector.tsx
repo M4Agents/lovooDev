@@ -9,10 +9,11 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Check } from 'lucide-react'
-import type { InstagramConnection } from '../../../types/instagram-chat'
+import type { InstagramByoChatAccount, InstagramConnection } from '../../../types/instagram-chat'
 
 interface InstagramAccountSelectorProps {
   connections: InstagramConnection[]
+  byoAccounts?: InstagramByoChatAccount[]
   selectedConnectionId: string
   onSelectConnection: (id: string) => void
   conversationCount?: number
@@ -38,6 +39,7 @@ const STATUS_BADGE: Record<string, { label: string; color: string }> = {
 
 export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> = ({
   connections,
+  byoAccounts = [],
   selectedConnectionId,
   onSelectConnection,
   conversationCount = 0,
@@ -60,14 +62,17 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
   const activeConnections   = connections.filter(c => c.status === 'active')
   const inactiveConnections = connections.filter(c => c.status !== 'active')
 
-  const selectedConnection = selectedConnectionId === 'all'
-    ? null
-    : connections.find(c => c.id === selectedConnectionId)
+  const officialId = selectedConnectionId.startsWith('official:')
+    ? selectedConnectionId.slice('official:'.length)
+    : null
+  const selectedByo = byoAccounts.find((account) => `byo:${account.id}` === selectedConnectionId)
+  const selectedConnection = officialId
+    ? connections.find(c => c.id === officialId) ?? null
+    : null
 
   const handleSelect = (conn: InstagramConnection) => {
-    // Bloquear seleção de contas não-ativas
     if (conn.status !== 'active') return
-    onSelectConnection(conn.id)
+    onSelectConnection(`official:${conn.id}`)
     setIsOpen(false)
   }
 
@@ -91,6 +96,14 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
                 <p className="text-xs text-gray-500">
                   {conversationCount} {conversationCount === 1 ? 'conversa' : 'conversas'}
                 </p>
+              </div>
+            </>
+          ) : selectedByo ? (
+            <>
+              <InstagramGradientIcon />
+              <div className="flex-1 min-w-0 text-left">
+                <p className="font-medium text-gray-900 truncate">@{selectedByo.username || 'Instagram BYO'}</p>
+                <p className="text-xs text-slate-500">Instagram BYO</p>
               </div>
             </>
           ) : selectedConnection ? (
@@ -135,13 +148,29 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
             <button
               key={conn.id}
               onClick={() => handleSelect(conn)}
-              className={`w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${selectedConnectionId === conn.id ? 'bg-pink-50' : ''}`}
+              className={`w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${selectedConnectionId === `official:${conn.id}` ? 'bg-pink-50' : ''}`}
             >
               {renderAvatar(conn)}
               <div className="flex-1 min-w-0 text-left">
                 <p className="font-medium text-gray-900 truncate">@{conn.instagram_username}</p>
               </div>
-              {selectedConnectionId === conn.id && <Check className="w-5 h-5 text-pink-600 flex-shrink-0" />}
+              {selectedConnectionId === `official:${conn.id}` && <Check className="w-5 h-5 text-pink-600 flex-shrink-0" />}
+            </button>
+          ))}
+
+          {byoAccounts.length > 0 && <div className="border-t border-gray-100" />}
+          {byoAccounts.map(account => (
+            <button
+              key={account.id}
+              onClick={() => { onSelectConnection(`byo:${account.id}`); setIsOpen(false) }}
+              className={`w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${selectedConnectionId === `byo:${account.id}` ? 'bg-pink-50' : ''}`}
+            >
+              <InstagramGradientIcon />
+              <div className="flex-1 min-w-0 text-left">
+                <p className="font-medium text-gray-900 truncate">@{account.username || 'Instagram BYO'}</p>
+                <p className="text-xs text-slate-500">Instagram BYO</p>
+              </div>
+              {selectedConnectionId === `byo:${account.id}` && <Check className="w-5 h-5 text-pink-600 flex-shrink-0" />}
             </button>
           ))}
 
@@ -182,7 +211,7 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
             </>
           )}
 
-          {connections.length === 0 && (
+          {connections.length === 0 && byoAccounts.length === 0 && (
             <div className="px-4 py-6 text-center text-gray-500 text-sm">{t('instagram.noAccounts')}</div>
           )}
         </div>

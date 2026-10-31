@@ -70,7 +70,9 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
   // Encontra a conexão selecionada e calcula o health para o banner
   const selectedConn = (() => {
     const selId = igSidebarData.selectedConnectionId
-    if (!selId || selId === 'all') {
+    const officialId = selId.startsWith('official:') ? selId.slice('official:'.length) : ''
+    if (!officialId) {
+      if (selId.startsWith('byo:')) return null
       // Exibe o problema mais crítico entre todas as conexões
       return igChatDataRaw.connections
         .map(c => ({ conn: c, health: computeConnectionHealth(c) }))
@@ -79,7 +81,7 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
           return (order[a.health.level] ?? 4) - (order[b.health.level] ?? 4)
         })[0] ?? null
     }
-    const found = igChatDataRaw.connections.find(c => c.id === selId)
+    const found = igChatDataRaw.connections.find(c => c.id === officialId)
     return found ? { conn: found, health: computeConnectionHealth(found) } : null
   })()
 

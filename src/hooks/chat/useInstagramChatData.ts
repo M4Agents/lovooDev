@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import type {
   InstagramConnection,
+  InstagramByoChatAccount,
   InstagramChatConversation,
   InstagramChatMessage,
   InstagramChannelFilter,
@@ -26,6 +27,20 @@ import type {
   CreateInstagramLeadPayload,
   CreateInstagramLeadResponse,
 } from '../../types/instagram-chat'
+import {
+  instagramChatStorageKey,
+  legacyInstagramChatStorageKey,
+  resolveInstagramChatSelection,
+} from './instagramChatSelection'
+import {
+  instagramMessageEventApplies,
+  instagramSubscriptionEventApplies,
+  nextInstagramQueryContext,
+  sameInstagramMessageContext,
+  sameInstagramQueryContext,
+  type InstagramMessageContext,
+  type InstagramQueryContext,
+} from './instagramRequestGate'
 
 // =====================================================
 // TIPOS DO RETORNO
@@ -34,12 +49,17 @@ import type {
 export interface UseInstagramChatDataReturn {
   // Conexões
   connections: InstagramConnection[]
+  byoAccounts: InstagramByoChatAccount[]
   selectedConnectionId: string
   connectionsLoading: boolean
 
   // Conversas
   conversations: InstagramChatConversation[]
   filteredConversations: InstagramChatConversation[]
+  conversationTotal: number
+  hasMoreConversations: boolean
+  loadingMoreConversations: boolean
+  conversationPageError: boolean
   selectedConversationId: string | undefined
   filter: InstagramChannelFilter
   conversationsLoading: boolean
@@ -58,6 +78,8 @@ export interface UseInstagramChatDataReturn {
   setSelectedConversation: (id: string) => void
   setFilter: (f: InstagramChannelFilter) => void
   refreshConversations: () => void
+  loadMoreConversations: () => void
+  retryLoadMoreConversations: () => void
   sendMessage: (payload: InstagramSendMessagePayload) => Promise<void>
   sendMedia: (payload: InstagramSendMediaPayload) => Promise<void>
   reactToMessage: (payload: InstagramReactPayload) => Promise<void>
@@ -123,19 +145,55 @@ export function useInstagramChatData(
   enabled = true
 ): UseInstagramChatDataReturn {
   const [connections,         setConnections]         = useState<InstagramConnection[]>([])
+  const [byoAccounts,         setByoAccounts]         = useState<InstagramByoChatAccount[]>([])
   const [connectionsLoading,  setConnectionsLoading]  = useState(false)
+  const [loadedForCompany,   setLoadedForCompany]   = useState<string | null>(null)
 
-  const [selectedConnectionId, setSelectedConnectionIdState] = useState<string>(() => {
-    return localStorage.getItem(`ig_chat_connection_${userId}`) ?? 'all'
-  })
+  const [selectedConnectionId, setSelectedConnectionIdState] = useState('all')
+  const [selectionReady, setSelectionReady] = useState(false)
 
   const [conversations,        setConversations]        = useState<InstagramChatConversation[]>([])
+  const [conversationTotal,    setConversationTotal]    = useState(0)
+  const [hasMoreConversations, setHasMoreConversations] = useState(false)
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false)
+  const [conversationPageError, setConversationPageError] = useState(false)
   const [conversationsLoading, setConversationsLoading] = useState(false)
   const [selectedConversationId, setSelectedConversationIdState] = useState<string | undefined>()
+  const [trackedCompanyId, setTrackedCompanyId] = useState(companyId)
 
   // Ref para acessar conversations dentro do useEffect sem adicioná-la como dependência
   const conversationsRef = useRef(conversations)
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
+  const cursorRef = useRef<{ at: string | null; id: string } | null>(null)
+  const migratedCompanyRef = useRef<string | null>(null)
+  const connectionFetchRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const pageErrorRef = useRef(false)
+  const selectionReadyRef = useRef(false)
+  const companyIdRef = useRef(companyId)
+  const conversationIdRef = useRef('')
+  const messageGenerationRef = useRef(0)
+  const listContextRef = useRef<InstagramQueryContext>({
+    generation: 0,
+    companyId,
+    owner: 'all',
+    filterType: 'all',
+    search: '',
+  })
+  const subscriptionContextRef = useRef<InstagramQueryContext>({
+    generation: 0,
+    companyId,
+    owner: 'all',
+    filterType: 'all',
+    search: '',
+  })
+  const leadOperationRef = useRef(0)
+  const messageSubscriptionRef = useRef<InstagramMessageContext>({
+    generation: 0,
+    companyId: '',
+    conversationId: '',
+  })
+  const loadConversationsRef = useRef<(append: boolean) => Promise<void>>(async () => {})
 
   const [filter, setFilterState] = useState<InstagramChannelFilter>({ type: 'all' })
 
@@ -150,23 +208,120 @@ export function useInstagramChatData(
   const [createLeadError,  setCreateLeadError]  = useState<string | undefined>()
   const [replyingTo, setReplyingTo]   = useState<InstagramChatMessage | null>(null)
 
+  selectionReadyRef.current = selectionReady
+  companyIdRef.current = companyId
+  conversationIdRef.current = selectedConversationId ?? ''
+
+  if (companyId !== trackedCompanyId) {
+    setTrackedCompanyId(companyId)
+    setSelectionReady(false)
+    setSelectedConnectionIdState('all')
+    setConversations([])
+    setConversationTotal(0)
+    setHasMoreConversations(false)
+    setLoadingMoreConversations(false)
+    setConversationsLoading(false)
+    setConversationPageError(false)
+    setSelectedConversationIdState(undefined)
+    setMessages([])
+    setMessagesError(undefined)
+    setMessagesLoading(false)
+    setReplyingTo(null)
+    setSendLoading(false)
+    setSendMediaLoading(false)
+    setSendError(undefined)
+    setCreateLeadLoading(false)
+    setCreateLeadError(undefined)
+    leadOperationRef.current += 1
+    cursorRef.current = null
+    pageErrorRef.current = false
+    loadingMoreRef.current = false
+    selectionReadyRef.current = false
+    migratedCompanyRef.current = null
+    conversationsRef.current = []
+    messageGenerationRef.current += 1
+    conversationIdRef.current = ''
+    companyIdRef.current = companyId
+    listContextRef.current = {
+      generation: listContextRef.current.generation + 1,
+      companyId,
+      owner: 'all',
+      filterType: filter.type,
+      search: filter.search?.trim() ?? '',
+    }
+    subscriptionContextRef.current = {
+      generation: subscriptionContextRef.current.generation + 1,
+      companyId,
+      owner: 'all',
+      filterType: filter.type,
+      search: filter.search?.trim() ?? '',
+    }
+  } else {
+    const advanced = nextInstagramQueryContext(listContextRef.current, {
+      companyId,
+      owner: selectedConnectionId,
+      filterType: filter.type,
+      search: filter.search?.trim() ?? '',
+    })
+    if (advanced !== listContextRef.current) {
+      listContextRef.current = advanced
+      subscriptionContextRef.current = {
+        generation: subscriptionContextRef.current.generation + 1,
+        companyId: advanced.companyId,
+        owner: advanced.owner,
+        filterType: advanced.filterType,
+        search: advanced.search,
+      }
+      cursorRef.current = null
+      if (pageErrorRef.current) {
+        pageErrorRef.current = false
+        setConversationPageError(false)
+      }
+    }
+  }
+
+  const currentMessageContext = (): InstagramMessageContext => ({
+    generation: messageGenerationRef.current,
+    companyId: companyIdRef.current,
+    conversationId: conversationIdRef.current,
+  })
+
+  const closeMessageContext = () => {
+    messageGenerationRef.current += 1
+    conversationIdRef.current = ''
+    leadOperationRef.current += 1
+    setCreateLeadLoading(false)
+    setCreateLeadError(undefined)
+  }
+
   // =====================================================
   // FETCH CONEXÕES
   // =====================================================
 
   const fetchConnections = useCallback(async () => {
     if (!enabled || !companyId) return
+    const generation = connectionFetchRef.current + 1
+    connectionFetchRef.current = generation
     try {
       setConnectionsLoading(true)
-      const data = await fetchWithAuth<{ connections?: InstagramConnection[] }>(
-        `/api/instagram/connections?company_id=${companyId}`
+      const data = await fetchWithAuth<{
+        connections?: InstagramConnection[]
+        byo_accounts?: InstagramByoChatAccount[]
+      }>(
+        `/api/instagram/connections?company_id=${encodeURIComponent(companyId)}`
       )
-      // Retorna todas as conexões para o selector poder exibir/desabilitar não-ativas
+      if (connectionFetchRef.current !== generation) return
       setConnections(data.connections ?? [])
+      setByoAccounts(data.byo_accounts ?? [])
     } catch {
+      if (connectionFetchRef.current !== generation) return
       setConnections([])
+      setByoAccounts([])
     } finally {
-      setConnectionsLoading(false)
+      if (connectionFetchRef.current === generation) {
+        setConnectionsLoading(false)
+        setLoadedForCompany(companyId)
+      }
     }
   }, [enabled, companyId])
 
@@ -174,47 +329,107 @@ export function useInstagramChatData(
   // FETCH CONVERSAS
   // =====================================================
 
-  const fetchConversations = useCallback(async () => {
-    if (!enabled || !companyId) return
-    try {
+  const listStillCurrent = (captured: InstagramQueryContext) =>
+    sameInstagramQueryContext(captured, listContextRef.current)
+
+  const messageStillCurrent = (captured: InstagramMessageContext) =>
+    sameInstagramMessageContext(captured, currentMessageContext())
+
+  const loadConversations = useCallback(async (append: boolean) => {
+    if (!enabled || !companyIdRef.current || !selectionReadyRef.current) return
+    if (append && (pageErrorRef.current || !cursorRef.current)) return
+
+    const cursor = append ? cursorRef.current : null
+    if (append) {
+      setLoadingMoreConversations(true)
+    } else {
+      listContextRef.current = {
+        ...listContextRef.current,
+        generation: listContextRef.current.generation + 1,
+      }
+      cursorRef.current = null
+      pageErrorRef.current = false
+      loadingMoreRef.current = false
+      setConversationPageError(false)
+      setLoadingMoreConversations(false)
       setConversationsLoading(true)
-
-      const params = new URLSearchParams({ company_id: companyId, filter: filter.type })
-      if (selectedConnectionId && selectedConnectionId !== 'all') {
-        params.set('connection_id', selectedConnectionId)
-      }
-      if (filter.search?.trim()) {
-        params.set('search', filter.search.trim())
-      }
-
-      const data = await fetchWithAuth<{ conversations?: InstagramChatConversation[] }>(
-        `/api/instagram/conversations?${params}`
-      )
-      setConversations(data.conversations ?? [])
-    } catch {
-      setConversations([])
-    } finally {
-      setConversationsLoading(false)
     }
-  }, [enabled, companyId, selectedConnectionId, filter])
+
+    const captured = { ...listContextRef.current }
+    try {
+      const params = new URLSearchParams({
+        company_id: captured.companyId,
+        filter: captured.filterType,
+        owner: captured.owner,
+      })
+      if (captured.search) params.set('search', captured.search)
+      if (append && cursor) {
+        params.set('cursor_id', cursor.id)
+        params.set('cursor_at', cursor.at ?? 'null')
+      }
+
+      const data = await fetchWithAuth<{
+        conversations?: InstagramChatConversation[]
+        total?: number
+        next_cursor?: { at: string | null; id: string } | null
+      }>(`/api/instagram/conversations?${params}`)
+      if (!listStillCurrent(captured)) return
+      const rows = data.conversations ?? []
+      setConversationTotal(typeof data.total === 'number' ? data.total : rows.length)
+      cursorRef.current = data.next_cursor ?? null
+      setHasMoreConversations(Boolean(data.next_cursor))
+      pageErrorRef.current = false
+      setConversationPageError(false)
+      setConversations((prev) => {
+        const merged = append ? [...prev, ...rows] : rows
+        const seen = new Set<string>()
+        return merged.filter((conversation) => {
+          if (seen.has(conversation.id)) return false
+          seen.add(conversation.id)
+          return true
+        })
+      })
+    } catch {
+      if (!listStillCurrent(captured)) return
+      if (!append) {
+        setConversations([])
+        setConversationTotal(0)
+        setHasMoreConversations(false)
+        cursorRef.current = null
+      } else {
+        pageErrorRef.current = true
+        setConversationPageError(true)
+      }
+    } finally {
+      if (!listStillCurrent(captured)) return
+      if (append) setLoadingMoreConversations(false)
+      else setConversationsLoading(false)
+    }
+  }, [enabled])
+
+  loadConversationsRef.current = loadConversations
 
   // =====================================================
   // FETCH MENSAGENS
   // =====================================================
 
-  const fetchMessages = useCallback(async (conversationId: string) => {
-    if (!conversationId) return
+  const fetchMessages = useCallback(async (captured: InstagramMessageContext) => {
+    if (!captured.conversationId) return
     try {
+      if (!messageStillCurrent(captured)) return
       setMessagesLoading(true)
       setMessagesError(undefined)
       const data = await fetchWithAuth<{ messages?: InstagramChatMessage[] }>(
-        `/api/instagram/conversations/${conversationId}/messages`
+        `/api/instagram/conversations/${captured.conversationId}/messages`
       )
+      if (!messageStillCurrent(captured)) return
       setMessages(data.messages ?? [])
     } catch (err: any) {
+      if (!messageStillCurrent(captured)) return
       setMessagesError(err.message ?? 'Erro ao carregar mensagens')
       setMessages([])
     } finally {
+      if (!messageStillCurrent(captured)) return
       setMessagesLoading(false)
     }
   }, [])
@@ -228,8 +443,24 @@ export function useInstagramChatData(
   }, [fetchConnections, enabled])
 
   useEffect(() => {
-    if (enabled) fetchConversations()
-  }, [fetchConversations, enabled])
+    if (!enabled || !companyId || loadedForCompany !== companyId || connectionsLoading) return
+    if (migratedCompanyRef.current === companyId) return
+    const scopedKey = instagramChatStorageKey(userId, companyId)
+    const stored = localStorage.getItem(scopedKey)
+      ?? localStorage.getItem(legacyInstagramChatStorageKey(userId))
+    const resolved = resolveInstagramChatSelection(stored, connections, byoAccounts)
+    localStorage.setItem(scopedKey, resolved)
+    localStorage.removeItem(legacyInstagramChatStorageKey(userId))
+    migratedCompanyRef.current = companyId
+    cursorRef.current = null
+    setSelectedConnectionIdState(resolved)
+    setSelectionReady(true)
+  }, [enabled, companyId, userId, loadedForCompany, connectionsLoading, connections, byoAccounts])
+
+  useEffect(() => {
+    if (!enabled || !selectionReady) return
+    void loadConversationsRef.current(false)
+  }, [enabled, companyId, selectedConnectionId, filter, selectionReady])
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -238,9 +469,13 @@ export function useInstagramChatData(
       return
     }
 
-    fetchMessages(selectedConversationId)
+    const captured: InstagramMessageContext = {
+      generation: messageGenerationRef.current,
+      companyId: companyIdRef.current,
+      conversationId: selectedConversationId,
+    }
+    void fetchMessages(captured)
 
-    // Enriquecer perfil do participante se ainda não preenchido
     const conv = conversationsRef.current.find(c => c.id === selectedConversationId)
     if (conv && !conv.byo_account_id && conv.connection_id && !conv.participant_name) {
       postWithAuth<{
@@ -252,9 +487,10 @@ export function useInstagramChatData(
         {}
       )
         .then((data) => {
+          if (!messageStillCurrent(captured)) return
           setConversations(prev =>
             prev.map(c =>
-              c.id === selectedConversationId
+              c.id === captured.conversationId
                 ? {
                     ...c,
                     participant_name:     data.participant_name,
@@ -312,6 +548,7 @@ export function useInstagramChatData(
 
   useEffect(() => {
     if (!enabled || !companyId) return
+    const subscribed = { ...subscriptionContextRef.current }
 
     const channel = supabase
       .channel(`ig_conversations_${companyId}`)
@@ -324,26 +561,28 @@ export function useInstagramChatData(
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
+          const row = (payload.new ?? {}) as InstagramChatConversation
+          if (!instagramSubscriptionEventApplies(subscribed, subscriptionContextRef.current, row)) return
           if (payload.eventType === 'INSERT') {
-            const newConv = payload.new as InstagramChatConversation
             setConversations(prev => {
-              if (prev.some(c => c.id === newConv.id)) return prev
-              return [newConv, ...prev]
+              if (prev.some(c => c.id === row.id)) return prev
+              return [row, ...prev]
             })
+            setConversationTotal(prev => prev + 1)
           } else if (payload.eventType === 'UPDATE') {
             setConversations(prev =>
               prev.map(c =>
-                c.id === payload.new.id
+                c.id === row.id
                   ? {
                       ...c,
-                      unread_count:         payload.new.unread_count         ?? c.unread_count,
-                      last_message_at:      payload.new.last_message_at      ?? c.last_message_at,
-                      last_message_preview: payload.new.last_message_preview ?? c.last_message_preview,
-                      assigned_to:          payload.new.assigned_to          ?? c.assigned_to,
-                      updated_at:           payload.new.updated_at           ?? c.updated_at,
-                      participant_name:     payload.new.participant_name     ?? c.participant_name,
-                      participant_username: payload.new.participant_username ?? c.participant_username,
-                      participant_avatar:   payload.new.participant_avatar   ?? c.participant_avatar,
+                      unread_count:         row.unread_count         ?? c.unread_count,
+                      last_message_at:      row.last_message_at      ?? c.last_message_at,
+                      last_message_preview: row.last_message_preview ?? c.last_message_preview,
+                      assigned_to:          row.assigned_to          ?? c.assigned_to,
+                      updated_at:           row.updated_at           ?? c.updated_at,
+                      participant_name:     row.participant_name     ?? c.participant_name,
+                      participant_username: row.participant_username ?? c.participant_username,
+                      participant_avatar:   row.participant_avatar   ?? c.participant_avatar,
                     }
                   : c
               )
@@ -354,7 +593,7 @@ export function useInstagramChatData(
       .subscribe()
 
     return () => { channel.unsubscribe() }
-  }, [enabled, companyId])
+  }, [enabled, companyId, selectedConnectionId, filter])
 
   // =====================================================
   // REALTIME — instagram_messages (thread da conversa aberta)
@@ -365,6 +604,12 @@ export function useInstagramChatData(
 
   useEffect(() => {
     if (!selectedConversationId) return
+    const subscribed: InstagramMessageContext = {
+      generation: messageSubscriptionRef.current.generation + 1,
+      companyId: companyIdRef.current,
+      conversationId: selectedConversationId,
+    }
+    messageSubscriptionRef.current = subscribed
 
     const channel = supabase
       .channel(`ig_messages_${selectedConversationId}`)
@@ -378,6 +623,7 @@ export function useInstagramChatData(
         },
         (payload) => {
           const newMsg = payload.new as InstagramChatMessage
+          if (!instagramMessageEventApplies(subscribed, messageSubscriptionRef.current, newMsg)) return
           setMessages(prev => {
             const isDupe = prev.some(m =>
               m.ig_message_id === newMsg.ig_message_id ||
@@ -396,7 +642,16 @@ export function useInstagramChatData(
       )
       .subscribe()
 
-    return () => { channel.unsubscribe() }
+    return () => {
+      channel.unsubscribe()
+      if (messageSubscriptionRef.current === subscribed) {
+        messageSubscriptionRef.current = {
+          ...subscribed,
+          generation: subscribed.generation + 1,
+          conversationId: '',
+        }
+      }
+    }
   }, [selectedConversationId])
 
   // =====================================================
@@ -480,29 +735,61 @@ export function useInstagramChatData(
   // =====================================================
 
   const setSelectedConnection = useCallback((id: string) => {
+    closeMessageContext()
     setSelectedConnectionIdState(id)
     setSelectedConversationIdState(undefined)
     setMessages([])
-    localStorage.setItem(`ig_chat_connection_${userId}`, id)
+    setMessagesError(undefined)
+    setReplyingTo(null)
+    cursorRef.current = null
+    pageErrorRef.current = false
+    setConversationPageError(false)
+    if (companyIdRef.current) {
+      localStorage.setItem(instagramChatStorageKey(userId, companyIdRef.current), id)
+    }
   }, [userId])
 
   const setSelectedConversation = useCallback((id: string) => {
+    closeMessageContext()
+    conversationIdRef.current = id
     setSelectedConversationIdState(id)
   }, [])
 
   const setFilter = useCallback((f: InstagramChannelFilter) => {
+    closeMessageContext()
     setFilterState(f)
     setSelectedConversationIdState(undefined)
     setMessages([])
+    setMessagesError(undefined)
+    setReplyingTo(null)
   }, [])
 
   const refreshConversations = useCallback(() => {
-    fetchConversations()
-  }, [fetchConversations])
+    void loadConversationsRef.current(false)
+  }, [])
+
+  const loadMoreConversations = useCallback(() => {
+    if (loadingMoreRef.current || pageErrorRef.current || !cursorRef.current) return
+    loadingMoreRef.current = true
+    void loadConversationsRef.current(true).finally(() => {
+      loadingMoreRef.current = false
+    })
+  }, [])
+
+  const retryLoadMoreConversations = useCallback(() => {
+    if (!pageErrorRef.current || loadingMoreRef.current || !cursorRef.current) return
+    pageErrorRef.current = false
+    setConversationPageError(false)
+    loadingMoreRef.current = true
+    void loadConversationsRef.current(true).finally(() => {
+      loadingMoreRef.current = false
+    })
+  }, [])
 
   const sendMessage = useCallback(async ({ text, reply_to_ig_message_id }: InstagramSendMessagePayload) => {
-    if (!selectedConversationId) return
-    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    const captured = currentMessageContext()
+    if (!captured.conversationId) return
+    const current = conversationsRef.current.find(c => c.id === captured.conversationId)
     if (current && (current.byo_account_id || current.connection_id == null)) return
     setSendLoading(true)
     setSendError(undefined)
@@ -511,16 +798,17 @@ export function useInstagramChatData(
       if (reply_to_ig_message_id) body.reply_to_ig_message_id = reply_to_ig_message_id
 
       const data = await postWithAuth<{ message: InstagramChatMessage }>(
-        `/api/instagram/conversations/${selectedConversationId}/send`,
+        `/api/instagram/conversations/${captured.conversationId}/send`,
         body
       )
+      if (!messageStillCurrent(captured)) return
       if (data.message) {
         setMessages(prev => [...prev, { ...data.message, reactions: data.message.reactions ?? [] }])
       }
       setReplyingTo(null)
       setConversations(prev =>
         prev.map(c =>
-          c.id === selectedConversationId
+          c.id === captured.conversationId
             ? {
                 ...c,
                 last_message_preview: text.slice(0, 100),
@@ -530,15 +818,18 @@ export function useInstagramChatData(
         )
       )
     } catch (err: any) {
+      if (!messageStillCurrent(captured)) return
       setSendError(err.message ?? 'Erro ao enviar mensagem')
     } finally {
+      if (!messageStillCurrent(captured)) return
       setSendLoading(false)
     }
-  }, [selectedConversationId])
+  }, [currentMessageContext, messageStillCurrent])
 
   const sendMedia = useCallback(async ({ media_url, media_type, reply_to_ig_message_id }: InstagramSendMediaPayload) => {
-    if (!selectedConversationId) return
-    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    const captured = currentMessageContext()
+    if (!captured.conversationId) return
+    const current = conversationsRef.current.find(c => c.id === captured.conversationId)
     if (current && (current.byo_account_id || current.connection_id == null)) return
     setSendMediaLoading(true)
     setSendError(undefined)
@@ -547,45 +838,63 @@ export function useInstagramChatData(
       if (reply_to_ig_message_id) body.reply_to_ig_message_id = reply_to_ig_message_id
 
       const data = await postWithAuth<{ message: InstagramChatMessage }>(
-        `/api/instagram/conversations/${selectedConversationId}/send-media`,
+        `/api/instagram/conversations/${captured.conversationId}/send-media`,
         body
       )
+      if (!messageStillCurrent(captured)) return
       if (data.message) {
         setMessages(prev => [...prev, { ...data.message, reactions: data.message.reactions ?? [] }])
       }
       setReplyingTo(null)
       setConversations(prev =>
         prev.map(c =>
-          c.id === selectedConversationId
+          c.id === captured.conversationId
             ? { ...c, last_message_preview: `[${media_type}]`, last_message_at: new Date().toISOString() }
             : c
         )
       )
     } catch (err: any) {
+      if (!messageStillCurrent(captured)) return
       setSendError(err.message ?? 'Erro ao enviar mídia')
     } finally {
+      if (!messageStillCurrent(captured)) return
       setSendMediaLoading(false)
     }
-  }, [selectedConversationId])
+  }, [currentMessageContext, messageStillCurrent])
 
   const reactToMessage = useCallback(async ({ ig_message_id, emoji, action }: InstagramReactPayload) => {
-    if (!selectedConversationId) return
-    const current = conversationsRef.current.find(c => c.id === selectedConversationId)
+    const captured = currentMessageContext()
+    if (!captured.conversationId) return
+    const current = conversationsRef.current.find(c => c.id === captured.conversationId)
     if (current && (current.byo_account_id || current.connection_id == null)) return
     try {
       await postWithAuth(
-        `/api/instagram/conversations/${selectedConversationId}/react`,
+        `/api/instagram/conversations/${captured.conversationId}/react`,
         { ig_message_id, emoji, action }
       )
+      if (!messageStillCurrent(captured)) return
     } catch {
       // Não-fatal: reação simplesmente não persiste
     }
-  }, [selectedConversationId])
+  }, [currentMessageContext, messageStillCurrent])
 
   const createLead = useCallback(async (
     conversationId: string,
     payload: CreateInstagramLeadPayload
   ): Promise<CreateInstagramLeadResponse | null> => {
+    if (!conversationId || conversationId !== conversationIdRef.current) return null
+    const operation = leadOperationRef.current + 1
+    leadOperationRef.current = operation
+    const captured: InstagramMessageContext = {
+      generation: messageGenerationRef.current,
+      companyId: companyIdRef.current,
+      conversationId,
+    }
+    const stillCurrent = () => operation === leadOperationRef.current && sameInstagramMessageContext(captured, {
+      generation: messageGenerationRef.current,
+      companyId: companyIdRef.current,
+      conversationId: conversationIdRef.current,
+    })
     setCreateLeadLoading(true)
     setCreateLeadError(undefined)
     try {
@@ -593,7 +902,7 @@ export function useInstagramChatData(
         `/api/instagram/conversations/${conversationId}/create-lead`,
         payload
       )
-      // Atualiza lead_id localmente para todos os actions (lead_created, lead_linked, already_linked)
+      if (!stillCurrent()) return null
       if (res.lead_id) {
         setConversations(prev =>
           prev.map(c =>
@@ -603,14 +912,14 @@ export function useInstagramChatData(
       }
       return res
     } catch (err: any) {
-      // Tratamento especial para plan_limit_exceeded
+      if (!stillCurrent()) return null
       const msg = err.errorCode === 'plan_limit_exceeded'
         ? 'plan_limit_exceeded'
         : (err.message ?? 'Erro ao criar lead')
       setCreateLeadError(msg)
       return null
     } finally {
-      setCreateLeadLoading(false)
+      if (stillCurrent()) setCreateLeadLoading(false)
     }
   }, [])
 
@@ -623,11 +932,16 @@ export function useInstagramChatData(
 
   return {
     connections,
+    byoAccounts,
     selectedConnectionId,
     connectionsLoading,
 
     conversations,
     filteredConversations,
+    conversationTotal,
+    hasMoreConversations,
+    loadingMoreConversations,
+    conversationPageError,
     selectedConversationId,
     filter,
     conversationsLoading,
@@ -643,6 +957,8 @@ export function useInstagramChatData(
     setSelectedConversation,
     setFilter,
     refreshConversations,
+    loadMoreConversations,
+    retryLoadMoreConversations,
     sendMessage,
     sendMedia,
     reactToMessage,

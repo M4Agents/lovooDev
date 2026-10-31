@@ -10,12 +10,13 @@
 //   - Nunca mistura as duas entidades
 // =====================================================
 
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { InstagramCommentsList } from '../InstagramComments/InstagramCommentsList'
 import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
 import type { UseInstagramCommentsDataReturn } from '../../hooks/instagram/useInstagramCommentsData'
+import { instagramPageMayAutoLoad } from '../../hooks/chat/instagramRequestGate'
 
 interface InstagramSidebarContentProps {
   igData?: InstagramSidebarData
@@ -70,8 +71,9 @@ const InstagramConversationList: React.FC<InstagramConversationListProps> = ({ i
     )
   }
 
-  const hasActiveOfficial = igData.connections.some(c => c.status === 'active')
-  if (!hasActiveOfficial && igData.conversations.length === 0) {
+  const hasInboxAccount = igData.connections.some(c => c.status === 'active')
+    || (igData.byoAccounts?.length ?? 0) > 0
+  if (!hasInboxAccount && igData.conversations.length === 0) {
     return (
       <div className="text-center py-12 px-6">
         <div className="mb-4">
@@ -125,6 +127,66 @@ const InstagramConversationList: React.FC<InstagramConversationListProps> = ({ i
           onClick={() => igData.onSelectConversation(conv.id)}
         />
       ))}
+      <InstagramListSentinel
+        hasMore={igData.hasMoreConversations === true}
+        loading={igData.loadingMoreConversations === true}
+        pageError={igData.conversationPageError === true}
+        onLoadMore={igData.onLoadMore}
+        onRetryPage={igData.onRetryPage}
+      />
+    </div>
+  )
+}
+
+function InstagramListSentinel({
+  hasMore,
+  loading,
+  pageError,
+  onLoadMore,
+  onRetryPage,
+}: {
+  hasMore: boolean
+  loading: boolean
+  pageError: boolean
+  onLoadMore?: () => void
+  onRetryPage?: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node || !hasMore || !onLoadMore || pageError || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      const intersecting = entries.some((entry) => entry.isIntersecting)
+      if (instagramPageMayAutoLoad({ pageError, hasMore, loading, intersecting })) onLoadMore()
+    }, {
+      root: node.closest('.overflow-y-auto'),
+      rootMargin: '120px',
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, loading, pageError, onLoadMore])
+
+  if (pageError) {
+    return (
+      <div className="flex items-center justify-center py-4">
+        <button
+          type="button"
+          onClick={onRetryPage}
+          className="px-3 py-1.5 text-sm font-medium text-pink-600 hover:text-pink-700"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    )
+  }
+
+  if (!hasMore && !loading) return null
+  return (
+    <div ref={ref} className="flex items-center justify-center py-4">
+      {loading && (
+        <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-200 border-t-pink-500" />
+      )}
     </div>
   )
 }
