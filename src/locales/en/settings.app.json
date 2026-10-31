@@ -27,6 +27,51 @@
     "instagramByo": "Instagram BYO Meta"
   },
   "integrations": {
+    "instagramModality": {
+      "title": "Operational mode",
+      "description": "The account uses official Instagram or BYO. Without a record, the screen only presumes official mode. Receiving depends on an active connection.",
+      "loading": "Loading the mode.",
+      "empty": "No Instagram account is available to switch.",
+      "account": "Account",
+      "current": "Account {{account}} is on {{mode}}.",
+      "currentCompatibility": "Account {{account}} appears as {{mode}} for compatibility. There is no mode record.",
+      "currentUnknown": "Account {{account}} has no registered mode.",
+      "destination": "Destination mode",
+      "compatibilityActive": "The official connection is active and official receiving remains available. This is compatibility, not an already applied record.",
+      "compatibilityInactive": "The official connection is not active. Official receiving is not running.",
+      "registerOfficial": "Confirming the official destination records the mode explicitly, even if no conversation is transferred. This does not mean the mode was already applied.",
+      "switchUnavailable": "The mode switch is turned off.",
+      "flagIsNotMode": "BYO preparation does not turn ingestion on.",
+      "byoSendUnavailable": "On BYO, replies and outbound automations are not available yet.",
+      "transferAll": "All conversations of this company and account move to the new mode.",
+      "preserveHistory": "Identifiers, messages, and history are preserved.",
+      "affectsTraffic": "The switch can change receiving and sending.",
+      "confirmLabel": "I confirm the mode switch for this account.",
+      "submit": "Switch mode",
+      "sending": "Switching mode.",
+      "switched": "Mode updated.",
+      "alreadyApplied": "That mode was already applied. No conversation was transferred again.",
+      "confirmationRequired": "The switch requires explicit confirmation.",
+      "denied": "You cannot change the mode for this company.",
+      "temporary": "The request could not be completed. Nothing was transferred.",
+      "mode": {
+        "official": "Official Instagram",
+        "byo": "Instagram BYO",
+        "unknown": "undefined"
+      },
+      "block": {
+        "company_inactive": "The company is not active.",
+        "no_official_connection": "There is no official connection for this account.",
+        "no_byo_account": "There is no matching BYO account.",
+        "identity_mismatch": "The official connection and the BYO account are not the same account.",
+        "ambiguous_instagram_account": "More than one connection or account matches this identifier.",
+        "destination_not_ready": "The destination is not ready to receive.",
+        "modality_switch_disabled": "The mode switch is turned off.",
+        "mode_conflict": "The mode record does not match the account.",
+        "company_mismatch": "The account does not belong to this company.",
+        "forbidden": "Insufficient permission for this operation."
+      }
+    },
     "cards": {
       "whatsapp": {
         "badge": "3 features",

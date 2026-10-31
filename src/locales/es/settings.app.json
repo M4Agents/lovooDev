@@ -27,6 +27,51 @@
     "instagramByo": "Instagram BYO Meta"
   },
   "integrations": {
+    "instagramModality": {
+      "title": "Modalidad operativa",
+      "description": "La cuenta usa Instagram oficial o BYO. Sin registro, la pantalla solo presume el modo oficial. La recepción depende de que la conexión esté activa.",
+      "loading": "Cargando la modalidad.",
+      "empty": "Ninguna cuenta de Instagram está disponible para el cambio.",
+      "account": "Cuenta",
+      "current": "La cuenta {{account}} está en {{mode}}.",
+      "currentCompatibility": "La cuenta {{account}} aparece como {{mode}} por compatibilidad. No hay registro de modalidad.",
+      "currentUnknown": "La cuenta {{account}} no tiene modalidad registrada.",
+      "destination": "Modalidad de destino",
+      "compatibilityActive": "La conexión oficial está activa y la recepción oficial sigue disponible. Esto es compatibilidad, no un registro ya aplicado.",
+      "compatibilityInactive": "La conexión oficial no está activa. La recepción oficial no está en funcionamiento.",
+      "registerOfficial": "Confirmar el destino oficial registra la modalidad de forma explícita, aunque no se transfiera ninguna conversación. Eso no significa que la modalidad ya estuviera aplicada.",
+      "switchUnavailable": "El cambio de modalidad está apagado.",
+      "flagIsNotMode": "La preparación de BYO no activa la ingesta.",
+      "byoSendUnavailable": "En BYO, el envío de respuestas y las automatizaciones de salida todavía no están disponibles.",
+      "transferAll": "Todas las conversaciones de esta empresa y de esta cuenta pasan a la nueva modalidad.",
+      "preserveHistory": "Los identificadores, los mensajes y el historial se conservan.",
+      "affectsTraffic": "El cambio puede alterar la recepción y el envío.",
+      "confirmLabel": "Confirmo el cambio de modalidad de esta cuenta.",
+      "submit": "Cambiar modalidad",
+      "sending": "Cambiando la modalidad.",
+      "switched": "Modalidad actualizada.",
+      "alreadyApplied": "Esa modalidad ya estaba aplicada. Ninguna conversación se transfirió de nuevo.",
+      "confirmationRequired": "El cambio exige confirmación explícita.",
+      "denied": "No puede cambiar la modalidad de esta empresa.",
+      "temporary": "No fue posible completar la consulta. No se transfirió nada.",
+      "mode": {
+        "official": "Instagram oficial",
+        "byo": "Instagram BYO",
+        "unknown": "indefinida"
+      },
+      "block": {
+        "company_inactive": "La empresa no está activa.",
+        "no_official_connection": "No hay conexión oficial de esta cuenta.",
+        "no_byo_account": "No hay cuenta BYO correspondiente.",
+        "identity_mismatch": "La conexión oficial y la cuenta BYO no son la misma cuenta.",
+        "ambiguous_instagram_account": "Hay más de una conexión o cuenta para este identificador.",
+        "destination_not_ready": "El destino todavía no está listo para recibir.",
+        "modality_switch_disabled": "El cambio de modalidad está apagado.",
+        "mode_conflict": "El registro de modalidad no corresponde a la cuenta.",
+        "company_mismatch": "La cuenta no pertenece a esta empresa.",
+        "forbidden": "Permiso insuficiente para esta operación."
+      }
+    },
     "cards": {
       "whatsapp": {
         "badge": "3 funciones",

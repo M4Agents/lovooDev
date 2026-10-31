@@ -30,7 +30,9 @@ import { OpenAIIntegrationPanel } from '../components/Settings/OpenAIIntegration
 import { ElevenLabsIntegrationPanel } from '../components/Settings/ElevenLabsIntegrationPanel';
 import { InstagramConnectionPanel } from '../components/Settings/InstagramConnectionPanel';
 import { InstagramByoMetaPanel } from '../components/Settings/InstagramByoMetaPanel';
+import { InstagramModalitySection } from '../components/Settings/InstagramModalitySection';
 import { canViewInstagramByoMeta, canWriteInstagramByoMeta } from '../components/Settings/instagramByoVisibility';
+import { canSwitchInstagramModality } from '../components/Settings/instagramModalityVisibility';
 import {
   leaveInstagramByoSearchParams,
   openInstagramByoSearchParams,
@@ -320,6 +322,7 @@ export const Settings: React.FC = () => {
       : undefined,
   });
   const canWriteInstagramByo = canWriteInstagramByoMeta(instagramByoAccess);
+  const canSwitchInstagram = canSwitchInstagramModality(instagramByoAccess);
 
   const instagramByoWasShown = useRef(false);
 
@@ -3105,6 +3108,10 @@ export const Settings: React.FC = () => {
           {integracoesTab === 'instagram' && company?.id && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <InstagramConnectionPanel companyId={company.id} />
+              <InstagramModalitySection
+                companyId={company.id}
+                canSwitch={canSwitchInstagram}
+              />
             </div>
           )}
 
