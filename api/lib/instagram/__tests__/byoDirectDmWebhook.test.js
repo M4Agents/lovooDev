@@ -113,7 +113,8 @@ describe('RPC de persistência Direct BYO', () => {
     const handler = readFileSync(resolve('api/lib/instagram/byoWebhookHttp.js'), 'utf8');
     const officialWebhook = readFileSync(resolve('api/instagram/webhook.js'), 'utf8');
     const officialDm = readFileSync(resolve('supabase/migrations/20260526110000_rpc_fix_ig_webhook_id_lookup.sql'), 'utf8');
-    expect(handler).not.toContain('process_instagram_byo_dm_webhook');
+    expect(handler).toContain("rpc('process_instagram_byo_dm_webhook'");
+    expect(handler).not.toContain('direct_ingest_enabled');
     expect(officialWebhook).not.toContain('direct_ingest_enabled');
     expect(officialWebhook).not.toContain('process_instagram_byo_dm_webhook');
     expect(officialDm).not.toContain('direct_ingest_enabled');

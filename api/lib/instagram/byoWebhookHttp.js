@@ -1,8 +1,8 @@
 import { getSupabaseAdmin } from '../automation/supabaseAdmin.js';
 import { decryptByoSecret } from './byoTokenCrypto.js';
+import { parseDmEvents } from './parseInstagramWebhook.js';
 import { verifyWebhookSignature } from './verifyWebhookSignature.js';
 import {
-  classifyByoWebhookPayload,
   credentialCanHostWebhook,
   readLimitedRawBody,
   verifyTokenMatches,
@@ -85,11 +85,97 @@ async function handlePost(req, res, routeId) {
     return res.status(401).json({ error: 'invalid_signature' });
   }
 
+  let payload;
   try {
-    classifyByoWebhookPayload(JSON.parse(raw.body.toString('utf8')));
+    payload = JSON.parse(raw.body.toString('utf8'));
   } catch {
-    classifyByoWebhookPayload(null);
+    return res.status(400).json({ error: 'rejected' });
+  }
+
+  try {
+    const outcome = await persistDirectEvents(svc, loaded.data.company_id, payload);
+    if (outcome === 'unavailable') return res.status(500).json({ error: 'unavailable' });
+  } catch {
+    return res.status(500).json({ error: 'unavailable' });
   }
 
   return res.status(200).json({ ok: true });
+}
+
+function timestampOf(value) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+  return value.toISOString();
+}
+
+function accountEligible(account, companyId, instagramAccountId) {
+  return Boolean(
+    account
+    && account.company_id === companyId
+    && account.instagram_account_id === instagramAccountId
+    && typeof account.id === 'string',
+  );
+}
+
+async function loadByoAccount(svc, companyId, instagramAccountId) {
+  return svc
+    .from('instagram_byo_poc_accounts')
+    .select('id, company_id, instagram_account_id')
+    .eq('company_id', companyId)
+    .eq('instagram_account_id', instagramAccountId)
+    .maybeSingle();
+}
+
+function rpcArgs(companyId, account, event) {
+  return {
+    p_company_id: companyId,
+    p_byo_account_id: account.id,
+    p_instagram_account_id: account.instagram_account_id,
+    p_ig_message_id: event.igMessageId,
+    p_ig_thread_id: event.igThreadId,
+    p_participant_ig_user_id: event.participantIgUserId,
+    p_direction: event.direction,
+    p_message_type: event.messageType,
+    p_content: typeof event.content === 'string' ? event.content : null,
+    p_media_url: typeof event.mediaUrl === 'string' ? event.mediaUrl : null,
+    p_timestamp: timestampOf(event.timestamp),
+    p_reply_to_ig_message_id: event.replyToIgMessageId ?? null,
+    p_reply_to_content: null,
+    p_reply_to_direction: null,
+    p_participant_name: null,
+    p_participant_username: null,
+  };
+}
+
+async function persistDirectEvents(svc, companyId, payload) {
+  if (!payload || payload.object !== 'instagram' || !Array.isArray(payload.entry)) return 'ok';
+
+  const accounts = new Map();
+  for (const entry of payload.entry) {
+    let events = [];
+    try {
+      events = parseDmEvents(entry && typeof entry === 'object' ? entry : {});
+    } catch {
+      continue;
+    }
+
+    for (const event of events) {
+      const instagramAccountId = String(event.instagramUserId ?? '');
+      if (!accounts.has(instagramAccountId)) {
+        const loaded = await loadByoAccount(svc, companyId, instagramAccountId);
+        if (loaded.error) return 'unavailable';
+        accounts.set(
+          instagramAccountId,
+          accountEligible(loaded.data, companyId, instagramAccountId) ? loaded.data : null,
+        );
+      }
+
+      const account = accounts.get(instagramAccountId);
+      if (!account) continue;
+
+      const result = await svc.rpc('process_instagram_byo_dm_webhook', rpcArgs(companyId, account, event));
+      if (!result || result.error || !result.data || typeof result.data !== 'object') return 'unavailable';
+    }
+  }
+
+  return 'ok';
 }

@@ -140,23 +140,23 @@ describe('webhook BYO', () => {
     expect(JSON.stringify(denied.body)).not.toContain(TOKEN);
   });
 
-  it('aceita POST autenticado sem persistir e rejeita HMAC, rota e excesso', async () => {
+  it('aceita POST autenticado sem conta elegível e rejeita HMAC, rota e excesso', async () => {
     const tables = [];
     getSupabaseAdmin.mockReturnValue({
       from: (table) => {
         tables.push(table);
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: credential(), error: null }),
-            }),
-          }),
+        const query = {
+          select: () => query,
+          eq: () => query,
+          maybeSingle: async () => ({ data: table === 'instagram_byo_company_credentials' ? credential() : null, error: null }),
         };
+        return query;
       },
+      rpc: async () => ({ data: { ok: true, skipped: false, reason: 'persisted' }, error: null }),
     });
     const body = JSON.stringify({
       object: 'instagram',
-      entry: [{ id: '17841405822304914', messaging: [{ message: { mid: 'm1', text: 'ola' } }] }],
+      entry: [{ id: '17841405822304914', messaging: [{ sender: { id: '9001' }, recipient: { id: '17841405822304914' }, timestamp: 1710000000000, message: { mid: 'm1', text: 'ola' } }] }],
       company_id: OTHER,
     });
     const ok = response();
@@ -166,7 +166,7 @@ describe('webhook BYO', () => {
     }), ok);
     expect(ok.statusCode).toBe(200);
     expect(ok.body).toEqual({ ok: true });
-    expect(tables).toEqual(['instagram_byo_company_credentials']);
+    expect(tables).toEqual(['instagram_byo_company_credentials', 'instagram_byo_poc_accounts']);
     expect(decryptByoSecret).toHaveBeenCalledWith('byo1:ciphertext', {
       companyId: COMPANY,
       field: 'app_secret',
@@ -226,7 +226,11 @@ describe('webhook BYO', () => {
     expect(official).not.toContain('byo-poc/webhook');
     expect(handler).not.toContain('instagram_messages');
     expect(handler).not.toContain('instagram_comments');
-    expect(handler).not.toContain('process_instagram_');
+    expect(handler).toContain("rpc('process_instagram_byo_dm_webhook'");
+    expect(handler).not.toContain('process_instagram_dm_webhook');
+    expect(handler).not.toContain('process_instagram_comment_webhook');
+    expect(handler).not.toContain('direct_ingest_enabled');
+    expect(handler).not.toContain('3cbe5c11-d834-40d1-b1cf-425e6377f099');
     expect(handler).not.toContain('graph.facebook.com');
     expect(handler).not.toContain('fetch(');
     expect(migration).not.toContain('UPDATE');

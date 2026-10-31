@@ -115,15 +115,16 @@ describe('migration de revogação do webhook BYO', () => {
     expect(body).not.toContain('instagram_byo_credential_events');
   });
 
-  it('não altera o webhook oficial nem o POST BYO', () => {
+  it('não altera o webhook oficial e encaminha o POST BYO à RPC', () => {
     const official = readFileSync(resolve('api/instagram/webhook.js'), 'utf8');
     const dm = readFileSync(resolve('supabase/migrations/20260526110000_rpc_fix_ig_webhook_id_lookup.sql'), 'utf8');
     const handler = readFileSync(resolve('api/lib/instagram/byoWebhookHttp.js'), 'utf8');
     expect(official).not.toContain('instagram_byo_clear_webhook_on_revoke');
     expect(dm).not.toContain('instagram_byo_clear_webhook_on_revoke');
-    expect(handler).not.toContain('process_instagram_');
+    expect(handler).toContain("rpc('process_instagram_byo_dm_webhook'");
+    expect(handler).not.toContain('process_instagram_dm_webhook');
     expect(handler).not.toContain('instagram_messages');
-    expect(handler).toContain('classifyByoWebhookPayload');
+    expect(handler).not.toContain('classifyByoWebhookPayload');
   });
 });
 
@@ -313,23 +314,26 @@ describe('rotação e revogação do webhook BYO', () => {
     expect(revokedPost.statusCode).toBe(401);
   });
 
-  it('mantém o POST autenticado sem persistir mensagem', async () => {
+  it('não grava mensagem quando a rota não tem conta BYO correspondente', async () => {
     const tables = [];
     getSupabaseAdmin.mockReturnValue({
       from: (table) => {
         tables.push(table);
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: credential(), error: null }),
-            }),
+        const query = {
+          select() { return query; },
+          eq() { return query; },
+          maybeSingle: async () => ({
+            data: table === 'instagram_byo_company_credentials' ? credential() : null,
+            error: null,
           }),
         };
+        return query;
       },
+      rpc: async () => ({ data: { ok: true, skipped: false, reason: 'persisted' }, error: null }),
     });
     const payload = JSON.stringify({
       object: 'instagram',
-      entry: [{ id: '17841405822304914', messaging: [{ message: { mid: 'm1', text: 'ola' } }] }],
+      entry: [{ id: '17841405822304914', messaging: [{ sender: { id: '9001' }, recipient: { id: '17841405822304914' }, timestamp: 1710000000000, message: { mid: 'm1', text: 'ola' } }] }],
     });
     const res = response();
     await handleByoWebhook(incoming({
@@ -340,9 +344,10 @@ describe('rotação e revogação do webhook BYO', () => {
     }), res);
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ ok: true });
-    expect(tables).toEqual(['instagram_byo_company_credentials']);
+    expect(tables).toEqual(['instagram_byo_company_credentials', 'instagram_byo_poc_accounts']);
+    expect(tables).not.toContain('instagram_messages');
     const handler = readFileSync(resolve('api/lib/instagram/byoWebhookHttp.js'), 'utf8');
-    expect(handler).not.toContain('.rpc(');
-    expect(handler).not.toContain('process_instagram_byo_dm_webhook');
+    expect(handler).toContain("rpc('process_instagram_byo_dm_webhook'");
+    expect(handler).not.toContain('instagram_messages');
   });
 });
