@@ -68,10 +68,24 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
   const [setPhase, setSetPhase] = useState<ByoAttemptPhase>('edit');
   const [manageUncertain, setManageUncertain] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [trackedCompany, setTrackedCompany] = useState(companyId ?? null);
   const snapshotRef = useRef<ByoStatusPayload | null>(null);
   const seenCompany = useRef<string | null | undefined>(undefined);
   const canWriteRef = useRef(canWrite);
   canWriteRef.current = canWrite;
+
+  if ((companyId ?? null) !== trackedCompany) {
+    setTrackedCompany(companyId ?? null);
+    snapshotRef.current = null;
+    setSnapshot(null);
+    setSync('initial');
+    setFault(null);
+    setShown(NONE_SHOWN);
+    setNotices(EMPTY_NOTICES);
+    setAction(null);
+    setSetPhase('edit');
+    setManageUncertain(false);
+  }
 
   useEffect(() => {
     const companyChanged = seenCompany.current !== companyId;
@@ -129,6 +143,7 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
   const textKey = byoStatusMessageKey(sync, fault, snapshot);
   const showVersion = sync === 'ready' && snapshot !== null;
   const configured = showVersion && snapshot.credentials.configured ? snapshot.credentials : null;
+  const webhookCredentials = snapshot?.credentials.configured ? snapshot.credentials : null;
   const revoked = showVersion && setMode.kind === 'revoked' ? snapshot.credentials : null;
   const setVisible = setMode.kind === 'initial' || setMode.kind === 'revoked' || setPhase !== 'edit';
   const canManage = Boolean(canWrite && configured && (shown.replace || shown.rotateSecret || shown.rotateSuat || shown.revoke));
@@ -222,13 +237,13 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
         )}
       </div>
 
-      {companyId && configured && (
+      {companyId && webhookCredentials && (
         <InstagramByoWebhookSection
           companyId={companyId}
           canWrite={Boolean(canWrite)}
-          routeId={configured.webhook_route_id ?? null}
-          enabled={configured.webhook_enabled === true}
-          verifyConfigured={configured.webhook_verify_configured === true}
+          routeId={webhookCredentials.webhook_route_id ?? null}
+          enabled={webhookCredentials.webhook_enabled === true}
+          verifyConfigured={webhookCredentials.webhook_verify_configured === true}
           onRefresh={() => setReloadKey((current) => current + 1)}
         />
       )}

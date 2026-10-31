@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { configureInstagramByoWebhook } from '../../services/instagramByoWebhookApi';
 
@@ -26,28 +26,43 @@ export function InstagramByoWebhookSection({
 }: Props) {
   const { t } = useTranslation('settings.app');
   const [busy, setBusy] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<{ companyId: string; token: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const companyRef = useRef(companyId);
+  const mountedRef = useRef(true);
+  companyRef.current = companyId;
+  const token = revealed?.companyId === companyId ? revealed.token : null;
   const url = routeId ? callbackUrl(routeId) : '';
 
   useEffect(() => {
-    setToken(null);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setRevealed(null);
     setNotice(null);
     setCopied(false);
   }, [companyId]);
 
   async function submit(action: 'generate' | 'rotate') {
     if (!canWrite || busy) return;
+    const requestedCompany = companyId;
     setBusy(true);
     setNotice(null);
-    const result = await configureInstagramByoWebhook({ companyId, action });
+    const result = await configureInstagramByoWebhook({ companyId: requestedCompany, action });
+    if (!mountedRef.current) return;
     setBusy(false);
+    if (companyRef.current !== requestedCompany) return;
     if (result.kind !== 'ok') {
       setNotice(t('integrations.instagramByo.webhookUnavailable'));
       return;
     }
-    setToken(result.webhookVerifyToken);
+    setRevealed({ companyId: requestedCompany, token: result.webhookVerifyToken });
+    setCopied(false);
     onRefresh();
   }
 

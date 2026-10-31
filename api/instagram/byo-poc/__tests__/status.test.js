@@ -464,6 +464,7 @@ describe('GET /api/instagram/byo-poc/status', () => {
     expect(serialized).not.toContain('app_secret_enc');
     expect(serialized).not.toContain('suat_enc');
     expect(serialized).not.toContain('webhook_verify_token_hash');
+    expect(serialized).not.toContain('"webhook_verify_token"');
     expect(serialized).not.toContain('cd'.repeat(32));
     expect(res.body.credentials.webhook_verify_configured).toBe(true);
   });
