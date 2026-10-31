@@ -20,6 +20,7 @@ import { InstagramCommentDetail } from '../InstagramComments/InstagramCommentDet
 import { CommentLeadPanel } from '../InstagramComments/CommentLeadPanel'
 import { InstagramReconnectBanner } from '../InstagramHealth/InstagramReconnectBanner'
 import { computeConnectionHealth } from '../../utils/instagram/computeConnectionHealth'
+import { presentInstagramAccounts } from '../../hooks/chat/instagramChatSelection'
 import { useAccessControl } from '../../hooks/useAccessControl'
 import type { UseInstagramCommentsDataReturn } from '../../hooks/instagram/useInstagramCommentsData'
 import type { InstagramSidebarData } from './ConversationSidebar/ConversationSidebar'
@@ -73,8 +74,12 @@ export const InstagramMainArea: React.FC<InstagramAreaRendererProps> = ({
     const officialId = selId.startsWith('official:') ? selId.slice('official:'.length) : ''
     if (!officialId) {
       if (selId.startsWith('byo:')) return null
-      // Exibe o problema mais crítico entre todas as conexões
+      const hiddenIds = new Set(presentInstagramAccounts(
+        igChatDataRaw.connections ?? [],
+        igSidebarData.byoAccounts ?? [],
+      ).hiddenConnectionIds)
       return igChatDataRaw.connections
+        .filter(c => !hiddenIds.has(c.id))
         .map(c => ({ conn: c, health: computeConnectionHealth(c) }))
         .sort((a, b) => {
           const order = { error: 0, disconnected: 1, warning: 2, healthy: 3 }

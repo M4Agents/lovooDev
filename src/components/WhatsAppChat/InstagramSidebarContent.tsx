@@ -266,11 +266,6 @@ const IgConvItem: React.FC<IgConvItemProps> = ({ conversation, isSelected, onCli
               )}
             </div>
           </div>
-          {conversation.byo_account_id && (
-            <p className="text-xs text-slate-500 truncate">
-              Instagram BYO{conversation.byo_instagram_username ? ` @${conversation.byo_instagram_username}` : ''}
-            </p>
-          )}
           {conversation.participant_username && conversation.participant_name && (
             <p className="text-xs text-slate-400 truncate">@{conversation.participant_username}</p>
           )}

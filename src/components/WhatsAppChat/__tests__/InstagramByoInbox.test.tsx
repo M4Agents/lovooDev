@@ -92,7 +92,9 @@ describe('caixa Instagram com origem BYO', () => {
         })])}
       />,
     );
-    expect(screen.getByText('Instagram BYO @usevalleron')).toBeTruthy();
+    expect(screen.getByText('Ana')).toBeTruthy();
+    expect(screen.queryByText('Instagram BYO @usevalleron')).toBeNull();
+    expect(screen.queryByText(/BYO|Oficial/)).toBeNull();
     expect(screen.queryByText('instagram.noAccounts')).toBeNull();
   });
 

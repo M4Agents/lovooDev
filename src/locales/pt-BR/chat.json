@@ -86,7 +86,7 @@
     "errorGeneric": "Falha ao enviar. Tente novamente.",
     "connectionInactiveBanner": "Conta Instagram desconectada ou expirada",
     "reconnectLink": "Reconectar em Configurações",
-    "byoSendUnavailable": "O envio de mensagens pelo Instagram BYO ainda não está disponível.",
+    "byoSendUnavailable": "O envio de mensagens pelo Instagram ainda não está disponível.",
     "noConversationSelected": "Selecione uma conversa Instagram",
     "noConversationSelectedHint": "Escolha uma conversa na sidebar para visualizar as mensagens",
     "loadingMessages": "Carregando mensagens...",

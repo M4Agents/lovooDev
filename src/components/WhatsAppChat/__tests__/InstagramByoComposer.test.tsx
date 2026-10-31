@@ -100,8 +100,8 @@ describe('aviso do compositor Instagram', () => {
 
   it('traduz o aviso em pt-BR, en e es', () => {
     const read = (locale: string) => JSON.parse(readFileSync(resolve(`src/locales/${locale}/chat.json`), 'utf8'));
-    expect(read('pt-BR').instagram.byoSendUnavailable).toBe('O envio de mensagens pelo Instagram BYO ainda não está disponível.');
-    expect(read('en').instagram.byoSendUnavailable).toBe('Sending messages through Instagram BYO is not available yet.');
-    expect(read('es').instagram.byoSendUnavailable).toBe('El envío de mensajes por Instagram BYO todavía no está disponible.');
+    expect(read('pt-BR').instagram.byoSendUnavailable).toBe('O envio de mensagens pelo Instagram ainda não está disponível.');
+    expect(read('en').instagram.byoSendUnavailable).toBe('Sending messages through Instagram is not available yet.');
+    expect(read('es').instagram.byoSendUnavailable).toBe('El envío de mensajes por Instagram todavía no está disponible.');
   });
 });

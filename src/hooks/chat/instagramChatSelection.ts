@@ -10,8 +10,56 @@ export function legacyInstagramChatStorageKey(userId: string) {
   return `ig_chat_connection_${userId}`
 }
 
-function sameAccount(connection: Pick<InstagramConnection, 'instagram_user_id' | 'ig_webhook_id'>, accountId: string) {
+function sameAccount(
+  connection: { instagram_user_id?: string | null; ig_webhook_id?: string | null },
+  accountId: string,
+) {
+  if (!accountId) return false
   return connection.instagram_user_id === accountId || connection.ig_webhook_id === accountId
+}
+
+function sameCompany(
+  connection: { company_id?: string | null },
+  account: { company_id?: string | null },
+) {
+  if (!connection.company_id || !account.company_id) return true
+  return connection.company_id === account.company_id
+}
+
+export interface InstagramAccountPresentation {
+  hiddenConnectionIds: string[]
+  photoByAccountId: Record<string, string | null>
+}
+
+export function presentInstagramAccounts(
+  connections: Array<Pick<InstagramConnection, 'id' | 'status' | 'instagram_user_id' | 'profile_picture_url'> & {
+    ig_webhook_id?: string | null
+    company_id?: string | null
+  }>,
+  byoAccounts: Array<Pick<InstagramByoChatAccount, 'id' | 'instagram_account_id'> & { company_id?: string | null }>,
+): InstagramAccountPresentation {
+  const hiddenConnectionIds: string[] = []
+  for (const connection of connections) {
+    if (connection.status === 'active') continue
+    const matches = byoAccounts.filter((account) => (
+      sameCompany(connection, account) && sameAccount(connection, account.instagram_account_id)
+    ))
+    const uniqueIds = [...new Set(matches.map((account) => account.id))]
+    if (uniqueIds.length === 1) hiddenConnectionIds.push(connection.id)
+  }
+
+  const photoByAccountId: Record<string, string | null> = {}
+  for (const account of byoAccounts) {
+    const photos = new Set(
+      connections
+        .filter((connection) => sameCompany(connection, account) && sameAccount(connection, account.instagram_account_id))
+        .map((connection) => connection.profile_picture_url?.trim())
+        .filter((url): url is string => Boolean(url)),
+    )
+    photoByAccountId[account.id] = photos.size === 1 ? [...photos][0] : null
+  }
+
+  return { hiddenConnectionIds, photoByAccountId }
 }
 
 export function resolveInstagramChatSelection(

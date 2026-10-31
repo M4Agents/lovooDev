@@ -10,6 +10,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, Check } from 'lucide-react'
 import type { InstagramByoChatAccount, InstagramConnection } from '../../../types/instagram-chat'
+import { presentInstagramAccounts } from '../../../hooks/chat/instagramChatSelection'
 
 interface InstagramAccountSelectorProps {
   connections: InstagramConnection[]
@@ -29,6 +30,25 @@ const InstagramGradientIcon: React.FC = () => (
     </svg>
   </div>
 )
+
+function accountTitle(username?: string | null) {
+  const name = username?.trim()
+  return name ? `@${name}` : 'Instagram'
+}
+
+const AccountAvatar: React.FC<{ url?: string | null; label: string }> = ({ url, label }) => {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => { setFailed(false) }, [url])
+  if (!url || failed) return <InstagramGradientIcon />
+  return (
+    <img
+      src={url}
+      alt={label}
+      className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+      onError={() => setFailed(true)}
+    />
+  )
+}
 
 const STATUS_BADGE: Record<string, { label: string; color: string }> = {
   revoked:         { label: 'Revogada',     color: 'bg-red-100 text-red-700' },
@@ -60,7 +80,9 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
   }, [])
 
   const activeConnections   = connections.filter(c => c.status === 'active')
-  const inactiveConnections = connections.filter(c => c.status !== 'active')
+  const presentation = presentInstagramAccounts(connections, byoAccounts)
+  const hiddenConnectionIds = new Set(presentation.hiddenConnectionIds)
+  const inactiveConnections = connections.filter(c => c.status !== 'active' && !hiddenConnectionIds.has(c.id))
 
   const officialId = selectedConnectionId.startsWith('official:')
     ? selectedConnectionId.slice('official:'.length)
@@ -76,10 +98,9 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
     setIsOpen(false)
   }
 
-  const renderAvatar = (conn: InstagramConnection) =>
-    conn.profile_picture_url
-      ? <img src={conn.profile_picture_url} alt={conn.instagram_username} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-      : <InstagramGradientIcon />
+  const renderAvatar = (conn: InstagramConnection) => (
+    <AccountAvatar url={conn.profile_picture_url} label={accountTitle(conn.instagram_username)} />
+  )
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
@@ -100,22 +121,24 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
             </>
           ) : selectedByo ? (
             <>
-              <InstagramGradientIcon />
+              <AccountAvatar url={presentation.photoByAccountId[selectedByo.id]} label={accountTitle(selectedByo.username)} />
               <div className="flex-1 min-w-0 text-left">
-                <p className="font-medium text-gray-900 truncate">@{selectedByo.username || 'Instagram BYO'}</p>
-                <p className="text-xs text-slate-500">Instagram BYO</p>
+                <p className="font-medium text-gray-900 truncate">{accountTitle(selectedByo.username)}</p>
+                {selectedByo.username?.trim() && <p className="text-xs text-slate-500">Instagram</p>}
               </div>
             </>
           ) : selectedConnection ? (
             <>
               {renderAvatar(selectedConnection)}
               <div className="flex-1 min-w-0 text-left">
-                <p className="font-medium text-gray-900 truncate">@{selectedConnection.instagram_username}</p>
-                {selectedConnection.status !== 'active' && (
-                  <p className="text-xs text-amber-600">
-                    {STATUS_BADGE[selectedConnection.status]?.label ?? 'Inativa'}
-                  </p>
-                )}
+                <p className="font-medium text-gray-900 truncate">{accountTitle(selectedConnection.instagram_username)}</p>
+                {selectedConnection.status === 'active'
+                  ? <p className="text-xs text-slate-500">Instagram</p>
+                  : (
+                    <p className="text-xs text-amber-600">
+                      {STATUS_BADGE[selectedConnection.status]?.label ?? 'Inativa'}
+                    </p>
+                  )}
               </div>
             </>
           ) : (
@@ -152,27 +175,31 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
             >
               {renderAvatar(conn)}
               <div className="flex-1 min-w-0 text-left">
-                <p className="font-medium text-gray-900 truncate">@{conn.instagram_username}</p>
+                <p className="font-medium text-gray-900 truncate">{accountTitle(conn.instagram_username)}</p>
+                <p className="text-xs text-slate-500">Instagram</p>
               </div>
               {selectedConnectionId === `official:${conn.id}` && <Check className="w-5 h-5 text-pink-600 flex-shrink-0" />}
             </button>
           ))}
 
           {byoAccounts.length > 0 && <div className="border-t border-gray-100" />}
-          {byoAccounts.map(account => (
+          {byoAccounts.map(account => {
+            const title = accountTitle(account.username)
+            return (
             <button
               key={account.id}
               onClick={() => { onSelectConnection(`byo:${account.id}`); setIsOpen(false) }}
               className={`w-full px-3 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${selectedConnectionId === `byo:${account.id}` ? 'bg-pink-50' : ''}`}
             >
-              <InstagramGradientIcon />
+              <AccountAvatar url={presentation.photoByAccountId[account.id]} label={title} />
               <div className="flex-1 min-w-0 text-left">
-                <p className="font-medium text-gray-900 truncate">@{account.username || 'Instagram BYO'}</p>
-                <p className="text-xs text-slate-500">Instagram BYO</p>
+                <p className="font-medium text-gray-900 truncate">{title}</p>
+                {account.username?.trim() && <p className="text-xs text-slate-500">Instagram</p>}
               </div>
               {selectedConnectionId === `byo:${account.id}` && <Check className="w-5 h-5 text-pink-600 flex-shrink-0" />}
             </button>
-          ))}
+            )
+          })}
 
           {/* Contas inativas — visíveis mas não selecionáveis */}
           {inactiveConnections.length > 0 && (
@@ -198,7 +225,7 @@ export const InstagramAccountSelector: React.FC<InstagramAccountSelectorProps> =
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 text-left">
-                      <p className="font-medium text-gray-900 truncate">@{conn.instagram_username}</p>
+                      <p className="font-medium text-gray-900 truncate">{accountTitle(conn.instagram_username)}</p>
                     </div>
                     {badge && (
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.color} flex-shrink-0`}>
