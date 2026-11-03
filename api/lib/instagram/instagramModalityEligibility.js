@@ -72,6 +72,14 @@ function blocked(reason) {
   };
 }
 
+function registeredByoWithoutConnection(account, modes) {
+  if (!account || modes.length !== 1) return false;
+  const mode = modes[0];
+  return mode.mode === 'byo'
+    && mode.byo_account_id === account.id
+    && mode.official_connection_id == null;
+}
+
 function describeOne(accountId, input, credential) {
   const matching = input.connections.filter((connection) => matchesAccount(connection, accountId));
   const live = input.accounts.filter((account) => account.instagram_account_id === accountId);
@@ -79,14 +87,15 @@ function describeOne(accountId, input, credential) {
   const connection = matching.length === 1 ? matching[0] : null;
   const account = live.length === 1 ? live[0] : null;
 
+  const byoWithoutConnection = registeredByoWithoutConnection(account, modes);
   let identity = null;
   if (!input.companyActive) identity = 'company_inactive';
-  else if (matching.length === 0) identity = 'no_official_connection';
+  else if (matching.length === 0 && !byoWithoutConnection) identity = 'no_official_connection';
   else if (matching.length > 1) identity = 'ambiguous_instagram_account';
-  else if (live.length === 0) identity = 'no_byo_account';
-  else if (live.length > 1) identity = 'ambiguous_instagram_account';
-  else if (accountSpan(connection, input.accounts) !== 1) identity = 'ambiguous_instagram_account';
-  else if (modes.length > 1) identity = 'ambiguous_instagram_account';
+  else if (matching.length === 1 && live.length === 0) identity = 'no_byo_account';
+  else if (matching.length === 1 && live.length > 1) identity = 'ambiguous_instagram_account';
+  else if (matching.length === 1 && accountSpan(connection, input.accounts) !== 1) identity = 'ambiguous_instagram_account';
+  else if (matching.length === 1 && modes.length > 1) identity = 'ambiguous_instagram_account';
 
   let operationalMode = 'official';
   let modeRegistered = false;
@@ -115,9 +124,12 @@ function describeOne(accountId, input, credential) {
   const targets = identity
     ? blocked(identity)
     : {
-      official: connection.status === 'active'
+      official: connection?.status === 'active'
         ? { eligible: true, block_reason: null }
-        : { eligible: false, block_reason: 'destination_not_ready' },
+        : {
+          eligible: false,
+          block_reason: connection ? 'destination_not_ready' : 'no_official_connection',
+        },
       byo: byoDestinationReady(account, credential)
         ? { eligible: true, block_reason: null }
         : { eligible: false, block_reason: 'destination_not_ready' },

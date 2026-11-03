@@ -45,6 +45,14 @@ function described(overrides = {}) {
 }
 
 describe('selectableByoAccounts', () => {
+  it('inclui a conta BYO quando não existe conexão oficial', () => {
+    expect(selectableByoAccounts(described({ connections: [] }))).toEqual([{
+      id: BYO,
+      instagram_account_id: ACCOUNT,
+      username: 'usevalleron',
+    }]);
+  });
+
   it('inclui a conta quando a modalidade registrada e a elegibilidade concordam', () => {
     expect(selectableByoAccounts(described())).toEqual([{
       id: BYO,

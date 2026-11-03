@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { selectableByoAccounts } from '../instagramChatAccounts.js';
 import { describeInstagramModality } from '../instagramModalityEligibility.js';
 
 const COMPANY = 'cccccccc-0000-4000-8000-000000000003';
@@ -40,6 +41,16 @@ function credential(overrides = {}) {
     webhook_verify_token_hash: HEX,
     app_secret_enc: 'enc',
     suat_enc: 'enc',
+    ...overrides,
+  };
+}
+
+function byoOperation(overrides = {}) {
+  return {
+    instagram_account_id: ACCOUNT,
+    mode: 'byo',
+    official_connection_id: null,
+    byo_account_id: BYO,
     ...overrides,
   };
 }
@@ -132,5 +143,91 @@ describe('describeInstagramModality', () => {
     });
     expect(mismatch.some((row) => row.targets.byo.block_reason === 'no_official_connection'
       || row.targets.official.block_reason === 'no_byo_account')).toBe(true);
+  });
+});
+
+describe('BYO sem conexão oficial', () => {
+  function withoutConnection(overrides = {}) {
+    return described({
+      connections: [],
+      operations: [byoOperation()],
+      ...overrides,
+    });
+  }
+
+  it('inclui no seletor a conta BYO inequívoca e mantém o oficial inelegível', () => {
+    const rows = withoutConnection();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].operational_mode).toBe('byo');
+    expect(rows[0].mode_basis).toBe('registered');
+    expect(rows[0].official_connection).toBeNull();
+    expect(rows[0].targets.byo).toEqual({ eligible: true, block_reason: null });
+    expect(rows[0].targets.official).toEqual({ eligible: false, block_reason: 'no_official_connection' });
+    expect(rows[0].official_receive_supported).toBe(false);
+    expect(rows[0].send_supported).toBe(false);
+    expect(rows[0].byo_send_supported).toBe(false);
+    expect(selectableByoAccounts(rows)).toEqual([{
+      id: BYO,
+      instagram_account_id: ACCOUNT,
+      username: 'byo',
+    }]);
+  });
+
+  it('bloqueia a conta sem operação BYO', () => {
+    const rows = withoutConnection({ operations: [] });
+    expect(rows[0].targets.byo.eligible).toBe(false);
+    expect(selectableByoAccounts(rows)).toEqual([]);
+  });
+
+  it('bloqueia a operação sem conta BYO', () => {
+    const rows = withoutConnection({ accounts: [] });
+    expect(rows[0].targets.byo.eligible).toBe(false);
+    expect(rows[0].byo_account).toBeNull();
+    expect(selectableByoAccounts(rows)).toEqual([]);
+  });
+
+  it('bloqueia operação apontando para outra conta BYO', () => {
+    const rows = withoutConnection({
+      operations: [byoOperation({ byo_account_id: '33333333-3333-4333-8333-333333333333' })],
+    });
+    expect(rows[0].targets.byo.eligible).toBe(false);
+    expect(selectableByoAccounts(rows)).toEqual([]);
+  });
+
+  it('bloqueia contas ou operações ambíguas', () => {
+    const manyAccounts = withoutConnection({
+      accounts: [
+        account(),
+        account({ id: '33333333-3333-4333-8333-333333333333' }),
+      ],
+    });
+    const manyOperations = withoutConnection({
+      operations: [
+        byoOperation(),
+        byoOperation({ byo_account_id: '33333333-3333-4333-8333-333333333333' }),
+      ],
+    });
+    expect(selectableByoAccounts(manyAccounts)).toEqual([]);
+    expect(selectableByoAccounts(manyOperations)).toEqual([]);
+    expect(manyAccounts[0].targets.byo.eligible).toBe(false);
+    expect(manyOperations[0].targets.byo.eligible).toBe(false);
+  });
+
+  it('bloqueia empresa inativa', () => {
+    const rows = withoutConnection({ companyActive: false });
+    expect(rows[0].targets.byo).toEqual({ eligible: false, block_reason: 'company_inactive' });
+    expect(rows[0].targets.official.eligible).toBe(false);
+    expect(selectableByoAccounts(rows)).toEqual([]);
+  });
+
+  it('bloqueia modalidade oficial sem conexão oficial', () => {
+    const rows = withoutConnection({
+      operations: [byoOperation({ mode: 'official', byo_account_id: null, official_connection_id: CONNECTION })],
+    });
+    expect(rows[0].targets.official.eligible).toBe(false);
+    expect(rows[0].targets.byo.eligible).toBe(false);
+    expect(rows[0].send_supported).toBe(false);
+    expect(rows[0].byo_send_supported).toBe(false);
+    expect(selectableByoAccounts(rows)).toEqual([]);
   });
 });
