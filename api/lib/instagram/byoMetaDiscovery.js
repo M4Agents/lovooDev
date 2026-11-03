@@ -88,6 +88,46 @@ export function interpretAssignedPages(body) {
   return { ok: true, accounts };
 }
 
+function instagramAccountIdOf(value) {
+  return typeof value === 'string' && ID_RE.test(value) ? value : '';
+}
+
+function usernameOf(value) {
+  return typeof value === 'string' && USERNAME_RE.test(value) ? value : null;
+}
+
+export function interpretAssignedInstagramAccounts(body) {
+  if (!Array.isArray(body?.data)) {
+    return { ok: false, code: 'temporary', definitive: false };
+  }
+  const accounts = [];
+  const seen = new Set();
+  for (const entry of body.data) {
+    const instagramAccountId = instagramAccountIdOf(entry?.id);
+    if (!instagramAccountId || seen.has(instagramAccountId)) continue;
+    seen.add(instagramAccountId);
+    accounts.push({
+      instagram_account_id: instagramAccountId,
+      instagram_username: usernameOf(entry?.username),
+    });
+  }
+  return { ok: true, accounts };
+}
+
+export function reportEffectiveScopes(scopes) {
+  const present = new Set();
+  if (Array.isArray(scopes)) {
+    for (const scope of scopes) {
+      if (typeof scope === 'string' && SCOPE_RE.test(scope)) present.add(scope);
+    }
+  }
+  return {
+    instagram_basic: present.has('instagram_basic'),
+    instagram_manage_messages: present.has('instagram_manage_messages'),
+    instagram_manage_comments: present.has('instagram_manage_comments'),
+  };
+}
+
 export function classifyMetaFailure(status, body) {
   const code = body?.error?.code;
   if (code === 190 || code === 102) {

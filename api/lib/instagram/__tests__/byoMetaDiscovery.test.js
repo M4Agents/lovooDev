@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { classifyMetaFailure, interpretAssignedPages, interpretDebugToken } from '../byoMetaDiscovery.js';
+import {
+  classifyMetaFailure,
+  interpretAssignedInstagramAccounts,
+  interpretAssignedPages,
+  interpretDebugToken,
+  reportEffectiveScopes,
+} from '../byoMetaDiscovery.js';
 
 const APP = '1234567890';
 
@@ -134,5 +140,150 @@ describe('descoberta do System User BYO', () => {
   it('trata resposta incompleta como falha temporária', () => {
     expect(interpretAssignedPages({})).toMatchObject({ code: 'temporary', definitive: false });
     expect(interpretDebugToken({}, APP)).toMatchObject({ code: 'temporary', definitive: false });
+  });
+});
+
+const ABSENT_SCOPES = {
+  instagram_basic: false,
+  instagram_manage_messages: false,
+  instagram_manage_comments: false,
+};
+
+describe('contas atribuídas do Unified Login', () => {
+  it('devolve uma conta válida', () => {
+    expect(interpretAssignedInstagramAccounts({
+      data: [{ id: '17841408602689007', username: 'usevalleron' }],
+    })).toEqual({
+      ok: true,
+      accounts: [{ instagram_account_id: '17841408602689007', instagram_username: 'usevalleron' }],
+    });
+  });
+
+  it('devolve várias contas e ignora repetição', () => {
+    expect(interpretAssignedInstagramAccounts({
+      data: [
+        { id: '17841408602689007', username: 'usevalleron' },
+        { id: '17841400000000002', username: 'outra.conta' },
+        { id: '17841408602689007', username: 'usevalleron' },
+      ],
+    })).toEqual({
+      ok: true,
+      accounts: [
+        { instagram_account_id: '17841408602689007', instagram_username: 'usevalleron' },
+        { instagram_account_id: '17841400000000002', instagram_username: 'outra.conta' },
+      ],
+    });
+  });
+
+  it('aceita data vazio', () => {
+    expect(interpretAssignedInstagramAccounts({ data: [] })).toEqual({ ok: true, accounts: [] });
+  });
+
+  it('trata resposta nula ou ausente como falha temporária', () => {
+    expect(interpretAssignedInstagramAccounts(null)).toMatchObject({ ok: false, code: 'temporary', definitive: false });
+    expect(interpretAssignedInstagramAccounts()).toMatchObject({ ok: false, code: 'temporary', definitive: false });
+  });
+
+  it('trata resposta malformada como falha temporária', () => {
+    expect(interpretAssignedInstagramAccounts({ data: { id: '17841408602689007' } })).toMatchObject({
+      ok: false,
+      code: 'temporary',
+      definitive: false,
+    });
+    expect(interpretAssignedInstagramAccounts('conta')).toMatchObject({ ok: false, code: 'temporary' });
+  });
+
+  it('preserva um Instagram ID grande como string', () => {
+    const instagramAccountId = '9007199254740993';
+    const result = interpretAssignedInstagramAccounts({
+      data: [{ id: instagramAccountId, username: 'usevalleron' }],
+    });
+    expect(result.accounts[0].instagram_account_id).toBe(instagramAccountId);
+    expect(typeof result.accounts[0].instagram_account_id).toBe('string');
+  });
+
+  it('ignora registro sem ID válido', () => {
+    expect(interpretAssignedInstagramAccounts({
+      data: [{ id: 'abc' }, { username: 'sem.id' }, { id: '' }, { id: 17841408602689007 }],
+    })).toEqual({ ok: true, accounts: [] });
+  });
+
+  it('ignora campos extras sem inferir permissão', () => {
+    const result = interpretAssignedInstagramAccounts({
+      data: [{
+        id: '17841408602689007',
+        username: 'usevalleron',
+        permissions: ['instagram_manage_messages'],
+        access_token: 'token-de-fixture',
+      }],
+      paging: { cursors: { after: 'cursor-secreto' } },
+    });
+    expect(result).toEqual({
+      ok: true,
+      accounts: [{ instagram_account_id: '17841408602689007', instagram_username: 'usevalleron' }],
+    });
+    expect(JSON.stringify(result)).not.toContain('instagram_manage_messages');
+    expect(JSON.stringify(result)).not.toContain('token-de-fixture');
+    expect(JSON.stringify(result)).not.toContain('cursor-secreto');
+  });
+});
+
+describe('relatório informativo de escopos', () => {
+  it('marca os três escopos presentes', () => {
+    expect(reportEffectiveScopes([
+      'instagram_basic',
+      'instagram_manage_messages',
+      'instagram_manage_comments',
+    ])).toEqual({
+      instagram_basic: true,
+      instagram_manage_messages: true,
+      instagram_manage_comments: true,
+    });
+  });
+
+  it('marca somente instagram_basic', () => {
+    expect(reportEffectiveScopes(['instagram_basic'])).toEqual({
+      ...ABSENT_SCOPES,
+      instagram_basic: true,
+    });
+  });
+
+  it('marca mensagem ausente', () => {
+    expect(reportEffectiveScopes([
+      'instagram_basic',
+      'instagram_manage_comments',
+    ])).toEqual({
+      instagram_basic: true,
+      instagram_manage_messages: false,
+      instagram_manage_comments: true,
+    });
+  });
+
+  it('marca lista vazia como ausente', () => {
+    expect(reportEffectiveScopes([])).toEqual(ABSENT_SCOPES);
+  });
+
+  it('marca lista nula ou inválida como ausente', () => {
+    expect(reportEffectiveScopes(null)).toEqual(ABSENT_SCOPES);
+    expect(reportEffectiveScopes(undefined)).toEqual(ABSENT_SCOPES);
+    expect(reportEffectiveScopes({ scopes: ['instagram_basic'] })).toEqual(ABSENT_SCOPES);
+  });
+
+  it('ignora escopos desconhecidos', () => {
+    expect(reportEffectiveScopes([
+      'instagram_basic',
+      'pages_show_list',
+      'ads_read',
+    ])).toEqual({
+      ...ABSENT_SCOPES,
+      instagram_basic: true,
+    });
+  });
+
+  it('não altera a lista recebida', () => {
+    const scopes = ['instagram_manage_messages', 'instagram_basic'];
+    const snapshot = [...scopes];
+    reportEffectiveScopes(scopes);
+    expect(scopes).toEqual(snapshot);
   });
 });
