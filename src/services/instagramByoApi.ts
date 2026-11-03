@@ -383,3 +383,114 @@ export async function setInstagramByoCredentials(input: ByoSetInput): Promise<By
     return { kind: 'temporary' };
   }
 }
+
+const DISCOVERY_PATH = '/api/instagram/byo-poc/discovery-diagnostic';
+const APP_IDENTITY = new Set(['compatible', 'incompatible', 'indeterminate']);
+const SCOPE_STATE = new Set(['present', 'absent', 'indeterminate']);
+const ACCOUNT_STATE = new Set(['found', 'not_found', 'indeterminate']);
+const READ_STATE = new Set(['compatible', 'incompatible', 'indeterminate']);
+
+export type ByoDiscoveryReport = {
+  app_identity: 'compatible' | 'incompatible' | 'indeterminate';
+  instagram_basic: 'present' | 'absent' | 'indeterminate';
+  instagram_manage_messages: 'present' | 'absent' | 'indeterminate';
+  instagram_manage_comments: 'present' | 'absent' | 'indeterminate';
+  expected_account: 'found' | 'not_found' | 'indeterminate';
+  unified_login_read: 'compatible' | 'incompatible' | 'indeterminate';
+  webhook_subscription: 'indeterminate';
+  error_code: null | 'not_found' | 'unavailable' | 'meta_unavailable';
+};
+
+export type ByoDiscoveryResult =
+  | { kind: 'ok'; report: ByoDiscoveryReport }
+  | { kind: 'not_found'; report: ByoDiscoveryReport }
+  | { kind: 'unavailable'; report: ByoDiscoveryReport | null }
+  | { kind: 'unauthorized' }
+  | { kind: 'forbidden' }
+  | { kind: 'network' }
+  | { kind: 'session_unavailable' }
+  | { kind: 'temporary' };
+
+function oneOf<T extends string>(value: unknown, allowed: Set<string>): value is T {
+  return typeof value === 'string' && allowed.has(value);
+}
+
+export function projectByoDiscoveryReport(value: unknown): ByoDiscoveryReport | null {
+  if (!isRecord(value)) return null;
+  if (!oneOf<ByoDiscoveryReport['app_identity']>(value.app_identity, APP_IDENTITY)) return null;
+  if (!oneOf<ByoDiscoveryReport['instagram_basic']>(value.instagram_basic, SCOPE_STATE)) return null;
+  if (!oneOf<ByoDiscoveryReport['instagram_manage_messages']>(value.instagram_manage_messages, SCOPE_STATE)) return null;
+  if (!oneOf<ByoDiscoveryReport['instagram_manage_comments']>(value.instagram_manage_comments, SCOPE_STATE)) return null;
+  if (!oneOf<ByoDiscoveryReport['expected_account']>(value.expected_account, ACCOUNT_STATE)) return null;
+  if (!oneOf<ByoDiscoveryReport['unified_login_read']>(value.unified_login_read, READ_STATE)) return null;
+  if (value.webhook_subscription !== 'indeterminate') return null;
+  const errorCode = value.error_code;
+  if (!(errorCode === null || errorCode === 'not_found' || errorCode === 'unavailable' || errorCode === 'meta_unavailable')) {
+    return null;
+  }
+  return {
+    app_identity: value.app_identity,
+    instagram_basic: value.instagram_basic,
+    instagram_manage_messages: value.instagram_manage_messages,
+    instagram_manage_comments: value.instagram_manage_comments,
+    expected_account: value.expected_account,
+    unified_login_read: value.unified_login_read,
+    webhook_subscription: 'indeterminate',
+    error_code: errorCode,
+  };
+}
+
+function blankDiscovery(errorCode: ByoDiscoveryReport['error_code']): ByoDiscoveryReport {
+  return {
+    app_identity: 'indeterminate',
+    instagram_basic: 'indeterminate',
+    instagram_manage_messages: 'indeterminate',
+    instagram_manage_comments: 'indeterminate',
+    expected_account: 'indeterminate',
+    unified_login_read: 'indeterminate',
+    webhook_subscription: 'indeterminate',
+    error_code: errorCode,
+  };
+}
+
+export async function diagnoseInstagramByoConnection(companyId: string): Promise<ByoDiscoveryResult> {
+  if (!UUID_RE.test(companyId)) return { kind: 'temporary' };
+
+  let token = '';
+  try {
+    const { data } = await supabase.auth.getSession();
+    token = data.session?.access_token ?? '';
+  } catch {
+    return { kind: 'session_unavailable' };
+  }
+  if (!token) return { kind: 'session_unavailable' };
+
+  let response: Response;
+  try {
+    response = await fetch(DISCOVERY_PATH, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ company_id: companyId.toLowerCase() }),
+    });
+  } catch {
+    return { kind: 'network' };
+  }
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  const report = projectByoDiscoveryReport(body);
+
+  if (response.status === 401) return { kind: 'unauthorized' };
+  if (response.status === 403) return { kind: 'forbidden' };
+  if (response.status === 404) return { kind: 'not_found', report: report ?? blankDiscovery('not_found') };
+  if (response.status === 503) return { kind: 'unavailable', report };
+  if (response.status !== 200 || !report) return { kind: 'temporary' };
+  return { kind: 'ok', report };
+}

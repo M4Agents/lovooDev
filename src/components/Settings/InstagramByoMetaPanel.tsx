@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InstagramByoActionForms } from './InstagramByoActionForms';
 import { InstagramByoSetupGuide } from './InstagramByoSetupGuide';
+import { InstagramByoDiscoverySection } from './InstagramByoDiscoverySection';
 import { InstagramByoValidationSection } from './InstagramByoValidationSection';
 import { InstagramByoWebhookSection } from './InstagramByoWebhookSection';
 import { InstagramByoSetForm } from './InstagramByoSetForm';
@@ -217,6 +218,9 @@ export function InstagramByoMetaPanel({ companyId = null, canWrite = false }: Pr
           accounts={snapshot?.accounts ?? []}
           onRefresh={() => setReloadKey((current) => current + 1)}
         />
+        {companyId && (
+          <InstagramByoDiscoverySection key={companyId} companyId={companyId} canWrite={Boolean(canWrite)} />
+        )}
         {revoked && (
           <dl className="space-y-1 text-sm text-slate-600">
             <div>
