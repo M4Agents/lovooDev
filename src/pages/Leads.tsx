@@ -203,16 +203,20 @@ export const Leads: React.FC = () => {
       .catch(() => setCustomFields([]));
   }, [company?.id]);
 
-  // Carregar usuários da empresa
+  // Carregar usuários atribuíveis para a coluna e o filtro de responsável.
+  // Usa get_assignable_users (exige apenas membership ativa) em vez de
+  // get_company_users_with_details (exige permissão 'users') para evitar
+  // a coluna RESPONSÁVEL vazia para sellers e managers sem essa permissão.
+  // Mesmo padrão de src/pages/SalesFunnel.tsx.
   const loadCompanyUsers = async () => {
     if (!company?.id) return;
-    
+
     try {
       const { data, error } = await supabase
-        .rpc('get_company_users_with_details', {
+        .rpc('get_assignable_users', {
           p_company_id: company.id
         });
-      
+
       if (error) throw error;
       setCompanyUsers(data || []);
     } catch (error) {
