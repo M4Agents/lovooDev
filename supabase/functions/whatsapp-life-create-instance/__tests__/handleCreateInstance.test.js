@@ -114,18 +114,18 @@ describe('autorização da edge function', () => {
     expect(CREATE_PARENT_ROLES).toEqual(QR_PARENT_ROLES);
   });
 
-  it('permite admin, manager e o administrador da mãe correspondente', async () => {
+  it('permite admin, manager, seller e o administrador da mãe correspondente', async () => {
     const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [{ role: 'admin' }], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ ok: true, role: 'admin' });
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [{ role: 'manager' }], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ ok: true, role: 'manager' });
+    await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [{ role: 'seller' }], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ ok: true, role: 'seller' });
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [], parent: [{ role: 'super_admin' }] }), USER, COMPANY)).resolves.toMatchObject({ ok: true, scope: 'parent' });
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [], parent: [{ role: 'system_admin' }] }), USER, COMPANY)).resolves.toMatchObject({ ok: true, role: 'system_admin' });
   });
 
-  it('nega partner sem atribuição, seller e empresa não relacionada', async () => {
+  it('nega partner sem atribuição e empresa não relacionada', async () => {
     const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [{ role: 'partner' }], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ status: 403 });
-    await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [{ role: 'seller' }], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ status: 403 });
     await expect(authorizeCreateInstance(authorizeSvc({ company, direct: [], parent: [] }), USER, COMPANY)).resolves.toMatchObject({ status: 403 });
     await expect(authorizeCreateInstance(authorizeSvc({
       company: { data: { id: OTHER, parent_company_id: null }, error: null },

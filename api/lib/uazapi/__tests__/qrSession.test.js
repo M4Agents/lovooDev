@@ -164,10 +164,11 @@ describe('autorização do QR', () => {
     return authorizeQrSession(authorizeSvc(state), USER, COMPANY);
   }
 
-  it('permite admin e manager da própria empresa', async () => {
+  it('permite admin, manager e seller da própria empresa', async () => {
     const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
     await expect(decide({ company, direct: [{ role: 'admin' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'admin' });
     await expect(decide({ company, direct: [{ role: 'manager' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'manager' });
+    await expect(decide({ company, direct: [{ role: 'seller' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'seller', scope: 'company' });
   });
 
   it('permite super_admin e system_admin da empresa mãe', async () => {
@@ -176,12 +177,17 @@ describe('autorização do QR', () => {
     await expect(decide({ company, direct: [], parent: [{ role: 'system_admin' }] })).resolves.toMatchObject({ ok: true, role: 'system_admin' });
   });
 
-  it('nega empresa não relacionada, partner, seller e admin da mãe', async () => {
+  it('nega empresa não relacionada, partner, seller inativo, papéis duplicados e admin da mãe', async () => {
     const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
     await expect(decide({ company, direct: [], parent: [] })).resolves.toMatchObject({ status: 403 });
     await expect(decide({ company, direct: [{ role: 'partner' }], parent: [] })).resolves.toMatchObject({ status: 403 });
-    await expect(decide({ company, direct: [{ role: 'seller' }], parent: [] })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({ company, direct: [{ role: 'seller' }, { role: 'admin' }], parent: [] })).resolves.toMatchObject({ status: 403 });
     await expect(decide({ company, direct: [], parent: [{ role: 'admin' }] })).resolves.toMatchObject({ status: 403 });
+    await expect(authorizeQrSession(authorizeSvc({
+      company: { data: { id: OTHER, parent_company_id: PARENT }, error: null },
+      direct: [{ role: 'seller' }],
+      parent: [],
+    }), USER, OTHER)).resolves.toMatchObject({ status: 403 });
     await expect(authorizeQrSession(authorizeSvc({
       company: { data: { id: OTHER, parent_company_id: null }, error: null },
       direct: [],

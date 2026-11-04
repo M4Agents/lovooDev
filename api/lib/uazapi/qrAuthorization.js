@@ -1,12 +1,12 @@
 // Autorização do QR WhatsApp.
 // A empresa do body não prova acesso. A prova é company_users ativo.
-// Própria empresa: admin ou manager.
+// Própria empresa: admin, manager ou seller, com um único papel ativo.
 // Empresa filha: super_admin ou system_admin da mãe correspondente.
-// Partner e seller não entram por papel. Template de permissão não é consultado.
+// Partner não entra por papel. Template de permissão não é consultado.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const QR_DIRECT_ROLES = ['admin', 'manager'];
+export const QR_DIRECT_ROLES = ['admin', 'manager', 'seller'];
 export const QR_PARENT_ROLES = ['super_admin', 'system_admin'];
 
 const FORBIDDEN = {

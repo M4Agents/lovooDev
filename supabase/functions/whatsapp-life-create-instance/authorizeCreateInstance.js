@@ -1,10 +1,11 @@
 // Autorização da criação administrativa de instância WhatsApp.
 // A matriz é a mesma de api/lib/uazapi/qrAuthorization.js.
-// A empresa do body não prova acesso. Partner e seller não entram por papel.
+// A empresa do body não prova acesso. Partner não entra por papel.
+// Seller entra na matriz, mas o handler encerra a operação antes de criar instância.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const CREATE_DIRECT_ROLES = ['admin', 'manager'];
+export const CREATE_DIRECT_ROLES = ['admin', 'manager', 'seller'];
 export const CREATE_PARENT_ROLES = ['super_admin', 'system_admin'];
 
 const FORBIDDEN = {
