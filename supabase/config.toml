@@ -29,7 +29,7 @@ double_confirm_changes = true
 enable_confirmations = false
 
 [functions.whatsapp-life-create-instance]
-verify_jwt = false
+verify_jwt = true
 
 [functions.whatsapp-life-get-qrcode]
 verify_jwt = false

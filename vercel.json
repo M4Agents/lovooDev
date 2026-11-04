@@ -9,6 +9,7 @@
     "api/whatsapp/meta/media/import.js": { "maxDuration": 60 },
     "api/webhook/uazapi/[company_id].js": { "maxDuration": 60 },
     "api/uazapi-webhook-final.js": { "maxDuration": 60 },
+    "api/uazapi/qr-session.js": { "maxDuration": 60 },
     "api/instagram/webhook.js": { "maxDuration": 30 },
     "api/nuvemshop/webhook.js": { "maxDuration": 15 },
     "api/cron/nuvemshop-process-events.js": { "maxDuration": 60 },

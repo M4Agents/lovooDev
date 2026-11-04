@@ -127,21 +127,23 @@ export const WhatsAppLifeModule: React.FC = () => {
     try {
       console.log('[WhatsAppLifeModule] Creating instance:', name);
       
-      // ABRIR MODAL IMEDIATAMENTE COM LOADING
-      setCurrentInstanceName(name);
-      setShowQRModal(true);
+    const reusableId = currentInstanceName === name && currentInstanceId && currentInstanceId !== 'loading'
+      ? currentInstanceId
+      : undefined;
+    setCurrentInstanceName(name);
+    setShowQRModal(true);
       
       // Inicializar dados com loading
       setQrCodeData({
-        temp_instance_id: 'loading',
+        temp_instance_id: reusableId || 'loading',
         status: 'loading',
         message: 'Gerando QR Code...',
         qrcode: null,
         instance_name: name,
       });
       
-      const result = await generateQRCode(name);
-      console.log('[WhatsAppLifeModule] QR Code result:', result);
+      const result = await generateQRCode(name, reusableId);
+      console.log('[WhatsAppLifeModule] QR Code result:', result.success);
 
       if (result.success && result.data) {
         // Atualizar dados do QR Code
@@ -153,10 +155,15 @@ export const WhatsAppLifeModule: React.FC = () => {
           startTempInstancePolling(result.data.temp_instance_id, false); // false = criação nova
         }
       } else {
-        // Atualizar com erro
+        if (result.recovery?.temp_instance_id) {
+          setCurrentInstanceId(result.recovery.temp_instance_id);
+        }
         setQrCodeData((prev: any) => ({
           ...prev,
+          qrcode: null,
+          temp_instance_id: result.recovery?.temp_instance_id || prev?.temp_instance_id,
           status: 'error',
+          recovery_status: result.recovery?.status,
           message: result.error || 'Erro ao gerar QR Code',
           error_message: result.error,
         }));
@@ -170,7 +177,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         error_message: error instanceof Error ? error.message : 'Erro interno',
       }));
     }
-  }, [generateQRCode]);
+  }, [generateQRCode, currentInstanceId, currentInstanceName]);
 
   // Handlers para editar e excluir instâncias
   const handleEditInstance = useCallback(async (instance: any) => {
@@ -575,21 +582,22 @@ export const WhatsAppLifeModule: React.FC = () => {
     
     // Se temos dados do QR Code armazenados, usar eles
     if (qrCodeData && qrCodeData.temp_instance_id === tempInstanceId) {
+      if (qrCodeData.error_message && !qrCodeData.qrcode) {
+        return { success: false, error: qrCodeData.error_message };
+      }
       return {
         success: true,
         data: {
           qrcode: qrCodeData.qrcode,
           expires_at: qrCodeData.expires_at,
-          status: qrCodeData.status, // INCLUIR STATUS
+          status: qrCodeData.status,
         },
       };
     }
     
-    // Para instâncias temporárias sem dados, gerar novamente
     if (tempInstanceId.includes('-')) {
       try {
-        // Regenerar QR Code usando o nome da instância atual
-        const result = await generateQRCode(currentInstanceName);
+        const result = await generateQRCode(currentInstanceName, tempInstanceId);
         if (result.success && result.data) {
           setQrCodeData(result.data);
           return {
@@ -597,22 +605,15 @@ export const WhatsAppLifeModule: React.FC = () => {
             data: {
               qrcode: result.data.qrcode,
               expires_at: result.data.expires_at,
-              status: result.data.status, // INCLUIR STATUS
+              status: result.data.status,
             },
           };
         }
+        return { success: false, error: result.error || 'Não foi possível gerar o QR Code' };
       } catch (error) {
         console.error('[WhatsAppLifeModule] Erro ao regenerar QR Code:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Não foi possível gerar o QR Code' };
       }
-      
-      // Fallback para QR Code de erro
-      return {
-        success: true,
-        data: {
-          qrcode: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZmZmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI0MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iI2Q5NTM0ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkVycm8gYW8gY2FycmVnYXIgUVIgQ29kZTwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjYwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEwIiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Q2xpcXVlIGVtIEF0dWFsaXphcjwvdGV4dD48L3N2Zz4=',
-          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        },
-      };
     } else {
       // É uma instância real, usar método normal
       return await getQRCode(tempInstanceId);
@@ -773,6 +774,7 @@ export const WhatsAppLifeModule: React.FC = () => {
         instanceId={currentInstanceId}
         instanceName={currentInstanceName}
         onGetQRCode={handleGetQRCode}
+        onRetry={() => { void handleConfirmCreateInstance(currentInstanceName); }}
         qrCodeData={qrCodeData}
       />
     </div>

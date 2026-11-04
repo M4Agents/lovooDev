@@ -16,8 +16,15 @@ interface QRCodeModalProps {
     data?: { qrcode: string; expires_at?: string };
     error?: string;
   }>;
+  onRetry?: () => void;
   qrCodeData?: any;
 }
+
+export function qrRetryAllowed(recoveryStatus?: string): boolean {
+  return recoveryStatus !== 'unknown';
+}
+
+export const UNKNOWN_QR_GUIDANCE = 'Um novo QR não será gerado até a reconciliação. A mesma operação permanece preservada.';
 
 export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   isOpen,
@@ -25,6 +32,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   instanceId,
   instanceName,
   onGetQRCode,
+  onRetry,
   qrCodeData
 }) => {
   const [qrCode, setQrCode] = useState<string>('');
@@ -36,7 +44,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   // Usar dados externos quando disponíveis
   useEffect(() => {
     if (qrCodeData) {
-      console.log('[QRCodeModal] Usando dados externos:', qrCodeData);
+      console.log('[QRCodeModal] Usando dados externos');
       
       if (qrCodeData.qrcode) {
         setQrCode(qrCodeData.qrcode);
@@ -190,16 +198,21 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                 </div>
               </div>
             ) : error ? (
-              <div className="w-48 h-48 flex items-center justify-center border-2 border-dashed border-red-300 rounded-lg bg-red-50">
+              <div className="w-full min-h-48 flex items-center justify-center border-2 border-dashed border-red-300 rounded-lg bg-red-50 p-4">
                 <div className="text-center">
                   <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
                   <p className="text-sm text-red-600 mb-3">{error}</p>
-                  <button
-                    onClick={loadQRCode}
-                    className="text-sm text-red-600 hover:text-red-800 underline"
-                  >
-                    Tentar novamente
-                  </button>
+                  {qrCodeData?.recovery_status === 'unknown' && (
+                    <p className="text-sm text-red-700 mb-3">{UNKNOWN_QR_GUIDANCE}</p>
+                  )}
+                  {qrRetryAllowed(qrCodeData?.recovery_status) && (
+                    <button
+                      onClick={onRetry ?? loadQRCode}
+                      className="text-sm text-red-600 hover:text-red-800 underline"
+                    >
+                      Tentar novamente
+                    </button>
+                  )}
                 </div>
               </div>
             ) : qrCode ? (

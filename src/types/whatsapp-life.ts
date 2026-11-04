@@ -188,7 +188,7 @@ export interface UseInstancesReturn {
   error: string | null;
   refetch: () => Promise<void>;
   createInstance: (name: string) => Promise<CreateInstanceResponse>;
-  generateQRCode: (name: string) => Promise<{
+  generateQRCode: (name: string, tempInstanceId?: string) => Promise<{
     success: boolean;
     data?: {
       temp_instance_id: string;
@@ -205,6 +205,7 @@ export interface UseInstancesReturn {
     };
     error?: string;
     planInfo?: any;
+    recovery?: { temp_instance_id: string; instance_name?: string; company_id?: string; status?: string };
   }>;
   confirmConnection: (
     tempInstanceId: string,

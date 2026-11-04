@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { requestWhatsAppQrSession } from '../services/uazapiQrSessionApi';
 import { 
   WhatsAppLifeInstance, 
   CreateInstanceResponse, 
@@ -61,7 +62,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
   // =====================================================
   // GERAR QR CODE (WEBHOOK 100% - OTIMIZADO)
   // =====================================================
-  const generateQRCode = useCallback(async (name: string): Promise<{
+  const generateQRCode = useCallback(async (name: string, tempInstanceId?: string): Promise<{
     success: boolean;
     data?: {
       temp_instance_id: string;
@@ -74,6 +75,7 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     };
     error?: string;
     planInfo?: any;
+    recovery?: { temp_instance_id: string; instance_name?: string; company_id?: string; status?: string };
   }> => {
     if (!companyId) {
       return {
@@ -83,37 +85,8 @@ export const useWhatsAppInstancesWebhook100 = (companyId?: string): UseInstances
     }
 
     try {
-      console.log('[useWhatsAppInstancesWebhook100] 🎯 VERSÃO DIRETA BASEADA NA REFERÊNCIA!');
       console.log('[useWhatsAppInstancesWebhook100] Generating QR Code for:', name);
-      
-      // USAR VERSÃO COM TIMEOUT DE 180 SEGUNDOS - QR CODE DIRETO NO MODAL
-      const { data, error } = await supabase.rpc('generate_whatsapp_qr_code_180s_timeout', {
-        p_company_id: companyId,
-        p_instance_name: name,
-      });
-
-      console.log('[useWhatsAppInstancesWebhook100] QR Code response (180s Timeout):', { data, error });
-
-      if (error) {
-        console.error('[useWhatsAppInstancesWebhook100] Erro RPC:', error);
-        return {
-          success: false,
-          error: `RPC Error: ${error.message || JSON.stringify(error)}`,
-        };
-      }
-
-      if (data && data.success) {
-        return {
-          success: true,
-          data: data.data,
-        };
-      } else {
-        return {
-          success: false,
-          error: data?.error || 'Erro desconhecido',
-          planInfo: data?.planInfo,
-        };
-      }
+      return await requestWhatsAppQrSession(companyId, name, tempInstanceId);
     } catch (err) {
       console.error('[useWhatsAppInstancesWebhook100] Erro ao gerar QR Code:', err);
       return {

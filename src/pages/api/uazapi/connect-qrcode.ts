@@ -8,7 +8,6 @@ import { supabase } from '../../../lib/supabase';
 
 // Configuração Uazapi
 const UAZAPI_BASE_URL = 'https://lovoo.uazapi.com';
-const ADMIN_TOKEN = 'Qz8m6fc3Gcfc0jKAdZbCPaHRYa2nCGpOapTNJT5J4C2km6GdQB';
 
 interface ConnectQRCodeRequest {
   temp_instance_id: string;
