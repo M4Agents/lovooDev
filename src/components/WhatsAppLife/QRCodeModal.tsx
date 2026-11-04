@@ -271,13 +271,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             )}
           </div>
 
-          {/* Status Info */}
-          <div className="mt-6 p-3 bg-blue-50 rounded-lg">
-            <div className="flex items-center gap-2 text-sm text-blue-700">
-              <CheckCircle className="h-4 w-4" />
-              <span>Instância criada com sucesso! Escaneie o QR Code para conectar.</span>
+          {qrCode && !error && (
+            <div className="mt-6 p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-blue-700">
+                <CheckCircle className="h-4 w-4" />
+                <span>Instância criada com sucesso! Escaneie o QR Code para conectar.</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Close Button */}
           <div className="mt-6">

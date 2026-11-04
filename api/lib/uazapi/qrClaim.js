@@ -1,8 +1,14 @@
 // Reserva a operação aberta no Postgres e lê a linha temporária.
 // A função claim_whatsapp_temp_open serializa empresa + nome.
-// Enquanto ela não existir no banco, a criação volta ao INSERT e ao índice único.
+// Sem essa função no banco, a sessão responde 503 e não chama /instance/init.
 
 const OPEN_STATUSES = ['creating', 'created', 'created_no_qr', 'connecting'];
+
+export function isBlockingOpen(row) {
+  if (!row || !OPEN_STATUSES.includes(row.status)) return false;
+  if (row.remote_init_state === 'reserved' || row.remote_init_state === 'confirmed') return true;
+  return row.remote_init_state === 'unknown' && row.init_started_at != null;
+}
 
 export class QrSessionError extends Error {
   constructor(code, status, publicMessage, extra = {}) {
@@ -29,7 +35,8 @@ async function queryOpen(svc, companyId, instanceName, tempInstanceId) {
     .from('whatsapp_temp_instances')
     .select('temp_instance_id, instance_name, company_id, uazapi_name, uazapi_instance_id, uazapi_token, status, qrcode, paircode, updated_at, remote_init_state')
     .eq('company_id', companyId)
-    .in('status', OPEN_STATUSES);
+    .in('status', OPEN_STATUSES)
+    .or('remote_init_state.eq.reserved,remote_init_state.eq.confirmed,and(remote_init_state.eq.unknown,init_started_at.not.is.null)');
   query = tempInstanceId
     ? query.eq('temp_instance_id', tempInstanceId)
     : query.eq('instance_name', instanceName);

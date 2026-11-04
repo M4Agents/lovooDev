@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { isBlockingOpen } from '../qrClaim.js';
 import { createQrSession } from '../qrSession.js';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
@@ -7,7 +10,6 @@ const ADMIN = 'fixture-admin-not-real';
 const INSTANCE = 'fixture-instance-not-real';
 const BASE = 'https://uazapi.test';
 const OPEN = ['creating', 'created', 'created_no_qr', 'connecting'];
-const CLAIMABLE = ['reserved', 'unknown', 'confirmed'];
 
 function memorySvc(options = {}) {
   const rows = options.rows ?? [];
@@ -25,8 +27,7 @@ function memorySvc(options = {}) {
         const existing = rows
           .filter((row) => row.company_id === args.p_company_id
             && row.instance_name === args.p_instance_name
-            && OPEN.includes(row.status)
-            && CLAIMABLE.includes(row.remote_init_state))
+            && isBlockingOpen(row))
           .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))[0];
         if (existing) {
           return {
@@ -76,18 +77,18 @@ function memorySvc(options = {}) {
         eq(column, value) { filters.push(['eq', column, value]); return builder; },
         is() { return builder; },
         in(column, value) { filters.push(['in', column, value]); return builder; },
+        or() { return builder; },
         order() { return builder; },
         limit() { return builder; },
         maybeSingle: async () => {
           if (table !== 'whatsapp_temp_instances') return { data: null, error: null };
           const value = (column) => filters.find((item) => item[0] === 'eq' && item[1] === column)?.[2];
-          const statuses = filters.find((item) => item[0] === 'in' && item[1] === 'status')?.[2];
           const found = rows
             .filter((row) => (
               (!value('company_id') || row.company_id === value('company_id'))
               && (!value('instance_name') || row.instance_name === value('instance_name'))
               && (!value('temp_instance_id') || row.temp_instance_id === value('temp_instance_id'))
-              && (!statuses || statuses.includes(row.status))
+              && isBlockingOpen(row)
             ))
             .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)));
           return { data: found[0] ?? null, error: null };
@@ -184,7 +185,7 @@ describe('posse da operação temporária', () => {
     expect(JSON.stringify(settled)).not.toContain(INSTANCE);
   });
 
-  it('duplicidades antigas em unknown não geram outra linha nem outro init', async () => {
+  it('temporária legada sem init não bloqueia e não duplica o init', async () => {
     const svc = memorySvc({
       rows: [
         {
@@ -194,6 +195,7 @@ describe('posse da operação temporária', () => {
           uazapi_name: 'antigo-1',
           status: 'connecting',
           remote_init_state: 'unknown',
+          init_started_at: null,
           updated_at: '2026-05-01T00:00:00.000Z',
         },
         {
@@ -203,6 +205,7 @@ describe('posse da operação temporária', () => {
           uazapi_name: 'antigo-2',
           status: 'connecting',
           remote_init_state: 'unknown',
+          init_started_at: null,
           updated_at: '2026-09-01T00:00:00.000Z',
         },
       ],
@@ -212,10 +215,37 @@ describe('posse da operação temporária', () => {
       createQrSession(input(svc, fetchImpl(inits))),
       createQrSession(input(svc, fetchImpl(inits))),
     ]);
-    expect(svc.rows).toHaveLength(2);
+    const created = svc.rows.filter((row) => row.remote_init_state !== 'unknown' || row.init_started_at);
+    expect(svc.rows).toHaveLength(3);
+    expect(created).toHaveLength(1);
+    expect(created[0].uazapi_name).not.toBe('antigo-1');
+    expect(created[0].uazapi_name).not.toBe('antigo-2');
+    expect(inits).toHaveLength(1);
+    expect(settled.filter((item) => item.status === 'fulfilled')).toHaveLength(1);
+    expect(settled.find((item) => item.status === 'rejected').reason.code).toBe('init_unknown');
+  });
+
+  it('unknown com init iniciado continua sem outro init', async () => {
+    const svc = memorySvc({
+      rows: [{
+        temp_instance_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        company_id: COMPANY,
+        instance_name: 'Comercial',
+        uazapi_name: 'em-andamento',
+        status: 'creating',
+        remote_init_state: 'unknown',
+        init_started_at: '2026-11-04T19:00:00.000Z',
+        updated_at: '2026-11-04T19:00:01.000Z',
+      }],
+    });
+    const inits = [];
+    const settled = await Promise.allSettled([
+      createQrSession(input(svc, fetchImpl(inits))),
+      createQrSession(input(svc, fetchImpl(inits))),
+    ]);
+    expect(svc.rows).toHaveLength(1);
     expect(inits).toHaveLength(0);
     expect(settled.every((item) => item.status === 'rejected' && item.reason.code === 'init_unknown')).toBe(true);
-    expect(settled.every((item) => item.reason.extra.recovery.temp_instance_id === 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')).toBe(true);
   });
 
   it('isola empresa e nome', async () => {
@@ -230,6 +260,18 @@ describe('posse da operação temporária', () => {
     expect(settled.every((item) => item.status === 'fulfilled')).toBe(true);
     expect(inits).toHaveLength(2);
     expect(svc.rows.map((row) => row.company_id).sort()).toEqual([COMPANY, OTHER].sort());
+  });
+
+  it('a migration nova usa o mesmo predicado e não altera linhas', () => {
+    const sql = readFileSync(
+      resolve(import.meta.dirname, '../../../../supabase/migrations/20261104220000_ignore_legacy_whatsapp_temp_open.sql'),
+      'utf8',
+    );
+    expect(sql).toContain("remote_init_state IN ('reserved', 'confirmed')");
+    expect(sql).toContain("remote_init_state = 'unknown' AND init_started_at IS NOT NULL");
+    expect(sql).toContain('pg_advisory_xact_lock');
+    expect(sql).toContain('GRANT EXECUTE ON FUNCTION public.claim_whatsapp_temp_open(uuid, text, text, text) TO service_role');
+    expect(sql).not.toMatch(/UPDATE public|DELETE FROM/i);
   });
 
   it('sem a RPC e sem índice único não chama init', async () => {

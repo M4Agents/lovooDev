@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QRCodeModal, UNKNOWN_QR_GUIDANCE, qrRetryAllowed } from '../QRCodeModal';
 
 const UNKNOWN = 'O resultado da criação anterior ainda não foi confirmado. A mesma operação foi preservada.';
+const SUCCESS = 'Instância criada com sucesso! Escaneie o QR Code para conectar.';
 const TEMP = '44444444-4444-4444-8444-444444444444';
 
 function renderModal(qrCodeData: Record<string, unknown>, onRetry = vi.fn(), onGetQRCode = vi.fn()) {
@@ -35,10 +36,21 @@ describe('modal de QR', () => {
     });
     expect(screen.getByText(UNKNOWN)).toBeTruthy();
     expect(screen.getByText(UNKNOWN_QR_GUIDANCE)).toBeTruthy();
+    expect(screen.queryByText(SUCCESS)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar novamente' })).toBeNull();
     expect(onRetry).not.toHaveBeenCalled();
     expect(onGetQRCode).not.toHaveBeenCalled();
     expect(qrRetryAllowed('unknown')).toBe(false);
+  });
+
+  it('mostra sucesso somente quando o QR existe e não há erro', () => {
+    renderModal({
+      temp_instance_id: TEMP,
+      status: 'connecting',
+      qrcode: 'data:image/png;base64,ZmFrZQ==',
+    });
+    expect(screen.getByText(SUCCESS)).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'QR Code WhatsApp' })).toBeTruthy();
   });
 
   it('permite repetir uma reserva que ainda não foi enviada', () => {

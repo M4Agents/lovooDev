@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readAdminToken } from '../adminCredential.js';
 import { authorizeQrSession } from '../qrAuthorization.js';
 import { INIT_CAP_MS, QR_BUDGET_MS, WEBHOOK_CAP_MS, timeoutForStep } from '../qrBudget.js';
+import { isBlockingOpen } from '../qrClaim.js';
 import { createQrSession } from '../qrSession.js';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
@@ -85,6 +86,7 @@ function sessionSvc(options = {}) {
         eq(column, value) { filters.push(['eq', column, value]); return builder; },
         is() { return builder; },
         in(column, value) { filters.push(['in', column, value]); return builder; },
+        or() { return builder; },
         order() { return builder; },
         limit() { return builder; },
         maybeSingle: async () => {
@@ -94,6 +96,7 @@ function sessionSvc(options = {}) {
           if (!state.open) return { data: null, error: null };
           if (companyId && state.open.company_id !== companyId) return { data: null, error: null };
           if (statuses && !statuses.includes(state.open.status)) return { data: null, error: null };
+          if (!isBlockingOpen(state.open)) return { data: null, error: null };
           return { data: state.open, error: null };
         },
         insert(row) {
@@ -363,6 +366,30 @@ describe('sessão de QR', () => {
     expect(JSON.stringify(result)).not.toContain(ADMIN);
   });
 
+  it('permanente ativa com o mesmo nome não chama init', async () => {
+    const fetchImpl = vi.fn();
+    const svc = sessionSvc();
+    const originalFrom = svc.from.bind(svc);
+    svc.from = (table) => {
+      if (table !== 'whatsapp_life_instances') return originalFrom(table);
+      const builder = {
+        select() { return builder; },
+        eq() { return builder; },
+        is() { return builder; },
+        maybeSingle: async () => ({ data: { id: 'perm-1' }, error: null }),
+      };
+      return builder;
+    };
+    await expect(createQrSession({
+      svc,
+      companyId: COMPANY,
+      instanceName: 'Comercial',
+      fetchImpl,
+      env: { UAZAPI_ADMIN_TOKEN: ADMIN, UAZAPI_BASE_URL: BASE },
+    })).rejects.toMatchObject({ code: 'duplicate_name', status: 409 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('não inicia outra criação enquanto a primeira ainda está em andamento', async () => {
     const fetchImpl = vi.fn();
     const open = {
@@ -374,6 +401,7 @@ describe('sessão de QR', () => {
       uazapi_token: null,
       status: 'creating',
       remote_init_state: 'unknown',
+      init_started_at: '2026-11-04T11:00:00.000Z',
       qrcode: null,
       updated_at: new Date().toISOString(),
     };
@@ -400,6 +428,7 @@ describe('sessão de QR', () => {
           eq() { return builder; },
           is() { return builder; },
           in() { return builder; },
+          or() { return builder; },
           order() { return builder; },
           limit() { return builder; },
           maybeSingle: async () => ({ data: table === 'whatsapp_temp_instances' ? null : null, error: null }),
@@ -482,6 +511,7 @@ describe('sessão de QR', () => {
       uazapi_token: null,
       status: 'creating',
       remote_init_state: 'unknown',
+      init_started_at: '2026-11-04T11:00:00.000Z',
       qrcode: null,
       updated_at: new Date().toISOString(),
     };
@@ -509,6 +539,7 @@ describe('sessão de QR', () => {
           eq() { return builder; },
           is() { return builder; },
           in() { return builder; },
+          or() { return builder; },
           order() { return builder; },
           limit() { return builder; },
           maybeSingle: async () => {
@@ -619,6 +650,7 @@ describe('sessão de QR', () => {
         uazapi_token: null,
         status: 'created_no_qr',
         remote_init_state: 'unknown',
+        init_started_at: '2026-11-04T10:59:00.000Z',
         qrcode: null,
         updated_at: '2026-11-04T11:00:00.000Z',
       },
@@ -674,6 +706,7 @@ describe('sessão de QR', () => {
           eq() { return builder; },
           is() { return builder; },
           in() { return builder; },
+          or() { return builder; },
           order() { return builder; },
           limit() { return builder; },
           maybeSingle: async () => {
@@ -778,6 +811,7 @@ describe('sessão de QR', () => {
         uazapi_token: null,
         status: 'creating',
         remote_init_state: 'unknown',
+        init_started_at: '2026-11-04T10:00:00.000Z',
         qrcode: null,
         updated_at: '2026-11-04T10:00:00.000Z',
       },
