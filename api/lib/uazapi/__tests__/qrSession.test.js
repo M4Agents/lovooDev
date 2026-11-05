@@ -40,6 +40,9 @@ function authorizeSvc(state) {
       return roleQuery((filters) => {
         const companyId = filters.find((item) => item[0] === 'company_id')?.[1];
         if (state.roleError) return { data: null, error: { message: 'falha' } };
+        if (state.byCompany && Object.prototype.hasOwnProperty.call(state.byCompany, companyId)) {
+          return { data: state.byCompany[companyId], error: null };
+        }
         if (companyId === COMPANY) return { data: state.direct, error: null };
         if (companyId === PARENT) return { data: state.parent, error: null };
         return { data: [], error: null };
@@ -178,6 +181,112 @@ describe('autorização do QR', () => {
     const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
     await expect(decide({ company, direct: [], parent: [{ role: 'super_admin' }] })).resolves.toMatchObject({ ok: true, scope: 'parent' });
     await expect(decide({ company, direct: [], parent: [{ role: 'system_admin' }] })).resolves.toMatchObject({ ok: true, role: 'system_admin' });
+  });
+
+  it('permite super_admin e system_admin com vínculo único na própria empresa pai', async () => {
+    const company = { data: { id: COMPANY, parent_company_id: null }, error: null };
+    await expect(decide({ company, direct: [{ role: 'super_admin' }], parent: [] })).resolves.toMatchObject({
+      ok: true,
+      role: 'super_admin',
+      scope: 'company',
+    });
+    await expect(decide({ company, direct: [{ role: 'system_admin' }], parent: [] })).resolves.toMatchObject({
+      ok: true,
+      role: 'system_admin',
+      scope: 'company',
+    });
+  });
+
+  it('preserva admin, manager e seller na empresa pai', async () => {
+    const company = { data: { id: COMPANY, parent_company_id: null }, error: null };
+    await expect(decide({ company, direct: [{ role: 'admin' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'admin', scope: 'company' });
+    await expect(decide({ company, direct: [{ role: 'manager' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'manager', scope: 'company' });
+    await expect(decide({ company, direct: [{ role: 'seller' }], parent: [] })).resolves.toMatchObject({ ok: true, role: 'seller', scope: 'company' });
+  });
+
+  it('nega o papel sem vínculo na empresa alvo e em outra empresa pai', async () => {
+    const parentCompany = { data: { id: COMPANY, parent_company_id: null }, error: null };
+    await expect(decide({
+      company: parentCompany,
+      direct: [],
+      parent: [{ role: 'super_admin' }],
+    })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({
+      company: parentCompany,
+      direct: [],
+      parent: [{ role: 'system_admin' }],
+    })).resolves.toMatchObject({ status: 403 });
+
+    const otherParent = { data: { id: OTHER, parent_company_id: null }, error: null };
+    await expect(authorizeQrSession(authorizeSvc({
+      company: otherParent,
+      byCompany: { [PARENT]: [{ role: 'super_admin' }], [OTHER]: [] },
+    }), USER, OTHER)).resolves.toMatchObject({ status: 403 });
+    await expect(authorizeQrSession(authorizeSvc({
+      company: otherParent,
+      byCompany: { [PARENT]: [{ role: 'system_admin' }], [OTHER]: [] },
+    }), USER, OTHER)).resolves.toMatchObject({ status: 403 });
+  });
+
+  it('nega vínculos diretos ambíguos mesmo com papel válido na empresa mãe', async () => {
+    const company = { data: { id: COMPANY, parent_company_id: PARENT }, error: null };
+    await expect(decide({
+      company,
+      direct: [{ role: 'admin' }, { role: 'seller' }],
+      parent: [{ role: 'super_admin' }],
+    })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({
+      company,
+      direct: [{ role: 'super_admin' }, { role: 'system_admin' }],
+      parent: [{ role: 'super_admin' }],
+    })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({
+      company,
+      direct: [{ role: 'partner' }, { role: 'manager' }],
+      parent: [{ role: 'system_admin' }],
+    })).resolves.toMatchObject({ status: 403 });
+  });
+
+  it('nega partner e papéis múltiplos na empresa pai', async () => {
+    const company = { data: { id: COMPANY, parent_company_id: null }, error: null };
+    await expect(decide({ company, direct: [{ role: 'partner' }], parent: [] })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({
+      company,
+      direct: [{ role: 'super_admin' }, { role: 'admin' }],
+      parent: [],
+    })).resolves.toMatchObject({ status: 403 });
+    await expect(decide({
+      company,
+      direct: [{ role: 'system_admin' }, { role: 'seller' }],
+      parent: [],
+    })).resolves.toMatchObject({ status: 403 });
+  });
+
+  it('não reserva nem inicia quando a autorização nega', async () => {
+    const access = await authorizeQrSession(authorizeSvc({
+      company: { data: { id: COMPANY, parent_company_id: null }, error: null },
+      direct: [{ role: 'super_admin' }, { role: 'system_admin' }],
+      parent: [],
+    }), USER, COMPANY);
+    expect(access).toMatchObject({
+      ok: false,
+      status: 403,
+      error: 'Permissão insuficiente para esta operação',
+    });
+
+    const fetchImpl = vi.fn(async () => ({ status: 500, text: async () => '' }));
+    const svc = sessionSvc();
+    if (access.ok) {
+      await createQrSession({
+        svc,
+        companyId: COMPANY,
+        instanceName: 'teste4',
+        fetchImpl,
+        env: { UAZAPI_ADMIN_TOKEN: ADMIN, UAZAPI_BASE_URL: BASE },
+      });
+    }
+    expect(svc.state.inserts).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('nega empresa não relacionada, partner, seller inativo, papéis duplicados e admin da mãe', async () => {

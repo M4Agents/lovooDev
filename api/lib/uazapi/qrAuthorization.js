@@ -1,7 +1,9 @@
 // Autorização do QR WhatsApp.
 // A empresa do body não prova acesso. A prova é company_users ativo.
-// Própria empresa: admin, manager ou seller, com um único papel ativo.
-// Empresa filha: super_admin ou system_admin da mãe correspondente.
+// Empresa solicitada: um único papel ativo entre admin, manager, seller,
+// super_admin e system_admin, inclusive quando a empresa é pai.
+// Empresa filha sem esse vínculo: super_admin ou system_admin da mãe correspondente.
+// O papel, sozinho, não autoriza outra empresa.
 // Partner não entra por papel. Template de permissão não é consultado.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -63,7 +65,9 @@ export async function authorizeQrSession(svc, userId, companyId) {
   if (direct.roles.length > 1) return { ...FORBIDDEN };
 
   const [directRole] = direct.roles;
-  if (directRole && QR_DIRECT_ROLES.includes(directRole)) {
+  const directAllowed = Boolean(directRole)
+    && (QR_DIRECT_ROLES.includes(directRole) || QR_PARENT_ROLES.includes(directRole));
+  if (directAllowed) {
     const company = await loadCompany(svc, companyId);
     if (!company.ok) return { ...UNAVAILABLE };
     if (!company.company) return { ok: false, status: 404, error: 'Empresa não encontrada' };
