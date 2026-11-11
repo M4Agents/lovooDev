@@ -44,6 +44,41 @@ function onPhoneSet(state, before, after) {
   return reassign(state, after);
 }
 
+function onSoftDelete(state, instanceId) {
+  const instances = state.instances.map((instance) => (
+    instance.id === instanceId && !instance.deletedAt
+      ? { ...instance, deletedAt: 'deleted', status: 'disconnected' }
+      : instance
+  ));
+  const deleted = instances.find((instance) => instance.id === instanceId);
+  const conversations = state.conversations.map((conversation) => ({ ...conversation }));
+  if (!deleted?.phone || !deleted.deletedAt) {
+    return { ...state, instances, conversations };
+  }
+  const live = instances.filter((instance) => (
+    instance.companyId === deleted.companyId
+    && instance.phone === deleted.phone
+    && !instance.deletedAt
+    && instance.id !== deleted.id
+  ));
+  if (live.length !== 1) return { ...state, instances, conversations };
+  const destination = live[0];
+  for (const conversation of conversations) {
+    if (conversation.companyId !== deleted.companyId || conversation.instanceId !== deleted.id) continue;
+    const duplicate = conversations.some((other) => (
+      other !== conversation
+      && other.companyId === destination.companyId
+      && other.instanceId === destination.id
+      && other.phone === conversation.phone
+    ));
+    if (duplicate) continue;
+    conversation.instanceId = destination.id;
+    conversation.lastInstanceId = destination.id;
+    conversation.lastInstanceName = destination.name;
+  }
+  return { ...state, instances, conversations };
+}
+
 function receive(state, input) {
   const existing = state.conversations.find((conversation) => (
     conversation.companyId === input.companyId
@@ -238,5 +273,76 @@ describe('contrato da realocação existente', () => {
       instanceId: 'foreign',
     });
     expect(connected.conversations.filter((item) => item.phone === PHONE && item.instanceId === NEXT)).toHaveLength(1);
+  });
+
+  it('realoca quando a instância antiga é excluída depois da nova', () => {
+    const migration = source('supabase/migrations/20261111201043_reassign_conversations_on_instance_soft_delete.sql');
+    expect(migration).toContain('WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)');
+    expect(migration).toContain('v_live_count <> 1');
+    expect(migration).toContain('cc2.company_id = v_old.company_id');
+    expect(migration).toContain('AND instance_id = v_old.id');
+    expect(migration).not.toContain('UPDATE public.chat_messages');
+    expect(migration).not.toContain('assigned_to =');
+
+    const active = {
+      instances: [{
+        id: OLD,
+        companyId: COMPANY,
+        name: 'Antiga',
+        phone: PHONE,
+        status: 'connected',
+        deletedAt: null,
+      }],
+      conversations: [{
+        id: 'conv-1',
+        companyId: COMPANY,
+        instanceId: OLD,
+        lastInstanceId: OLD,
+        phone: '5511888880000',
+        assignedTo: 'seller-1',
+        status: 'active',
+      }],
+      messages: [{ id: 'msg-old', conversationId: 'conv-1', instanceId: OLD, companyId: COMPANY }],
+    };
+    const connected = onInsert(active, {
+      id: NEXT,
+      companyId: COMPANY,
+      name: 'Nova',
+      phone: PHONE,
+      status: 'connected',
+      deletedAt: null,
+    });
+    expect(connected.conversations[0].instanceId).toBe(OLD);
+
+    const moved = onSoftDelete(connected, OLD);
+    expect(moved.conversations[0]).toMatchObject({
+      instanceId: NEXT,
+      lastInstanceId: NEXT,
+      lastInstanceName: 'Nova',
+      assignedTo: 'seller-1',
+    });
+    expect(moved.messages[0].instanceId).toBe(OLD);
+    expect(onSoftDelete(moved, OLD).conversations[0].instanceId).toBe(NEXT);
+  });
+
+  it('não escolhe destino quando há duas instâncias ativas com o mesmo telefone', () => {
+    const state = {
+      instances: [
+        { id: OLD, companyId: COMPANY, name: 'Antiga', phone: PHONE, status: 'connected', deletedAt: null },
+        { id: NEXT, companyId: COMPANY, name: 'Nova', phone: PHONE, status: 'connected', deletedAt: null },
+        { id: 'instance-extra', companyId: COMPANY, name: 'Extra', phone: PHONE, status: 'connected', deletedAt: null },
+      ],
+      conversations: [{
+        id: 'conv-1',
+        companyId: COMPANY,
+        instanceId: OLD,
+        lastInstanceId: OLD,
+        phone: '5511888880000',
+        assignedTo: 'seller-1',
+        status: 'active',
+      }],
+      messages: [],
+    };
+    expect(onSoftDelete(state, OLD).conversations[0].instanceId).toBe(OLD);
   });
 });
