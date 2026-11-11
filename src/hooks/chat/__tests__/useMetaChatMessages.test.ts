@@ -67,14 +67,24 @@ import type { MetaChatMessage }                  from '../../../types/meta-whats
 // Cada chamada a supabase.channel() cria e registra uma entrada em mockRt.channels,
 // expondo channelName, config do .on(), unsubscribeFn e simulateInsert().
 
+interface RtListener {
+  event:  string
+  schema: string
+  table:  string
+  filter: string
+  cb:     (payload: unknown) => void
+}
+
 interface RtChannelEntry {
-  channelName:   string
-  event:         string
-  schema:        string
-  table:         string
-  filter:        string
-  unsubscribeFn: ReturnType<typeof vi.fn>
+  channelName:    string
+  event:          string
+  schema:         string
+  table:          string
+  filter:         string
+  listeners:      RtListener[]
+  unsubscribeFn:  ReturnType<typeof vi.fn>
   simulateInsert: (payload?: object) => void
+  simulateUpdate: (payload?: object) => void
 }
 
 const mockRt = vi.hoisted(() => {
@@ -90,23 +100,18 @@ const mockRt = vi.hoisted(() => {
 vi.mock('../../../lib/supabase', () => ({
   supabase: {
     channel: vi.fn().mockImplementation((channelName: string) => {
-      let registeredCb: ((payload: unknown) => void) | undefined
-      let capturedEvent  = ''
-      let capturedSchema = ''
-      let capturedTable  = ''
-      let capturedFilter = ''
-
+      const listeners: RtListener[] = []
       const unsubscribeFn = vi.fn()
 
       const channelObj = {
         on: vi.fn().mockImplementation((_listenerType: string, config: Record<string, string>, cb: (p: unknown) => void) => {
-          // config contém: { event: 'INSERT', schema: 'public', table: '...', filter: '...' }
-          // O primeiro arg (_listenerType) é 'postgres_changes' — não é o event de negócio.
-          capturedEvent  = config?.event  ?? ''
-          capturedSchema = config?.schema ?? ''
-          capturedTable  = config?.table  ?? ''
-          capturedFilter = config?.filter ?? ''
-          registeredCb   = cb
+          listeners.push({
+            event:  config?.event  ?? '',
+            schema: config?.schema ?? '',
+            table:  config?.table  ?? '',
+            filter: config?.filter ?? '',
+            cb,
+          })
           return channelObj
         }),
         subscribe:   vi.fn().mockImplementation(() => channelObj),
@@ -115,12 +120,18 @@ vi.mock('../../../lib/supabase', () => ({
 
       mockRt.channels.push({
         channelName,
-        get event()  { return capturedEvent  },
-        get schema() { return capturedSchema },
-        get table()  { return capturedTable  },
-        get filter() { return capturedFilter },
+        get event()  { return listeners[0]?.event  ?? '' },
+        get schema() { return listeners[0]?.schema ?? '' },
+        get table()  { return listeners[0]?.table  ?? '' },
+        get filter() { return listeners[0]?.filter ?? '' },
+        listeners,
         unsubscribeFn,
-        simulateInsert: (payload = {}) => registeredCb?.(payload),
+        simulateInsert: (payload = {}) => {
+          listeners.filter((l) => l.event === 'INSERT').forEach((l) => l.cb(payload))
+        },
+        simulateUpdate: (payload = {}) => {
+          listeners.filter((l) => l.event === 'UPDATE').forEach((l) => l.cb(payload))
+        },
       })
 
       return channelObj
@@ -1201,4 +1212,173 @@ it('RT-MSG-SILENT-15: outbound refresh (load normal) + RT INSERT (silent) sem ra
   expect(result.current.loading).toBe(false)
   expect(result.current.messages).toHaveLength(2)
   expect(result.current.messages[1].id).toBe('msg-outbound-0001')
+})
+
+// =============================================================================
+// MVP5.B1.2 — Realtime UPDATE → loadSilent (ticks)
+// =============================================================================
+
+function makeUpdatePayload(overrides: Record<string, unknown> = {}) {
+  return {
+    new: {
+      id:              MSG_A2.id,
+      company_id:      COMPANY_A,
+      conversation_id: CONV_A,
+      instance_id:     'inst-0001',
+      updated_at:      '2026-11-11T15:00:00.000Z',
+      ...overrides,
+    },
+  }
+}
+
+it('RT-UPD-01: INSERT continua disparando GET canônico', async () => {
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1])
+    .mockResolvedValueOnce([MSG_A1, MSG_A2])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+
+  await act(async () => { mockRt.last()?.simulateInsert({ conversation_id: CONV_A }) })
+  await act(async () => { await Promise.resolve() })
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+})
+
+it('RT-UPD-02: UPDATE relevante chama loadSilent / GET canônico', async () => {
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1, MSG_A2])
+    .mockResolvedValueOnce([{ ...MSG_A2, delivery_status: 'delivered' } as MetaChatMessage])
+
+  const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+
+  const ch = mockRt.last()
+  expect(ch?.listeners.map((l) => l.event)).toEqual(['INSERT', 'UPDATE'])
+  expect(ch?.listeners[1]?.filter).toBe(`conversation_id=eq.${CONV_A}`)
+
+  await act(async () => { ch?.simulateUpdate(makeUpdatePayload()) })
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+  expect(result.current.messages[0].delivery_status).toBe('delivered')
+})
+
+it('RT-UPD-03: UPDATE de outra conversa não atualiza o chat', async () => {
+  mockGetMessages.mockResolvedValueOnce([MSG_A1])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRt.last()?.simulateUpdate(makeUpdatePayload({ conversation_id: CONV_B }))
+  })
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+})
+
+it('RT-UPD-04: UPDATE de outra empresa não atualiza o chat', async () => {
+  mockGetMessages.mockResolvedValueOnce([MSG_A1])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRt.last()?.simulateUpdate(makeUpdatePayload({ company_id: COMPANY_B }))
+  })
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+})
+
+it('RT-UPD-05: UPDATE de outra instância não atualiza o chat', async () => {
+  mockGetMessages.mockResolvedValueOnce([MSG_A1, MSG_A2])
+
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRt.last()?.simulateUpdate(makeUpdatePayload({ instance_id: 'inst-other-9999' }))
+  })
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(1)
+})
+
+it('RT-UPD-06: cleanup remove a subscription única (INSERT+UPDATE no mesmo channel)', async () => {
+  mockGetMessages.mockResolvedValueOnce([])
+  const { unmount } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockRt.channels).toHaveLength(1)
+  const ch = mockRt.last()!
+  expect(ch.listeners).toHaveLength(2)
+  unmount()
+  expect(ch.unsubscribeFn).toHaveBeenCalledTimes(1)
+})
+
+it('RT-UPD-07: troca de conversa — UPDATE antigo não sobrescreve a atual', async () => {
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1])
+    .mockResolvedValueOnce([])
+
+  const { rerender } = renderHook(
+    ({ convId }: { convId: string }) => useMetaChatMessages(COMPANY_A, convId),
+    { initialProps: { convId: CONV_A } },
+  )
+  await act(async () => { await Promise.resolve() })
+  const channelA = mockRt.get(0)!
+
+  rerender({ convId: CONV_B })
+  await act(async () => { await Promise.resolve() })
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+
+  await act(async () => { channelA.simulateUpdate(makeUpdatePayload()) })
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockGetMessages).toHaveBeenCalledTimes(2)
+})
+
+it('RT-UPD-08: INSERT+UPDATE não criam channels adicionais', async () => {
+  mockGetMessages.mockResolvedValue([])
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  expect(mockRt.channels).toHaveLength(1)
+  expect(mockRt.last()?.listeners).toHaveLength(2)
+  await act(async () => { mockRt.last()?.simulateInsert({}) })
+  await act(async () => { mockRt.last()?.simulateUpdate(makeUpdatePayload()) })
+  expect(mockRt.channels).toHaveLength(1)
+})
+
+it('RT-UPD-09: status vem do GET, não do payload Realtime', async () => {
+  const fromGet = { ...MSG_A2, delivery_status: 'delivered' as const }
+  mockGetMessages
+    .mockResolvedValueOnce([MSG_A1, MSG_A2])
+    .mockResolvedValueOnce([MSG_A1, fromGet])
+
+  const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRt.last()?.simulateUpdate(makeUpdatePayload({
+      delivery_status: 'read',
+      body: 'NÃO USAR ESTE BODY',
+    }))
+  })
+  await act(async () => { await Promise.resolve() })
+
+  expect(result.current.messages[1].delivery_status).toBe('delivered')
+  expect(result.current.messages.map((m) => m.body)).not.toContain('NÃO USAR ESTE BODY')
+})
+
+it('RT-UPD-10: nenhum polling — setInterval não é usado', async () => {
+  const spy = vi.spyOn(global, 'setInterval')
+  mockGetMessages.mockResolvedValueOnce([MSG_A1])
+  renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+  await act(async () => { await Promise.resolve() })
+  expect(spy).not.toHaveBeenCalled()
+  spy.mockRestore()
 })

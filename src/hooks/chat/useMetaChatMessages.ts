@@ -9,8 +9,8 @@
 //   - Manter estado: messages, loading, error
 //   - Refresh explícito
 //   - Limpar estado corretamente quando IDs mudarem
-//   - Realtime: subscription INSERT em meta_messages → sinal de invalidação
-//     silencioso (MVP3E B1.1 — sem flicker, sem spinner durante atualização RT)
+  //   - Realtime: subscription INSERT + UPDATE em meta_messages → sinal de
+  //     invalidação silencioso (MVP3E B1.1 + MVP5.B1.2). Sem flicker, sem polling.
 //
 // Estratégia de fetch (B1.1):
 //   - performFetch({ silent }) — única implementação do GET
@@ -80,6 +80,9 @@ export function useMetaChatMessages(
 
   const fetchCountRef       = useRef(0)
   const normalFetchCountRef = useRef(0)
+  // instance_id da conversa ativa — preenchido pelo GET canônico.
+  // Usado só para rejeitar UPDATE Realtime de outra instância quando o payload traz o campo.
+  const instanceIdRef       = useRef<string | null>(null)
 
   // Guard de unmount: evita setState após desmontagem do componente.
   const mountedRef = useRef(true)
@@ -114,6 +117,7 @@ export function useMetaChatMessages(
     // Normal: limpar estado anterior imediatamente.
     // Silent: manter messages atuais visíveis durante o GET.
     if (!silent) {
+      instanceIdRef.current = null
       setMessages([])
       setError(null)
       setLoading(true)
@@ -131,6 +135,7 @@ export function useMetaChatMessages(
       .then((result) => {
         if (!mountedRef.current)                    return  // desmontado
         if (currentFetch !== fetchCountRef.current) return  // stale — fetch mais recente ganhou
+        instanceIdRef.current = result[0]?.instance_id ?? null
         setMessages(result)
       })
       .catch((err: unknown) => {
@@ -180,7 +185,11 @@ export function useMetaChatMessages(
     load()
   }, [load])
 
-  // ── Realtime — MVP3E B1.1: sinal de invalidação INSERT silencioso ──────────
+  // ── Realtime — INSERT + UPDATE (MVP3E B1.1 + MVP5.B1.2) ─────────────────────
+  // UPDATE: ticks de entrega. Payload NÃO é fonte de status — loadSilent() busca o GET.
+  // Replica identity de meta_messages permanece DEFAULT; o filtro conversation_id
+  // em UPDATE depende do WAL incluir essa coluna. Sem FULL, o evento pode não chegar
+  // até o cliente. O GET canônico continua a fonte de verdade quando o sinal chega.
   //
   // Propósito: detectar novas mensagens sem polling e sem flicker.
   //
@@ -223,7 +232,32 @@ export function useMetaChatMessages(
 
     // Captura conversationId no closure do effect.
     // Handler compara com activeConvRef para rejeitar eventos tardios.
-    const capturedConvId = conversationId
+    const capturedConvId    = conversationId
+    const capturedCompanyId = companyId
+
+    const onInvalidation = (payload: unknown) => {
+      // Guard unmount: não disparar GET após desmontagem.
+      if (!mountedRef.current) return
+
+      // Guard A→B: descartar evento tardio de conversa anterior.
+      if (activeConvRef.current !== capturedConvId) return
+
+      const row = readRealtimeRow(payload)
+      if (row) {
+        if (typeof row.company_id === 'string' && row.company_id !== capturedCompanyId) return
+        if (typeof row.conversation_id === 'string' && row.conversation_id !== capturedConvId) return
+        const expectedInstanceId = instanceIdRef.current
+        if (
+          expectedInstanceId &&
+          typeof row.instance_id === 'string' &&
+          row.instance_id !== expectedInstanceId
+        ) return
+      }
+
+      // Sinal de invalidação silencioso — payload NÃO é source of truth.
+      // GET canônico (B1.1) determina delivery_status e o restante do DTO.
+      loadSilent()
+    }
 
     const channel = supabase
       .channel(`meta_messages_${companyId}_${conversationId}`)
@@ -235,18 +269,17 @@ export function useMetaChatMessages(
           table:  'meta_messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (_payload) => {
-          // Guard unmount: não disparar GET após desmontagem.
-          if (!mountedRef.current) return
-
-          // Guard A→B: descartar evento tardio de conversa anterior.
-          if (activeConvRef.current !== capturedConvId) return
-
-          // Sinal de invalidação silencioso — _payload não é source of truth.
-          // GET canônico determina o estado final das mensagens.
-          // Messages atuais permanecem visíveis durante o GET. Sem spinner.
-          loadSilent()
-        }
+        onInvalidation,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'meta_messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        onInvalidation,
       )
       .subscribe()
 
@@ -263,4 +296,11 @@ export function useMetaChatMessages(
     error,
     refresh: load,
   }
+}
+
+function readRealtimeRow(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object') return null
+  const maybeNew = (payload as { new?: unknown }).new
+  if (maybeNew && typeof maybeNew === 'object') return maybeNew as Record<string, unknown>
+  return payload as Record<string, unknown>
 }

@@ -18,6 +18,11 @@
 //   - messages[]: RPC process_meta_inbound_message — UNIQUE (instance_id, wamid)
 //   - Retry Meta em 5xx é seguro: ambos os ramos são idempotentes
 //
+// MVP5.B1.2 — sinal de ticks:
+//   Após transição APPLY no tracking, UPDATE pontual de meta_messages.updated_at
+//   (company_id + instance_id + meta_message_id + direction outbound).
+//   NOOP não toca o chat. Zero linhas = no-op. Falha de touch não reverte tracking.
+//
 // Ramos INDEPENDENTES por value:
 //   - statuses[] e messages[] processados em paralelo (sem else/continue entre eles)
 //   - Um mesmo value pode conter ambos — ambos são processados
@@ -312,6 +317,14 @@ async function handlePost(req, res) {
         }
 
         console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
+
+        // MVP5.B1.2 — sinal Realtime para ticks: UPDATE pontual de updated_at
+        // em meta_messages. Só após transição efetivamente aplicada no tracking.
+        // NOOP / duplicata / regressão / wamid desconhecido não chegam aqui.
+        // Zero linhas: mensagem ainda não persistida no chat — no-op, sem INSERT.
+        // Falha de DB: log sanitizado; tracking NÃO é revertido.
+        // HTTP: 200 (retry Meta seria NOOP no tracking e não reaplicaria o sinal).
+        await touchOutboundChatMessage(svc, instance, wamid);
       }
 
       // ── 13. Ramo B — messages[] inbound TEXT (MVP3A) ──────────────────────
@@ -718,4 +731,37 @@ function buildUpdatePayload(newStatus, timestamp, statusItem) {
       // Nunca atingido com SUPPORTED_STATUSES guard antes desta função
       return { updated_at: now };
   }
+}
+
+/**
+ * MVP5.B1.2 — toca meta_messages.updated_at para emitir UPDATE no Realtime.
+ *
+ * Filtros: company_id da instância resolvida no banco, instance_id validado,
+ * meta_message_id do evento, direction outbound.
+ * Não altera body, direção, timestamp original nem mídia.
+ * Não cria linha se a mensagem ainda não existir.
+ *
+ * @returns {Promise<'ok'|'missing'|'error'>}
+ */
+async function touchOutboundChatMessage(svc, instance, wamid) {
+  const { data, error } = await svc
+    .from('meta_messages')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('company_id', instance.company_id)
+    .eq('instance_id', instance.id)
+    .eq('meta_message_id', wamid)
+    .eq('direction', 'outbound')
+    .select('id');
+
+  if (error) {
+    console.error('[meta/webhook] event_type=status chat_touch_failed db_error=true');
+    return 'error';
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    console.log('[meta/webhook] event_type=status chat_touch_skipped rows=0');
+    return 'missing';
+  }
+
+  return 'ok';
 }
