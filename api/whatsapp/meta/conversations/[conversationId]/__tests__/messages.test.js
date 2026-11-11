@@ -102,10 +102,10 @@ const FAKE_MSG_OLDEST = {
   created_at:         '2026-09-21T13:00:00.000Z',
 };
 
-// Shape esperado no DTO final — media:null e template_buttons:null sem snapshot.
-const FAKE_MSG_NEWEST_DTO = { ...FAKE_MSG_NEWEST, media: null, template_buttons: null };
-const FAKE_MSG_MIDDLE_DTO = { ...FAKE_MSG_MIDDLE, media: null, template_buttons: null };
-const FAKE_MSG_OLDEST_DTO = { ...FAKE_MSG_OLDEST, media: null, template_buttons: null };
+// Shape esperado no DTO final — media:null, template_buttons:null, delivery_status:null (inbound).
+const FAKE_MSG_NEWEST_DTO = { ...FAKE_MSG_NEWEST, media: null, template_buttons: null, delivery_status: null };
+const FAKE_MSG_MIDDLE_DTO = { ...FAKE_MSG_MIDDLE, media: null, template_buttons: null, delivery_status: null };
+const FAKE_MSG_OLDEST_DTO = { ...FAKE_MSG_OLDEST, media: null, template_buttons: null, delivery_status: null };
 const FAKE_MSGS_DESC_DTO  = [FAKE_MSG_NEWEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_OLDEST_DTO];
 const FAKE_MSGS_ASC_DTO   = [FAKE_MSG_OLDEST_DTO, FAKE_MSG_MIDDLE_DTO, FAKE_MSG_NEWEST_DTO];
 
@@ -172,6 +172,32 @@ function makeAssetChain(data, error = null) {
     select: vi.fn().mockReturnThis(),
     eq:     vi.fn().mockReturnThis(),
     in:     vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
+/**
+ * Chain para meta_whatsapp_messages (tracking de entrega):
+ * select().eq().eq().in() — mesma forma do asset chain.
+ */
+function makeTrackingChain(data, error = null) {
+  return makeAssetChain(data, error);
+}
+
+const FAKE_WAMID_A = 'wamid.FAKE_TRACKING_A';
+const FAKE_WAMID_B = 'wamid.FAKE_TRACKING_B';
+
+function makeOutboundDbMsg(id, wamid, overrides = {}) {
+  return {
+    id,
+    conversation_id:    FAKE_CONV_ID,
+    instance_id:        FAKE_INSTANCE_ID,
+    direction:          'outbound',
+    message_type:       'text',
+    body:               'Mensagem outbound',
+    provider_timestamp: '2026-09-21T14:00:00.000Z',
+    created_at:         '2026-09-21T14:00:00.000Z',
+    meta_message_id:    wamid,
+    ...overrides,
   };
 }
 
@@ -462,22 +488,33 @@ describe('GET messages — SELECT público', () => {
     expect(msgChain.select).toHaveBeenCalledTimes(1);
     const selectArg = msgChain.select.mock.calls[0][0];
 
-    // Campos esperados (inclui template metadata — MVP4A.4 e media_asset_id — MVP4B.6C)
+    // Campos esperados (inclui template metadata, media_asset_id interno e
+    // meta_message_id interno para correlacionar tracking — nunca no DTO)
     const EXPECTED = ['id', 'conversation_id', 'instance_id', 'direction',
                       'message_type', 'body', 'provider_timestamp', 'created_at',
                       'template_name', 'template_language',
-                      'media_asset_id']; // MVP4B.6C — interno; não exposto no DTO final
+                      'media_asset_id',
+                      'meta_message_id'];
     for (const field of EXPECTED) {
       expect(selectArg).toContain(field);
     }
 
     // Campos proibidos no SELECT (confidenciais / nunca expostos)
     expect(selectArg).not.toContain('company_id');
-    expect(selectArg).not.toContain('meta_message_id');
     expect(selectArg).not.toContain('updated_at');
     // Sem SELECT *
     expect(selectArg).not.toBe('*');
     expect(selectArg).not.toContain('*');
+
+    // DTO público: wamid, error_code e meta_message_id nunca expostos
+    const dto = res._body.messages[0];
+    expect(dto).not.toHaveProperty('meta_message_id');
+    expect(dto).not.toHaveProperty('wamid');
+    expect(dto).not.toHaveProperty('error_code');
+    expect(dto).toHaveProperty('delivery_status', null);
+    expect(JSON.stringify(res._body)).not.toContain('"meta_message_id"');
+    expect(JSON.stringify(res._body)).not.toContain('"wamid"');
+    expect(JSON.stringify(res._body)).not.toContain('"error_code"');
   });
 });
 
@@ -747,7 +784,10 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
     // template_name/language presentes, mas company_id continua ausente do SELECT
     expect(selectArg).toContain('template_name');
     expect(selectArg).not.toContain('company_id');
-    expect(selectArg).not.toContain('meta_message_id');
+    // meta_message_id é interno no SELECT; nunca no DTO
+    expect(selectArg).toContain('meta_message_id');
+    expect(res._body.messages[0]).not.toHaveProperty('meta_message_id');
+    expect(res._body.messages[0].delivery_status).toBeNull();
   });
 });
 
@@ -1135,17 +1175,21 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 // =============================================================================
 
 describe('GET messages — template_buttons snapshot (MVP4C.4B)', () => {
-  it('MSG-23a: SELECT inclui template_buttons e nunca company_id/wamid', async () => {
+  it('MSG-23a: SELECT inclui template_buttons e nunca company_id/wamid no DTO', async () => {
     const msgChain = makeMsgChain([FAKE_MSG_OLDEST]);
     mockSvc.from
       .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
       .mockReturnValueOnce(msgChain);
 
-    await handler(makeReq(), makeRes());
+    const res = makeRes();
+    await handler(makeReq(), res);
     const selectArg = msgChain.select.mock.calls[0][0];
     expect(selectArg).toContain('template_buttons');
     expect(selectArg).not.toContain('company_id');
-    expect(selectArg).not.toContain('meta_message_id');
+    // meta_message_id é interno no SELECT; wamid nunca no DTO
+    expect(selectArg).toContain('meta_message_id');
+    expect(res._body.messages[0]).not.toHaveProperty('meta_message_id');
+    expect(JSON.stringify(res._body)).not.toContain('"wamid"');
   });
 
   it('MSG-23b: DB NULL/ausente → DTO null', async () => {
@@ -1224,5 +1268,257 @@ describe('GET messages — template_buttons snapshot (MVP4C.4B)', () => {
       expect(JSON.stringify(res._body)).not.toContain('lovoo:qr:v1');
       expect(JSON.stringify(res._body)).not.toContain('javascript:');
     }
+  });
+});
+
+// =============================================================================
+// DS-01 … DS-13 — MVP5.B1.1 delivery_status (batched, tenant-safe)
+// =============================================================================
+
+describe('GET messages — delivery_status (MVP5.B1.1)', () => {
+  const STATUSES = ['accepted', 'sent', 'delivered', 'read', 'failed'];
+
+  function setupOutboundWithTracking(dbMsg, trackingRows, trackingError = null) {
+    const trackingChain = makeTrackingChain(trackingRows, trackingError);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(trackingChain);
+    return trackingChain;
+  }
+
+  function assertPublicDto(msg) {
+    expect(msg).not.toHaveProperty('meta_message_id');
+    expect(msg).not.toHaveProperty('wamid');
+    expect(msg).not.toHaveProperty('error_code');
+    expect(JSON.stringify(msg)).not.toContain('"meta_message_id"');
+    expect(JSON.stringify(msg)).not.toContain('"wamid"');
+    expect(JSON.stringify(msg)).not.toContain('"error_code"');
+  }
+
+  it.each(STATUSES)('DS-01: outbound com tracking status=%s → delivery_status correspondente', async (status) => {
+    const dbMsg = makeOutboundDbMsg('msg-out-001', FAKE_WAMID_A);
+    setupOutboundWithTracking(dbMsg, [{ meta_message_id: FAKE_WAMID_A, status }]);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toHaveLength(1);
+    expect(res._body.messages[0].delivery_status).toBe(status);
+    assertPublicDto(res._body.messages[0]);
+  });
+
+  it('DS-02: inbound com meta_message_id → delivery_status null e sem query de tracking', async () => {
+    const inbound = {
+      ...FAKE_MSG_OLDEST,
+      meta_message_id: FAKE_WAMID_A,
+    };
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inbound]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from.mock.calls.map((c) => c[0])).toEqual([
+      'meta_conversations',
+      'meta_messages',
+    ]);
+    expect(res._body.messages[0].delivery_status).toBeNull();
+    expect(res._body.messages[0].direction).toBe('inbound');
+    assertPublicDto(res._body.messages[0]);
+  });
+
+  it('DS-03: outbound sem tracking correspondente → delivery_status null, chat 200', async () => {
+    const dbMsg = makeOutboundDbMsg('msg-out-002', FAKE_WAMID_A);
+    setupOutboundWithTracking(dbMsg, []);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].body).toBe('Mensagem outbound');
+    expect(res._body.messages[0].delivery_status).toBeNull();
+    assertPublicDto(res._body.messages[0]);
+  });
+
+  it('DS-04: outbound sem meta_message_id → delivery_status null, sem query de tracking', async () => {
+    const dbMsg = makeOutboundDbMsg('msg-out-003', null);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(res._body.messages[0].delivery_status).toBeNull();
+    assertPublicDto(res._body.messages[0]);
+  });
+
+  it('DS-05: correlação por instance_id + meta_message_id (não cruza wamids)', async () => {
+    const msgA = makeOutboundDbMsg('msg-out-a', FAKE_WAMID_A);
+    const msgB = makeOutboundDbMsg('msg-out-b', FAKE_WAMID_B);
+    const trackingChain = makeTrackingChain([
+      { meta_message_id: FAKE_WAMID_A, status: 'sent' },
+      { meta_message_id: FAKE_WAMID_B, status: 'read' },
+    ]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([msgA, msgB]))
+      .mockReturnValueOnce(trackingChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    const byId = Object.fromEntries(res._body.messages.map((m) => [m.id, m]));
+    expect(byId['msg-out-a'].delivery_status).toBe('sent');
+    expect(byId['msg-out-b'].delivery_status).toBe('read');
+    assertPublicDto(byId['msg-out-a']);
+    assertPublicDto(byId['msg-out-b']);
+  });
+
+  it('DS-06: isolamento por company_id + instance_id na query de tracking', async () => {
+    const dbMsg = makeOutboundDbMsg('msg-out-004', FAKE_WAMID_A);
+    const trackingChain = setupOutboundWithTracking(dbMsg, [
+      { meta_message_id: FAKE_WAMID_A, status: 'delivered' },
+    ]);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls[2][0]).toBe('meta_whatsapp_messages');
+    expect(trackingChain.select).toHaveBeenCalledWith('meta_message_id, status');
+    expect(trackingChain.eq).toHaveBeenNthCalledWith(1, 'company_id', FAKE_COMPANY_ID);
+    expect(trackingChain.eq).toHaveBeenNthCalledWith(2, 'instance_id', FAKE_INSTANCE_ID);
+    expect(trackingChain.in).toHaveBeenCalledWith('meta_message_id', [FAKE_WAMID_A]);
+  });
+
+  it('DS-07: consulta de tracking em lote — uma query para N outbound', async () => {
+    const msgA = makeOutboundDbMsg('msg-out-a', FAKE_WAMID_A);
+    const msgB = makeOutboundDbMsg('msg-out-b', FAKE_WAMID_B);
+    const trackingChain = makeTrackingChain([
+      { meta_message_id: FAKE_WAMID_A, status: 'accepted' },
+      { meta_message_id: FAKE_WAMID_B, status: 'failed' },
+    ]);
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([msgA, msgB]))
+      .mockReturnValueOnce(trackingChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(trackingChain.in).toHaveBeenCalledTimes(1);
+    const ids = trackingChain.in.mock.calls[0][1];
+    expect(ids).toHaveLength(2);
+    expect(ids).toEqual(expect.arrayContaining([FAKE_WAMID_A, FAKE_WAMID_B]));
+    const byId = Object.fromEntries(res._body.messages.map((m) => [m.id, m]));
+    expect(byId['msg-out-a'].delivery_status).toBe('accepted');
+    expect(byId['msg-out-b'].delivery_status).toBe('failed');
+  });
+
+  it('DS-08: DTO não expõe wamid, meta_message_id nem error_code bruto', async () => {
+    const dbMsg = makeOutboundDbMsg('msg-out-005', FAKE_WAMID_A);
+    setupOutboundWithTracking(dbMsg, [{
+      meta_message_id: FAKE_WAMID_A,
+      status: 'failed',
+      error_code: 131026,
+      error_message: 'Message undeliverable',
+    }]);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    const bodyStr = JSON.stringify(res._body);
+    expect(bodyStr).not.toContain('wamid.FAKE_TRACKING_A');
+    expect(bodyStr).not.toContain('"meta_message_id"');
+    expect(bodyStr).not.toContain('"wamid"');
+    expect(bodyStr).not.toContain('"error_code"');
+    expect(bodyStr).not.toContain('131026');
+    expect(bodyStr).not.toContain('Message undeliverable');
+    expect(res._body.messages[0].delivery_status).toBe('failed');
+  });
+
+  it('DS-09: falha na consulta de tracking → 500 internal_error, sem status inventado', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const dbMsg = makeOutboundDbMsg('msg-out-006', FAKE_WAMID_A);
+    setupOutboundWithTracking(dbMsg, null, { message: 'query timeout' });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('query timeout');
+    expect(JSON.stringify(res._body)).not.toContain('delivery_status');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID_A);
+    spy.mockRestore();
+  });
+
+  it('DS-10: status desconhecido no tracking → delivery_status null (não inventa)', async () => {
+    const dbMsg = makeOutboundDbMsg('msg-out-007', FAKE_WAMID_A);
+    setupOutboundWithTracking(dbMsg, [{ meta_message_id: FAKE_WAMID_A, status: 'queued' }]);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].delivery_status).toBeNull();
+  });
+
+  it('DS-11: auth inválido continua 401 e não consulta tracking', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok:     false,
+      status: 401,
+      body:   { error: 'unauthorized' },
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('DS-12: tracking usa auth.companyId — nunca o company_id da query', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ...FAKE_AUTH_OK,
+      companyId: FAKE_COMPANY_ID,
+    });
+    const dbMsg = makeOutboundDbMsg('msg-out-008', FAKE_WAMID_A);
+    const trackingChain = setupOutboundWithTracking(dbMsg, [
+      { meta_message_id: FAKE_WAMID_A, status: 'sent' },
+    ]);
+
+    const res = makeRes();
+    await handler(makeReq({ company_id: 'zzzz0000-0000-0000-0000-000000000099' }), res);
+
+    expect(res._status).toBe(200);
+    expect(trackingChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(trackingChain.eq).not.toHaveBeenCalledWith(
+      'company_id',
+      'zzzz0000-0000-0000-0000-000000000099',
+    );
+  });
+
+  it('DS-13: contrato anterior preservado — media/template + delivery_status no inbound', async () => {
+    setupHappyPath(FAKE_MSGS_DESC);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toEqual(FAKE_MSGS_ASC_DTO);
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
   });
 });

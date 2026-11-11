@@ -16,6 +16,8 @@
 //   5. [somente após auth.ok] Lookup de meta_conversations com auth.companyId
 //   6. [somente após conversa válida] Query de meta_messages com auth.companyId
 //   7. [somente após messages] Resolução batched de assets de mídia (MVP4B.6C)
+//   8. [somente outbound com wamid] Tracking batched em meta_whatsapp_messages
+//      (MVP5.B1.1 — delivery_status; wamid nunca no DTO)
 //
 // Segurança:
 //   - company_id da query identifica o tenant — nunca autoriza acesso diretamente
@@ -24,8 +26,9 @@
 //   - conversation_id e instance_id na query de messages vêm do objeto DB,
 //     nunca do caller — impede travessia cross-tenant via IDs injetados
 //   - 404 idêntico para: inexistente, outro tenant, archived — sem oracle
-//   - SELECT explícito: sem company_id, meta_message_id, updated_at, SELECT *
-//   - media_asset_id: selecionado internamente para enriquecimento; não exposto no DTO
+//   - SELECT explícito: sem company_id, updated_at, SELECT *
+//   - media_asset_id e meta_message_id: selecionados internamente; não expostos no DTO
+//   - delivery_status: enriquecido via tracking outbound; inbound e ausência → null
 //   - asset lookup: filtra company_id = auth.companyId (tenant-safe); s3_key nunca exposto
 //   - Respostas 500 nunca expõem stack, erro bruto Supabase, PII ou credentials
 //   - Zero logging de Authorization, token ou segredos
@@ -61,7 +64,8 @@ const CONV_FIELDS = 'id, instance_id';
 
 // Campos de meta_messages para o SELECT interno.
 // media_asset_id: usado apenas para resolução de mídia (Step 7); não exposto no DTO final.
-// Nunca incluir: company_id, meta_message_id (wamid), updated_at.
+// meta_message_id: usado apenas para correlacionar tracking (Step 8); não exposto no DTO.
+// Nunca incluir: company_id, updated_at.
 // template_name e template_language: presentes nas colunas desde MVP4A.4.
 // Retornados como null em mensagens de texto — nunca ausentes do shape.
 const MSG_FIELDS = [
@@ -77,7 +81,17 @@ const MSG_FIELDS = [
   'template_language',
   'media_asset_id',       // MVP4B.6C — interno; removido do DTO antes de retornar
   'template_buttons',     // MVP4C.4B — sanitizado no DTO; nunca JSONB cru
+  'meta_message_id',      // MVP5.B1.1 — interno; correlaciona tracking; nunca no DTO
 ].join(', ');
+
+// Statuses públicos de entrega. Qualquer outro valor do tracking → null.
+const ALLOWED_DELIVERY_STATUS = new Set([
+  'accepted',
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+]);
 
 // Campos retornados de company_media_library para enriquecimento do DTO de mídia.
 // Nunca incluir: s3_key (confidencial), company_id (nunca exposto ao frontend).
@@ -223,8 +237,45 @@ export default async function handler(req, res) {
     }
   }
 
-  // Enriquecer DTO: adicionar media; remover media_asset_id do shape público.
-  const messages = rawMessages.map(({ media_asset_id, template_buttons, ...msg }) => {
+  // ── 8. Delivery status — batched, tenant-safe ─────────────────────────────
+  // Somente outbound com wamid. Uma query para o lote; nunca N+1.
+  // Filtros: auth.companyId + instance_id da conversa validada + wamids do lote.
+  // Falha de consulta → 500 (não inventar status nem tratar erro como ausência).
+  // Wamid ausente no tracking → delivery_status null (mensagem ainda visível).
+  const outboundWamids = [...new Set(
+    rawMessages.flatMap((m) => (
+      m.direction === 'outbound' && typeof m.meta_message_id === 'string' && m.meta_message_id.length > 0
+        ? [m.meta_message_id]
+        : []
+    ))
+  )];
+
+  const statusByWamid = new Map();
+  if (outboundWamids.length > 0) {
+    const { data: trackingRows, error: trackingErr } = await svc
+      .from('meta_whatsapp_messages')
+      .select('meta_message_id, status')
+      .eq('company_id', auth.companyId)
+      .eq('instance_id', conversation.instance_id)
+      .in('meta_message_id', outboundWamids);
+
+    if (trackingErr) {
+      console.error('[meta/messages] tracking_lookup_failed db_error=true');
+      return res.status(500).json({ error: 'internal_error' });
+    }
+
+    for (const row of (trackingRows ?? [])) {
+      if (
+        typeof row?.meta_message_id === 'string'
+        && ALLOWED_DELIVERY_STATUS.has(row.status)
+      ) {
+        statusByWamid.set(row.meta_message_id, row.status);
+      }
+    }
+  }
+
+  // Enriquecer DTO: media + delivery_status; remover campos internos.
+  const messages = rawMessages.map(({ media_asset_id, template_buttons, meta_message_id, ...msg }) => {
     let media = null;
     if (media_asset_id) {
       const asset = assetMap.get(media_asset_id);
@@ -238,10 +289,16 @@ export default async function handler(req, res) {
         };
       }
     }
+
+    const deliveryStatus = msg.direction === 'outbound'
+      ? (statusByWamid.get(meta_message_id) ?? null)
+      : null;
+
     return {
       ...msg,
       media,
       template_buttons: sanitizeTemplateButtonsSnapshot(template_buttons),
+      delivery_status:  deliveryStatus,
     };
   });
 

@@ -188,6 +188,7 @@ export interface MetaChatConversation {
 //
 // Campos explicitamente excluídos pelo backend: company_id, meta_message_id, updated_at.
 // media_asset_id: usado internamente pelo backend para resolução de mídia; nunca exposto.
+// delivery_status: enriquecido internamente via tracking outbound (MVP5.B1.1).
 // message_type é string (não literal union) porque o MVP3A entrega 'text' e
 // futuros tipos (image, document, etc.) serão adicionados sem breaking change.
 
@@ -202,6 +203,14 @@ export interface MetaMessageMedia {
   mime_type: string | null
   file_size: number | null
 }
+
+// Status público de entrega outbound. inbound e ausência de tracking → null.
+export type MetaDeliveryStatus =
+  | 'accepted'
+  | 'sent'
+  | 'delivered'
+  | 'read'
+  | 'failed'
 
 // MVP4C.4C — botão histórico sanitizado do GET messages.
 // Distinto de MetaTemplateButton (definição do picker: url / url_kind).
@@ -241,6 +250,9 @@ export interface MetaChatMessage {
   media:              MetaMessageMedia | null
   // MVP4C.4C — snapshot histórico; null em mensagens antigas ou sem botões
   template_buttons:   MetaHistoricalTemplateButton[] | null
+  // MVP5.B1.1 — entrega outbound. inbound / sem tracking → null.
+  // Opcional para compatibilidade com mocks e mensagens em memória anteriores.
+  delivery_status?:   MetaDeliveryStatus | null
 }
 
 // ── Response shapes ───────────────────────────────────────────────────────────

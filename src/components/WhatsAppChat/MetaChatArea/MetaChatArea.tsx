@@ -31,6 +31,7 @@
 // =============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { AlertCircle, Check, CheckCheck, Clock } from 'lucide-react'
 import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
 import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
@@ -41,6 +42,7 @@ import {
 import type {
   MetaChatConversation,
   MetaChatMessage,
+  MetaDeliveryStatus,
   MetaHistoricalTemplateButton,
   MetaWhatsAppTemplate,
   MetaTemplateParameterValues,
@@ -297,6 +299,46 @@ function HistoricalTemplateButtons({
   )
 }
 
+const DELIVERY_STATUS_LABEL: Record<MetaDeliveryStatus, string> = {
+  accepted:  'Mensagem aceita',
+  sent:      'Mensagem enviada',
+  delivered: 'Mensagem entregue',
+  read:      'Mensagem lida',
+  failed:    'Falha no envio',
+}
+
+function DeliveryTicks({ status }: { status: MetaDeliveryStatus | null | undefined }) {
+  if (status == null) return null
+
+  const label = DELIVERY_STATUS_LABEL[status]
+  const iconClass = 'w-3 h-3 flex-shrink-0'
+  const icon =
+    status === 'accepted'  ? <Clock className={`${iconClass} text-blue-100/80`} aria-hidden="true" /> :
+    status === 'sent'      ? <Check className={`${iconClass} text-blue-100`} aria-hidden="true" /> :
+    status === 'delivered' ? <CheckCheck className={`${iconClass} text-blue-100`} aria-hidden="true" /> :
+    status === 'read'      ? <CheckCheck className={`${iconClass} text-white`} aria-hidden="true" /> :
+    <AlertCircle className={`${iconClass} text-red-200`} aria-hidden="true" />
+
+  const tickCount =
+    status === 'sent' ? '1' :
+    status === 'delivered' || status === 'read' ? '2' :
+    undefined
+
+  return (
+    <span
+      data-testid="meta-delivery-status"
+      data-status={status}
+      data-tick-count={tickCount}
+      role="img"
+      aria-label={label}
+      title={label}
+      className="inline-flex items-center"
+    >
+      {icon}
+    </span>
+  )
+}
+
 interface MetaMessageBubbleProps {
   message: MetaChatMessage
 }
@@ -430,11 +472,14 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
           inbound={isInbound}
         />
         {time && (
-          <p className={`text-[10px] mt-1 text-right leading-none ${
-            isInbound ? 'text-slate-400' : 'text-blue-100'
-          }`}>
-            {time}
-          </p>
+          <div className="mt-1 flex items-center justify-end gap-0.5">
+            <p className={`text-[10px] text-right leading-none ${
+              isInbound ? 'text-slate-400' : 'text-blue-100'
+            }`}>
+              {time}
+            </p>
+            {!isInbound && <DeliveryTicks status={message.delivery_status} />}
+          </div>
         )}
       </div>
     </div>

@@ -68,7 +68,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { MetaChatArea, formatTime }                                from '../MetaChatArea'
-import type { MetaChatConversation, MetaChatMessage, MetaMessageMedia } from '../../../../types/meta-whatsapp'
+import type {
+  MetaChatConversation,
+  MetaChatMessage,
+  MetaDeliveryStatus,
+  MetaMessageMedia,
+} from '../../../../types/meta-whatsapp'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -194,6 +199,7 @@ function makeMsg(
   body:          string = `corpo ${id}`,
   ts:            string | null = '2026-09-21T15:30:00.000Z',
   media:         MetaMessageMedia | null = null,
+  delivery_status: MetaDeliveryStatus | null | undefined = undefined,
 ): MetaChatMessage {
   return {
     id,
@@ -206,6 +212,7 @@ function makeMsg(
     created_at:         '2026-09-21T15:00:00.000Z',
     media,
     template_buttons:   null,
+    ...(delivery_status !== undefined ? { delivery_status } : {}),
   }
 }
 
@@ -2170,5 +2177,138 @@ describe('MetaChatArea — historical template buttons', () => {
     expect(screen.getByText('Segue o link combinado.')).toBeTruthy()
     expect(screen.queryByTestId('hist-template-buttons')).toBeNull()
     expect(screen.queryByTestId('hist-url-0')).toBeNull()
+  })
+})
+
+// =============================================================================
+// DS-UI — MVP5.B1.1 ticks de entrega
+// =============================================================================
+
+describe('MetaChatArea — delivery ticks (MVP5.B1.1)', () => {
+  function renderOutbound(status: MetaDeliveryStatus | null | undefined, extra?: Partial<MetaChatMessage>) {
+    const msg = {
+      ...makeMsg('msg-tick-001', 'outbound', 'text', 'Olá outbound', '2026-09-21T15:30:00.000Z', null, status),
+      ...extra,
+    }
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    return screen.getByText('Olá outbound')
+  }
+
+  it('DS-UI-01: sent → um tick acessível', () => {
+    renderOutbound('sent')
+    const tick = screen.getByTestId('meta-delivery-status')
+    expect(tick.getAttribute('data-status')).toBe('sent')
+    expect(tick.getAttribute('aria-label')).toBe('Mensagem enviada')
+    expect(tick.getAttribute('title')).toBe('Mensagem enviada')
+    expect(tick.getAttribute('data-tick-count')).toBe('1')
+  })
+
+  it('DS-UI-02: delivered → dois ticks', () => {
+    renderOutbound('delivered')
+    const tick = screen.getByTestId('meta-delivery-status')
+    expect(tick.getAttribute('data-status')).toBe('delivered')
+    expect(tick.getAttribute('aria-label')).toBe('Mensagem entregue')
+    expect(tick.getAttribute('title')).toBe('Mensagem entregue')
+    expect(tick.getAttribute('data-tick-count')).toBe('2')
+    expect(tick.querySelector('svg')?.getAttribute('class') ?? '').toContain('text-blue-100')
+  })
+
+  it('DS-UI-03: read → dois ticks diferenciados de delivered', () => {
+    renderOutbound('read')
+    const tick = screen.getByTestId('meta-delivery-status')
+    expect(tick.getAttribute('data-status')).toBe('read')
+    expect(tick.getAttribute('aria-label')).toBe('Mensagem lida')
+    expect(tick.getAttribute('title')).toBe('Mensagem lida')
+    expect(tick.getAttribute('data-tick-count')).toBe('2')
+    const svgClass = tick.querySelector('svg')?.getAttribute('class') ?? ''
+    expect(svgClass).toContain('text-white')
+    expect(svgClass).not.toContain('text-blue-100')
+  })
+
+  it('DS-UI-04: failed → indicador de falha acessível', () => {
+    renderOutbound('failed')
+    const tick = screen.getByTestId('meta-delivery-status')
+    expect(tick.getAttribute('data-status')).toBe('failed')
+    expect(tick.getAttribute('aria-label')).toBe('Falha no envio')
+    expect(tick.getAttribute('title')).toBe('Falha no envio')
+    expect(tick.querySelector('svg')).not.toBeNull()
+  })
+
+  it('DS-UI-05: accepted → indicador discreto de processamento', () => {
+    renderOutbound('accepted')
+    const tick = screen.getByTestId('meta-delivery-status')
+    expect(tick.getAttribute('data-status')).toBe('accepted')
+    expect(tick.getAttribute('aria-label')).toBe('Mensagem aceita')
+    expect(tick.getAttribute('title')).toBe('Mensagem aceita')
+  })
+
+  it('DS-UI-06: outbound null → sem tick e sem afirmar entrega', () => {
+    renderOutbound(null)
+    expect(screen.queryByTestId('meta-delivery-status')).toBeNull()
+    expect(screen.getByText('Olá outbound')).toBeTruthy()
+    expect(screen.queryByLabelText('Mensagem enviada')).toBeNull()
+    expect(screen.queryByLabelText('Mensagem entregue')).toBeNull()
+  })
+
+  it('DS-UI-07: outbound sem campo delivery_status → sem tick', () => {
+    renderOutbound(undefined)
+    expect(screen.queryByTestId('meta-delivery-status')).toBeNull()
+    expect(screen.getByText('Olá outbound')).toBeTruthy()
+  })
+
+  it('DS-UI-08: inbound nunca exibe tick, mesmo com status no DTO', () => {
+    const msg = makeMsg('msg-in-001', 'inbound', 'text', 'Olá inbound', '2026-09-21T15:30:00.000Z', null, 'read')
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Olá inbound')).toBeTruthy()
+    expect(screen.getByText('Olá inbound').closest('[data-direction]')?.getAttribute('data-direction')).toBe('inbound')
+    expect(screen.queryByTestId('meta-delivery-status')).toBeNull()
+  })
+
+  it('DS-UI-09: indicadores têm title e aria-label', () => {
+    const statuses: MetaDeliveryStatus[] = ['accepted', 'sent', 'delivered', 'read', 'failed']
+    const labels: Record<MetaDeliveryStatus, string> = {
+      accepted:  'Mensagem aceita',
+      sent:      'Mensagem enviada',
+      delivered: 'Mensagem entregue',
+      read:      'Mensagem lida',
+      failed:    'Falha no envio',
+    }
+
+    for (const status of statuses) {
+      cleanup()
+      renderOutbound(status)
+      const tick = screen.getByRole('img', { name: labels[status] })
+      expect(tick.getAttribute('title')).toBe(labels[status])
+      expect(tick.getAttribute('aria-label')).toBe(labels[status])
+    }
+  })
+
+  it('DS-UI-10: ticks não alteram texto, template nem mídia', () => {
+    const media: MetaMessageMedia = {
+      type: 'image',
+      url: 'https://storage.example.com/fake-preview.jpg',
+      filename: 'foto.jpg',
+      mime_type: 'image/jpeg',
+      file_size: 1024,
+    }
+    const msg = makeMsg(
+      'msg-tpl-media',
+      'outbound',
+      'template',
+      'Olá, João! Seu código é 12345.',
+      '2026-09-21T15:30:00.000Z',
+      media,
+      'delivered',
+    )
+    mockIdle({ messages: [msg] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+
+    expect(screen.getByText('Olá, João! Seu código é 12345.')).toBeTruthy()
+    expect(screen.getByTestId('msg-media-image').getAttribute('src')).toBe(media.url)
+    expect(screen.getByTestId('meta-delivery-status').getAttribute('data-status')).toBe('delivered')
+    expect(screen.queryByText(FAKE_WAMID)).toBeNull()
   })
 })
