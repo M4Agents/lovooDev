@@ -224,6 +224,11 @@ vi.mock('../../../../lib/meta-whatsapp/templateEngine.js', () => ({
   interpolateBody:         (...args) => mockInterpolateBody(...args),
 }));
 
+const mockUpdateConversationPreview = vi.fn();
+vi.mock('../../../../lib/meta-whatsapp/updateConversationPreview.js', () => ({
+  updateConversationPreview: (...args) => mockUpdateConversationPreview(...args),
+}));
+
 import handler from '../send-template.js';
 
 // =============================================================================
@@ -526,6 +531,7 @@ function setupHappyMediaPath({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUpdateConversationPreview.mockResolvedValue({ outcome: 'applied' });
 });
 
 // =============================================================================
@@ -4994,5 +5000,162 @@ describe('4D-A2-SEND | IMAGE + QUICK_REPLY', () => {
     await handler(makeReq({ body: { ...HAPPY_BODY, parameter_values: { body: {} } } }), res);
     expect(res._status).toBe(200);
     expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// SIDEBAR (MVP5.B1.3) — helper após persistência do chat
+// =============================================================================
+
+describe('SB-TPL-01: template texto → preview interpolada', () => {
+  it('helper recebe renderedBody.slice(0, 100)', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockUpdateConversationPreview).toHaveBeenCalledTimes(1);
+    const args = mockUpdateConversationPreview.mock.calls[0][0];
+    expect(args.preview).toBe(FAKE_RENDERED_BODY.slice(0, 100));
+    expect(args.preview).not.toBe(FAKE_TEMPLATE_NAME);
+    expect(args.companyId).toBe(FAKE_COMPANY_ID);
+    expect(args.instanceId).toBe(FAKE_INSTANCE_ID);
+    expect(args.conversationId).toBe(FAKE_CONVERSATION_ID);
+  });
+});
+
+describe('SB-TPL-02: template IMAGE → body ou fallback Imagem', () => {
+  it('IMAGE com body interpolado usa o body', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    const { preview } = mockUpdateConversationPreview.mock.calls[0][0];
+    expect(preview).toBe(FAKE_RENDERED_BODY.slice(0, 100));
+    expect(preview).not.toContain(FAKE_MEDIA_ID);
+  });
+
+  it('IMAGE com body vazio usa fallback Imagem', async () => {
+    setupHappyMediaPath();
+    mockInterpolateBody.mockReturnValue('');
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    expect(res._status).toBe(200);
+    expect(mockUpdateConversationPreview.mock.calls[0][0].preview).toBe('Imagem');
+  });
+});
+
+describe('SB-TPL-03: template VIDEO → body ou fallback Vídeo', () => {
+  it('VIDEO com body vazio usa fallback Vídeo', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_VIDEO,
+      analysis:    FAKE_ANALYSIS_VIDEO,
+      assetResult: FAKE_ASSET_RESULT_VIDEO,
+      components:  FAKE_COMPONENTS_VIDEO,
+    });
+    mockInterpolateBody.mockReturnValue('');
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_VIDEO }), res);
+    expect(res._status).toBe(200);
+    expect(mockUpdateConversationPreview.mock.calls[0][0].preview).toBe('Vídeo');
+  });
+});
+
+describe('SB-TPL-04: template DOCUMENT → body ou fallback Documento', () => {
+  it('DOCUMENT com body vazio usa fallback Documento', async () => {
+    setupHappyMediaPath({
+      rawTemplate: FAKE_RAW_TEMPLATE_DOCUMENT,
+      analysis:    FAKE_ANALYSIS_DOCUMENT,
+      assetResult: FAKE_ASSET_RESULT_DOCUMENT,
+      components:  FAKE_COMPONENTS_DOCUMENT,
+    });
+    mockInterpolateBody.mockReturnValue('');
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_DOCUMENT }), res);
+    expect(res._status).toBe(200);
+    const { preview } = mockUpdateConversationPreview.mock.calls[0][0];
+    expect(preview).toBe('Documento');
+    expect(preview).not.toBe(FAKE_FILENAME);
+    expect(preview).not.toContain(FAKE_MEDIA_ID);
+  });
+});
+
+describe('SB-TPL-05: falha Graph/tracking/chat → sem helper', () => {
+  it('Graph send falha → helper não chamado', async () => {
+    setupHappyPath();
+    const err = new Error('fail'); err.code = 'send_template_failed';
+    mockSendTemplateMessage.mockRejectedValue(err);
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+  });
+
+  it('tracking falha → helper não chamado', async () => {
+    setupForPersistTest({ code: 'ERR', message: 'err' });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+  });
+
+  it('chat falha → helper não chamado', async () => {
+    setupForPersistTest(null, { code: 'PGSQL', message: 'constraint' });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+  });
+});
+
+describe('SB-TPL-06: falha sidebar → HTTP 200 sem reenviar', () => {
+  it('helper failed mantém 200 e não retenta Graph', async () => {
+    setupHappyPath();
+    mockUpdateConversationPreview.mockResolvedValue({ outcome: 'failed' });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe('SB-TPL-07: sem exposição de mediaId ou URL na preview', () => {
+  it('preview IMAGE não contém mediaId, filename ou URL', async () => {
+    setupHappyMediaPath();
+    const res = makeRes();
+    await handler(makeReq({ body: HAPPY_BODY_IMAGE }), res);
+    const { preview } = mockUpdateConversationPreview.mock.calls[0][0];
+    expect(preview).not.toContain(FAKE_MEDIA_ID);
+    expect(preview).not.toContain(FAKE_FILENAME);
+    expect(preview).not.toMatch(/https?:\/\//);
+    expect(JSON.stringify(mockUpdateConversationPreview.mock.calls[0][0])).not.toContain(FAKE_MEDIA_ID);
+  });
+});
+
+describe('SB-TPL-08: timestamp idêntico ao persistido em meta_messages', () => {
+  it('providerTimestamp do helper = insert.provider_timestamp', async () => {
+    setupGuardOk();
+    let capturedChatArg;
+    const chatInsertChain = makeInsertChain();
+    chatInsertChain.insert = vi.fn().mockImplementation((arg) => {
+      capturedChatArg = arg;
+      return Promise.resolve({ data: null, error: null });
+    });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(chatInsertChain);
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
+    setupEngineOk();
+    mockSendTemplateMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    const args = mockUpdateConversationPreview.mock.calls[0][0];
+    expect(args.providerTimestamp).toBe(capturedChatArg.provider_timestamp);
   });
 });

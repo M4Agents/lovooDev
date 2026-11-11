@@ -25,7 +25,8 @@
 //  11.  Envio via sendTextMessage (primitive isolado)
 //  12.  Persistência em meta_whatsapp_messages (tracking/status webhook)
 //  13.  Persistência em meta_messages (chat — fonte lida pelo GET messages)
-//  14.  Resposta sanitizada
+//  14.  Atualização best-effort de meta_conversations (prévia da sidebar)
+//  15.  Resposta sanitizada
 //
 // Persistência (etapas 12–13):
 //   Ambos os INSERTs ocorrem somente após Graph success confirmado.
@@ -37,6 +38,11 @@
 //   Não existe atomicidade entre as duas gravações — documentado intencionalmente.
 //   Unique violation (23505) → mesmo tratamento: 500 send_persistence_failed.
 //   Nenhum retry de Graph após wamid obtido.
+//
+// Sidebar (etapa 14 — MVP5.B1.3):
+//   Após meta_messages INSERT success, UPDATE last_message_preview/at
+//   via updateConversationPreview (dois UPDATEs condicionais, sem .or()).
+//   Falha da sidebar NÃO altera o HTTP 200. Não retenta Graph nem INSERTs.
 //
 // Segurança:
 //   - company_id do body identifica o tenant solicitado — não autoriza acesso.
@@ -59,6 +65,7 @@ import { getSupabaseAdmin }                     from '../../../lib/automation/su
 import { validateMetaCaller, META_SEND_ROLES }  from '../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { decryptMetaToken }                     from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendTextMessage }                      from '../../../lib/meta-whatsapp/graphClient.js';
+import { updateConversationPreview }            from '../../../lib/meta-whatsapp/updateConversationPreview.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
@@ -309,6 +316,7 @@ export default async function handler(req, res) {
   // Unique (instance_id, meta_message_id): impede duplicação de wamid.
   // Falha → 500 send_persistence_failed (Graph e tracking já executaram).
   const bodyTrimmed = message.text.body.trim();
+  const providerTimestamp = new Date().toISOString();
   const { error: insertChatErr } = await svc
     .from('meta_messages')
     .insert({
@@ -319,7 +327,7 @@ export default async function handler(req, res) {
       direction:         'outbound',
       message_type:      'text',
       body:              bodyTrimmed,
-      provider_timestamp: new Date().toISOString(),
+      provider_timestamp: providerTimestamp,
     });
 
   if (insertChatErr) {
@@ -328,7 +336,27 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'send_persistence_failed' });
   }
 
-  // ── 14. Resposta sanitizada ───────────────────────────────────────────────
+  // ── 14. Sidebar best-effort (não altera o HTTP do envio) ──────────────────
+  // Timestamp = exatamente o provider_timestamp gravado em meta_messages.
+  // Preview = texto enviado, trimado, limitado a 100 caracteres (padrão inbound).
+  // Falha → log sanitizado + 200. Sem retry de Graph ou INSERTs.
+  try {
+    const previewResult = await updateConversationPreview({
+      supabase:          svc,
+      companyId:         auth.companyId,
+      instanceId:        instance.id,
+      conversationId:    conversation.id,
+      providerTimestamp,
+      preview:           bodyTrimmed.slice(0, 100),
+    });
+    if (previewResult?.outcome === 'failed') {
+      console.error('[meta/messages/send] conversation_preview_failed');
+    }
+  } catch {
+    console.error('[meta/messages/send] conversation_preview_failed');
+  }
+
+  // ── 15. Resposta sanitizada ───────────────────────────────────────────────
   // Somente message_id (wamid) retornado — nunca token, credencial ou payload Graph.
   return res.status(200).json({ ok: true, message_id: result.messageId });
 

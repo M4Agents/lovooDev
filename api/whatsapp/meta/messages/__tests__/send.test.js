@@ -110,6 +110,11 @@ vi.mock('../../../../lib/meta-whatsapp/graphClient.js', () => ({
   sendTextMessage: (...args) => mockSendTextMessage(...args),
 }));
 
+const mockUpdateConversationPreview = vi.fn();
+vi.mock('../../../../lib/meta-whatsapp/updateConversationPreview.js', () => ({
+  updateConversationPreview: (...args) => mockUpdateConversationPreview(...args),
+}));
+
 import handler from '../send.js';
 
 // =============================================================================
@@ -258,6 +263,7 @@ function setupHappyPath() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSvc.rpc = vi.fn(); // rpc nunca deve ser chamado
+  mockUpdateConversationPreview.mockResolvedValue({ outcome: 'applied' });
 });
 
 // =============================================================================
@@ -1467,6 +1473,125 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       const res = makeRes();
       await handler(makeReq(), res);
       expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // SIDEBAR (MVP5.B1.3) — helper após persistência do chat
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('SB-TXT-01: Graph + tracking + chat OK → helper chamado; HTTP 200', () => {
+    it('chama updateConversationPreview após persistir meta_messages', async () => {
+      setupHappyPath();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(mockUpdateConversationPreview).toHaveBeenCalledTimes(1);
+      const args = mockUpdateConversationPreview.mock.calls[0][0];
+      expect(args.companyId).toBe(FAKE_COMPANY_ID);
+      expect(args.instanceId).toBe(FAKE_INSTANCE_ID);
+      expect(args.conversationId).toBe(FAKE_CONVERSATION_ID);
+      expect(args.supabase).toBe(mockSvc);
+    });
+  });
+
+  describe('SB-TXT-02: preview limitada a 100 caracteres', () => {
+    it('passa preview = body trimado cortado em 100', async () => {
+      const longBody = `X${'a'.repeat(150)}`;
+      setupHappyPath();
+      const res = makeRes();
+      await handler(makeReq({
+        body: { ...HAPPY_BODY, message: { type: 'text', text: { body: longBody } } },
+      }), res);
+      expect(res._status).toBe(200);
+      const { preview } = mockUpdateConversationPreview.mock.calls[0][0];
+      expect(preview).toBe(longBody.trim().slice(0, 100));
+      expect(preview.length).toBe(100);
+    });
+  });
+
+  describe('SB-TXT-03: falha Graph → sem helper', () => {
+    it('send_failed não chama updateConversationPreview', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED));
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockRejectedValue(
+        Object.assign(new Error('fail'), { code: 'send_failed' }),
+      );
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SB-TXT-04: falha tracking → sem helper', () => {
+    it('send_persistence_failed no tracking não chama helper', async () => {
+      setupPreInsert({ trackingError: new Error('tracking fail') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SB-TXT-05: falha chat → sem helper', () => {
+    it('send_persistence_failed no chat não chama helper', async () => {
+      setupPreInsert({ chatError: new Error('chat fail') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SB-TXT-06: falha sidebar → HTTP 200, sem segunda chamada Graph', () => {
+    it('helper failed não altera 200 e não retenta Graph', async () => {
+      setupHappyPath();
+      mockUpdateConversationPreview.mockResolvedValue({ outcome: 'failed' });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('helper throw não vira 500 nem retenta Graph', async () => {
+      setupHappyPath();
+      mockUpdateConversationPreview.mockRejectedValue(new Error('preview boom'));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('SB-TXT-07: timestamp do helper idêntico ao persistido em meta_messages', () => {
+    it('providerTimestamp do helper = insert.provider_timestamp', async () => {
+      setupGuardOk();
+      let capturedChatArg;
+      const chatInsertChain = makeInsertChain();
+      chatInsertChain.insert = vi.fn().mockImplementation((arg) => {
+        capturedChatArg = arg;
+        return Promise.resolve({ data: null, error: null });
+      });
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(chatInsertChain);
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+
+      const res = makeRes();
+      await handler(makeReq(), res);
+
+      expect(res._status).toBe(200);
+      const args = mockUpdateConversationPreview.mock.calls[0][0];
+      expect(args.providerTimestamp).toBe(capturedChatArg.provider_timestamp);
     });
   });
 });

@@ -38,7 +38,8 @@
 //  18.  sendTemplateMessage → WRITE 2
 //  19.  Persistência em meta_whatsapp_messages (tracking)
 //  20.  Persistência em meta_messages (chat) — inclui media_asset_id
-//  21.  Resposta sanitizada
+//  21.  Atualização best-effort de meta_conversations (prévia da sidebar)
+//  22.  Resposta sanitizada
 //
 // Segurança:
 //   - company_id identifica tenant solicitado — não autoriza acesso.
@@ -60,6 +61,10 @@
 //   Ordem: meta_whatsapp_messages primeiro, depois meta_messages.
 //   Falha em qualquer INSERT → 500 send_persistence_failed.
 //   Nenhum retry de Graph ocorre após falha de persistência.
+//
+// Sidebar (etapa 21 — MVP5.B1.3):
+//   Após meta_messages INSERT success, UPDATE last_message_preview/at
+//   via updateConversationPreview. Falha da sidebar NÃO altera o HTTP 200.
 //
 // Write budget:
 //   Template textual: 0×/media + 1×/messages = 1 Graph WRITE total.
@@ -84,6 +89,20 @@ import { analyzeTemplate,
          interpolateBody }                     from '../../../lib/meta-whatsapp/templateEngine.js';
 import { buildTemplateButtonsSnapshot }        from '../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
 import { validateMediaAsset }                  from '../../../lib/meta-whatsapp/mediaAsset.js';
+import { updateConversationPreview }           from '../../../lib/meta-whatsapp/updateConversationPreview.js';
+
+const MEDIA_PREVIEW_FALLBACK = {
+  IMAGE:    'Imagem',
+  VIDEO:    'Vídeo',
+  DOCUMENT: 'Documento',
+};
+
+function buildTemplateSidebarPreview(renderedBody, headerMediaFormat) {
+  if (typeof renderedBody === 'string' && renderedBody.length > 0) {
+    return renderedBody.slice(0, 100);
+  }
+  return MEDIA_PREVIEW_FALLBACK[headerMediaFormat] ?? '';
+}
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -512,6 +531,7 @@ export default async function handler(req, res) {
   // media_asset_id: UUID do asset validado (para template media) ou null (para textual).
   // body: renderedBody — exclusivamente texto interpolado do BODY.
   // Nunca: mediaId, filename, URL ou s3_key no body.
+  const providerTimestamp = new Date().toISOString();
   const { error: insertChatErr } = await svc
     .from('meta_messages')
     .insert({
@@ -524,7 +544,7 @@ export default async function handler(req, res) {
       body:               renderedBody,
       template_name:      templateName,
       template_language:  templateLanguage,
-      provider_timestamp: new Date().toISOString(),
+      provider_timestamp: providerTimestamp,
       media_asset_id:     assetId,
       template_buttons:   templateButtonsSnapshot,
     });
@@ -533,7 +553,30 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'send_persistence_failed' });
   }
 
-  // ── 21. Resposta sanitizada ────────────────────────────────────────────────
+  // ── 21. Sidebar best-effort (não altera o HTTP do envio) ───────────────────
+  // Preview: renderedBody.slice(0, 100) se não vazio; senão Imagem/Vídeo/Documento.
+  // Timestamp = exatamente o provider_timestamp gravado em meta_messages.
+  // Falha → log sanitizado + 200. Sem retry de Graph ou INSERTs.
+  try {
+    const preview = buildTemplateSidebarPreview(renderedBody, analysis.headerMediaFormat);
+    if (preview) {
+      const previewResult = await updateConversationPreview({
+        supabase:          svc,
+        companyId:         auth.companyId,
+        instanceId:        instance.id,
+        conversationId:    conversation.id,
+        providerTimestamp,
+        preview,
+      });
+      if (previewResult?.outcome === 'failed') {
+        console.error('[meta/messages/send-template] conversation_preview_failed');
+      }
+    }
+  } catch {
+    console.error('[meta/messages/send-template] conversation_preview_failed');
+  }
+
+  // ── 22. Resposta sanitizada ────────────────────────────────────────────────
   // Somente message_id (wamid) retornado — nunca token, credential, recipient,
   // payload Graph, mediaId ou asset.
   return res.status(200).json({ ok: true, message_id: result.messageId });
