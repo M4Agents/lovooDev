@@ -856,9 +856,10 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
   // ──────────────────────────────────────────────────────────────────────────
   // GRAPH: mapeamento de erros do primitive
   // ──────────────────────────────────────────────────────────────────────────
-  function makeGraphError(code) {
+  function makeGraphError(code, extra = {}) {
     const err = new Error('graph error');
     err.code = code;
+    Object.assign(err, extra);
     return err;
   }
 
@@ -931,6 +932,194 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       await handler(makeReq(), res);
       expect(res._status).toBe(500);
       expect(res._body).toEqual({ error: 'internal_error' });
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // B2.3: Meta 131047 após gate B2.2 aberto
+  // ──────────────────────────────────────────────────────────────────────────
+  function expectNoPersistOrPreview() {
+    expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    const tables = mockSvc.from.mock.calls.map(([t]) => t);
+    expect(tables).not.toContain('meta_whatsapp_messages');
+    expect(tables.filter((t) => t === 'meta_messages')).toEqual(['meta_messages']);
+  }
+
+  describe('B2.3: Graph 131047 após gate aberto', () => {
+    it('B2.3-01: gate aberto + Graph 131047 → 409 closed, Graph 1x, sem persistência/preview/retry', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+          makeGraphError('send_failed', { metaErrorCode: 131047 }),
+        ));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+        expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+        expectNoPersistOrPreview();
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('B2.3-02: gate aberto + Graph 190 → 502 provider_error', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        makeGraphError('send_failed', { metaErrorCode: 190 }),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+      expectNoPersistOrPreview();
+    });
+
+    it('B2.3-03: gate aberto + Graph 131026 → 502 provider_error', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        makeGraphError('send_failed', { metaErrorCode: 131026 }),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('B2.3-04: gate aberto + send_failed sem metaErrorCode → 502 provider_error', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(makeGraphError('send_failed')));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+    });
+
+    it('B2.3-04b: send_failed + metaErrorCode string "131047" → 502 provider_error', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        makeGraphError('send_failed', { metaErrorCode: '131047' }),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+    });
+
+    it('B2.3-05: gate aberto + send_invalid_response → 502 provider_error', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        makeGraphError('send_invalid_response'),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('B2.3-05b: metaErrorCode 131047 sem send_failed → não mapeia para 409', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        makeGraphError('send_invalid_response', { metaErrorCode: 131047 }),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+    });
+
+    it('B2.3-06: gate fechado → 409 closed, Graph não chamado', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+
+    it('B2.3-07: gate desconhecido → 409 unproven, Graph não chamado', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({ data: null }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+
+    it('B2.3-08: timeout → 503 provider_unavailable', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(makeGraphError('send_timeout')));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(503);
+      expect(res._body).toEqual({ error: 'provider_unavailable' });
+    });
+
+    it('B2.3-08b: falha de rede → 503 provider_unavailable', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(makeGraphError('send_network_error')));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(503);
+      expect(res._body).toEqual({ error: 'provider_unavailable' });
+    });
+
+    it('B2.3-09: resposta e logs sem token, telefone, payload ou mensagem bruta da Meta', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const graphErr = makeGraphError('send_failed', { metaErrorCode: 131047 });
+        graphErr.message = 'META_RAW_MESSAGE_SENTINEL';
+        graphErr.fbtrace_id = 'FAKE_FBTRACE_NOT_REAL';
+        setupPreGraph(() => mockSendTextMessage.mockRejectedValue(graphErr));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        const bodyStr = JSON.stringify(res._body);
+        expect(bodyStr).toBe(JSON.stringify({ error: 'customer_service_window_closed' }));
+        expect(bodyStr).not.toContain(FAKE_PLAIN_TOKEN);
+        expect(bodyStr).not.toContain(FAKE_ENC_TOKEN);
+        expect(bodyStr).not.toContain(FAKE_WA_ID);
+        expect(bodyStr).not.toContain(FAKE_PHONE_NUM_ID);
+        expect(bodyStr).not.toContain(FAKE_TEXT);
+        expect(bodyStr).not.toContain('META_RAW_MESSAGE_SENTINEL');
+        expect(bodyStr).not.toContain('FAKE_FBTRACE_NOT_REAL');
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).toContain('meta_code=131047');
+        expect(logged).not.toContain(FAKE_PLAIN_TOKEN);
+        expect(logged).not.toContain(FAKE_ENC_TOKEN);
+        expect(logged).not.toContain(FAKE_WA_ID);
+        expect(logged).not.toContain(FAKE_PHONE_NUM_ID);
+        expect(logged).not.toContain(FAKE_TEXT);
+        expect(logged).not.toContain('META_RAW_MESSAGE_SENTINEL');
+        expect(logged).not.toContain('FAKE_FBTRACE_NOT_REAL');
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('B2.3-10: envio de texto bem-sucedido continua 200', async () => {
+      setupHappyPath();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('B2.3-10b: send.js não aciona fluxo de templates', () => {
+      const sendSrc = readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), '../send.js'),
+        'utf8',
+      );
+      expect(sendSrc).not.toContain('sendTemplateMessage');
+      expect(sendSrc).not.toContain('send-template');
     });
   });
 

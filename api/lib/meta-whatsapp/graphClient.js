@@ -67,6 +67,10 @@ const MAX_TEXT_BODY_LENGTH = 4096;
 // A Graph API aceita E.164 com ou sem '+'; o caller deve remover '+' antes de passar.
 const TO_PHONE_RE = /^[0-9]{7,15}$/;
 
+// Teto defensivo para o body JSON de erro de sendTextMessage (não-2xx).
+// Acima disso o código Meta não é extraído: mantém send_failed sem metaErrorCode.
+const GRAPH_SEND_ERROR_BODY_MAX_BYTES = 8192;
+
 // =============================================================================
 // Helpers internos
 // =============================================================================
@@ -81,6 +85,157 @@ function makeError(code, message) {
   const err = new Error(message);
   err.code  = code;
   return err;
+}
+
+/**
+ * Interrompe o reader sem aguardar cancel() — evita hang se cancel nunca resolver.
+ * Rejeições de cancel são engolidas. releaseLock é best-effort.
+ *
+ * @private
+ */
+function abortSendErrorReader(reader) {
+  try {
+    const result = reader.cancel();
+    if (result != null && typeof result.then === 'function') {
+      result.catch(() => {});
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (typeof reader.releaseLock === 'function') {
+      reader.releaseLock();
+    }
+  } catch {
+    // lock já liberado ou cancel já liberou
+  }
+}
+
+/**
+ * Converte um chunk do ReadableStream em Uint8Array.
+ * Tipos desconhecidos → null (fail-closed, sem concatenar).
+ *
+ * @private
+ */
+function sendErrorChunkToBytes(value) {
+  if (value == null) return null;
+  if (value instanceof Uint8Array) return value;
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  return null;
+}
+
+/**
+ * Lê o body de erro Graph com teto efetivo de bytes DURANTE a leitura.
+ * Usa Response.body.getReader() — nunca res.text()/res.json() (ilimitados).
+ * Sem stream legível → null. Não lança para o caller.
+ * UTF-8 é decodificado somente após leitura completa e dentro do limite.
+ *
+ * @private
+ */
+async function readSendErrorBodyLimited(res, maxBytes) {
+  try {
+    const headers = res?.headers;
+    if (headers && typeof headers.get === 'function') {
+      const cl = Number(headers.get('content-length'));
+      if (Number.isFinite(cl) && cl > maxBytes) {
+        return null;
+      }
+    }
+
+    const stream = res?.body;
+    if (stream == null || typeof stream.getReader !== 'function') {
+      return null;
+    }
+
+    let reader;
+    try {
+      reader = stream.getReader();
+    } catch {
+      return null;
+    }
+    if (reader == null || typeof reader.read !== 'function') {
+      return null;
+    }
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      for (;;) {
+        let step;
+        try {
+          step = await reader.read();
+        } catch {
+          abortSendErrorReader(reader);
+          return null;
+        }
+        if (step == null || step.done) break;
+
+        const bytes = sendErrorChunkToBytes(step.value);
+        if (bytes == null) {
+          abortSendErrorReader(reader);
+          return null;
+        }
+        if (bytes.byteLength === 0) continue;
+
+        if (total + bytes.byteLength > maxBytes) {
+          abortSendErrorReader(reader);
+          return null;
+        }
+
+        chunks.push(bytes);
+        total += bytes.byteLength;
+      }
+    } catch {
+      abortSendErrorReader(reader);
+      return null;
+    }
+
+    try {
+      if (typeof reader.releaseLock === 'function') {
+        reader.releaseLock();
+      }
+    } catch {
+      // ignore
+    }
+
+    if (total === 0) return '';
+
+    const all = new Uint8Array(total);
+    let offset = 0;
+    for (const part of chunks) {
+      all.set(part, offset);
+      offset += part.byteLength;
+    }
+    return new TextDecoder('utf-8').decode(all);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copia somente códigos Meta numéricos para o Error interno.
+ * Nunca copia message, type, fbtrace_id ou o payload.
+ *
+ * @private
+ */
+function attachSafeSendMetaCodes(errObj, payload) {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return;
+  }
+  const code = payload.error?.code;
+  const subcode = payload.error?.error_subcode;
+  if (typeof code === 'number' && Number.isFinite(code)) {
+    errObj.metaErrorCode = code;
+  }
+  if (typeof subcode === 'number' && Number.isFinite(subcode)) {
+    errObj.metaSubcode = subcode;
+  }
 }
 
 /**
@@ -615,6 +770,8 @@ export async function listMessageTemplates(token, wabaId, options = {}) {
  * @throws {Error} err.code in:
  *   send_invalid_input    — validação falhou antes do fetch (sem rede)
  *   send_failed           — HTTP não-2xx do Graph
+ *                          (pode incluir metaErrorCode/metaSubcode numéricos;
+ *                           nunca inclui Graph message, type ou fbtrace_id)
  *   send_timeout          — AbortError / timeout expirado
  *   send_network_error    — falha de rede não-timeout
  *   send_invalid_response — HTTP 2xx mas response sem message id válido
@@ -673,7 +830,17 @@ export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
   }
 
   if (!res.ok) {
-    throw makeError('send_failed', 'Meta send failed');
+    const errObj = makeError('send_failed', 'Meta send failed');
+    errObj.graphStatus = res.status;
+    const raw = await readSendErrorBodyLimited(res, GRAPH_SEND_ERROR_BODY_MAX_BYTES);
+    if (raw != null) {
+      try {
+        attachSafeSendMetaCodes(errObj, JSON.parse(raw));
+      } catch {
+        // JSON inválido — send_failed sem metaErrorCode.
+      }
+    }
+    throw errObj;
   }
 
   let payload;

@@ -1226,6 +1226,403 @@ describe('sendTextMessage', () => {
       .rejects.toSatisfy((err) => !err.message.includes(FAKE_TO));
   });
 
+  const SEND_ERROR_MAX = 8192;
+  const utf8 = (str) => new TextEncoder().encode(str);
+
+  function paddedMetaJson(code, totalBytes) {
+    const prefix = `{"error":{"code":${code},"pad":"`;
+    const suffix = `"}}`;
+    const padLen = totalBytes - prefix.length - suffix.length;
+    return prefix + 'x'.repeat(padLen) + suffix;
+  }
+
+  function makeErrorStreamBody(chunks, { readErrorAt = 0, cancelNeverSettles = false } = {}) {
+    const spies = {
+      getReaderCalls: 0,
+      cancelCalls: 0,
+      releaseLockCalls: 0,
+      readCalls: 0,
+    };
+    let idx = 0;
+    const body = {
+      getReader() {
+        spies.getReaderCalls += 1;
+        return {
+          async read() {
+            spies.readCalls += 1;
+            if (readErrorAt > 0 && spies.readCalls === readErrorAt) {
+              throw new Error('READ_FAIL_SENTINEL');
+            }
+            if (idx >= chunks.length) return { done: true, value: undefined };
+            const value = chunks[idx];
+            idx += 1;
+            return { done: false, value };
+          },
+          cancel() {
+            spies.cancelCalls += 1;
+            if (cancelNeverSettles) return new Promise(() => {});
+            return Promise.resolve();
+          },
+          releaseLock() {
+            spies.releaseLockCalls += 1;
+          },
+        };
+      },
+    };
+    return { body, spies };
+  }
+
+  function makeStreamErrorResponse({
+    status = 400,
+    json,
+    raw,
+    chunks,
+    contentLength,
+    streamOptions,
+    noBody = false,
+  } = {}) {
+    let streamChunks = chunks;
+    if (streamChunks == null) {
+      const rawStr = raw != null ? raw : JSON.stringify(json ?? {});
+      streamChunks = rawStr.length === 0 ? [] : [utf8(rawStr)];
+    }
+    const byteLen = streamChunks.reduce((n, c) => n + c.byteLength, 0);
+    const { body, spies } = noBody
+      ? { body: undefined, spies: { getReaderCalls: 0, cancelCalls: 0, releaseLockCalls: 0, readCalls: 0 } }
+      : makeErrorStreamBody(streamChunks, streamOptions);
+
+    let clHeader;
+    if (contentLength === null) clHeader = null;
+    else if (contentLength !== undefined) clHeader = String(contentLength);
+    else clHeader = String(byteLen);
+
+    return {
+      ok: false,
+      status,
+      headers: {
+        get(name) {
+          if (String(name).toLowerCase() === 'content-length') return clHeader;
+          return null;
+        },
+      },
+      body,
+      spies,
+    };
+  }
+
+  it('TC-M08f: HTTP 400 com error.code=131047 → send_failed + metaErrorCode 131047', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: {
+        error: {
+          code: 131047,
+          message: 'META_RAW_MESSAGE_SENTINEL',
+          type: 'OAuthException',
+          fbtrace_id: 'FAKE_FBTRACE_NOT_REAL',
+          error_subcode: 2494010,
+        },
+      },
+    }));
+    await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
+      .rejects.toMatchObject({
+        code: 'send_failed',
+        metaErrorCode: 131047,
+        metaSubcode: 2494010,
+      });
+  });
+
+  it('TC-M08g: HTTP 401 com error.code=190 → send_failed + metaErrorCode 190', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      status: 401,
+      json: { error: { code: 190, message: 'META_RAW_MESSAGE_SENTINEL' } },
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBe(190);
+  });
+
+  it('TC-M08h: error.code string "131047" → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: { error: { code: '131047', message: 'META_RAW_MESSAGE_SENTINEL' } },
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('TC-M08i: HTTP não-2xx com stream vazio → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      status: 500,
+      chunks: [],
+      contentLength: null,
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('TC-M08j: HTTP não-2xx com JSON inválido → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({ raw: '{not-json' }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('TC-M08k: error ausente ou malformado → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({ json: { foo: 1 } }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('TC-M08l: error não-objeto → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({ json: { error: 'oops' } }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('B231-01: Content-Length ausente + body pequeno 131047 → extrai código', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: { error: { code: 131047 } },
+      contentLength: null,
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBe(131047);
+  });
+
+  it('B231-02: Content-Length ausente + body acima do limite → sem metaErrorCode, cancela', async () => {
+    const raw = paddedMetaJson(131047, 9000);
+    const res = makeStreamErrorResponse({ raw, contentLength: null });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(res.spies.getReaderCalls).toBe(1);
+    expect(res.spies.cancelCalls).toBe(1);
+    expect(JSON.stringify(err)).not.toContain('x'.repeat(32));
+  });
+
+  it('B231-03: Content-Length mentiroso menor que o body real → limite no stream', async () => {
+    const raw = paddedMetaJson(131047, 9000);
+    const res = makeStreamErrorResponse({ raw, contentLength: 10 });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(res.spies.getReaderCalls).toBe(1);
+    expect(res.spies.cancelCalls).toBe(1);
+  });
+
+  it('B231-04: Content-Length acima do teto não chama getReader', async () => {
+    const res = makeStreamErrorResponse({
+      json: { error: { code: 131047 } },
+      contentLength: 20_000,
+    });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(res.spies.getReaderCalls).toBe(0);
+    expect(res.spies.readCalls).toBe(0);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('B231-05: body exatamente 8192 bytes com 131047 → extrai código', async () => {
+    const raw = paddedMetaJson(131047, SEND_ERROR_MAX);
+    expect(utf8(raw).byteLength).toBe(SEND_ERROR_MAX);
+    fetch.mockResolvedValue(makeStreamErrorResponse({ raw, contentLength: null }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBe(131047);
+  });
+
+  it('B231-06: body com 8193 bytes → send_failed sem metaErrorCode', async () => {
+    const raw = paddedMetaJson(131047, SEND_ERROR_MAX + 1);
+    expect(utf8(raw).byteLength).toBe(SEND_ERROR_MAX + 1);
+    const res = makeStreamErrorResponse({ raw, contentLength: null });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(res.spies.cancelCalls).toBe(1);
+  });
+
+  it('B231-07: stream em múltiplos chunks com 131047 → extrai código', async () => {
+    const bytes = utf8(JSON.stringify({ error: { code: 131047 } }));
+    const mid = Math.max(1, Math.floor(bytes.byteLength / 2));
+    const res = makeStreamErrorResponse({
+      chunks: [bytes.slice(0, mid), bytes.slice(mid)],
+      contentLength: null,
+    });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBe(131047);
+    expect(res.spies.cancelCalls).toBe(0);
+    expect(res.spies.releaseLockCalls).toBe(1);
+  });
+
+  it('B231-08: chunk individual maior que 8192 não é concatenado', async () => {
+    const huge = utf8(paddedMetaJson(131047, 9000));
+    expect(huge.byteLength).toBeGreaterThan(SEND_ERROR_MAX);
+    const res = makeStreamErrorResponse({ chunks: [huge], contentLength: null });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(res.spies.readCalls).toBe(1);
+    expect(res.spies.cancelCalls).toBe(1);
+    expect(JSON.stringify(err)).not.toContain('x'.repeat(32));
+  });
+
+  it('B231-09: falha em reader.read() → send_failed sem metaErrorCode', async () => {
+    const res = makeStreamErrorResponse({
+      json: { error: { code: 131047 } },
+      contentLength: null,
+      streamOptions: { readErrorAt: 1 },
+    });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(err.message).not.toContain('READ_FAIL_SENTINEL');
+    expect(res.spies.cancelCalls).toBe(1);
+  });
+
+  it('B231-10: cancel() que nunca resolve não trava o envio', async () => {
+    const res = makeStreamErrorResponse({
+      raw: paddedMetaJson(131047, 9000),
+      contentLength: null,
+      streamOptions: { cancelNeverSettles: true },
+    });
+    fetch.mockResolvedValue(res);
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(res.spies.cancelCalls).toBe(1);
+    expect(res.spies.releaseLockCalls).toBe(1);
+  });
+
+  it('B231-11: ausência de stream legível → send_failed sem metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: { error: { code: 131047 } },
+      noBody: true,
+      contentLength: null,
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('B231-12: text()/json() presentes não são usados (sem fallback ilimitado)', async () => {
+    let textCalled = false;
+    let jsonCalled = false;
+    const { body, spies } = makeErrorStreamBody([
+      utf8(JSON.stringify({ error: { code: 131047 } })),
+    ]);
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: { get: () => null },
+      body,
+      async text() {
+        textCalled = true;
+        return '{"error":{"code":131047,"message":"META_RAW_MESSAGE_SENTINEL"}}';
+      },
+      async json() {
+        jsonCalled = true;
+        return { error: { code: 131047, message: 'META_RAW_MESSAGE_SENTINEL' } };
+      },
+    });
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(textCalled).toBe(false);
+    expect(jsonCalled).toBe(false);
+    expect(spies.getReaderCalls).toBe(1);
+    expect(err.metaErrorCode).toBe(131047);
+  });
+
+  it('B231-13: sem stream, text()/json() existentes não são consumidos', async () => {
+    let textCalled = false;
+    let jsonCalled = false;
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: { get: () => null },
+      async text() {
+        textCalled = true;
+        return '{"error":{"code":131047}}';
+      },
+      async json() {
+        jsonCalled = true;
+        return { error: { code: 131047 } };
+      },
+    });
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(textCalled).toBe(false);
+    expect(jsonCalled).toBe(false);
+    expect(err.code).toBe('send_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+  });
+
+  it('TC-M08o: send_failed não anexa message/type/fbtrace_id da Meta', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: {
+        error: {
+          code: 131047,
+          message: 'META_RAW_MESSAGE_SENTINEL',
+          type: 'OAuthException',
+          fbtrace_id: 'FAKE_FBTRACE_NOT_REAL',
+        },
+      },
+    }));
+    const err = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(err.code).toBe('send_failed');
+    expect(err.message).toBe('Meta send failed');
+    expect(err.message).not.toContain('META_RAW_MESSAGE_SENTINEL');
+    expect(err.message).not.toContain(FAKE_TOKEN);
+    expect(err.message).not.toContain(FAKE_TO);
+    expect(err.message).not.toContain(FAKE_TEXT);
+    expect(err.fbtrace_id).toBeUndefined();
+    expect(err.type).toBeUndefined();
+    expect(JSON.stringify(err)).not.toContain('META_RAW_MESSAGE_SENTINEL');
+    expect(JSON.stringify(err)).not.toContain('FAKE_FBTRACE_NOT_REAL');
+  });
+
+  it('B231-14: sendTemplateMessage HTTP 400 com 131047 não anexa metaErrorCode', async () => {
+    fetch.mockResolvedValue(makeStreamErrorResponse({
+      json: { error: { code: 131047, message: 'META_RAW_MESSAGE_SENTINEL' } },
+    }));
+    const err = await sendTemplateMessage(
+      FAKE_TOKEN,
+      FAKE_PHONE_NUMBER_ID,
+      FAKE_TO,
+      { name: 'hello_world', language: { code: 'pt_BR' } },
+    ).then(() => null, (e) => e);
+    expect(err.code).toBe('send_template_failed');
+    expect(err.metaErrorCode).toBeUndefined();
+    expect(err.message).not.toContain('META_RAW_MESSAGE_SENTINEL');
+  });
+
   // ── Timeout e rede ───────────────────────────────────────────────────────────
 
   it('TC-M09a: AbortError → send_timeout', async () => {
@@ -1238,6 +1635,20 @@ describe('sendTextMessage', () => {
     fetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT))
       .rejects.toMatchObject({ code: 'send_network_error' });
+  });
+
+  it('TC-M09c: timeout/rede não anexam metaErrorCode e não viram send_failed', async () => {
+    fetch.mockRejectedValue(makeAbortError());
+    const timeoutErr = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(timeoutErr.code).toBe('send_timeout');
+    expect(timeoutErr.metaErrorCode).toBeUndefined();
+
+    fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    const netErr = await sendTextMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_TEXT)
+      .then(() => null, (e) => e);
+    expect(netErr.code).toBe('send_network_error');
+    expect(netErr.metaErrorCode).toBeUndefined();
   });
 
   // ── Resposta inválida ────────────────────────────────────────────────────────

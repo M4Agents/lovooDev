@@ -290,6 +290,10 @@ export default async function handler(req, res) {
     if (code === 'send_timeout' || code === 'send_network_error') {
       return res.status(503).json({ error: 'provider_unavailable' });
     }
+    if (code === 'send_failed' && err.metaErrorCode === 131047) {
+      console.error('[meta/messages/send] graph_rejected meta_code=131047');
+      return res.status(409).json({ error: 'customer_service_window_closed' });
+    }
     if (code === 'send_failed' || code === 'send_invalid_response') {
       return res.status(502).json({ error: 'provider_error' });
     }
