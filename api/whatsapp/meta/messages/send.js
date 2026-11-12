@@ -20,6 +20,7 @@
 //   6.  Lookup de instância (company_id autorizado + deleted_at IS NULL)
 //   7.  Verificação de status (connected)
 //   8.  Lookup de conversa (company_id + instance_id) → deriva to
+//   8.5 Gate da janela de atendimento de 24h (MVP5.B2.2) — fail-closed
 //   9.  Lookup de credencial (instance_id)
 //  10.  Decrypt do token (decryptMetaToken)
 //  11.  Envio via sendTextMessage (primitive isolado)
@@ -66,6 +67,7 @@ import { validateMetaCaller, META_SEND_ROLES }  from '../../../lib/meta-whatsapp
 import { decryptMetaToken }                     from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendTextMessage }                      from '../../../lib/meta-whatsapp/graphClient.js';
 import { updateConversationPreview }            from '../../../lib/meta-whatsapp/updateConversationPreview.js';
+import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServiceWindow.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
@@ -212,8 +214,40 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
+  // ── 8.5 Gate da janela de atendimento de 24h (MVP5.B2.2) ───────────────────
+  // Fail-closed: janela fechada, desconhecida ou falha de consulta bloqueiam
+  // credencial, decrypt, Graph, tracking, chat e preview.
+  // IDs vêm exclusivamente de auth + lookups já validados neste handler.
+  try {
+    const loaded = await customerServiceWindow.loadLastInboundTimestamp(svc, {
+      companyId:      auth.companyId,
+      instanceId:     instance.id,
+      conversationId: conversation.id,
+    });
+    if (!loaded.ok) {
+      console.error(
+        `[meta/messages/send] customer_service_window_unproven reason=${loaded.reason}`,
+      );
+      return res.status(409).json({ error: 'customer_service_window_unproven' });
+    }
+    const window = customerServiceWindow.resolveCustomerServiceWindow({
+      lastInboundAt: loaded.lastInboundAt,
+    });
+    if (window.state === 'closed') {
+      return res.status(409).json({ error: 'customer_service_window_closed' });
+    }
+    if (window.state !== 'open') {
+      return res.status(409).json({ error: 'customer_service_window_unproven' });
+    }
+  } catch {
+    console.error(
+      '[meta/messages/send] customer_service_window_unproven reason=unexpected_gate_error',
+    );
+    return res.status(409).json({ error: 'customer_service_window_unproven' });
+  }
+
   // ── 9. Lookup de credencial ────────────────────────────────────────────────
-  // Somente após instance válida e connected.
+  // Somente após instance válida, connected e janela comprovadamente aberta.
   // Seleciona somente access_token_enc — nunca campos desnecessários.
   const { data: credential, error: credErr } = await svc
     .from('meta_whatsapp_credentials')

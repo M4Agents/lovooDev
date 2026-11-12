@@ -80,7 +80,11 @@
 //   PERSIST-13  meta_messages não é criado quando meta_whatsapp_messages falha
 // =============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as customerServiceWindow from '../../../../lib/meta-whatsapp/customerServiceWindow.js';
 
 // =============================================================================
 // Mocks (antes dos imports do handler)
@@ -191,6 +195,33 @@ function makeCredChain(data, error = null) {
   };
 }
 
+const OPEN_INBOUND_ISO = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+const EFFECTIVE_WINDOW_MS =
+  customerServiceWindow.CUSTOMER_SERVICE_WINDOW_MS
+  - customerServiceWindow.CUSTOMER_SERVICE_WINDOW_SAFETY_MS;
+
+/**
+ * Chain para o SELECT do último inbound (motor B2.1 real):
+ * select().eq().eq().eq().eq().not().order().limit().maybeSingle()
+ */
+function makeWindowChain({ data = { provider_timestamp: OPEN_INBOUND_ISO }, error = null, rejectWith = null } = {}) {
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq:     vi.fn().mockReturnThis(),
+    not:    vi.fn().mockReturnThis(),
+    order:  vi.fn().mockReturnThis(),
+    limit:  vi.fn().mockReturnThis(),
+  };
+  chain.maybeSingle = rejectWith
+    ? vi.fn().mockRejectedValue(rejectWith)
+    : vi.fn().mockResolvedValue({ data, error });
+  return chain;
+}
+
+function openWindowChain() {
+  return makeWindowChain();
+}
+
 /** Chain para meta_whatsapp_messages ou meta_messages: insert() */
 function makeInsertChain(error = null) {
   return {
@@ -234,21 +265,23 @@ function setupGuardFail(status, error) {
 }
 
 /**
- * Configura happy path completo (MVP3D):
- * guard + instance + conversation + credential + decrypt + send + insert×2
+ * Configura happy path completo (MVP3D + B2.2):
+ * guard + instance + conversation + inbound window + credential + decrypt + send + insert×2
  *
  * Ordem de svc.from:
  *   1. meta_whatsapp_instances  (step 6)
  *   2. meta_conversations       (step 8)
- *   3. meta_whatsapp_credentials (step 9)
- *   4. meta_whatsapp_messages INSERT (step 12)
- *   5. meta_messages INSERT     (step 13)
+ *   3. meta_messages SELECT     (step 8.5 — último inbound)
+ *   4. meta_whatsapp_credentials (step 9)
+ *   5. meta_whatsapp_messages INSERT (step 12)
+ *   6. meta_messages INSERT     (step 13)
  */
 function setupHappyPath() {
   setupGuardOk();
   mockSvc.from = vi.fn()
     .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))    // meta_whatsapp_instances
     .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION)) // meta_conversations
+    .mockReturnValueOnce(openWindowChain())               // meta_messages inbound
     .mockReturnValueOnce(makeCredChain(FAKE_CRED))        // meta_whatsapp_credentials
     .mockReturnValueOnce(makeInsertChain())               // meta_whatsapp_messages INSERT
     .mockReturnValueOnce(makeInsertChain());              // meta_messages INSERT
@@ -669,6 +702,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(convWithPlus))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(makeInsertChain())
         .mockReturnValueOnce(makeInsertChain());
@@ -702,6 +736,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(null));
       const res = makeRes();
       await handler(makeReq(), res);
@@ -714,6 +749,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain({ access_token_enc: null }));
       const res = makeRes();
       await handler(makeReq(), res);
@@ -726,6 +762,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(null, new Error('db error')));
       const res = makeRes();
       await handler(makeReq(), res);
@@ -740,6 +777,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockImplementation(() => { throw new Error('decrypt failed'); });
       const res = makeRes();
@@ -753,6 +791,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockImplementation(() => { throw new Error('decrypt failed'); });
       const res = makeRes();
@@ -823,12 +862,13 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
     return err;
   }
 
-  /** Helper: configura instance + conversation + credential + decrypt para testes de Graph */
+  /** Helper: configura instance + conversation + inbound window + credential + decrypt para testes de Graph */
   function setupPreGraph(graphMock) {
     setupGuardOk();
     mockSvc.from = vi.fn()
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(openWindowChain())
       .mockReturnValueOnce(makeCredChain(FAKE_CRED));
     mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
     graphMock();
@@ -924,6 +964,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       const rawErr = makeGraphError('send_failed');
@@ -978,6 +1019,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(null));
       const res = makeRes();
       await handler(makeReq(), res);
@@ -1053,6 +1095,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(credChain)
         .mockReturnValueOnce(makeInsertChain())
         .mockReturnValueOnce(makeInsertChain());
@@ -1066,16 +1109,17 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       expect(instanceIdCall[1]).toBe(FAKE_INSTANCE_ID);
     });
 
-    it('ordem das tabelas no happy path: instances→conversations→credentials→tracking→chat', async () => {
+    it('ordem das tabelas no happy path: instances→conversations→inbound→credentials→tracking→chat', async () => {
       setupHappyPath();
       const res = makeRes();
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
       expect(tables[0]).toBe('meta_whatsapp_instances');
       expect(tables[1]).toBe('meta_conversations');
-      expect(tables[2]).toBe('meta_whatsapp_credentials');
-      expect(tables[3]).toBe('meta_whatsapp_messages');
-      expect(tables[4]).toBe('meta_messages');
+      expect(tables[2]).toBe('meta_messages');              // gate inbound
+      expect(tables[3]).toBe('meta_whatsapp_credentials');
+      expect(tables[4]).toBe('meta_whatsapp_messages');     // tracking INSERT
+      expect(tables[5]).toBe('meta_messages');              // chat INSERT
     });
   });
 
@@ -1093,6 +1137,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
     mockSvc.from = vi.fn()
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(openWindowChain())
       .mockReturnValueOnce(makeCredChain(FAKE_CRED))
       .mockReturnValueOnce(makeInsertChain(trackingError))   // meta_whatsapp_messages
       .mockReturnValueOnce(makeInsertChain(chatError));       // meta_messages
@@ -1162,16 +1207,21 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockRejectedValue(graphErr);
       const res = makeRes();
       await handler(makeReq(), res);
-      // Somente 3 chamadas: instances + conversations + credentials.
-      expect(mockSvc.from).toHaveBeenCalledTimes(3);
+      // 4 chamadas: instances + conversations + inbound window + credentials. Sem INSERT.
+      expect(mockSvc.from).toHaveBeenCalledTimes(4);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
-      expect(tables).not.toContain('meta_whatsapp_messages');
-      expect(tables).not.toContain('meta_messages');
+      expect(tables).toEqual([
+        'meta_whatsapp_instances',
+        'meta_conversations',
+        'meta_messages',
+        'meta_whatsapp_credentials',
+      ]);
     });
 
     it('send_timeout → sem nenhum INSERT', async () => {
@@ -1179,6 +1229,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockRejectedValue(
@@ -1188,7 +1239,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
       expect(tables).not.toContain('meta_whatsapp_messages');
-      expect(tables).not.toContain('meta_messages');
+      expect(tables.filter((t) => t === 'meta_messages')).toEqual(['meta_messages']);
     });
   });
 
@@ -1239,12 +1290,13 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(null));
       const res = makeRes();
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
       expect(tables).not.toContain('meta_whatsapp_messages');
-      expect(tables).not.toContain('meta_messages');
+      expect(tables.filter((t) => t === 'meta_messages')).toEqual(['meta_messages']);
     });
 
     it('decrypt falha → sem INSERT', async () => {
@@ -1252,6 +1304,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockImplementation(() => { throw new Error('decrypt failed'); });
       const res = makeRes();
@@ -1301,10 +1354,10 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       const res = makeRes();
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
-      // tracking deve ter sido tentado (posição 3)
-      expect(tables[3]).toBe('meta_whatsapp_messages');
-      // meta_messages deve ter sido tentado (posição 4)
-      expect(tables[4]).toBe('meta_messages');
+      // tracking deve ter sido tentado (posição 4 — após inbound window + credencial)
+      expect(tables[4]).toBe('meta_whatsapp_messages');
+      // meta_messages INSERT deve ter sido tentado (posição 5)
+      expect(tables[5]).toBe('meta_messages');
     });
 
     it('sendTextMessage é chamado exatamente 1 vez (sem retry após falha de chat)', async () => {
@@ -1330,6 +1383,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(trackingInsertChain)    // meta_whatsapp_messages
         .mockReturnValueOnce(chatInsertChain);        // meta_messages
@@ -1380,13 +1434,19 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockRejectedValue(makeGraphError('send_failed'));
       const res = makeRes();
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
-      expect(tables).not.toContain('meta_messages');
+      expect(tables).toEqual([
+        'meta_whatsapp_instances',
+        'meta_conversations',
+        'meta_messages',
+        'meta_whatsapp_credentials',
+      ]);
     });
   });
 
@@ -1397,7 +1457,8 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       await handler(makeReq(), res);
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
       expect(tables).toContain('meta_whatsapp_messages'); // tentado
-      expect(tables).not.toContain('meta_messages');       // NÃO tentado após falha
+      // Somente o SELECT do gate (não o INSERT de chat)
+      expect(tables.filter((t) => t === 'meta_messages')).toEqual(['meta_messages']);
     });
   });
 
@@ -1414,6 +1475,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(trackingInsertChain)
         .mockReturnValueOnce(makeInsertChain());
@@ -1516,6 +1578,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED));
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockRejectedValue(
@@ -1580,6 +1643,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       mockSvc.from = vi.fn()
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(makeInsertChain())
         .mockReturnValueOnce(chatInsertChain);
@@ -1592,6 +1656,481 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       expect(res._status).toBe(200);
       const args = mockUpdateConversationPreview.mock.calls[0][0];
       expect(args.providerTimestamp).toBe(capturedChatArg.provider_timestamp);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CSW: gate da janela de atendimento de 24h (MVP5.B2.2)
+  // Motor B2.1 real — sem vi.mock de resolveCustomerServiceWindow/loadLastInboundTimestamp
+  // ──────────────────────────────────────────────────────────────────────────
+
+  function isoAt(ms) {
+    return new Date(ms).toISOString();
+  }
+
+  function expectNoGraphDecryptOrPersist() {
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    const tables = mockSvc.from.mock.calls.map(([t]) => t);
+    expect(tables).not.toContain('meta_whatsapp_credentials');
+    expect(tables).not.toContain('meta_whatsapp_messages');
+  }
+
+  describe('CSW: gate da janela de 24h', () => {
+    afterEach(() => {
+      vi.spyOn(Date, 'now').mockRestore();
+    });
+
+    it('S-01: inbound recente → Graph 1x, HTTP 200, persistência e preview', async () => {
+      setupHappyPath();
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+      expect(mockDecryptMetaToken).toHaveBeenCalledTimes(1);
+      expect(mockUpdateConversationPreview).toHaveBeenCalledTimes(1);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).toContain('meta_whatsapp_messages');
+      expect(tables.filter((t) => t === 'meta_messages')).toHaveLength(2);
+    });
+
+    it('S-02: janela closed → 409 customer_service_window_closed; Graph/decrypt/INSERT não chamados', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+          .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+          .mockReturnValueOnce(makeWindowChain({
+            data: { provider_timestamp: isoAt(Date.now() - 25 * 60 * 60 * 1000) },
+          }));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+        expectNoGraphDecryptOrPersist();
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).not.toContain('customer_service_window_unproven');
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('S-03: nenhuma linha inbound → 409 unproven; Graph não chamado', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({ data: null }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('S-04: timestamp inválido → 409 unproven', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: '2026-11-12T15:00:00' },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('S-05: erro Supabase no SELECT inbound → 409 unproven, sem Graph, log sanitizado', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+          .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+          .mockReturnValueOnce(makeWindowChain({
+            data: null,
+            error: { message: 'SUPABASE_RAW_ERROR_SENTINEL' },
+          }));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+        expect(JSON.stringify(res._body)).not.toContain('SUPABASE_RAW_ERROR_SENTINEL');
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).toContain('reason=db_error');
+        expect(logged).not.toContain('SUPABASE_RAW_ERROR_SENTINEL');
+        expect(logged).not.toContain(FAKE_WA_ID);
+        expect(logged).not.toContain(FAKE_PLAIN_TOKEN);
+        expect(logged).not.toContain(FAKE_TEXT);
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('S-06: exatamente 23h59min → closed', async () => {
+      const frozenNow = Date.parse('2026-11-12T15:00:00.000Z');
+      vi.spyOn(Date, 'now').mockReturnValue(frozenNow);
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: isoAt(frozenNow - EFFECTIVE_WINDOW_MS) },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('S-07: um milissegundo antes do corte → open, relógio controlado', async () => {
+      const frozenNow = Date.parse('2026-11-12T15:00:00.000Z');
+      vi.spyOn(Date, 'now').mockReturnValue(frozenNow);
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: isoAt(frozenNow - (EFFECTIVE_WINDOW_MS - 1)) },
+        }))
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeInsertChain());
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('S-08: timestamp futuro (+30s) → unproven', async () => {
+      const frozenNow = Date.parse('2026-11-12T15:00:00.000Z');
+      vi.spyOn(Date, 'now').mockReturnValue(frozenNow);
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: isoAt(frozenNow + 30_000) },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('S-09: SELECT inbound filtra company_id, instance_id, conversation_id e direction=inbound', async () => {
+      const windowChain = openWindowChain();
+      const otherCompanyId = 'eeee0000-0000-0000-0000-000000000099';
+      setupGuardOk(FAKE_COMPANY_ID);
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(windowChain)
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeInsertChain());
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+      const res = makeRes();
+      await handler(makeReq({ body: { ...HAPPY_BODY, company_id: otherCompanyId } }), res);
+      expect(res._status).toBe(200);
+      expect(windowChain.select).toHaveBeenCalledWith('provider_timestamp');
+      expect(windowChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+      expect(windowChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+      expect(windowChain.eq).toHaveBeenCalledWith('conversation_id', FAKE_CONVERSATION_ID);
+      expect(windowChain.eq).toHaveBeenCalledWith('direction', 'inbound');
+      expect(windowChain.eq).not.toHaveBeenCalledWith('company_id', otherCompanyId);
+      expect(windowChain.not).toHaveBeenCalledWith('provider_timestamp', 'is', null);
+      expect(windowChain.order).toHaveBeenCalledWith(
+        'provider_timestamp',
+        { ascending: false, nullsFirst: false },
+      );
+      expect(windowChain.limit).toHaveBeenCalledWith(1);
+    });
+
+    it('S-10: conversa de outra empresa → 404 existente; gate e Graph não chamados', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+          .mockReturnValueOnce(makeConvChain(null));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(404);
+        expect(res._body).toEqual({ error: 'conversation_not_found' });
+        expect(loaderSpy).not.toHaveBeenCalled();
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+        const tables = mockSvc.from.mock.calls.map(([t]) => t);
+        expect(tables).not.toContain('meta_messages');
+      } finally {
+        loaderSpy.mockRestore();
+      }
+    });
+
+    it('S-11: instância de outra empresa → 404 existente; gate não chamado', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn().mockReturnValue(makeInstChain(null));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(404);
+        expect(res._body).toEqual({ error: 'instance_not_found' });
+        expect(loaderSpy).not.toHaveBeenCalled();
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+      } finally {
+        loaderSpy.mockRestore();
+      }
+    });
+
+    it('S-12: RBAC negado → sem consulta a meta_messages, sem Graph', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardFail(403, 'Permissão insuficiente para esta operação');
+        mockSvc.from = vi.fn();
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(403);
+        expect(loaderSpy).not.toHaveBeenCalled();
+        expect(mockSvc.from).not.toHaveBeenCalled();
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+      } finally {
+        loaderSpy.mockRestore();
+      }
+    });
+
+    it('S-13: closed → decryptMetaToken não chamado', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: isoAt(Date.now() - 25 * 60 * 60 * 1000) },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(409);
+      expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    });
+
+    it('S-14: closed → nenhum INSERT de tracking/chat e nenhum preview', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeWindowChain({
+          data: { provider_timestamp: isoAt(Date.now() - 25 * 60 * 60 * 1000) },
+        }));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expectNoGraphDecryptOrPersist();
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+
+    it('S-15: open + Graph send_failed → 502 provider_error, sem persistência', async () => {
+      setupPreGraph(() => mockSendTextMessage.mockRejectedValue(
+        Object.assign(new Error('fail'), { code: 'send_failed' }),
+      ));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(502);
+      expect(res._body).toEqual({ error: 'provider_error' });
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables).not.toContain('meta_whatsapp_messages');
+      expect(tables.filter((t) => t === 'meta_messages')).toEqual(['meta_messages']);
+      expect(mockUpdateConversationPreview).not.toHaveBeenCalled();
+    });
+
+    it('S-16: send-template.js não foi alterado e não aplica o gate', () => {
+      const here = dirname(fileURLToPath(import.meta.url));
+      const src = readFileSync(resolve(here, '../send-template.js'), 'utf8');
+      expect(src).not.toContain('customerServiceWindow');
+      expect(src).not.toContain('customer_service_window');
+      expect(src).not.toContain('loadLastInboundTimestamp');
+      expect(src).not.toContain('resolveCustomerServiceWindow');
+    });
+
+    it('S-17: instância desconectada → 409 instance_not_connected, sem gate', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn().mockReturnValue(
+          makeInstChain({ ...FAKE_INSTANCE, status: 'disconnected' }),
+        );
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'instance_not_connected' });
+        expect(loaderSpy).not.toHaveBeenCalled();
+      } finally {
+        loaderSpy.mockRestore();
+      }
+    });
+
+    it('S-18: body inválido → 400 invalid_request, sem gate', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn();
+        const res = makeRes();
+        await handler(makeReq({ body: { ...HAPPY_BODY, instance_id: 'not-a-uuid' } }), res);
+        expect(res._status).toBe(400);
+        expect(res._body).toEqual({ error: 'invalid_request' });
+        expect(loaderSpy).not.toHaveBeenCalled();
+        expect(mockSvc.from).not.toHaveBeenCalled();
+      } finally {
+        loaderSpy.mockRestore();
+      }
+    });
+
+    it('S-19: dois sends independentes → duas consultas ao último inbound, sem cache', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
+        .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeInsertChain());
+      mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+      mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+      const res1 = makeRes();
+      const res2 = makeRes();
+      await handler(makeReq(), res1);
+      await handler(makeReq(), res2);
+      expect(res1._status).toBe(200);
+      expect(res2._status).toBe(200);
+      const tables = mockSvc.from.mock.calls.map(([t]) => t);
+      expect(tables.filter((t) => t === 'meta_messages')).toHaveLength(4);
+      expect(tables[2]).toBe('meta_messages');
+      expect(tables[8]).toBe('meta_messages');
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('S-20: exceção inesperada no gate → 409 unproven, sem Graph', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp')
+        .mockRejectedValueOnce(new Error('unexpected boom'));
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+          .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+        expect(JSON.stringify(res._body)).not.toContain('unexpected boom');
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).toContain('reason=unexpected_gate_error');
+        expect(logged).not.toContain('unexpected boom');
+      } finally {
+        try {
+          loaderSpy.mockRestore();
+        } finally {
+          logSpy.mockRestore();
+        }
+      }
+    });
+
+    it('loaded.ok === false com invalid_client → 409 unproven, sem Graph', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        setupGuardOk();
+        const convChain = makeConvChain(FAKE_CONVERSATION);
+        convChain.maybeSingle = vi.fn().mockImplementation(async () => {
+          mockSvc.from = 123;
+          return { data: FAKE_CONVERSATION, error: null };
+        });
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+          .mockReturnValueOnce(convChain);
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).toContain('reason=invalid_client');
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('loaded.ok === false com invalid_ids → 409 unproven, sem Graph', async () => {
+      const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        setupGuardOk();
+        mockSvc.from = vi.fn()
+          .mockReturnValueOnce(makeInstChain({ ...FAKE_INSTANCE, id: 'not-a-uuid' }))
+          .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION));
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(409);
+        expect(res._body).toEqual({ error: 'customer_service_window_unproven' });
+        expect(mockSendTextMessage).not.toHaveBeenCalled();
+        const logged = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(logged).toContain('reason=invalid_ids');
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it('falha de credencial após gate aberto mantém 500 credential_unavailable', async () => {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(openWindowChain())
+        .mockReturnValueOnce(makeCredChain(null));
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'credential_unavailable' });
+      expect(mockSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('erro de persistência após Graph 2xx mantém 500 send_persistence_failed', async () => {
+      setupPreInsert({ trackingError: new Error('db error') });
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'send_persistence_failed' });
+      expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('ausência de chamada ao loader antes da validação de auth', async () => {
+      const loaderSpy = vi.spyOn(customerServiceWindow, 'loadLastInboundTimestamp');
+      try {
+        setupGuardFail(401, 'Não autenticado');
+        mockSvc.from = vi.fn();
+        const res = makeRes();
+        await handler(makeReq(), res);
+        expect(res._status).toBe(401);
+        expect(loaderSpy).not.toHaveBeenCalled();
+      } finally {
+        loaderSpy.mockRestore();
+      }
     });
   });
 });
