@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -8,7 +8,6 @@ import {
   type WelcomePopupDraft,
 } from '../../services/nuvemshopWelcomePopupApi';
 import { WelcomePopupPreview, type WelcomePopupPreviewContent } from './WelcomePopupPreview';
-import { WelcomePopupTestSection } from './WelcomePopupTestSection';
 
 const WRITE_ROLES = ['super_admin', 'system_admin', 'admin', 'manager'];
 
@@ -28,7 +27,6 @@ type DraftForm = {
   promo_consent_text: string;
   promo_consent_version: string;
   allowed_origins: string;
-  test_contacts: { email: string; phone: string }[];
 };
 
 const FIELDS: { key: keyof DraftForm; label: string; placeholder: string }[] = [
@@ -65,7 +63,6 @@ function emptyForm(): DraftForm {
     promo_consent_text: '',
     promo_consent_version: '',
     allowed_origins: '',
-    test_contacts: [],
   };
 }
 
@@ -86,14 +83,11 @@ function campaignToForm(campaign: WelcomePopupCampaign): DraftForm {
     promo_consent_text: campaign.promo_consent_text ?? '',
     promo_consent_version: campaign.promo_consent_version ?? '',
     allowed_origins: (campaign.allowed_origins ?? []).join('\n'),
-    test_contacts: campaign.test_contacts ?? [],
   };
 }
 
 function isVisibleField(value: string | null): boolean {
-  return value === 'allowed_origins'
-    || value === 'test_contacts'
-    || FIELDS.some((item) => item.key === value);
+  return value === 'allowed_origins' || FIELDS.some((item) => item.key === value);
 }
 
 function toPreview(form: DraftForm): WelcomePopupPreviewContent {
@@ -126,7 +120,6 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [field, setField] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const contactsBlocked = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +143,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
   }, [companyId, storeId, reloadKey]);
 
   async function handleSave() {
-    if (phase !== 'ready' || contactsBlocked.current) return;
+    if (phase !== 'ready') return;
     setSaving(true);
     setError(null);
     setField(null);
@@ -253,22 +246,29 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
             </div>
           )}
 
-          <WelcomePopupTestSection
-            companyId={companyId}
-            storeId={storeId}
-            canWrite={canWrite}
-            origins={form.allowed_origins}
-            contacts={form.test_contacts}
-            onOrigins={(value) => {
-              setForm((current) => ({ ...current, allowed_origins: value }));
-              setSaved(false);
-            }}
-            onContacts={(value) => {
-              setForm((current) => ({ ...current, test_contacts: value }));
-              setSaved(false);
-            }}
-            onContactsIssue={(issue) => { contactsBlocked.current = issue != null; }}
-          />
+          <div className="space-y-2 border-t border-slate-100 pt-4">
+            <label className="block text-xs font-medium text-slate-700">
+              Origens autorizadas
+              <textarea
+                aria-label="Origens autorizadas"
+                value={form.allowed_origins}
+                disabled={!canWrite || saving}
+                placeholder="https://valleron.store"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setForm((current) => ({ ...current, allowed_origins: value }));
+                  setSaved(false);
+                }}
+                className="mt-1 h-16 w-full max-w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 disabled:bg-slate-50"
+              />
+            </label>
+            {field === 'allowed_origins' && error && (
+              <span className="block text-xs font-normal text-red-600">{error}</span>
+            )}
+            <p className="text-xs text-slate-500">
+              Uma origem https por linha, sem caminho. O domínio antigo da conexão não é usado. Isso não publica o pop-up.
+            </p>
+          </div>
 
           {canWrite && (
             <button

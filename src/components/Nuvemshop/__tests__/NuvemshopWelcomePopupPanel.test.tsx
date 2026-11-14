@@ -49,8 +49,6 @@ vi.mock('../../../services/nuvemshopApi', () => ({
 vi.mock('../../../services/nuvemshopWelcomePopupApi', () => ({
   getWelcomePopup: vi.fn(),
   saveWelcomePopup: vi.fn(),
-  runWelcomePopupTest: vi.fn(),
-  clearWelcomePopupTests: vi.fn(),
 }));
 
 const COMPANY = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413';
@@ -116,17 +114,32 @@ describe('painel e prévia do pop-up', () => {
     expect(consentBoxes.length).toBe(2);
     consentBoxes.forEach((box) => expect((box as HTMLInputElement).disabled).toBe(true));
     expect(screen.queryByRole('button', { name: /ativar|publicar/i })).toBeNull();
+    expect(screen.queryByLabelText('Contatos autorizados para teste')).toBeNull();
+    expect(screen.queryByLabelText('Nome do teste')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar teste' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Limpar resultados de teste' })).toBeNull();
+    expect(screen.getByLabelText('Origens autorizadas')).toBeTruthy();
     expect(screen.getByText('Computador')).toBeTruthy();
     expect(screen.getByText('Celular')).toBeTruthy();
+    expect(screen.getAllByLabelText('WhatsApp').every((field) => (field as HTMLInputElement).disabled)).toBe(true);
 
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Olá loja' } });
+    fireEvent.change(screen.getByLabelText('Origens autorizadas'), { target: { value: 'https://valleron.store' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
 
     await waitFor(() => expect(saveWelcomePopup).toHaveBeenCalledWith(
       COMPANY,
       STORE,
-      expect.objectContaining({ enabled: false, title: 'Olá loja', description: '', coupon_code: '' }),
+      expect.objectContaining({
+        enabled: false,
+        title: 'Olá loja',
+        description: '',
+        coupon_code: '',
+        allowed_origins: 'https://valleron.store',
+      }),
     ));
+    const payload = vi.mocked(saveWelcomePopup).mock.calls[0][2];
+    expect(payload).not.toHaveProperty('test_contacts');
     expect(await screen.findByText('Rascunho salvo. O pop-up continua desativado.')).toBeTruthy();
   });
 
