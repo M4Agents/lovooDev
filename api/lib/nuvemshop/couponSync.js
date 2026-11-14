@@ -37,7 +37,8 @@ import { createNuvemshopClient }  from './nuvemshopClient.js';
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const COUPON_TYPES         = ['percentage', 'absolute', 'shipping'];
-const MAX_LIST_PER_PAGE    = 50;
+const MAX_LIST_PER_PAGE       = 50;
+export const COUPON_LOOKUP_PAGE_LIMIT = 5;
 const MAX_CODE_LENGTH      = 50;
 const MIN_CODE_LENGTH      = 3;
 const CODE_REGEX           = /^[A-Za-z0-9_-]+$/;
@@ -344,6 +345,87 @@ export async function listCoupons({ companyId, storeId, page = 1, perPage = 20, 
   const coupons = Array.isArray(raw) ? raw.map(sanitizeCoupon) : [];
 
   return { ok: true, coupons, page: safePage, perPage: safePerPage };
+}
+
+/**
+ * Localiza um cupom existente pelo código, na conexão ativa da empresa.
+ * Somente leitura: GET /coupons?q=. Não cria, altera nem apaga o cupom.
+ *
+ * @param {{
+ *   companyId: string,
+ *   storeId: string,
+ *   code: string,
+ *   correlationId?: string,
+ *   svc?: object
+ * }} params
+ * @returns {Promise<{ ok: true, coupon: object } | { ok: false, error: object }>}
+ */
+export async function findCouponByCode({ companyId, storeId, code, correlationId, svc: _svc }) {
+  const svc = _svc ?? getSupabaseAdmin();
+  const normalized = String(code ?? '').trim().toUpperCase();
+
+  let client;
+  try {
+    ({ client } = await resolveClient({ svc, companyId, storeId, correlationId }));
+  } catch (err) {
+    return { ok: false, error: err };
+  }
+
+  for (let page = 1; page <= COUPON_LOOKUP_PAGE_LIMIT; page += 1) {
+    let raw;
+    try {
+      raw = await client.get('coupons', { q: normalized, page, per_page: MAX_LIST_PER_PAGE });
+    } catch (err) {
+      return { ok: false, error: mapApiError(err) };
+    }
+
+    if (!Array.isArray(raw)) return couponSearchIncomplete();
+
+    const match = raw.find((coupon) => {
+      if (!coupon || coupon.deleted_at) return false;
+      return String(coupon.code ?? '').trim().toUpperCase() === normalized;
+    });
+
+    if (match?.valid === false) {
+      return {
+        ok: false,
+        error: {
+          code:    'coupon_inactive',
+          message: 'Este cupom existe na loja, mas está inativo.',
+          field:   'coupon_code',
+          status:  422,
+        },
+      };
+    }
+
+    if (match) return { ok: true, coupon: sanitizeCoupon(match) };
+
+    if (raw.length < MAX_LIST_PER_PAGE) {
+      return {
+        ok: false,
+        error: {
+          code:    'coupon_not_found',
+          message: 'Este código não existe na loja conectada.',
+          field:   'coupon_code',
+          status:  422,
+        },
+      };
+    }
+  }
+
+  return couponSearchIncomplete();
+}
+
+function couponSearchIncomplete() {
+  return {
+    ok: false,
+    error: {
+      code:    'coupon_search_incomplete',
+      message: 'A consulta de cupons não foi concluída. Tente novamente em instantes.',
+      field:   'coupon_code',
+      status:  503,
+    },
+  };
 }
 
 // ── Sanitização da resposta ───────────────────────────────────────────────────
