@@ -14,8 +14,12 @@ import { applySignupCommit, signupPayloadHash, toPublicSignupResult } from './we
 const MAX_BODY_BYTES = 8_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function fail(status, code, message) {
-  return { status, body: { error: message, code, coupon_revealed: false, redirect: false } };
+function fail(status, code, message, origin) {
+  return {
+    status,
+    ...(origin ? { origin } : {}),
+    body: { error: message, code, coupon_revealed: false, redirect: false },
+  };
 }
 
 export function requestOrigin(header) {
@@ -170,16 +174,18 @@ export async function handleWelcomePublic(req, db, options = {}) {
     return { status: 200, origin, body: req.method === 'GET' ? { config: publicConfig(loaded.campaign) } : { ok: true } };
   }
 
-  const raw = JSON.stringify(req.body ?? {});
-  if (Buffer.byteLength(raw) > MAX_BODY_BYTES) return fail(413, 'payload_too_large', 'Os dados enviados são grandes demais.');
-  if (req.body?.company_website) return fail(400, 'validation_error', 'Não foi possível enviar o formulário.');
-
-  const buckets = options.buckets ?? db.rateBuckets;
-  const email = normalizeWelcomeEmail(req.body?.email);
-  const phone = normalizeWelcomeMobile(req.body?.phone);
-  if (!email) return fail(400, 'validation_error', EMAIL_FORMAT_MESSAGE);
-  if (!phone) return fail(400, 'validation_error', MOBILE_FORMAT_MESSAGE);
   try {
+    const raw = JSON.stringify(req.body ?? {});
+    if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+      return fail(413, 'payload_too_large', 'Os dados enviados são grandes demais.', origin);
+    }
+    if (req.body?.company_website) return fail(400, 'validation_error', 'Não foi possível enviar o formulário.', origin);
+
+    const buckets = options.buckets ?? db.rateBuckets;
+    const email = normalizeWelcomeEmail(req.body?.email);
+    const phone = normalizeWelcomeMobile(req.body?.phone);
+    if (!email) return fail(400, 'validation_error', EMAIL_FORMAT_MESSAGE, origin);
+    if (!phone) return fail(400, 'validation_error', MOBILE_FORMAT_MESSAGE, origin);
     if (welcomeRateLimited(buckets, {
       ip: String(req.ip ?? '').trim(),
       companyId: store.companyId,
@@ -187,47 +193,47 @@ export async function handleWelcomePublic(req, db, options = {}) {
       email,
       phone,
     })) {
-      return fail(429, 'rate_limited', 'Muitas tentativas. Aguarde para tentar novamente.');
+      return fail(429, 'rate_limited', 'Muitas tentativas. Aguarde para tentar novamente.', origin);
     }
-  } catch {
-    return fail(503, 'signup_unavailable', 'O cadastro não está disponível agora.');
-  }
-  if (req.body?.coupon_consent !== true) return fail(400, 'validation_error', 'O aceite do cupom é obrigatório.');
-  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-  if (name.length < 1 || name.length > 80) return fail(400, 'validation_error', 'Informe o nome.');
-  if (!UUID_RE.test(String(req.body?.attempt_id ?? ''))) return fail(400, 'validation_error', 'Tentativa inválida.');
+    if (req.body?.coupon_consent !== true) return fail(400, 'validation_error', 'O aceite do cupom é obrigatório.', origin);
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (name.length < 1 || name.length > 80) return fail(400, 'validation_error', 'Informe o nome.', origin);
+    if (!UUID_RE.test(String(req.body?.attempt_id ?? ''))) return fail(400, 'validation_error', 'Tentativa inválida.', origin);
 
-  const host = new URL(origin).host;
-  const input = {
-    companyId: store.companyId,
-    storeId: store.storeId,
-    campaignId: loaded.campaign.id,
-    attemptId: req.body.attempt_id,
-    name,
-    email,
-    phone,
-    couponConsent: true,
-    couponConsentVersion: loaded.campaign.consent_version,
-    promoConsent: req.body?.promo_consent === true,
-    promoConsentVersion: loaded.campaign.promo_consent_version,
-    couponCode: loaded.campaign.coupon_code,
-    applyUrl: `https://${host}/discount/${encodeURIComponent(loaded.campaign.coupon_code)}?redirect_to=/`,
-    visitorId: req.body?.visitor_id || null,
-    sessionId: req.body?.session_id || null,
-    utm: req.body?.utm && typeof req.body.utm === 'object' ? req.body.utm : {},
-    phones: brMobilePhoneLookupValues(phone),
-    origin,
-  };
-  input.payloadHash = signupPayloadHash(input);
-  const committed = db.commitSignup
-    ? await db.commitSignup(input)
-    : applySignupCommit(db.signupState, input);
-  if (!committed) return fail(503, 'signup_unavailable', 'O cadastro não está disponível agora.');
-  const response = toPublicSignupResult(committed, input);
-  if (response.body?.coupon_revealed === true && committed.signup?.id) {
-    response.body.whatsapp_notice = await pendingAutomationNotice(db, committed, store.companyId);
+    const host = new URL(origin).host;
+    const input = {
+      companyId: store.companyId,
+      storeId: store.storeId,
+      campaignId: loaded.campaign.id,
+      attemptId: req.body.attempt_id,
+      name,
+      email,
+      phone,
+      couponConsent: true,
+      couponConsentVersion: loaded.campaign.consent_version,
+      promoConsent: req.body?.promo_consent === true,
+      promoConsentVersion: loaded.campaign.promo_consent_version,
+      couponCode: loaded.campaign.coupon_code,
+      applyUrl: `https://${host}/discount/${encodeURIComponent(loaded.campaign.coupon_code)}?redirect_to=/`,
+      visitorId: req.body?.visitor_id || null,
+      sessionId: req.body?.session_id || null,
+      utm: req.body?.utm && typeof req.body.utm === 'object' ? req.body.utm : {},
+      phones: brMobilePhoneLookupValues(phone),
+      origin,
+    };
+    input.payloadHash = signupPayloadHash(input);
+    const committed = db.commitSignup
+      ? await db.commitSignup(input)
+      : applySignupCommit(db.signupState, input);
+    if (!committed) return fail(503, 'signup_unavailable', 'O cadastro não está disponível agora.', origin);
+    const response = toPublicSignupResult(committed, input);
+    if (response.body?.coupon_revealed === true && committed.signup?.id) {
+      response.body.whatsapp_notice = await pendingAutomationNotice(db, committed, store.companyId);
+    }
+    return { ...response, origin };
+  } catch {
+    return fail(503, 'signup_unavailable', 'O cadastro não está disponível agora.', origin);
   }
-  return { ...response, origin };
 }
 
 async function pendingAutomationNotice(db, committed, companyId) {

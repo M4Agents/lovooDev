@@ -122,6 +122,7 @@ describe('cadastro real do pop-up', () => {
     const current = state();
     const result = await handleWelcomePublic(post(), database(current));
     expect(result.status).toBe(200);
+    expect(result.origin).toBe('https://valleron.store');
     expect(result.body.code).toBe('coupon_granted');
     expect(result.body.apply_url).toBe('https://valleron.store/discount/CUPOM10?redirect_to=/');
     expect(result.body.discount_applied).toBe(false);
@@ -370,11 +371,17 @@ describe('cadastro real do pop-up', () => {
       headers: { origin: 'https://evil.example' },
     }), database(current));
     expect(foreign.status).toBe(403);
+    expect(foreign.origin).toBeUndefined();
     expect(foreign.body.code).toBe('origin_not_allowed');
     expect(JSON.stringify(foreign.body)).not.toMatch(/ana@|11999999999|5511999999999/);
 
+    const missing = await handleWelcomePublic(post({}, { headers: {} }), database(state()));
+    expect(missing.status).toBe(403);
+    expect(missing.origin).toBeUndefined();
+
     const huge = await handleWelcomePublic(post({ name: 'A'.repeat(9000) }), database(current));
     expect(huge.status).toBe(413);
+    expect(huge.origin).toBe('https://valleron.store');
     expect(huge.body.code).toBe('payload_too_large');
     expect(current.signups).toHaveLength(0);
 
@@ -385,6 +392,7 @@ describe('cadastro real do pop-up', () => {
       email: 'loja@valleron.store',
     }), database(state(), { buckets }));
     expect(limited.status).toBe(429);
+    expect(limited.origin).toBe('https://valleron.store');
     expect(limited.body.code).toBe('rate_limited');
     expect(JSON.stringify(limited.body)).not.toMatch(/loja@|11999999999/);
     expect([...buckets.keys()].join(' ')).not.toMatch(/loja@|11999999999|5511999999999/);
@@ -396,8 +404,20 @@ describe('cadastro real do pop-up', () => {
     const empty = state();
     const unavailable = await handleWelcomePublic(post(), database(empty, { buckets: broken }));
     expect(unavailable.status).toBe(503);
+    expect(unavailable.origin).toBe('https://valleron.store');
     expect(unavailable.body.code).toBe('signup_unavailable');
     expect(empty.signups).toHaveLength(0);
+
+    const thrown = await handleWelcomePublic(post({
+      attempt_id: '55555555-5555-4555-8555-555555555558',
+      email: 'falha@valleron.store',
+    }), database(state(), {
+      commitSignup: async () => { throw new Error('rpc down'); },
+    }));
+    expect(thrown.status).toBe(503);
+    expect(thrown.origin).toBe('https://valleron.store');
+    expect(thrown.body.code).toBe('signup_unavailable');
+    expect(JSON.stringify(thrown.body)).not.toMatch(/rpc down|falha@/);
   });
 
   it('não concede de novo ao trocar só um contato e não mescla leads', async () => {
@@ -438,6 +458,8 @@ describe('cadastro real do pop-up', () => {
       email: 'ana@valleron.store',
       phone: '11977777777',
     }), database(current));
+    expect(conflict.status).toBe(409);
+    expect(conflict.origin).toBe('https://valleron.store');
     expect(conflict.body.code).toBe('identity_conflict');
     expect(conflict.body.coupon_revealed).toBe(false);
     expect(current.leads.map((lead) => lead.email)).toEqual(before.map((lead) => lead.email));
@@ -510,6 +532,7 @@ describe('cadastro real do pop-up', () => {
       query: { store_id: '7680914' },
     }, database(state()));
     expect(result.status).toBe(200);
+    expect(result.origin).toBe('https://valleron.store');
     expect(result.body.config.title).toBe('Bem-vindo');
     expect(result.body.config.coupon_code).toBeUndefined();
     expect(JSON.stringify(result.body)).not.toMatch(/CUPOM10|api_key|token/);

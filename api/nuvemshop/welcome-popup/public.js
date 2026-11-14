@@ -3,7 +3,8 @@
 //
 // A empresa vem da conexão ativa da loja. company_id do navegador é recusado.
 // Sem campanha publicada, a resposta continua 409 e não revela cupom.
-// CORS apenas ecoa uma origem já autorizada; não autentica a requisição.
+// CORS ecoa só a origem já aceita na campanha, em qualquer retorno posterior.
+// Origem ausente ou recusada não recebe eco. Vary acumula Origin sem apagar o restante.
 // =============================================================================
 
 import { getSupabaseAdmin } from '../../lib/automation/supabaseAdmin.js';
@@ -12,6 +13,20 @@ import { signupPayloadHash } from '../../lib/nuvemshop/welcomeSignup.js';
 import { publicSignupClosed } from '../../lib/nuvemshop/welcomePopupAccess.js';
 
 const buckets = new Map();
+
+function applyAuthorizedCors(res, origin) {
+  if (typeof origin !== 'string' || !origin.startsWith('https://') || origin.includes('*')) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const current = typeof res.getHeader === 'function' ? res.getHeader('Vary') : undefined;
+  const values = (current == null ? [] : (Array.isArray(current) ? current : [current]))
+    .flatMap((item) => String(item).split(','))
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!values.some((part) => part.toLowerCase() === 'origin')) values.push('Origin');
+  res.setHeader('Vary', values.join(', '));
+}
 
 function blocked(res) {
   const closed = publicSignupClosed({ enabled: false });
@@ -57,12 +72,7 @@ export default async function handler(req, res) {
 
   try {
     const result = await handleWelcomePublic(req, adapt(admin, req));
-    if (result.origin) {
-      res.setHeader('Access-Control-Allow-Origin', result.origin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Vary', 'Origin');
-    }
+    if (result.origin) applyAuthorizedCors(res, result.origin);
     return res.status(result.status).json(result.body);
   } catch {
     return res.status(503).json({
