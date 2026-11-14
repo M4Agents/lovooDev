@@ -4,7 +4,7 @@ export interface WelcomePopupCampaign {
   id: string | null;
   company_id: string;
   nuvemshop_store_id: string;
-  enabled: false;
+  enabled: boolean;
   page_rule: 'home';
   title: string | null;
   description: string | null;
@@ -26,7 +26,7 @@ export interface WelcomePopupCampaign {
 }
 
 export interface WelcomePopupDraft {
-  enabled: false;
+  enabled: boolean;
   title: string;
   description: string;
   image_url: string;
@@ -49,9 +49,10 @@ async function authToken(): Promise<string | null> {
   return session?.access_token ?? null;
 }
 
-function welcomePopupError(json: { error?: string; field?: string }, fallback: string): Error {
-  const error = new Error(json.error ?? fallback) as Error & { field?: string };
+function welcomePopupError(json: { error?: string; field?: string; code?: string }, fallback: string): Error {
+  const error = new Error(json.error ?? fallback) as Error & { field?: string; code?: string };
   if (json.field) error.field = json.field;
+  if (json.code) error.code = json.code;
   return error;
 }
 
@@ -84,7 +85,6 @@ export async function saveWelcomePopup(
       company_id: companyId,
       store_id: storeId,
       ...payload,
-      enabled: false,
     }),
   });
   const json = await res.json();

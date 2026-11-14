@@ -7,6 +7,7 @@ import {
   type WelcomePopupCampaign,
   type WelcomePopupDraft,
 } from '../../services/nuvemshopWelcomePopupApi';
+import { NuvemshopWelcomeActivationControl } from './NuvemshopWelcomeActivationControl';
 import { WelcomePopupPreview, type WelcomePopupPreviewContent } from './WelcomePopupPreview';
 
 const WRITE_ROLES = ['super_admin', 'system_admin', 'admin', 'manager'];
@@ -120,6 +121,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [field, setField] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [activate, setActivate] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +133,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
       .then((campaign) => {
         if (cancelled) return;
         setForm(campaignToForm(campaign));
+        setActivate(campaign.enabled === true);
         setHasStoredDraft(campaign.id != null);
         setPhase('ready');
       })
@@ -148,13 +151,17 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
     setError(null);
     setField(null);
     setSaved(false);
-    const payload: WelcomePopupDraft = { ...form, enabled: false };
+    const payload: WelcomePopupDraft = { ...form, enabled: activate };
     try {
       const campaign = await saveWelcomePopup(companyId, storeId, payload);
       setForm(campaignToForm(campaign));
+      setActivate(campaign.enabled === true);
       setHasStoredDraft(campaign.id != null);
       setSaved(true);
     } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'publication_database_blocked') {
+        setActivate(false);
+      }
       setError(err instanceof Error ? err.message : 'Erro ao salvar o rascunho.');
       if (err && typeof err === 'object' && 'field' in err) {
         const value = (err as { field?: unknown }).field;
@@ -174,7 +181,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
       </div>
       <p className="text-xs leading-relaxed text-slate-500">
         O visitante ainda não vê este formulário. O rascunho pode ser salvo incompleto.
-        O que estiver preenchido é validado. A ativação fica bloqueada até o formulário público existir.
+        O que estiver preenchido é validado. A publicação continua bloqueada pelo banco.
       </p>
 
       {phase === 'loading' && (
@@ -228,6 +235,14 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
             <p className="text-xs text-slate-500">Nenhum rascunho salvo para esta loja.</p>
           )}
           <p className="text-xs text-slate-500">Página: somente a inicial. O visitante ainda não envia este formulário.</p>
+          <NuvemshopWelcomeActivationControl
+            enabled={activate}
+            disabled={!canWrite || saving}
+            onChange={(enabled) => {
+              setActivate(enabled);
+              setSaved(false);
+            }}
+          />
 
           {!canWrite && (
             <p className="text-xs text-slate-500">Somente administradores e gerentes podem salvar esta configuração.</p>

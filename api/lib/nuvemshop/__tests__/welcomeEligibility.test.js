@@ -67,14 +67,24 @@ describe('endpoint público', () => {
     }).code).toBe('publication_blocked');
   });
 
-  it('não abre cadastro real mesmo com a configuração completa', () => {
+  it('abre o portão somente com a publicação completa', () => {
     expect(publicSignupClosed({
       enabled: true,
+      title: 'Bem-vindo',
+      button_label: 'Quero',
       allowed_origins: ['https://valleron.store'],
       consent_text: 'Aceito',
       consent_version: '2026-11',
       coupon_code: 'BEMVINDO10',
-    }).code).toBe('public_registration_unavailable');
+    })).toBeNull();
+    expect(publicSignupClosed({
+      enabled: true,
+      button_label: 'Quero',
+      allowed_origins: ['https://valleron.store'],
+      consent_text: 'Aceito',
+      consent_version: '2026-11',
+      coupon_code: 'BEMVINDO10',
+    }).code).toBe('publication_blocked');
   });
 });
 

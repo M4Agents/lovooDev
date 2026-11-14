@@ -2,8 +2,9 @@
 // GET  /api/nuvemshop/welcome-popup?company_id=&store_id=
 // PUT  /api/nuvemshop/welcome-popup
 //
-// Configuração por loja do pop-up de boas-vindas. Nesta etapa só existe
-// rascunho: enabled=true responde 409 e nenhuma linha é publicada.
+// Configuração por loja do pop-up de boas-vindas.
+// Ativar valida a configuração. Enquanto o banco recusar enabled=true,
+// a resposta é publication_database_blocked e a campanha permanece desligada.
 //
 // Segurança:
 //   - JWT obrigatório
@@ -16,7 +17,6 @@
 import { getSupabaseAdmin } from '../lib/automation/supabaseAdmin.js';
 import { validateNuvemshopCaller, ALLOWED_ROLES } from '../lib/nuvemshop/validateNuvemshopCaller.js';
 import {
-  activationRequested,
   assertWelcomeScope,
   getWelcomeCampaign,
   saveWelcomeCampaign,
@@ -49,14 +49,6 @@ export default async function handler(req, res) {
     roles: req.method === 'PUT' ? WELCOME_WRITE_ROLES : ALLOWED_ROLES,
   });
   if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
-
-  if (req.method === 'PUT' && activationRequested(req.body?.enabled)) {
-    return res.status(409).json({
-      error: 'O pop-up ainda não pode ser publicado. O formulário público não está disponível.',
-      code: 'publication_blocked',
-      field: 'enabled',
-    });
-  }
 
   const result = req.method === 'GET'
     ? await getWelcomeCampaign({ svc, companyId: scope.companyId, storeId: scope.storeId })

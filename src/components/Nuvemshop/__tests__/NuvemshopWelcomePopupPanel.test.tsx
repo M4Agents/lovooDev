@@ -104,12 +104,13 @@ describe('painel e prévia do pop-up', () => {
     vi.clearAllMocks();
   });
 
-  it('mostra o estado não publicado e salva rascunho sem controle de ativação', async () => {
+  it('mostra o bloqueio do banco e salva o rascunho desligado', async () => {
     render(<NuvemshopWelcomePopupPanel companyId={COMPANY} storeId={STORE} />);
 
     expect(await screen.findByText('Em configuração — ainda não publicado')).toBeTruthy();
-    expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByRole('checkbox', { name: /ativar|publicar/i })).toBeNull();
+    expect(screen.getByText(/O banco ainda impede a publicação/)).toBeTruthy();
+    const activation = screen.getByRole('switch', { name: 'Ativar pop-up' }) as HTMLInputElement;
+    expect(activation.checked).toBe(false);
     const consentBoxes = screen.getAllByRole('checkbox', { name: 'Aceite para receber o cupom' });
     expect(consentBoxes.length).toBe(2);
     consentBoxes.forEach((box) => expect((box as HTMLInputElement).disabled).toBe(true));
@@ -141,6 +142,25 @@ describe('painel e prévia do pop-up', () => {
     const payload = vi.mocked(saveWelcomePopup).mock.calls[0][2];
     expect(payload).not.toHaveProperty('test_contacts');
     expect(await screen.findByText('Rascunho salvo. O pop-up continua desativado.')).toBeTruthy();
+  });
+
+  it('desliga o controle quando o banco recusa a ativação', async () => {
+    const blocked = new Error('O banco ainda impede a publicação. A campanha não foi ativada.') as Error & { code?: string };
+    blocked.code = 'publication_database_blocked';
+    vi.mocked(saveWelcomePopup).mockRejectedValueOnce(blocked);
+    render(<NuvemshopWelcomePopupPanel companyId={COMPANY} storeId={STORE} />);
+
+    const activation = await screen.findByRole('switch', { name: 'Ativar pop-up' }) as HTMLInputElement;
+    fireEvent.click(activation);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(saveWelcomePopup).toHaveBeenCalledWith(
+      COMPANY,
+      STORE,
+      expect.objectContaining({ enabled: true }),
+    ));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/não foi ativada/);
+    expect((screen.getByRole('switch', { name: 'Ativar pop-up' }) as HTMLInputElement).checked).toBe(false);
   });
 
   it('não abre o formulário quando a leitura falha e distingue o rascunho inexistente', async () => {

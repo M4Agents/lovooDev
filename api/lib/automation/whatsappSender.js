@@ -228,7 +228,7 @@ const OPPORTUNITY_STATUS_LABELS = {
   lost:   'Perdida',
 }
 
-function replaceVariables(message, lead, opportunity, contextVariables) {
+export function replaceVariables(message, lead, opportunity, contextVariables) {
   if (!message) return ''
   let result = message
   const now = new Date()

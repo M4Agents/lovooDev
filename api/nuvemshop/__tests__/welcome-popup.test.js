@@ -120,15 +120,23 @@ describe('API autenticada do pop-up', () => {
     expect(WELCOME_WRITE_ROLES).not.toContain('seller');
   });
 
-  it('bloqueia ativação mesmo para quem pode gravar', async () => {
+  it('devolve o bloqueio do banco quando a gravação ligada é recusada', async () => {
+    saveWelcomeCampaign.mockResolvedValue({
+      ok: false,
+      error: {
+        status: 409,
+        code: 'publication_database_blocked',
+        message: 'O banco ainda impede a publicação. A campanha não foi ativada.',
+      },
+    });
     const blocked = response();
     await handler(request('PUT', {
-      body: { company_id: COMPANY_A, store_id: STORE, enabled: 'true', title: 'Agora' },
+      body: { company_id: COMPANY_A, store_id: STORE, enabled: true, title: 'Agora' },
     }), blocked);
 
     expect(blocked.statusCode).toBe(409);
-    expect(blocked.body.code).toBe('publication_blocked');
-    expect(saveWelcomeCampaign).not.toHaveBeenCalled();
+    expect(blocked.body.code).toBe('publication_database_blocked');
+    expect(saveWelcomeCampaign).toHaveBeenCalled();
   });
 
   it('grava o rascunho na empresa e na loja autenticadas', async () => {

@@ -3,7 +3,9 @@
 //
 // company_id e store_id vêm do caller já autenticado.
 // A loja precisa ser a conexão ativa daquela empresa.
-// enabled permanece false. Cupom preenchido é só consultado (GET).
+// Cupom preenchido é só consultado (GET).
+// enabled=true só é gravado com a configuração completa.
+// Enquanto chk_nv_welcome_unpublished existir, o banco recusa e nada fica ativo.
 //
 // Publicar este módulo só depois da migration aditiva 20261114130000.
 // Sem as colunas novas, a leitura responde recurso indisponível e
@@ -26,6 +28,7 @@ export {
 
 const CAMPAIGN_COLUMNS = [
   'id',
+  'enabled',
   'title',
   'description',
   'button_label',
@@ -71,7 +74,19 @@ function missingCampaignShape(error) {
   return false;
 }
 
+function publicationBlockedByDatabase(error) {
+  const message = `${error?.message ?? ''} ${error?.details ?? ''}`;
+  return error?.code === '23514' && message.includes('chk_nv_welcome_unpublished');
+}
+
 function campaignStoreError(error, fallbackMessage) {
+  if (publicationBlockedByDatabase(error)) {
+    return fail(
+      409,
+      'publication_database_blocked',
+      'O banco ainda impede a publicação. A campanha não foi ativada. O painel não consegue ligar o pop-up enquanto a restrição enabled = false existir.',
+    );
+  }
   if (missingCampaignShape(error)) {
     return fail(503, 'resource_unavailable', UNAVAILABLE);
   }
@@ -153,7 +168,6 @@ export async function saveWelcomeCampaign({
 
   const write = {
     ...mergeWelcomeDraft(existing.data, draft.value),
-    enabled: false,
     page_rule: 'home',
     updated_by: userId ?? null,
   };

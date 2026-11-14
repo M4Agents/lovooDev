@@ -278,6 +278,51 @@ const NS_VARS_CHECKOUT: Variable[] = [
   },
 ]
 
+const NS_VARS_POPUP: Variable[] = [
+  {
+    key:         'nuvemshop.coupon_code',
+    label:       'Código do cupom (NS)',
+    category:    'nuvemshop',
+    description: 'Código do cupom entregue no cadastro do pop-up',
+  },
+  {
+    key:         'nuvemshop.coupon_url',
+    label:       'Link do cupom (NS)',
+    category:    'nuvemshop',
+    description: 'Link para o visitante aplicar o cupom na loja',
+  },
+  {
+    key:         'nuvemshop.store_id',
+    label:       'ID da Loja (NS)',
+    category:    'nuvemshop',
+    description: 'Identificador da loja Nuvemshop vinculada',
+  },
+  {
+    key:         'nuvemshop.coupon_consent',
+    label:       'Consentimento do cupom (NS)',
+    category:    'nuvemshop',
+    description: 'Aceite separado para receber o cupom',
+  },
+  {
+    key:         'nuvemshop.coupon_consent_version',
+    label:       'Versão do consentimento do cupom (NS)',
+    category:    'nuvemshop',
+    description: 'Versão do texto aceito para o cupom',
+  },
+  {
+    key:         'nuvemshop.promo_consent',
+    label:       'Consentimento promocional (NS)',
+    category:    'nuvemshop',
+    description: 'Aceite separado e opcional para mensagens promocionais',
+  },
+  {
+    key:         'nuvemshop.promo_consent_version',
+    label:       'Versão do consentimento promocional (NS)',
+    category:    'nuvemshop',
+    description: 'Versão do texto promocional, quando aceito',
+  },
+]
+
 const NS_VARS_ORDER: Variable[] = [
   {
     key:         'nuvemshop.order_id',
@@ -351,6 +396,10 @@ export function getNuvemshopVariables(activeTriggerType?: string): Variable[] {
       ...NS_VARS_ORDER,
       ...NS_VARS_FULFILLMENT,
     ]
+  }
+
+  if (activeTriggerType === 'nuvemshop.popup_signup') {
+    return NS_VARS_POPUP
   }
 
   // checkout_abandoned → customer_id, store_id, checkout_id, cart_total

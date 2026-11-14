@@ -186,6 +186,7 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
     { value: 'opportunity.lost', label: '😔 Oportunidade Perdida' },
     { value: 'opportunity.owner_assigned', label: '👤 Vendedor Atribuído' },
     { value: 'opportunity.owner_removed', label: '👤 Vendedor Removido' },
+    { value: 'nuvemshop.popup_signup', label: '🎁 NS: Cadastro no pop-up' },
     { value: 'nuvemshop.checkout_abandoned', label: '🛒 NS: Carrinho Abandonado' },
     { value: 'nuvemshop.order_created',      label: '📦 NS: Pedido Criado' },
     { value: 'nuvemshop.order_paid',         label: '💳 NS: Pedido Pago' },
@@ -1055,6 +1056,28 @@ export default function TriggerConfigPanel({ selectedNode, onClose, onSave }: Tr
           {config.triggerType === 'opportunity.owner_removed' && renderOpportunityOwnerRemovedConfig()}
 
           {/* Gatilhos Nuvemshop */}
+          {config.triggerType === 'nuvemshop.popup_signup' && (
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Loja (opcional)
+                <input
+                  value={config.storeId ?? ''}
+                  placeholder="Todas as lojas"
+                  onChange={(e) => setConfig({ ...config, storeId: e.target.value || undefined })}
+                  className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                />
+              </label>
+              <label className="block text-sm font-medium text-gray-700">
+                Campanha (opcional)
+                <input
+                  value={config.campaignId ?? ''}
+                  placeholder="Todas as campanhas"
+                  onChange={(e) => setConfig({ ...config, campaignId: e.target.value || undefined })}
+                  className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                />
+              </label>
+            </div>
+          )}
           {config.triggerType === 'nuvemshop.checkout_abandoned' && (
             <div className="space-y-3">
               <div>

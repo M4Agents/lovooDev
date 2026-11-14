@@ -25,6 +25,14 @@ function memory(seed = {}) {
     return null;
   }
 
+  function unpublishedBlock(patch) {
+    if (!seed.blockUnpublished || patch?.enabled !== true) return null;
+    return {
+      code: '23514',
+      message: 'new row for relation "nuvemshop_welcome_campaigns" violates check constraint "chk_nv_welcome_unpublished"',
+    };
+  }
+
   function from(table) {
     const filters = [];
     const api = {
@@ -44,6 +52,8 @@ function memory(seed = {}) {
           select() {
             return {
               single: async () => {
+                const blocked = unpublishedBlock(patch);
+                if (blocked) return { data: null, error: blocked };
                 const rows = matched(table, updateFilters);
                 if (rows.length !== 1) return { data: null, error: { message: 'muitas linhas' } };
                 Object.assign(rows[0], patch, { updated_at: '2026-11-14T13:00:00.000Z' });
@@ -60,10 +70,16 @@ function memory(seed = {}) {
           updated_at: '2026-11-14T13:00:00.000Z',
           ...row,
         };
-        tables[table].push(stored);
+        const blocked = unpublishedBlock(row);
         return {
           select() {
-            return { single: async () => ({ data: { ...stored }, error: null }) };
+            return {
+              single: async () => {
+                if (blocked) return { data: null, error: blocked };
+                tables[table].push(stored);
+                return { data: { ...stored }, error: null };
+              },
+            };
           },
         };
       },
@@ -133,7 +149,7 @@ describe('configuração do pop-up por loja', () => {
     expect(findCoupon).not.toHaveBeenCalled();
   });
 
-  it('recusa enabled verdadeiro antes de gravar ou consultar cupom', async () => {
+  it('recusa ativação incompleta antes de gravar ou consultar cupom', async () => {
     const db = memory({ connections: [connected(COMPANY_A)] });
     const findCoupon = vi.fn();
     const saved = await saveWelcomeCampaign({
@@ -146,10 +162,66 @@ describe('configuração do pop-up por loja', () => {
     });
 
     expect(saved.ok).toBe(false);
-    expect(saved.error.status).toBe(409);
-    expect(saved.error.code).toBe('publication_blocked');
+    expect(saved.error.status).toBe(400);
+    expect(saved.error.code).toBe('validation_error');
     expect(findCoupon).not.toHaveBeenCalled();
     expect(db.tables.nuvemshop_welcome_campaigns).toHaveLength(0);
+  });
+
+  const completeEnable = {
+    enabled: true,
+    title: 'Bem-vindo',
+    button_label: 'Quero',
+    coupon_code: 'CUPOM10',
+    consent_text: 'Aceito receber o cupom',
+    consent_version: '2026-11',
+    allowed_origins: ['https://valleron.store'],
+  };
+
+  it('mostra o bloqueio do banco e não deixa a campanha ativa', async () => {
+    const db = memory({
+      connections: [connected(COMPANY_A)],
+      campaigns: [{
+        id: 'draft-1',
+        company_id: COMPANY_A,
+        nuvemshop_store_id: STORE,
+        enabled: false,
+        title: 'Rascunho',
+      }],
+      blockUnpublished: true,
+    });
+    const findCoupon = vi.fn(async () => ({ ok: true }));
+    const saved = await saveWelcomeCampaign({
+      svc: db,
+      companyId: COMPANY_A,
+      storeId: STORE,
+      userId: 'user-1',
+      payload: completeEnable,
+      findCoupon,
+    });
+
+    expect(saved.ok).toBe(false);
+    expect(saved.error).toMatchObject({ status: 409, code: 'publication_database_blocked' });
+    expect(saved.error.message).toMatch(/não foi ativada/);
+    expect(findCoupon).toHaveBeenCalledTimes(1);
+    expect(db.tables.nuvemshop_welcome_campaigns[0].enabled).toBe(false);
+  });
+
+  it('grava enabled verdadeiro só quando a configuração está completa e o banco aceita', async () => {
+    const db = memory({ connections: [connected(COMPANY_A)] });
+    const findCoupon = vi.fn(async () => ({ ok: true }));
+    const saved = await saveWelcomeCampaign({
+      svc: db,
+      companyId: COMPANY_A,
+      storeId: STORE,
+      userId: 'user-1',
+      payload: completeEnable,
+      findCoupon,
+    });
+
+    expect(saved.ok).toBe(true);
+    expect(saved.campaign.enabled).toBe(true);
+    expect(db.tables.nuvemshop_welcome_campaigns[0].enabled).toBe(true);
   });
 
   it('valida valor preenchido e não grava cor ou cupom inválidos', async () => {

@@ -316,6 +316,7 @@ export type TriggerType =
   | 'manual.execution'
   | 'schedule.time'
   // Nuvemshop — visíveis apenas para empresas com integração (active ou disconnected)
+  | 'nuvemshop.popup_signup'
   | 'nuvemshop.checkout_abandoned'
   | 'nuvemshop.order_created'
   | 'nuvemshop.order_paid'

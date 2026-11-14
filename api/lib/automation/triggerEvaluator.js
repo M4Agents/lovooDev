@@ -32,6 +32,7 @@ function matchesTriggerConditions(flow, event) {
       case 'tag.removed':               return matchesTag(trigger, event.data)
       case 'message.received':          return matchesMessageReceived(trigger, event.data)
       // Nuvemshop — cases explícitos para auditabilidade e filtros futuros
+      case 'nuvemshop.popup_signup':       return matchesNuvemshopPopupSignup(trigger, event.data)
       case 'nuvemshop.checkout_abandoned': return matchesNuvemshopCheckoutAbandoned(trigger, event.data)
       case 'nuvemshop.order_created':
       case 'nuvemshop.order_paid':
@@ -280,6 +281,13 @@ function matchesCalendarActivity(trigger, eventData) {
 }
 
 // nuvemshop.checkout_abandoned — filtro opcional por valor mínimo do carrinho
+function matchesNuvemshopPopupSignup(trigger, eventData) {
+  const config = trigger.config || {}
+  if (config.storeId && String(config.storeId) !== String(eventData?.store_id ?? '')) return false
+  if (config.campaignId && String(config.campaignId) !== String(eventData?.campaign_id ?? '')) return false
+  return true
+}
+
 function matchesNuvemshopCheckoutAbandoned(trigger, eventData) {
   const config = trigger.config || {}
   if (config.minCartTotal && Number(eventData?.cart_total) < Number(config.minCartTotal)) return false
@@ -297,6 +305,7 @@ export {
   matchesOpportunityOwner,
   matchesTag,
   matchesMessageReceived,
+  matchesNuvemshopPopupSignup,
   matchesNuvemshopCheckoutAbandoned,
   matchesCalendarActivity,
   normalizeText,

@@ -222,6 +222,13 @@ const NUVEMSHOP_CATEGORY: TriggerCategory = {
   icon: '🛒',
   triggers: [
     {
+      type: 'nuvemshop.popup_signup',
+      label: 'Cadastro no pop-up da Nuvemshop',
+      description: 'Dispara depois que o pop-up concede o cupom configurado da loja',
+      icon: ShoppingCart,
+      color: 'orange',
+    },
+    {
       type: 'nuvemshop.checkout_abandoned',
       label: 'Carrinho Abandonado',
       description: 'Dispara quando um cliente abandona o carrinho na loja Nuvemshop',

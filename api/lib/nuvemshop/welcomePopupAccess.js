@@ -108,29 +108,28 @@ export function normalizeTestContacts(value) {
   return { ok: true, value: contacts };
 }
 
+function filled(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export function publicationBlockers(campaign) {
   const missing = [];
   if (campaign?.enabled !== true) missing.push('enabled');
+  if (!filled(campaign?.title)) missing.push('title');
+  if (!filled(campaign?.button_label)) missing.push('button_label');
   if (!Array.isArray(campaign?.allowed_origins) || campaign.allowed_origins.length === 0) {
     missing.push('allowed_origins');
   }
-  if (!campaign?.consent_text || !campaign?.consent_version) missing.push('consent');
+  if (!filled(campaign?.consent_text) || !filled(campaign?.consent_version)) missing.push('consent');
   if (!campaign?.coupon_code) missing.push('coupon_code');
   return missing;
 }
 
 export function publicSignupClosed(campaign) {
-  const missing = publicationBlockers(campaign);
-  if (missing.includes('enabled') || missing.length > 0) {
-    return {
-      status: 409,
-      code: 'publication_blocked',
-      message: 'O pop-up ainda não pode ser publicado. O formulário público não está disponível.',
-    };
-  }
+  if (publicationBlockers(campaign).length === 0) return null;
   return {
     status: 409,
-    code: 'public_registration_unavailable',
-    message: 'O cadastro público ainda não está disponível.',
+    code: 'publication_blocked',
+    message: 'O pop-up ainda não pode ser publicado. O formulário público não está disponível.',
   };
 }

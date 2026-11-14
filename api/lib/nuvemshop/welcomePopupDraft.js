@@ -2,7 +2,9 @@
 // welcomePopupDraft — validação do rascunho do pop-up de boas-vindas
 //
 // Rascunho incompleto é válido. Valor preenchido é validado.
-// enabled=true é recusado enquanto o formulário público não existe.
+// Ativar exige título, botão, cupom, consentimento e uma origem.
+// O consentimento promocional continua opcional.
+// O CHECK enabled=false do banco ainda recusa a gravação ligada.
 // O company_id da linha nunca vem deste objeto.
 // =============================================================================
 
@@ -159,14 +161,7 @@ export function normalizeWelcomeDraft(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return fail(400, 'validation_error', 'Corpo inválido.');
   }
-  if (activationRequested(input.enabled)) {
-    return fail(
-      409,
-      'publication_blocked',
-      'O pop-up ainda não pode ser publicado. O formulário público não está disponível.',
-      'enabled',
-    );
-  }
+  const activating = activationRequested(input.enabled);
   if (
     input.page_rule !== undefined
     && input.page_rule !== null
@@ -204,10 +199,30 @@ export function normalizeWelcomeDraft(input) {
     background, textColor, buttonColor, couponCode, delaySeconds, resurfaceDays,
   ] = fields;
 
+  if (activating) {
+    const gaps = [
+      ['title', title.value],
+      ['button_label', buttonLabel.value],
+      ['coupon_code', couponCode.value],
+      ['consent_text', consentText.value],
+      ['consent_version', consentVersion.value],
+      ['allowed_origins', origins.value?.length ? origins.value : null],
+    ];
+    const missing = gaps.find(([, value]) => value == null || value === '');
+    if (missing) {
+      return fail(
+        400,
+        'validation_error',
+        'Para ativar, preencha título, botão, cupom, texto e versão do consentimento e uma origem autorizada.',
+        missing[0],
+      );
+    }
+  }
+
   return {
     ok: true,
     value: {
-      enabled: false,
+      enabled: activating,
       page_rule: 'home',
       title: title.value,
       description: description.value,
@@ -234,7 +249,7 @@ export function toPublicCampaign(row, companyId, storeId) {
     id: row?.id ?? null,
     company_id: companyId,
     nuvemshop_store_id: storeId,
-    enabled: false,
+    enabled: row?.enabled === true,
     page_rule: 'home',
     updated_at: row?.updated_at ?? null,
   };
@@ -249,7 +264,7 @@ export function toPublicCampaign(row, companyId, storeId) {
 }
 
 export function mergeWelcomeDraft(existing, draft) {
-  const merged = { enabled: false, page_rule: 'home' };
+  const merged = { enabled: draft.enabled === true, page_rule: 'home' };
   for (const field of WELCOME_DRAFT_FIELDS) {
     if (field === 'allowed_origins' || field === 'test_contacts') {
       const value = draft[field] === undefined ? existing?.[field] : draft[field];

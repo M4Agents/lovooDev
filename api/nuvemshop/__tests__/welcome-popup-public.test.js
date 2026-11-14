@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../lib/automation/supabaseAdmin.js', () => ({
+  getSupabaseAdmin: () => {
+    throw new Error('sem cliente nesta prova');
+  },
+}));
+
 import handler from '../welcome-popup/public.js';
 
 function response() {
