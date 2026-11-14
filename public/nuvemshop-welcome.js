@@ -4,7 +4,8 @@ Substituição futura da prova carregada pelo GTM. Esta entrega não altera a ta
 Quando a publicação for autorizada:
 1. Publicar este arquivo no projeto loovocrm, remoto production (M4Agents/loovocrm).
 2. No GTM, substituir o script da prova (nuvemshop-welcome-proof.js, lovoo_popup_test=1)
-   por este arquivo, na home, com data-store-id da loja.
+   por este arquivo, na home. A loja e o endpoint vêm dos atributos data-*
+   ou, se o GTM não copiar atributos, da query do src deste arquivo.
 3. Remover o parâmetro lovoo_popup_test=1.
 4. Não alterar m4track, Cashing, a tag em revisão #12661 nem a atribuição de checkout #9213.
 5. Aplicar antes a migration de habilitação e ligar a campanha no painel.
@@ -16,12 +17,39 @@ somente se já existirem.
 (function () {
   'use strict';
 
-  var script = document.currentScript || document.querySelector('script[data-lovoo-welcome]');
-  var storeId = script && script.getAttribute('data-store-id');
-  var endpoint = (script && script.getAttribute('data-endpoint')) || '/api/nuvemshop/welcome-popup/public';
+  var script = welcomeScript();
+  var params = scriptParams(script);
+  var storeId = (script && script.getAttribute('data-store-id')) || (params && params.get('store_id')) || '';
+  var rawEndpoint = (script && script.getAttribute('data-endpoint')) || (params && params.get('endpoint')) || '';
+  var endpoint = rawEndpoint ? validEndpoint(rawEndpoint) : '/api/nuvemshop/welcome-popup/public';
   var startedAt = Date.now();
-  if (!storeId || !/^\d+$/.test(storeId)) return;
+  if (!/^\d+$/.test(storeId) || !endpoint) return;
   if (location.pathname !== '/' && location.pathname !== '') return;
+
+  function welcomeScript() {
+    if (document.currentScript) return document.currentScript;
+    var marked = document.querySelector('script[data-lovoo-welcome]');
+    if (marked) return marked;
+    var nodes = document.getElementsByTagName('script');
+    for (var i = nodes.length - 1; i >= 0; i -= 1) {
+      if ((nodes[i].getAttribute('src') || '').indexOf('nuvemshop-welcome.js') !== -1) return nodes[i];
+    }
+    return null;
+  }
+
+  function scriptParams(node) {
+    var src = node && node.getAttribute('src');
+    if (!src) return null;
+    try { return new URL(src, 'https://app.lovoocrm.com').searchParams; } catch (e) { return null; }
+  }
+
+  function validEndpoint(value) {
+    if (value.charAt(0) === '/' && value.charAt(1) !== '/') return value;
+    try {
+      var url = new URL(value);
+      return url.protocol === 'https:' ? url.toString() : null;
+    } catch (e) { return null; }
+  }
 
   var DDDS = {
     '11': 1, '12': 1, '13': 1, '14': 1, '15': 1, '16': 1, '17': 1, '18': 1, '19': 1,

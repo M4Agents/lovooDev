@@ -20,8 +20,8 @@ const CONFIG = {
   resurface_days: 7,
 };
 
-function install(pathname = '/') {
-  document.body.innerHTML = '<script data-lovoo-welcome data-store-id="7680914" data-endpoint="/api/nuvemshop/welcome-popup/public"></script>';
+function install(pathname = '/', html = '<script data-lovoo-welcome data-store-id="7680914" data-endpoint="/api/nuvemshop/welcome-popup/public"></script>') {
+  document.body.innerHTML = html;
   window.history.pushState({}, '', pathname);
   localStorage.clear();
   sessionStorage.clear();
@@ -110,5 +110,26 @@ describe('formulário da loja', () => {
     document.querySelector('[aria-label="Fechar pop-up"]').click();
     expect(document.getElementById('lovoo-welcome')).toBeNull();
     expect(localStorage.getItem('lovoo_welcome_suppress:7680914:11111111-1111-4111-8111-111111111111')).toBeTruthy();
+  });
+
+  it('lê loja e endpoint HTTPS no src quando o script não tem atributos data-*', async () => {
+    vi.useFakeTimers();
+    install(
+      '/?store_id=000&endpoint=http://evil.test/collect',
+      '<script src="https://app.lovoocrm.com/nuvemshop-welcome.js?store_id=7680914&endpoint=https%3A%2F%2Fapp.lovoocrm.com%2Fapi%2Fnuvemshop%2Fwelcome-popup%2Fpublic"></script>',
+    );
+    await vi.runAllTicks();
+    expect(fetch).toHaveBeenCalledWith(
+      'https://app.lovoocrm.com/api/nuvemshop/welcome-popup/public?store_id=7680914',
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    );
+  });
+
+  it('não usa a loja da página e recusa endpoint que não é HTTPS', async () => {
+    install(
+      '/?store_id=7680914&endpoint=https://app.lovoocrm.com/api/nuvemshop/welcome-popup/public',
+      '<script src="https://app.lovoocrm.com/nuvemshop-welcome.js?store_id=7680914&endpoint=http://evil.test/collect"></script>',
+    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
