@@ -97,18 +97,18 @@ export function WelcomePopupPreview({
       <div
         data-preview-modal
         style={previewModalStyle(content)}
-        className="rounded-2xl border border-slate-200 p-3 shadow-sm"
+        className="max-h-80 rounded-2xl border border-slate-200 p-2.5 shadow-sm"
       >
         {image && (
           <img
             src={image}
             alt=""
-            className="mb-3 block h-24 w-full max-w-full rounded-lg object-cover"
+            className="mb-2 block h-16 w-full max-w-full rounded-lg object-cover"
           />
         )}
-        <p className="text-base font-semibold leading-snug">{title}</p>
-        <p className="mt-1 text-sm leading-snug opacity-80">{description}</p>
-        <form className="mt-3 min-w-0 space-y-2" onSubmit={(event) => event.preventDefault()}>
+        <p className="text-sm font-semibold leading-tight">{title}</p>
+        <p className="mt-1 text-xs leading-snug opacity-80">{description}</p>
+        <form className="mt-2 min-w-0 space-y-1.5" onSubmit={(event) => event.preventDefault()}>
           <label className="block min-w-0 max-w-full text-[11px] font-medium">
             Nome
             <input aria-label="Nome" disabled className="mt-1 h-8 w-full max-w-full rounded-lg border border-black/10 bg-white/80" />

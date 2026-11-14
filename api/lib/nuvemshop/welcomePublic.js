@@ -7,8 +7,9 @@ import {
   normalizeWelcomeEmail,
   normalizeWelcomeMobile,
 } from './welcomeContact.js';
+import { matchesTriggerConditions } from '../automation/triggerEvaluator.js';
+import { flowHasCertainWhatsappSend } from './welcomeFlowNotice.js';
 import { applySignupCommit, signupPayloadHash, toPublicSignupResult } from './welcomeSignup.js';
-import { dispatchPopupSignup } from './welcomeAutomation.js';
 
 const MAX_BODY_BYTES = 8_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,6 +93,58 @@ async function loadCampaign(db, companyId, storeId) {
   return { ok: true, campaign: data };
 }
 
+export function classifyWelcomeNotice({ job, flows, signup, leadId, matches = matchesTriggerConditions }) {
+  if (!job || job.status !== 'pending' || String(job.signup_id) !== String(signup?.id)) return 'unknown';
+  if (!Array.isArray(flows)) return 'unknown';
+  try {
+    const event = {
+      type: 'nuvemshop.popup_signup',
+      data: {
+        store_id: signup.nuvemshop_store_id,
+        campaign_id: signup.campaign_id,
+        lead_id: leadId ?? signup.lead_id ?? null,
+      },
+    };
+    const matched = flows.filter((flow) => (
+      flow.is_active !== false
+      && flow.is_over_plan !== true
+      && matches(flow, event)
+    ));
+    if (matched.length === 0) return 'none';
+    return matched.some((flow) => flowHasCertainWhatsappSend(flow)) ? 'scheduled' : 'none';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function readPendingWelcomeJob(db, signupId) {
+  if (db.signupState) {
+    return (db.signupState.jobs ?? []).find((job) => (
+      job.signup_id === signupId && job.status === 'pending'
+    )) ?? null;
+  }
+  const { data, error } = await db
+    .from('nuvemshop_welcome_automation_jobs')
+    .select('id, signup_id, grant_id, status')
+    .eq('signup_id', signupId)
+    .eq('status', 'pending')
+    .maybeSingle();
+  if (error) return { error: true };
+  return data ?? null;
+}
+
+async function readWelcomeFlows(db, companyId) {
+  if (typeof db.readWelcomeFlows === 'function') return db.readWelcomeFlows(companyId);
+  if (Array.isArray(db.flows)) return db.flows;
+  const { data, error } = await db
+    .from('automation_flows')
+    .select('id, nodes, edges, trigger_operator, is_over_plan, is_active')
+    .eq('company_id', companyId)
+    .eq('is_active', true);
+  if (error) return { error: true };
+  return data ?? [];
+}
+
 export async function handleWelcomePublic(req, db, options = {}) {
   if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'OPTIONS') {
     return fail(405, 'method_not_allowed', 'Método não permitido.');
@@ -171,23 +224,25 @@ export async function handleWelcomePublic(req, db, options = {}) {
     : applySignupCommit(db.signupState, input);
   if (!committed) return fail(503, 'signup_unavailable', 'O cadastro não está disponível agora.');
   const response = toPublicSignupResult(committed, input);
-  if (committed.ok && committed.grantCreated) {
-    try {
-      const automation = db.dispatch
-        ? db.dispatch(committed)
-        : dispatchPopupSignup({
-            companyId: store.companyId,
-            signup: committed.signup,
-            grant: committed.grant,
-            leadId: committed.leadId,
-            flows: db.flows ?? [],
-            claims: db.claims ?? new Map(),
-            startExecution: db.startExecution ?? (async () => ({ id: null })),
-          });
-      await automation;
-    } catch {
-      // A concessão e o trabalho pendente já foram gravados. O cron retoma.
-    }
+  if (response.body?.coupon_revealed === true && committed.signup?.id) {
+    response.body.whatsapp_notice = await pendingAutomationNotice(db, committed, store.companyId);
   }
   return { ...response, origin };
+}
+
+async function pendingAutomationNotice(db, committed, companyId) {
+  try {
+    const job = await readPendingWelcomeJob(db, committed.signup.id);
+    if (!job || job.error) return 'unknown';
+    const flows = await readWelcomeFlows(db, companyId);
+    if (!flows || flows.error) return 'unknown';
+    return classifyWelcomeNotice({
+      job,
+      flows,
+      signup: committed.signup,
+      leadId: committed.leadId,
+    });
+  } catch {
+    return 'unknown';
+  }
 }

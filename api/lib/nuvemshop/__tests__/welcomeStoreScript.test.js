@@ -59,13 +59,13 @@ describe('formulário da loja', () => {
     await vi.advanceTimersByTimeAsync(10000);
     const dialog = document.getElementById('lovoo-welcome');
     expect(dialog).not.toBeNull();
-    expect(dialog.style.overflow).toBe('hidden');
+    const css = document.getElementById('lovoo-welcome-spin').textContent;
+    expect(css).toContain('overflow:hidden');
+    expect(css).toContain('width:min(420px,100%)');
+    expect(css).toContain('#lovoo-welcome [data-mobile-row]{display:flex;gap:8px;width:100%');
     expect(dialog.textContent).toContain('+55');
-    expect(dialog.querySelector('[data-mobile-row]').style.width).toBe('100%');
     expect(dialog.querySelector('input[name="email"]').type).toBe('email');
     expect(dialog.querySelector('input[name="phone"]').getAttribute('inputmode')).toBe('numeric');
-    const card = dialog.firstElementChild;
-    expect(card.style.width.replace(/\s/g, '')).toContain('min(420px,100%)');
     expect(dialog.textContent).toContain('Aceito receber o cupom');
     expect(dialog.textContent).toContain('Aceito promoções');
     expect(dialog.querySelector('input[name="promo_consent"]').required).toBe(false);
@@ -91,14 +91,21 @@ describe('formulário da loja', () => {
     document.querySelector('input[name="name"]').value = 'Ana';
     document.querySelector('input[name="email"]').value = 'ana@valleron.store';
     document.querySelector('input[name="coupon_consent"]').checked = true;
+    const delayed = vi.spyOn(window, 'setTimeout');
     document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(document.body.textContent).toContain('CUPOM10'));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Olá, Ana!'));
+    expect(delayed.mock.calls.some((call) => call[1] === 5000)).toBe(true);
+    expect(document.querySelector('[data-coupon-code]').textContent).toBe('CUPOM10');
+    expect(document.body.textContent).toContain('Seu cupom está pronto para você utilizar.');
+    expect(document.body.textContent).toContain('Continuar comprando');
+    expect(document.body.textContent).toContain('Copiar cupom');
+    expect(document.body.textContent).not.toContain('Enviamos seu cupom pelo WhatsApp');
+    expect(document.body.textContent).not.toContain('receberá seu cupom');
+    expect(document.querySelector('[data-whatsapp-notice]')).toBeNull();
     expect(localStorage.getItem('lovoo_welcome_suppress:7680914:11111111-1111-4111-8111-111111111111')).toBeTruthy();
     expect(window.__lovooNavigate).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1200);
+    await vi.advanceTimersByTimeAsync(5000);
     expect(window.__lovooNavigate).toHaveBeenCalledWith('https://valleron.store/discount/CUPOM10?redirect_to=/');
-    expect(document.body.textContent).toContain('Aplicar cupom');
-    expect(document.body.textContent).toContain('Copiar código');
     expect(document.body.textContent).not.toContain('desconto aplicado');
   });
 
@@ -131,5 +138,106 @@ describe('formulário da loja', () => {
       '<script src="https://app.lovoocrm.com/nuvemshop-welcome.js?store_id=7680914&endpoint=http://evil.test/collect"></script>',
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  async function openForm() {
+    vi.useFakeTimers();
+    install('/');
+    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(10000);
+  }
+
+  function fillForm() {
+    document.querySelector('input[name="name"]').value = 'Ana';
+    document.querySelector('input[name="email"]').value = 'ana@valleron.store';
+    const phone = document.querySelector('input[name="phone"]');
+    phone.value = '11987654321';
+    phone.dispatchEvent(new Event('input'));
+    document.querySelector('input[name="coupon_consent"]').checked = true;
+  }
+
+  it('mostra o carregamento, bloqueia o segundo clique e preserva os campos no erro', async () => {
+    await openForm();
+    fillForm();
+    let release;
+    window.fetch = vi.fn(() => new Promise((resolve) => { release = resolve; }));
+    const form = document.querySelector('form');
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    const css = document.getElementById('lovoo-welcome-spin').textContent;
+    expect(css).toContain('100dvh');
+    expect(css).toContain('font-size:16px');
+    expect(css).toContain('min-height:44px');
+    expect(css).not.toContain('transform:scale');
+    expect(getComputedStyle(document.querySelector('input[name="name"]')).fontSize).toBe('16px');
+    expect(css).toContain('font-size:clamp(22px,6vw,26px)');
+    expect(document.querySelector('button[type="submit"]').disabled).toBe(true);
+    expect(document.querySelector('[data-loading]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Confirmando seu cadastro…');
+    expect(window.fetch).toHaveBeenCalledTimes(1);
+    release({ ok: false, json: async () => ({ error: 'Não foi possível concluir o cadastro.' }) });
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Não foi possível concluir o cadastro.'));
+    expect(document.querySelector('input[name="name"]').value).toBe('Ana');
+    expect(document.querySelector('input[name="email"]').value).toBe('ana@valleron.store');
+    expect(document.querySelector('input[name="phone"]').value).toBe('(11) 98765-4321');
+    expect(document.querySelector('button[type="submit"]').disabled).toBe(false);
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    const firstAttempt = JSON.parse(window.fetch.mock.calls[0][1].body).attempt_id;
+    const secondAttempt = JSON.parse(window.fetch.mock.calls[1][1].body).attempt_id;
+    expect(secondAttempt).toBe(firstAttempt);
+  });
+
+  it('copia o código, antecipa a compra e fala de WhatsApp só quando o estado é conhecido', async () => {
+    await openForm();
+    fillForm();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    window.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        coupon_revealed: true,
+        coupon_code: 'BEMVINDO10',
+        apply_url: 'https://valleron.store/discount/BEMVINDO10?redirect_to=/',
+        whatsapp_notice: 'scheduled',
+        discount_applied: false,
+      }),
+    }));
+    document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-coupon-code]').textContent).toBe('BEMVINDO10'));
+    expect(document.getElementById('lovoo-welcome-spin').textContent).toContain('flex-wrap:wrap');
+    expect(document.getElementById('lovoo-welcome-spin').textContent).not.toContain('transform:scale');
+    expect(document.querySelector('[data-whatsapp-notice="scheduled"]').textContent).toBe('Você também receberá seu cupom pelo WhatsApp.');
+    [...document.querySelectorAll('button')].find((button) => button.textContent === 'Copiar cupom').click();
+    expect(writeText).toHaveBeenCalledWith('BEMVINDO10');
+    document.querySelector('a').click();
+    expect(window.__lovooNavigate).toHaveBeenCalledWith('https://valleron.store/discount/BEMVINDO10?redirect_to=/');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(window.__lovooNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('trata nome e cupom como texto e omite WhatsApp sem aviso confirmado', async () => {
+    await openForm();
+    document.querySelector('input[name="name"]').value = '<img src=x onerror=alert(1)>';
+    document.querySelector('input[name="email"]').value = 'ana@valleron.store';
+    const phone = document.querySelector('input[name="phone"]');
+    phone.value = '11987654321';
+    phone.dispatchEvent(new Event('input'));
+    document.querySelector('input[name="coupon_consent"]').checked = true;
+    window.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        coupon_revealed: true,
+        coupon_code: '<b>CUPOM</b>',
+        apply_url: 'https://valleron.store/discount/CUPOM?redirect_to=/',
+        whatsapp_notice: 'sent',
+        discount_applied: false,
+      }),
+    }));
+    document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-coupon-code]').textContent).toBe('<b>CUPOM</b>'));
+    expect(document.querySelector('#lovoo-welcome-title').textContent).toBe('Olá, <img src=x onerror=alert(1)>!');
+    expect(document.querySelector('#lovoo-welcome img, #lovoo-welcome b')).toBeNull();
+    expect(document.querySelector('[data-whatsapp-notice]')).toBeNull();
+    expect(document.body.textContent).not.toContain('Enviamos seu cupom pelo WhatsApp');
   });
 });

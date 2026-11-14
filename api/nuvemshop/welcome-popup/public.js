@@ -44,24 +44,6 @@ function adapt(admin, req) {
       if (error || !data) return null;
       return data;
     },
-    async dispatch(committed) {
-      try {
-        const [{ createExecution, processFlowAsync }, { matchesTriggerConditions }, { processWelcomeAutomationJobs }] = await Promise.all([
-          import('../../lib/automation/executor.js'),
-          import('../../lib/automation/triggerEvaluator.js'),
-          import('../../lib/nuvemshop/welcomeAutomationWorker.js'),
-        ]);
-        await processWelcomeAutomationJobs({
-          supabase: admin,
-          signupId: committed.signup?.id ?? null,
-          createExecution,
-          processFlowAsync,
-          matchesTriggerConditions,
-        });
-      } catch {
-        // O cron retoma o trabalho que já foi gravado com a concessão.
-      }
-    },
   };
 }
 

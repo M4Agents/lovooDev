@@ -169,43 +169,41 @@ somente se já existirem.
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-labelledby', 'lovoo-welcome-title');
-    root.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;background:rgba(15,23,42,.45);padding:16px;box-sizing:border-box;overflow:hidden;';
-
     var card = document.createElement('div');
-    card.style.cssText = 'width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;border-radius:16px;padding:20px;background:' + (config.background_color || '#ffffff') + ';color:' + (config.text_color || '#111827') + ';';
+    card.setAttribute('data-welcome-card', 'true');
+    card.style.cssText = 'background:' + (config.background_color || '#ffffff') + ';color:' + (config.text_color || '#111827') + ';';
+    var header = document.createElement('div');
+    header.setAttribute('data-welcome-header', 'true');
+    var body = document.createElement('div');
+    body.setAttribute('data-welcome-body', 'true');
 
     var close = document.createElement('button');
     close.type = 'button';
     close.textContent = 'Fechar';
+    close.setAttribute('data-close', 'true');
     close.setAttribute('aria-label', 'Fechar pop-up');
-    close.style.cssText = 'float:right;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;';
     close.onclick = function () { suppress(config.campaign_id, config.resurface_days || 7); root.remove(); };
 
     var title = document.createElement('h2');
     title.id = 'lovoo-welcome-title';
     title.textContent = config.title || 'Bem-vindo';
-    title.style.margin = '0 0 8px';
     var description = document.createElement('p');
     description.textContent = config.description || '';
     if (config.image_url) {
       var image = document.createElement('img');
       image.src = config.image_url;
       image.alt = '';
-      image.style.cssText = 'display:block;width:100%;max-width:100%;height:auto;border-radius:12px;margin-bottom:12px;';
-      card.appendChild(image);
+      body.appendChild(image);
     }
 
     var form = document.createElement('form');
-    form.style.cssText = 'display:grid;gap:10px;clear:both;';
     var status = document.createElement('p');
     status.setAttribute('role', 'status');
     status.style.minHeight = '1.2em';
 
     function field(labelText, input) {
       var label = document.createElement('label');
-      label.style.cssText = 'display:grid;gap:4px;font-size:14px;';
       label.appendChild(document.createTextNode(labelText));
-      input.style.cssText = 'width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px;font:inherit;';
       label.appendChild(input);
       return label;
     }
@@ -222,10 +220,8 @@ somente se já existirem.
     email.autocomplete = 'email';
     var phoneRow = document.createElement('div');
     phoneRow.setAttribute('data-mobile-row', 'true');
-    phoneRow.style.cssText = 'display:flex;gap:8px;width:100%;box-sizing:border-box;';
     var prefix = document.createElement('span');
     prefix.textContent = '+55';
-    prefix.style.cssText = 'display:flex;align-items:center;padding:0 10px;border:1px solid #d1d5db;border-radius:8px;';
     var phone = document.createElement('input');
     phone.name = 'phone';
     phone.type = 'tel';
@@ -233,7 +229,6 @@ somente se já existirem.
     phone.autocomplete = 'tel';
     phone.placeholder = '(11) 99999-9999';
     phone.required = true;
-    phone.style.cssText = 'flex:1;min-width:0;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px;font:inherit;';
     phone.addEventListener('input', function () { phone.value = maskPhone(phone.value); });
     phoneRow.appendChild(prefix);
     phoneRow.appendChild(phone);
@@ -254,12 +249,44 @@ somente se já existirem.
     var submit = document.createElement('button');
     submit.type = 'submit';
     submit.textContent = config.button_label || 'Quero meu cupom';
-    submit.style.cssText = 'width:100%;border:0;border-radius:8px;padding:12px;font:inherit;cursor:pointer;background:' + (config.button_color || '#111827') + ';color:#fff;';
+    submit.style.background = config.button_color || '#111827';
+    var sending = false;
+
+    if (!document.getElementById('lovoo-welcome-spin')) {
+      var spin = document.createElement('style');
+      spin.id = 'lovoo-welcome-spin';
+      spin.textContent = [
+        '@keyframes lovoo-spin{to{transform:rotate(360deg)}}',
+        '#lovoo-welcome,#lovoo-welcome *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:normal;text-transform:none;}',
+        '#lovoo-welcome{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;padding:16px;background:rgba(15,23,42,.45);overflow:hidden;font-size:14px;line-height:1.35;-webkit-text-size-adjust:100%;}',
+        '#lovoo-welcome [data-welcome-card]{width:min(420px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;border-radius:16px;padding:12px 16px 16px;}',
+        '#lovoo-welcome [data-welcome-header]{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex:0 0 auto;}',
+        '#lovoo-welcome [data-welcome-body]{overflow:auto;min-height:0;overscroll-behavior:contain;}',
+        '#lovoo-welcome h2{margin:0;font-size:clamp(22px,6vw,26px);font-weight:700;line-height:1.2;overflow-wrap:anywhere;}',
+        '#lovoo-welcome p,#lovoo-welcome label{margin:0;font-size:14px;line-height:1.35;}',
+        '#lovoo-welcome [data-close]{flex:0 0 auto;min-width:44px;min-height:44px;margin:-8px -8px 0 0;padding:8px;border:0;background:transparent;color:inherit;font-size:14px;cursor:pointer;}',
+        '#lovoo-welcome form{display:grid;gap:8px;margin-top:8px;}',
+        '#lovoo-welcome label{display:grid;gap:2px;}',
+        '#lovoo-welcome label[data-consent]{display:flex;align-items:center;gap:8px;min-height:44px;}',
+        '#lovoo-welcome input:not([type="checkbox"]){width:100%;height:44px;min-width:0;margin:0;padding:0 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:inherit;font-size:16px;line-height:1.2;}',
+        '#lovoo-welcome [data-mobile-row]{display:flex;gap:8px;width:100%;min-width:0;}',
+        '#lovoo-welcome [data-mobile-row] span{display:flex;align-items:center;height:44px;padding:0 10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:16px;}',
+        '#lovoo-welcome [data-mobile-row] input{flex:1;}',
+        '#lovoo-welcome label[data-consent] input{width:20px;height:20px;margin:0;flex:0 0 20px;}',
+        '#lovoo-welcome button[type="submit"],#lovoo-welcome [data-confirmation-actions] a,#lovoo-welcome [data-confirmation-actions] button{min-height:44px;border-radius:8px;font-size:16px;line-height:1.2;}',
+        '#lovoo-welcome button[type="submit"]{width:100%;border:0;padding:0 12px;color:#fff;cursor:pointer;}',
+        '#lovoo-welcome [data-coupon-code]{margin:8px 0;font-size:22px;font-weight:700;line-height:1.2;letter-spacing:.04em;text-align:center;overflow-wrap:anywhere;}',
+        '#lovoo-welcome [data-confirmation-actions]{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}',
+        '#lovoo-welcome [data-confirmation-actions] a,#lovoo-welcome [data-confirmation-actions] button{flex:1 1 140px;min-width:0;box-sizing:border-box;padding:0 12px;text-align:center;text-decoration:none;cursor:pointer;}',
+        '#lovoo-welcome img{display:block;width:100%;max-width:100%;max-height:72px;height:auto;object-fit:cover;border-radius:12px;margin:8px 0;}'
+      ].join('');
+      document.head.appendChild(spin);
+    }
 
     form.appendChild(field('Nome', name));
     form.appendChild(field('E-mail', email));
     var phoneLabel = document.createElement('label');
-    phoneLabel.style.cssText = 'display:grid;gap:4px;font-size:14px;';
+    phoneLabel.style.cssText = '';
     phoneLabel.appendChild(document.createTextNode('WhatsApp'));
     phoneLabel.appendChild(phoneRow);
     form.appendChild(phoneLabel);
@@ -269,23 +296,97 @@ somente se já existirem.
     form.appendChild(submit);
     form.appendChild(status);
 
+    function showSending() {
+      sending = true;
+      submit.disabled = true;
+      submit.setAttribute('aria-busy', 'true');
+      status.textContent = '';
+      var spinner = document.createElement('span');
+      spinner.setAttribute('data-loading', 'true');
+      spinner.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:lovoo-spin .8s linear infinite;';
+      status.appendChild(spinner);
+      status.appendChild(document.createTextNode('Confirmando seu cadastro…'));
+    }
+
+    function showError(message) {
+      sending = false;
+      submit.disabled = false;
+      submit.removeAttribute('aria-busy');
+      status.textContent = message;
+    }
+
+    function showConfirmation(result, givenName) {
+      var code = result.body.coupon_code;
+      var applyUrl = result.body.apply_url;
+      var notice = result.body.whatsapp_notice;
+      suppress(config.campaign_id, config.resurface_days || 7);
+      form.remove();
+      title.id = 'lovoo-welcome-title';
+      title.textContent = 'Olá, ' + givenName + '!';
+      description.textContent = 'Seu cupom está pronto para você utilizar.';
+      var codeLine = document.createElement('p');
+      codeLine.setAttribute('data-coupon-code', 'true');
+      codeLine.appendChild(document.createTextNode(code));
+      body.appendChild(codeLine);
+      if (notice === 'scheduled') {
+        var whatsapp = document.createElement('p');
+        whatsapp.setAttribute('data-whatsapp-notice', 'scheduled');
+        whatsapp.appendChild(document.createTextNode('Você também receberá seu cupom pelo WhatsApp.'));
+        body.appendChild(whatsapp);
+      }
+      var actions = document.createElement('div');
+      actions.setAttribute('data-confirmation-actions', 'true');
+      var goShopping = document.createElement('a');
+      goShopping.href = applyUrl;
+      goShopping.textContent = 'Continuar comprando';
+      goShopping.style.background = config.button_color || '#111827';
+      goShopping.style.color = '#fff';
+      var copy = document.createElement('button');
+      copy.type = 'button';
+      copy.textContent = 'Copiar cupom';
+      copy.style.border = '1px solid currentColor';
+      copy.style.background = 'transparent';
+      copy.style.color = 'inherit';
+      copy.onclick = function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code);
+      };
+      actions.appendChild(goShopping);
+      actions.appendChild(copy);
+      body.appendChild(actions);
+      var left = false;
+      function leave() {
+        if (left) return;
+        left = true;
+        window.clearTimeout(timer);
+        if (typeof window.__lovooNavigate === 'function') window.__lovooNavigate(applyUrl);
+        else location.assign(applyUrl);
+      }
+      goShopping.addEventListener('click', function (clickEvent) {
+        clickEvent.preventDefault();
+        leave();
+      });
+      var timer = window.setTimeout(leave, 5000);
+    }
+
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (sending) return;
       var emailValue = normalizeEmail(email.value);
       var phoneValue = validPhone(phone.value);
       if (!name.value.trim() || !emailValue || !phoneValue || !couponConsent.checked) {
         status.textContent = 'Revise nome, e-mail, WhatsApp e o aceite do cupom.';
         return;
       }
-      var payloadKey = [config.campaign_id, name.value.trim(), emailValue, phoneValue, couponConsent.checked, promoConsent.checked].join('|');
-      submit.disabled = true;
-      status.textContent = 'Enviando…';
+      var givenName = name.value.trim();
+      var payloadKey = [config.campaign_id, givenName, emailValue, phoneValue, couponConsent.checked, promoConsent.checked].join('|');
+      var attemptId = attemptFor(payloadKey);
+      showSending();
       fetch(endpoint + '?store_id=' + encodeURIComponent(storeId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           store_id: storeId,
-          attempt_id: attemptFor(payloadKey),
+          attempt_id: attemptId,
           name: name.value.trim(),
           email: emailValue,
           phone: phoneValue,
@@ -298,42 +399,23 @@ somente se já existirem.
         })
       }).then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
         .then(function (result) {
-          submit.disabled = false;
-          if (!result.body || result.body.coupon_revealed !== true) {
-            status.textContent = (result.body && result.body.error) || 'Não foi possível concluir o cadastro.';
+          if (!result.body || result.body.coupon_revealed !== true || !result.body.coupon_code || !result.body.apply_url) {
+            showError((result.body && result.body.error) || 'Não foi possível concluir o cadastro.');
             return;
           }
-          status.textContent = 'Cadastro recebido. Seu código: ' + result.body.coupon_code + '. O desconto só vale depois de aplicado no carrinho.';
-          var actions = document.createElement('div');
-          actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-          var apply = document.createElement('a');
-          apply.href = result.body.apply_url;
-          apply.textContent = 'Aplicar cupom';
-          var copy = document.createElement('button');
-          copy.type = 'button';
-          copy.textContent = 'Copiar código';
-          copy.onclick = function () {
-            if (navigator.clipboard) navigator.clipboard.writeText(result.body.coupon_code);
-          };
-          actions.appendChild(apply);
-          actions.appendChild(copy);
-          form.appendChild(actions);
-          suppress(config.campaign_id, config.resurface_days || 7);
-          window.setTimeout(function () {
-            if (typeof window.__lovooNavigate === 'function') window.__lovooNavigate(result.body.apply_url);
-            else location.assign(result.body.apply_url);
-          }, 1200);
+          showConfirmation(result, givenName);
         })
         .catch(function () {
-          submit.disabled = false;
-          status.textContent = 'Não foi possível enviar agora. Tente novamente.';
+          showError('Não foi possível enviar agora. Tente novamente.');
         });
     });
 
-    card.appendChild(close);
-    card.appendChild(title);
-    card.appendChild(description);
-    card.appendChild(form);
+    header.appendChild(title);
+    header.appendChild(close);
+    body.appendChild(description);
+    body.appendChild(form);
+    card.appendChild(header);
+    card.appendChild(body);
     root.appendChild(card);
     document.body.appendChild(root);
     close.focus();
@@ -341,7 +423,7 @@ somente se já existirem.
 
   function checkLabel(input, text) {
     var label = document.createElement('label');
-    label.style.cssText = 'display:flex;gap:8px;align-items:flex-start;font-size:14px;';
+    label.setAttribute('data-consent', 'true');
     label.appendChild(input);
     label.appendChild(document.createTextNode(text));
     return label;

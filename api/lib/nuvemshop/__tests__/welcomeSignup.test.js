@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleWelcomePublic, hashRateKey } from '../welcomePublic.js';
+import { classifyWelcomeNotice, handleWelcomePublic, hashRateKey } from '../welcomePublic.js';
 import { applySignupCommit } from '../welcomeSignup.js';
 
 const COMPANY = '3cbe5c11-d834-40d1-b1cf-425e6377f099';
@@ -38,6 +38,8 @@ function database(current, extras = {}) {
     rateBuckets: extras.buckets ?? new Map(),
     claims: extras.claims ?? new Map(),
     flows: extras.flows ?? [],
+    readWelcomeFlows: extras.readWelcomeFlows,
+    commitSignup: extras.commitSignup,
     startExecution: extras.startExecution ?? vi.fn(async () => ({ id: 'exec-1' })),
     dispatch: extras.dispatch,
     from(table) {
@@ -59,6 +61,40 @@ function database(current, extras = {}) {
       return api;
     },
   };
+}
+
+function popupFlow(config = {}) {
+  return {
+    id: 'flow-1',
+    is_active: true,
+    is_over_plan: false,
+    nodes: [{
+      id: 'start-1',
+      type: 'start',
+      data: {
+        triggers: [{ enabled: true, type: 'nuvemshop.popup_signup', config }],
+      },
+    }],
+    edges: [],
+  };
+}
+
+function whatsappFlow(config = {}, message = {}) {
+  const flow = popupFlow(config);
+  flow.nodes.push({
+    id: 'message-1',
+    type: 'message',
+    data: {
+      config: {
+        messageType: 'text',
+        message: 'Seu cupom',
+        instanceId: 'instance-1',
+        ...message,
+      },
+    },
+  });
+  flow.edges = [{ source: 'start-1', target: 'message-1', sourceHandle: 'trigger-output' }];
+  return flow;
 }
 
 function post(body, extra = {}) {
@@ -214,23 +250,86 @@ describe('cadastro real do pop-up', () => {
     expect(open.body.coupon_code).toBe('CUPOM10');
   });
 
-  it('dispara a automação só na concessão nova, para lead novo e existente', async () => {
-    const calls = [];
+  it('responde sem executar a automação e só avisa com fluxo correspondente e trabalho pendente', async () => {
+    const processFlowAsync = vi.fn(() => new Promise(() => {}));
     const current = state();
-    const startExecution = vi.fn(async (flow) => {
-      calls.push(flow.id);
-      return { id: `exec-${flow.id}` };
-    });
-    const flows = [{ id: 'flow-1', matches: true }];
-    await handleWelcomePublic(post(), database(current, { flows, startExecution }));
-    expect(calls).toEqual(['flow-1']);
-    await handleWelcomePublic(post({ attempt_id: ATTEMPT_2 }), database(current, { flows, startExecution, claims: new Map() }));
-    expect(calls).toEqual(['flow-1']);
+    const granted = await handleWelcomePublic(post(), database(current, {
+      flows: [whatsappFlow()],
+      processFlowAsync,
+    }));
+    expect(processFlowAsync).not.toHaveBeenCalled();
+    expect(current.jobs).toHaveLength(1);
+    expect(current.jobs[0].status).toBe('pending');
+    expect(granted.body.whatsapp_notice).toBe('scheduled');
 
-    const existing = state();
-    existing.leads.push({ id: 3, company_id: COMPANY, email: 'ana@valleron.store', phone_normalized: '5511999999999', phone: '5511999999999', name: 'Ana', origin: 'manual', deleted_at: null });
-    await handleWelcomePublic(post({ attempt_id: ATTEMPT }), database(existing, { flows, startExecution }));
-    expect(calls).toEqual(['flow-1', 'flow-1']);
+    const retry = await handleWelcomePublic(post(), database(current, {
+      flows: [whatsappFlow()],
+      processFlowAsync,
+    }));
+    expect(processFlowAsync).not.toHaveBeenCalled();
+    expect(current.signups).toHaveLength(1);
+    expect(current.jobs).toHaveLength(1);
+    expect(retry.body.coupon_revealed).toBe(true);
+
+    const otherStore = await handleWelcomePublic(post({
+      attempt_id: ATTEMPT_2,
+      email: 'bia@valleron.store',
+    }), database(state(), { flows: [popupFlow({ storeId: '8047001' })], processFlowAsync }));
+    expect(otherStore.body.whatsapp_notice).toBe('none');
+    expect(processFlowAsync).not.toHaveBeenCalled();
+  });
+
+  it('confirma o trabalho pendente por leitura e não chama a execução', async () => {
+    const processFlowAsync = vi.fn(() => new Promise(() => {}));
+    const current = state();
+    const db = database(current, { processFlowAsync });
+    delete db.signupState;
+    delete db.flows;
+    db.commitSignup = async () => ({
+      ok: true,
+      grantCreated: true,
+      leadId: 1,
+      signup: {
+        id: 'signup-db',
+        nuvemshop_store_id: '7680914',
+        campaign_id: CAMPAIGN,
+        identity_result: 'new',
+        eligibility_result: 'eligible_limited',
+        limitation_note: null,
+      },
+      grant: {
+        coupon_code: 'CUPOM10',
+        apply_url: 'https://valleron.store/discount/CUPOM10?redirect_to=/',
+      },
+    });
+    const originalFrom = db.from.bind(db);
+    db.from = (table) => {
+      if (table === 'nuvemshop_welcome_automation_jobs') {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          maybeSingle: async () => ({
+            data: { id: 'job-1', signup_id: 'signup-db', grant_id: 'grant-1', status: 'pending' },
+            error: null,
+          }),
+        };
+      }
+      if (table === 'automation_flows') {
+        const query = {
+          select() { return query; },
+          eq() { return query; },
+          then(ok, fail) {
+            return Promise.resolve({ data: [whatsappFlow()], error: null }).then(ok, fail);
+          },
+        };
+        return query;
+      }
+      return originalFrom(table);
+    };
+    const result = await handleWelcomePublic(post(), db);
+    expect(processFlowAsync).not.toHaveBeenCalled();
+    expect(result.body.whatsapp_notice).toBe('scheduled');
+    expect(result.body.coupon_code).toBe('CUPOM10');
   });
 
   it('não escolhe conexão ambígua nem aceita company_id do navegador', async () => {
@@ -345,15 +444,63 @@ describe('cadastro real do pop-up', () => {
     expect(current.grants).toHaveLength(1);
   });
 
-  it('mantém o trabalho pendente quando o despacho falha', async () => {
+  it('mantém o trabalho pendente quando a leitura da automação falha', async () => {
     const current = state();
     const result = await handleWelcomePublic(post(), database(current, {
-      dispatch: async () => { throw new Error('worker down'); },
+      readWelcomeFlows: async () => { throw new Error('worker down'); },
     }));
     expect(result.body.coupon_revealed).toBe(true);
     expect(current.jobs).toHaveLength(1);
     expect(current.jobs[0].status).toBe('pending');
     expect(JSON.stringify(result.body)).not.toMatch(/worker down|ana@/);
+    expect(result.body.whatsapp_notice).toBe('unknown');
+  });
+
+  it('não promete WhatsApp só pela concessão', async () => {
+    const current = state();
+    const hiddenJob = await handleWelcomePublic(post(), database(current, {
+      flows: [whatsappFlow()],
+      commitSignup: async (input) => {
+        const committed = applySignupCommit(current, input);
+        current.jobs = [];
+        return committed;
+      },
+    }));
+    expect(hiddenJob.body.coupon_revealed).toBe(true);
+    expect(hiddenJob.body.whatsapp_notice).toBe('unknown');
+
+    const inactive = await handleWelcomePublic(post({
+      attempt_id: ATTEMPT_2,
+      email: 'bia@valleron.store',
+    }), database(state(), { flows: [{ ...popupFlow(), is_active: false }] }));
+    expect(inactive.body.whatsapp_notice).toBe('none');
+  });
+
+  it('só avisa WhatsApp quando a ação de envio é alcançável e tem conexão', () => {
+    const job = { signup_id: 'signup-1', status: 'pending' };
+    const signup = { id: 'signup-1', nuvemshop_store_id: '7680914', campaign_id: CAMPAIGN };
+    const notice = (flow) => classifyWelcomeNotice({ job, flows: [flow], signup });
+
+    expect(notice(popupFlow())).toBe('none');
+    expect(notice(whatsappFlow({}, { instanceId: '' }))).toBe('none');
+    expect(notice(whatsappFlow({}, { messageType: 'user_input' }))).toBe('none');
+
+    const behindCondition = whatsappFlow();
+    behindCondition.nodes.splice(1, 0, { id: 'cond', type: 'condition', data: { config: {} } });
+    behindCondition.edges = [
+      { source: 'start-1', target: 'cond', sourceHandle: 'trigger-output' },
+      { source: 'cond', target: 'message-1', sourceHandle: 'true' },
+    ];
+    expect(notice(behindCondition)).toBe('none');
+
+    const afterDelay = whatsappFlow();
+    afterDelay.nodes.splice(1, 0, { id: 'wait', type: 'delay', data: { config: { wait_mode: 'time' } } });
+    afterDelay.edges = [
+      { source: 'start-1', target: 'wait', sourceHandle: 'trigger-output' },
+      { source: 'wait', target: 'message-1', sourceHandle: 'next' },
+    ];
+    expect(notice(afterDelay)).toBe('scheduled');
+    expect(notice(whatsappFlow())).toBe('scheduled');
   });
 
   it('não revela o cupom na configuração pública', async () => {
