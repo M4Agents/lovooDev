@@ -18,6 +18,10 @@ export interface WelcomePopupCampaign {
   coupon_code: string | null;
   delay_seconds: number | null;
   resurface_days: number | null;
+  promo_consent_text: string | null;
+  promo_consent_version: string | null;
+  allowed_origins: string[];
+  test_contacts: { email: string; phone: string }[];
   updated_at: string | null;
 }
 
@@ -35,6 +39,10 @@ export interface WelcomePopupDraft {
   coupon_code: string;
   delay_seconds: string;
   resurface_days: string;
+  promo_consent_text: string;
+  promo_consent_version: string;
+  allowed_origins: string;
+  test_contacts: { email: string; phone: string }[];
 }
 
 async function authToken(): Promise<string | null> {
@@ -83,4 +91,48 @@ export async function saveWelcomePopup(
   const json = await res.json();
   if (!res.ok) throw welcomePopupError(json, 'Erro ao salvar o rascunho.');
   return json.campaign as WelcomePopupCampaign;
+}
+
+export interface WelcomePopupTestResult {
+  identity: 'none' | 'reuse' | 'conflict' | 'unavailable';
+  eligibility: 'ineligible_paid' | 'eligible_limited' | 'unavailable' | 'pending_refund_rule' | 'payment_inconclusive' | 'not_evaluated';
+  limitation: string | null;
+  coupon_revealed: false;
+  redirect: false;
+  lead_changed: false;
+}
+
+export async function runWelcomePopupTest(
+  companyId: string,
+  storeId: string,
+  payload: {
+    name: string;
+    email: string;
+    phone: string;
+    coupon_consent: boolean;
+    promo_consent: boolean;
+  },
+): Promise<WelcomePopupTestResult> {
+  const token = await authToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const res = await fetch('/api/nuvemshop/welcome-popup/test', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_id: companyId, store_id: storeId, ...payload }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw welcomePopupError(json, 'Erro ao registrar o teste.');
+  return json.result as WelcomePopupTestResult;
+}
+
+export async function clearWelcomePopupTests(companyId: string, storeId: string): Promise<void> {
+  const token = await authToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const res = await fetch('/api/nuvemshop/welcome-popup/test', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_id: companyId, store_id: storeId }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw welcomePopupError(json, 'Erro ao limpar os testes.');
 }

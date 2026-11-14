@@ -61,6 +61,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@eslint/js": "^9.9.1",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^18.3.5",

@@ -4,6 +4,10 @@
 // company_id e store_id vêm do caller já autenticado.
 // A loja precisa ser a conexão ativa daquela empresa.
 // enabled permanece false. Cupom preenchido é só consultado (GET).
+//
+// Publicar este módulo só depois da migration aditiva 20261114130000.
+// Sem as colunas novas, a leitura responde recurso indisponível e
+// a gravação não substitui o rascunho existente.
 // =============================================================================
 
 import { findCouponByCode } from './couponSync.js';
@@ -34,6 +38,10 @@ const CAMPAIGN_COLUMNS = [
   'coupon_code',
   'delay_seconds',
   'resurface_days',
+  'promo_consent_text',
+  'promo_consent_version',
+  'allowed_origins',
+  'test_contacts',
   'updated_at',
 ].join(', ');
 
@@ -45,8 +53,26 @@ const READ_ERROR = 'Erro ao consultar a configuração do pop-up.';
 const WRITE_ERROR = 'Erro ao salvar a configuração do pop-up.';
 const UNAVAILABLE = 'A configuração do pop-up ainda não está disponível neste ambiente.';
 
+const WELCOME_TABLES = ['nuvemshop_welcome_campaigns', 'nuvemshop_welcome_test_submissions'];
+const WELCOME_COLUMNS = ['promo_consent_text', 'promo_consent_version', 'allowed_origins', 'test_contacts'];
+
+function mentionsWelcome(message, names) {
+  const text = message.toLowerCase();
+  return names.some((name) => text.includes(name));
+}
+
+function missingCampaignShape(error) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  const code = error?.code;
+  const table = mentionsWelcome(message, WELCOME_TABLES);
+  const column = mentionsWelcome(message, WELCOME_COLUMNS);
+  if (code === 'PGRST205' || code === '42P01') return table;
+  if (code === 'PGRST204' || code === '42703') return table && column;
+  return false;
+}
+
 function campaignStoreError(error, fallbackMessage) {
-  if (error?.code === 'PGRST205' || error?.code === '42P01') {
+  if (missingCampaignShape(error)) {
     return fail(503, 'resource_unavailable', UNAVAILABLE);
   }
   return fail(500, 'db_error', fallbackMessage);
@@ -120,7 +146,10 @@ export async function saveWelcomeCampaign({
     .eq('nuvemshop_store_id', scope.storeId)
     .maybeSingle();
 
-  if (existing.error) return campaignStoreError(existing.error, WRITE_ERROR);
+  if (existing.error) {
+    // Falha de leitura não segue para insert/update. O rascunho permanece.
+    return campaignStoreError(existing.error, WRITE_ERROR);
+  }
 
   const write = {
     ...mergeWelcomeDraft(existing.data, draft.value),

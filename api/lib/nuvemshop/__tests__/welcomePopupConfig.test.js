@@ -258,7 +258,7 @@ describe('configuração do pop-up por loja', () => {
   it.each(['PGRST205', '42P01'])('responde recurso indisponível quando a tabela ainda não existe (%s)', async (code) => {
     const db = memory({
       connections: [connected(COMPANY_A)],
-      campaignError: { code, message: 'relation missing' },
+      campaignError: { code, message: 'relation "nuvemshop_welcome_campaigns" does not exist' },
     });
     const seen = await getWelcomeCampaign({ svc: db, companyId: COMPANY_A, storeId: STORE });
     const saved = await saveWelcomeCampaign({
@@ -273,6 +273,63 @@ describe('configuração do pop-up por loja', () => {
     expect(saved.error).toMatchObject({ status: 503, code: 'resource_unavailable' });
     expect(seen.error.message).toMatch(/ainda não está disponível/);
     expect(db.tables.nuvemshop_welcome_campaigns).toHaveLength(0);
+  });
+
+  it.each(['PGRST204', '42703'])('coluna ausente preserva o rascunho e esconde o erro interno (%s)', async (code) => {
+    const db = memory({
+      connections: [connected(COMPANY_A)],
+      campaigns: [{
+        id: 'draft-1',
+        company_id: COMPANY_A,
+        nuvemshop_store_id: STORE,
+        title: 'Rascunho Valleron',
+        coupon_code: 'CUPOM10',
+        enabled: false,
+      }],
+      campaignError: {
+        code,
+        message: "Could not find the 'promo_consent_text' column of 'nuvemshop_welcome_campaigns' in the schema cache",
+      },
+    });
+    const seen = await getWelcomeCampaign({ svc: db, companyId: COMPANY_A, storeId: STORE });
+    const saved = await saveWelcomeCampaign({
+      svc: db,
+      companyId: COMPANY_A,
+      storeId: STORE,
+      userId: 'user-a',
+      payload: { title: '' },
+      findCoupon: vi.fn(),
+    });
+
+    expect(seen.error).toMatchObject({ status: 503, code: 'resource_unavailable' });
+    expect(saved.error).toMatchObject({ status: 503, code: 'resource_unavailable' });
+    expect(seen.error.message).toMatch(/ainda não está disponível/);
+    expect(saved.error.message).not.toMatch(/promo_consent_text|schema cache/);
+    expect(db.tables.nuvemshop_welcome_campaigns).toEqual([
+      expect.objectContaining({ title: 'Rascunho Valleron', coupon_code: 'CUPOM10' }),
+    ]);
+  });
+
+  it('não trata schema cache de outro recurso como migration pendente', async () => {
+    const db = memory({
+      connections: [connected(COMPANY_A)],
+      campaigns: [{
+        id: 'draft-1',
+        company_id: COMPANY_A,
+        nuvemshop_store_id: STORE,
+        title: 'Rascunho Valleron',
+        enabled: false,
+      }],
+      campaignError: {
+        code: 'PGRST204',
+        message: "Could not find the 'instagram_user_id' column of 'leads' in the schema cache",
+      },
+    });
+    const seen = await getWelcomeCampaign({ svc: db, companyId: COMPANY_A, storeId: STORE });
+
+    expect(seen.error).toMatchObject({ status: 500, code: 'db_error' });
+    expect(seen.error.message).not.toMatch(/ainda não está disponível/);
+    expect(db.tables.nuvemshop_welcome_campaigns[0].title).toBe('Rascunho Valleron');
   });
 
   it('não trata outro erro de banco como migration pendente', async () => {

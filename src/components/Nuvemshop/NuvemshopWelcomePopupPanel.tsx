@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -8,6 +8,7 @@ import {
   type WelcomePopupDraft,
 } from '../../services/nuvemshopWelcomePopupApi';
 import { WelcomePopupPreview, type WelcomePopupPreviewContent } from './WelcomePopupPreview';
+import { WelcomePopupTestSection } from './WelcomePopupTestSection';
 
 const WRITE_ROLES = ['super_admin', 'system_admin', 'admin', 'manager'];
 
@@ -24,6 +25,10 @@ type DraftForm = {
   coupon_code: string;
   delay_seconds: string;
   resurface_days: string;
+  promo_consent_text: string;
+  promo_consent_version: string;
+  allowed_origins: string;
+  test_contacts: { email: string; phone: string }[];
 };
 
 const FIELDS: { key: keyof DraftForm; label: string; placeholder: string }[] = [
@@ -34,8 +39,10 @@ const FIELDS: { key: keyof DraftForm; label: string; placeholder: string }[] = [
   { key: 'background_color', label: 'Cor de fundo', placeholder: '#ffffff' },
   { key: 'text_color', label: 'Cor do texto', placeholder: '#0f172a' },
   { key: 'button_color', label: 'Cor do botão', placeholder: '#6d28d9' },
-  { key: 'consent_text', label: 'Texto do consentimento', placeholder: 'Autorizo o uso dos meus dados para receber o cupom.' },
-  { key: 'consent_version', label: 'Versão do consentimento', placeholder: '2026-11' },
+  { key: 'consent_text', label: 'Texto do consentimento do cupom', placeholder: 'Autorizo o uso dos meus dados para receber o cupom.' },
+  { key: 'consent_version', label: 'Versão do consentimento do cupom', placeholder: '2026-11' },
+  { key: 'promo_consent_text', label: 'Texto do consentimento promocional', placeholder: 'Quero receber promoções futuras. Opcional.' },
+  { key: 'promo_consent_version', label: 'Versão do consentimento promocional', placeholder: 'promo-2026-11' },
   { key: 'coupon_code', label: 'Código do cupom já existente', placeholder: 'CUPOM10' },
   { key: 'delay_seconds', label: 'Atraso em segundos', placeholder: '10' },
   { key: 'resurface_days', label: 'Dias para reaparecer', placeholder: '7' },
@@ -55,6 +62,10 @@ function emptyForm(): DraftForm {
     coupon_code: '',
     delay_seconds: '',
     resurface_days: '',
+    promo_consent_text: '',
+    promo_consent_version: '',
+    allowed_origins: '',
+    test_contacts: [],
   };
 }
 
@@ -72,11 +83,17 @@ function campaignToForm(campaign: WelcomePopupCampaign): DraftForm {
     coupon_code: campaign.coupon_code ?? '',
     delay_seconds: campaign.delay_seconds == null ? '' : String(campaign.delay_seconds),
     resurface_days: campaign.resurface_days == null ? '' : String(campaign.resurface_days),
+    promo_consent_text: campaign.promo_consent_text ?? '',
+    promo_consent_version: campaign.promo_consent_version ?? '',
+    allowed_origins: (campaign.allowed_origins ?? []).join('\n'),
+    test_contacts: campaign.test_contacts ?? [],
   };
 }
 
-function isVisibleField(value: string | null): value is keyof DraftForm {
-  return FIELDS.some((item) => item.key === value);
+function isVisibleField(value: string | null): boolean {
+  return value === 'allowed_origins'
+    || value === 'test_contacts'
+    || FIELDS.some((item) => item.key === value);
 }
 
 function toPreview(form: DraftForm): WelcomePopupPreviewContent {
@@ -86,6 +103,7 @@ function toPreview(form: DraftForm): WelcomePopupPreviewContent {
     imageUrl: form.image_url,
     buttonLabel: form.button_label,
     consentText: form.consent_text,
+    promoConsentText: form.promo_consent_text,
     backgroundColor: form.background_color,
     textColor: form.text_color,
     buttonColor: form.button_color,
@@ -108,6 +126,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [field, setField] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const contactsBlocked = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +150,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
   }, [companyId, storeId, reloadKey]);
 
   async function handleSave() {
-    if (phase !== 'ready') return;
+    if (phase !== 'ready' || contactsBlocked.current) return;
     setSaving(true);
     setError(null);
     setField(null);
@@ -215,7 +234,7 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
           {!hasStoredDraft && (
             <p className="text-xs text-slate-500">Nenhum rascunho salvo para esta loja.</p>
           )}
-          <p className="text-xs text-slate-500">Página: somente a inicial. Nome, e-mail e WhatsApp serão obrigatórios no formulário futuro.</p>
+          <p className="text-xs text-slate-500">Página: somente a inicial. O visitante ainda não envia este formulário.</p>
 
           {!canWrite && (
             <p className="text-xs text-slate-500">Somente administradores e gerentes podem salvar esta configuração.</p>
@@ -233,6 +252,23 @@ export function NuvemshopWelcomePopupPanel({ companyId, storeId }: Props) {
               Rascunho salvo. O pop-up continua desativado.
             </div>
           )}
+
+          <WelcomePopupTestSection
+            companyId={companyId}
+            storeId={storeId}
+            canWrite={canWrite}
+            origins={form.allowed_origins}
+            contacts={form.test_contacts}
+            onOrigins={(value) => {
+              setForm((current) => ({ ...current, allowed_origins: value }));
+              setSaved(false);
+            }}
+            onContacts={(value) => {
+              setForm((current) => ({ ...current, test_contacts: value }));
+              setSaved(false);
+            }}
+            onContactsIssue={(issue) => { contactsBlocked.current = issue != null; }}
+          />
 
           {canWrite && (
             <button

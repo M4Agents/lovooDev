@@ -6,6 +6,12 @@
 // O company_id da linha nunca vem deste objeto.
 // =============================================================================
 
+import {
+  normalizeAllowedOrigins,
+  normalizePromoConsent,
+  normalizeTestContacts,
+} from './welcomePopupAccess.js';
+
 export const WELCOME_WRITE_ROLES = ['super_admin', 'system_admin', 'admin', 'manager'];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,6 +41,10 @@ export const WELCOME_DRAFT_FIELDS = [
   'coupon_code',
   'delay_seconds',
   'resurface_days',
+  'promo_consent_text',
+  'promo_consent_version',
+  'allowed_origins',
+  'test_contacts',
 ];
 
 export function activationRequested(enabled) {
@@ -182,6 +192,12 @@ export function normalizeWelcomeDraft(input) {
   ];
   const invalid = fields.find((item) => !item.ok);
   if (invalid) return invalid;
+  const promo = normalizePromoConsent(input.promo_consent_text, input.promo_consent_version);
+  if (!promo.ok) return promo;
+  const origins = normalizeAllowedOrigins(input.allowed_origins);
+  if (!origins.ok) return origins;
+  const contacts = normalizeTestContacts(input.test_contacts);
+  if (!contacts.ok) return contacts;
 
   const [
     title, description, buttonLabel, consentText, consentVersion, imageUrl,
@@ -205,6 +221,10 @@ export function normalizeWelcomeDraft(input) {
       coupon_code: couponCode.value,
       delay_seconds: delaySeconds.value,
       resurface_days: resurfaceDays.value,
+      promo_consent_text: promo.text,
+      promo_consent_version: promo.version,
+      allowed_origins: origins.value,
+      test_contacts: contacts.value,
     },
   };
 }
@@ -218,13 +238,24 @@ export function toPublicCampaign(row, companyId, storeId) {
     page_rule: 'home',
     updated_at: row?.updated_at ?? null,
   };
-  for (const field of WELCOME_DRAFT_FIELDS) campaign[field] = row?.[field] ?? null;
+  for (const field of WELCOME_DRAFT_FIELDS) {
+    if (field === 'allowed_origins' || field === 'test_contacts') {
+      campaign[field] = Array.isArray(row?.[field]) ? row[field] : [];
+    } else {
+      campaign[field] = row?.[field] ?? null;
+    }
+  }
   return campaign;
 }
 
 export function mergeWelcomeDraft(existing, draft) {
   const merged = { enabled: false, page_rule: 'home' };
   for (const field of WELCOME_DRAFT_FIELDS) {
+    if (field === 'allowed_origins' || field === 'test_contacts') {
+      const value = draft[field] === undefined ? existing?.[field] : draft[field];
+      merged[field] = Array.isArray(value) ? value : [];
+      continue;
+    }
     merged[field] = draft[field] === undefined ? (existing?.[field] ?? null) : draft[field];
   }
   return merged;

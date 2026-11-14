@@ -49,6 +49,8 @@ vi.mock('../../../services/nuvemshopApi', () => ({
 vi.mock('../../../services/nuvemshopWelcomePopupApi', () => ({
   getWelcomePopup: vi.fn(),
   saveWelcomePopup: vi.fn(),
+  runWelcomePopupTest: vi.fn(),
+  clearWelcomePopupTests: vi.fn(),
 }));
 
 const COMPANY = 'dcc99d3d-9def-4b93-aeb2-1a3be5f15413';
@@ -109,7 +111,10 @@ describe('painel e prévia do pop-up', () => {
 
     expect(await screen.findByText('Em configuração — ainda não publicado')).toBeTruthy();
     expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /ativar|publicar/i })).toBeNull();
+    const consentBoxes = screen.getAllByRole('checkbox', { name: 'Aceite para receber o cupom' });
+    expect(consentBoxes.length).toBe(2);
+    consentBoxes.forEach((box) => expect((box as HTMLInputElement).disabled).toBe(true));
     expect(screen.queryByRole('button', { name: /ativar|publicar/i })).toBeNull();
     expect(screen.getByText('Computador')).toBeTruthy();
     expect(screen.getByText('Celular')).toBeTruthy();
