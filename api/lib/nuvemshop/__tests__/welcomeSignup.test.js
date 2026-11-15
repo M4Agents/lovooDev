@@ -349,7 +349,12 @@ describe('cadastro real do pop-up', () => {
     const current = state();
     const buckets = new Map();
     const db = database(current, { buckets });
-    expect((await handleWelcomePublic(post({ company_website: 'https://spam.example' }), db)).status).toBe(400);
+    expect((await handleWelcomePublic(post({ lovoo_hp: 'https://spam.example' }), db)).status).toBe(400);
+    expect(current.signups).toHaveLength(0);
+    const autofill = state();
+    const filled = await handleWelcomePublic(post({ company_website: 'https://empresa.example' }), database(autofill));
+    expect(filled.status).not.toBe(400);
+    expect(filled.body.code).not.toBe('validation_error');
     const attempts = [
       '55555555-5555-4555-8555-555555555551',
       '55555555-5555-4555-8555-555555555552',

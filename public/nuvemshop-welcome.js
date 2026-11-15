@@ -241,9 +241,10 @@ somente se já existirem.
     promoConsent.type = 'checkbox';
     promoConsent.name = 'promo_consent';
     var honey = document.createElement('input');
-    honey.name = 'company_website';
+    honey.name = 'lovoo_hp';
     honey.tabIndex = -1;
     honey.autocomplete = 'off';
+    honey.setAttribute('aria-hidden', 'true');
     honey.style.cssText = 'position:absolute;left:-9999px;';
 
     var submit = document.createElement('button');
@@ -395,7 +396,7 @@ somente se já existirem.
           visitor_id: readVisitor(),
           session_id: readSession(),
           utm: readUtms(),
-          company_website: honey.value
+          lovoo_hp: honey.value
         })
       }).then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
         .then(function (result) {

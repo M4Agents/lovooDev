@@ -179,7 +179,7 @@ export async function handleWelcomePublic(req, db, options = {}) {
     if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
       return fail(413, 'payload_too_large', 'Os dados enviados são grandes demais.', origin);
     }
-    if (req.body?.company_website) return fail(400, 'validation_error', 'Não foi possível enviar o formulário.', origin);
+    if (req.body?.lovoo_hp) return fail(400, 'validation_error', 'Não foi possível enviar o formulário.', origin);
 
     const buckets = options.buckets ?? db.rateBuckets;
     const email = normalizeWelcomeEmail(req.body?.email);
