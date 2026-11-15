@@ -15,6 +15,7 @@ import {
   BarChart3,
   Tag,
   MessageSquare,
+  Link2,
 } from 'lucide-react';
 import { NuvemshopBrandIcon, NuvemshopCloudIcon } from '../icons/NuvemshopIcon';
 import { useNuvemshopConnection } from '../../hooks/useNuvemshopConnection';
@@ -26,6 +27,7 @@ import {
 import { NuvemshopDashboard }      from '../Nuvemshop/NuvemshopDashboard';
 import { NuvemshopCouponsPanel }   from '../Nuvemshop/NuvemshopCouponsPanel';
 import { NuvemshopWelcomePopupPanel } from '../Nuvemshop/NuvemshopWelcomePopupPanel';
+import { NuvemshopPromoLinksPanel } from '../Nuvemshop/NuvemshopPromoLinksPanel';
 
 // ── Componente de badge de saúde ─────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
   const [showDashboard, setShowDashboard]         = useState(false);
   const [showCoupons, setShowCoupons]             = useState(false);
   const [showWelcome, setShowWelcome]             = useState(false);
+  const [showPromoLinks, setShowPromoLinks]       = useState(false);
   const [metrics, setMetrics]                     = useState<NuvemshopMetrics | null>(null);
   const [metricsLoading, setMetricsLoading]       = useState(false);
 
@@ -421,6 +424,28 @@ export function NuvemshopConnectionPanel({ companyId }: Props) {
               {showCoupons && (
                 <div className="mt-4">
                   <NuvemshopCouponsPanel
+                    companyId={companyId}
+                    storeId={status.store_id}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {status.store_id && (
+            <div className="border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowPromoLinks(v => !v)}
+                className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                {showPromoLinks ? 'Ocultar links promocionais' : 'Links promocionais'}
+              </button>
+
+              {showPromoLinks && (
+                <div className="mt-4">
+                  <NuvemshopPromoLinksPanel
                     companyId={companyId}
                     storeId={status.store_id}
                   />

@@ -49,7 +49,7 @@ const CODE_REGEX           = /^[A-Za-z0-9_-]+$/;
  * Busca conexão ativa e retorna client Nuvemshop pronto para uso.
  * Lança erro descritivo se não encontrada.
  */
-async function resolveClient({ svc, companyId, storeId, correlationId }) {
+export async function resolveClient({ svc, companyId, storeId, correlationId }) {
   const { data: conn, error } = await svc
     .from('nuvemshop_connections')
     .select('id, access_token_enc, status')
@@ -87,7 +87,7 @@ async function resolveClient({ svc, companyId, storeId, correlationId }) {
  * @param {object} data  Dados do cupom a criar
  * @throws {{ code, message, status, field? }}
  */
-function validateCouponData(data) {
+export function validateCouponData(data) {
   const { code, type, value } = data;
 
   if (!code?.trim()) {
@@ -117,16 +117,18 @@ function validateCouponData(data) {
     };
   }
 
-  const numValue = Number(value);
-  if (isNaN(numValue) || numValue <= 0) {
-    throw { code: 'validation_error', message: 'O valor deve ser um número positivo.', field: 'value', status: 400 };
-  }
-  if (type === 'percentage' && numValue > 100) {
-    throw {
-      code:    'validation_error',
-      message: 'O desconto percentual não pode ultrapassar 100%.',
-      field:   'value', status: 400,
-    };
+  if (type !== 'shipping') {
+    const numValue = Number(value);
+    if (isNaN(numValue) || numValue <= 0) {
+      throw { code: 'validation_error', message: 'O valor deve ser um número positivo.', field: 'value', status: 400 };
+    }
+    if (type === 'percentage' && numValue > 100) {
+      throw {
+        code:    'validation_error',
+        message: 'O desconto percentual não pode ultrapassar 100%.',
+        field:   'value', status: 400,
+      };
+    }
   }
 
   if (data.max_uses !== undefined && data.max_uses !== null) {
@@ -147,6 +149,28 @@ function validateCouponData(data) {
   }
 
   return cleanCode;  // Retorna código normalizado
+}
+
+/**
+ * Payload enviado à Nuvemshop.
+ * Frete grátis não leva value: a API não usa esse campo como benefício desse tipo.
+ * includes_shipping permanece só em percentual e valor fixo, e não significa frete grátis.
+ */
+export function buildCouponWritePayload(couponData, normalizedCode) {
+  const payload = {
+    code:       normalizedCode,
+    type:       couponData.type,
+    max_uses:   couponData.max_uses ?? null,
+    valid:      couponData.valid !== false,
+    start_date: couponData.start_date ?? null,
+    end_date:   couponData.end_date ?? null,
+    min_price:  couponData.min_price != null ? String(Number(couponData.min_price)) : null,
+  };
+  if (couponData.type !== 'shipping') {
+    payload.value = String(Number(couponData.value));
+    payload.includes_shipping = couponData.includes_shipping ?? false;
+  }
+  return payload;
 }
 
 // ── Mapeamento de erros da API ────────────────────────────────────────────────
@@ -228,7 +252,7 @@ function mapApiError(err) {
  *   couponData: {
  *     code:              string,   Obrigatório
  *     type:              string,   'percentage'|'absolute'|'shipping'
- *     value:             number,   Obrigatório, positivo
+ *     value:             number,   Obrigatório e positivo só para percentage e absolute
  *     max_uses?:         number|null,
  *     valid?:            boolean,
  *     start_date?:       string,   YYYY-MM-DD
@@ -262,17 +286,7 @@ export async function createCoupon({ companyId, storeId, couponData, userId, cor
   }
 
   // 3. Montar payload seguro para a API (apenas campos permitidos)
-  const payload = {
-    code:              normalizedCode,
-    type:              couponData.type,
-    value:             String(Number(couponData.value)),
-    max_uses:          couponData.max_uses ?? null,
-    valid:             couponData.valid !== false,  // default true
-    start_date:        couponData.start_date        ?? null,
-    end_date:          couponData.end_date          ?? null,
-    min_price:         couponData.min_price != null ? String(Number(couponData.min_price)) : null,
-    includes_shipping: couponData.includes_shipping ?? false,
-  };
+  const payload = buildCouponWritePayload(couponData, normalizedCode);
 
   // 4. Chamar API
   let created;

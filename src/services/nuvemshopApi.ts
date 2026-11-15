@@ -70,7 +70,7 @@ export interface NuvemshopCoupon {
 export interface CreateCouponPayload {
   code:              string;
   type:              CouponType;
-  value:             number;
+  value?:            number;
   max_uses?:         number | null;
   min_price?:        number | null;
   start_date?:       string | null;
@@ -424,4 +424,70 @@ export async function createNuvemshopCoupon(
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? 'Erro ao criar cupom.');
   return json.coupon ?? json;
+}
+
+export interface PromoLink {
+  id: string;
+  name: string;
+  coupon_code: string;
+  coupon_type: CouponType;
+  destination_path: string;
+  created_at: string;
+}
+
+export async function listPromoLinks(companyId: string, storeId: string): Promise<PromoLink[]> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const params = new URLSearchParams({ company_id: companyId, store_id: storeId });
+  const res = await fetch(`/api/nuvemshop/promo-links?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? 'Erro ao listar links promocionais.');
+  return json.links ?? [];
+}
+
+export async function savePromoLink(
+  companyId: string,
+  storeId: string,
+  payload: { name: string; benefit: 'discount' | 'shipping'; coupon_code: string; destination: string; host?: string },
+): Promise<PromoLink> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const res = await fetch('/api/nuvemshop/promo-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ company_id: companyId, store_id: storeId, ...payload }),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const error = new Error(json.error ?? 'Erro ao salvar o link promocional.') as Error & { code?: string; hosts?: string[] };
+    error.code = json.code;
+    error.hosts = json.hosts;
+    throw error;
+  }
+  return json.link;
+}
+
+export async function copyPromoLink(
+  companyId: string,
+  storeId: string,
+  id: string,
+  host?: string,
+): Promise<{ url: string; host: string }> {
+  const token = await getAuthToken();
+  if (!token) throw new Error('Sessão expirada.');
+  const res = await fetch('/api/nuvemshop/promo-links/url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ company_id: companyId, store_id: storeId, id, host }),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const error = new Error(json.error ?? 'Erro ao montar o link.') as Error & { code?: string; hosts?: string[] };
+    error.code = json.code;
+    error.hosts = json.hosts;
+    throw error;
+  }
+  return { url: json.url, host: json.host };
 }
