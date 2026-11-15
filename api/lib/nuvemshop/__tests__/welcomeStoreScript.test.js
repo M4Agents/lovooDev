@@ -240,4 +240,51 @@ describe('formulário da loja', () => {
     expect(document.querySelector('[data-whatsapp-notice]')).toBeNull();
     expect(document.body.textContent).not.toContain('Enviamos seu cupom pelo WhatsApp');
   });
+
+  it('explica que o cupom é só para a primeira compra e permanece na loja', async () => {
+    await openForm();
+    fillForm();
+    window.fetch = vi.fn(async () => ({
+      ok: false,
+      json: async () => ({
+        code: 'identity_conflict',
+        outcome: 'existing_customer',
+        coupon_revealed: false,
+      }),
+    }));
+    document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-welcome-outcome="existing_customer"]')).not.toBeNull());
+    expect(document.getElementById('lovoo-welcome-title').textContent).toBe('Olá, Ana!');
+    expect(document.body.textContent).toContain('Este cupom é exclusivo para a primeira compra. Continue explorando nossas coleções e aproveite as ofertas da VALLERON.');
+    expect(document.body.textContent).toContain('Continuar comprando');
+    expect(document.querySelector('form')).toBeNull();
+    expect(document.querySelector('[data-coupon-code]')).toBeNull();
+    expect(localStorage.getItem('lovoo_welcome_suppress:7680914:11111111-1111-4111-8111-111111111111')).toBeTruthy();
+    document.querySelector('[data-welcome-outcome="existing_customer"]').click();
+    expect(document.getElementById('lovoo-welcome')).toBeNull();
+    expect(window.__lovooNavigate).not.toHaveBeenCalled();
+  });
+
+  it('avisa quem já solicitou o cupom para conferir o WhatsApp', async () => {
+    await openForm();
+    fillForm();
+    window.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        outcome: 'already_requested',
+        coupon_revealed: true,
+        coupon_code: 'BEMVINDO10',
+        apply_url: 'https://valleron.store/discount/BEMVINDO10?redirect_to=/',
+        repeated: true,
+      }),
+    }));
+    document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-welcome-outcome="already_requested"]')).not.toBeNull());
+    expect(document.getElementById('lovoo-welcome-title').textContent).toBe('Olá, Ana!');
+    expect(document.body.textContent).toContain('Você já solicitou seu cupom de boas-vindas. Confira a mensagem no seu WhatsApp para acessá-lo.');
+    expect(document.querySelector('[data-coupon-code]')).toBeNull();
+    expect(document.body.textContent).not.toContain('BEMVINDO10');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(window.__lovooNavigate).not.toHaveBeenCalled();
+  });
 });

@@ -180,7 +180,7 @@ describe('cadastro público', () => {
       attempt_id: '33333333-3333-4333-8333-333333333333',
       email: 'conflito@valleron.store',
     }), conflictRes);
-    expect(conflictRes.statusCode).toBe(409);
+    expect(conflictRes.statusCode).toBe(200);
     expect(conflictRes.body.code).toBe('identity_conflict');
     expectCors(conflictRes);
     expect(conflictRes.getHeader('vary')).toBe('Accept-Encoding, Origin');

@@ -241,6 +241,8 @@ function storeAttempt(state, input, hash, decision) {
   };
 }
 
+const EXISTING_CUSTOMER_MESSAGE = 'Este cupom é exclusivo para a primeira compra. Continue explorando nossas coleções e aproveite as ofertas da VALLERON.';
+
 export function toPublicSignupResult(result, input) {
   if (!result.ok) {
     const errors = {
@@ -260,10 +262,11 @@ export function toPublicSignupResult(result, input) {
   }
   if (result.signup.identity_result === 'conflict') {
     return {
-      status: 409,
+      status: 200,
       body: {
         code: 'identity_conflict',
-        error: 'Não foi possível concluir o cadastro com estes dados.',
+        outcome: 'existing_customer',
+        error: EXISTING_CUSTOMER_MESSAGE,
         coupon_revealed: false,
         redirect: false,
       },
@@ -272,29 +275,35 @@ export function toPublicSignupResult(result, input) {
   if (!result.grant || result.signup.eligibility_result !== 'eligible_limited') {
     const unavailable = result.signup.eligibility_result === 'payment_inconclusive'
       || result.signup.eligibility_result === 'unavailable';
+    const existingCustomer = result.signup.eligibility_result === 'ineligible_paid';
     return {
       status: 200,
       body: {
         code: unavailable ? 'eligibility_unavailable' : 'coupon_not_granted',
+        ...(existingCustomer ? { outcome: 'existing_customer' } : {}),
         error: unavailable
           ? 'Não foi possível confirmar a elegibilidade agora.'
-          : 'Não foi possível conceder o cupom para este cadastro.',
+          : existingCustomer
+            ? EXISTING_CUSTOMER_MESSAGE
+            : 'Não foi possível conceder o cupom para este cadastro.',
         coupon_revealed: false,
         redirect: false,
         discount_applied: false,
       },
     };
   }
+  const alreadyRequested = result.repeated || !result.grantCreated;
   return {
     status: 200,
     body: {
       code: 'coupon_granted',
+      outcome: alreadyRequested ? 'already_requested' : 'coupon_granted',
       coupon_code: result.grant.coupon_code,
       apply_url: result.grant.apply_url,
       coupon_revealed: true,
-      redirect: true,
+      redirect: !alreadyRequested,
       discount_applied: false,
-      repeated: result.repeated || !result.grantCreated,
+      repeated: alreadyRequested,
       limitation: result.signup.limitation_note,
       campaign_id: input.campaignId,
     },

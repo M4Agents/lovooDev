@@ -164,8 +164,9 @@ describe('cadastro real do pop-up', () => {
       { id: 2, company_id: COMPANY, email: 'outra@valleron.store', phone_normalized: '5511999999999', phone: '5511999999999', deleted_at: null },
     );
     const result = await handleWelcomePublic(post(), database(current));
-    expect(result.status).toBe(409);
+    expect(result.status).toBe(200);
     expect(result.body.code).toBe('identity_conflict');
+    expect(result.body.outcome).toBe('existing_customer');
     expect(result.body.coupon_revealed).toBe(false);
     expect(current.leads).toHaveLength(2);
     expect(current.grants).toHaveLength(0);
@@ -175,7 +176,11 @@ describe('cadastro real do pop-up', () => {
     const paid = state();
     paid.leads.push({ id: 4, company_id: COMPANY, email: 'ana@valleron.store', phone_normalized: '5511999999999', phone: '5511999999999', origin: 'manual', deleted_at: null });
     paid.opportunities.push({ company_id: COMPANY, lead_id: 4, nuvemshop_store_id: '7680914', nuvemshop_order_id: '10', nuvemshop_payment_data: { payment_status: 'paid' }, status: 'won' });
-    expect((await handleWelcomePublic(post(), database(paid))).body).toMatchObject({ code: 'coupon_not_granted', coupon_revealed: false });
+    expect((await handleWelcomePublic(post(), database(paid))).body).toMatchObject({
+      code: 'coupon_not_granted',
+      outcome: 'existing_customer',
+      coupon_revealed: false,
+    });
 
     const refunded = state();
     refunded.leads.push({ id: 4, company_id: COMPANY, email: 'ana@valleron.store', phone_normalized: '5511999999999', phone: '5511999999999', deleted_at: null });
@@ -463,9 +468,10 @@ describe('cadastro real do pop-up', () => {
       email: 'ana@valleron.store',
       phone: '11977777777',
     }), database(current));
-    expect(conflict.status).toBe(409);
+    expect(conflict.status).toBe(200);
     expect(conflict.origin).toBe('https://valleron.store');
     expect(conflict.body.code).toBe('identity_conflict');
+    expect(conflict.body.outcome).toBe('existing_customer');
     expect(conflict.body.coupon_revealed).toBe(false);
     expect(current.leads.map((lead) => lead.email)).toEqual(before.map((lead) => lead.email));
     expect(current.grants).toHaveLength(1);

@@ -316,6 +316,29 @@ somente se já existirem.
       status.textContent = message;
     }
 
+    function showOutcome(kind, givenName) {
+      var message = kind === 'already_requested'
+        ? 'Você já solicitou seu cupom de boas-vindas. Confira a mensagem no seu WhatsApp para acessá-lo.'
+        : 'Este cupom é exclusivo para a primeira compra. Continue explorando nossas coleções e aproveite as ofertas da VALLERON.';
+      sending = false;
+      suppress(config.campaign_id, config.resurface_days || 7);
+      form.remove();
+      title.id = 'lovoo-welcome-title';
+      title.textContent = 'Olá, ' + givenName + '!';
+      description.textContent = message;
+      var actions = document.createElement('div');
+      actions.setAttribute('data-confirmation-actions', 'true');
+      var stay = document.createElement('button');
+      stay.type = 'button';
+      stay.setAttribute('data-welcome-outcome', kind);
+      stay.textContent = 'Continuar comprando';
+      stay.style.background = config.button_color || '#111827';
+      stay.style.color = '#fff';
+      stay.onclick = function () { root.remove(); };
+      actions.appendChild(stay);
+      body.appendChild(actions);
+    }
+
     function showConfirmation(result, givenName) {
       var code = result.body.coupon_code;
       var applyUrl = result.body.apply_url;
@@ -400,8 +423,17 @@ somente se já existirem.
         })
       }).then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
         .then(function (result) {
-          if (!result.body || result.body.coupon_revealed !== true || !result.body.coupon_code || !result.body.apply_url) {
-            showError((result.body && result.body.error) || 'Não foi possível concluir o cadastro.');
+          var answer = result.body || {};
+          if (answer.outcome === 'already_requested' || answer.repeated === true) {
+            showOutcome('already_requested', givenName);
+            return;
+          }
+          if (answer.outcome === 'existing_customer' || answer.code === 'identity_conflict') {
+            showOutcome('existing_customer', givenName);
+            return;
+          }
+          if (answer.coupon_revealed !== true || !answer.coupon_code || !answer.apply_url) {
+            showError(answer.error || 'Não foi possível concluir o cadastro.');
             return;
           }
           showConfirmation(result, givenName);
