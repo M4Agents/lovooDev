@@ -30,7 +30,8 @@
 //
 // NÃO DUPLICA:
 //   batch safety, document.id ausente, too_large, type_mismatch, credential_missing,
-//   metadata_failure, download_timeout, audio/sticker skip, url_invalid — cobertos em W-DOC.
+//   metadata_failure, download_timeout, sticker skip, url_invalid — cobertos em W-DOC.
+//   audio inbound — cobertos em W-AUD / inboundMediaProcessor B-AUD.
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

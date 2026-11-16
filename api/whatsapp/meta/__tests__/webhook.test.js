@@ -1803,14 +1803,12 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(res._status).toBe(500);
   });
 
-  // W-DOC-14 — AUDIO e STICKER continuam type_skipped; VIDEO saiu deste ramo ———
-  it('W-DOC-14 | type=audio e type=sticker → type_skipped; zero processor/RPC', async () => {
-    const audioMsg = { id: 'wamid_aud_01', from: FAKE_WA_ID, type: 'audio',
-                       audio: { id: '333', mime_type: 'audio/ogg' }, timestamp: FAKE_TIMESTAMP };
+  // W-DOC-14 — STICKER continua type_skipped; AUDIO saiu para W-AUD ———
+  it('W-DOC-14 | type=sticker → type_skipped; zero processor/RPC', async () => {
     const stickerMsg = { id: 'wamid_stk_01', from: FAKE_WA_ID, type: 'sticker',
                          sticker: { id: '444', mime_type: 'image/webp' }, timestamp: FAKE_TIMESTAMP };
 
-    const payload = makeInboundPayload({ messages: [audioMsg, stickerMsg] });
+    const payload = makeInboundPayload({ messages: [stickerMsg] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
     mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
@@ -2195,6 +2193,308 @@ describe('POST — inbound VIDEO', () => {
 });
 
 // =============================================================================
+// Helpers — AUDIO inbound (MVP5.B3.2.B)
+// =============================================================================
+
+function makeAudioMessage({
+  id        = FAKE_INBOUND_WAMID,
+  from      = FAKE_WA_ID,
+  timestamp = FAKE_TIMESTAMP,
+  audioId   = FAKE_MEDIA_ID,
+  mime_type = 'audio/ogg; codecs=opus',
+  voice     = true,
+  sha256    = 'sha256_fake_audio_for_tests',
+} = {}) {
+  const msg = { id, from, type: 'audio', timestamp };
+  if (audioId === null) return msg;
+  msg.audio = { id: audioId, mime_type, sha256, voice };
+  return msg;
+}
+
+function makeAudioPayload({
+  messages = [makeAudioMessage()],
+  contacts = [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+  statuses = null,
+  phoneId  = FAKE_PHONE_NUM_ID,
+} = {}) {
+  return makeInboundPayload({ messages, contacts, statuses, phoneId });
+}
+
+// =============================================================================
+// W-AUD — POST inbound AUDIO (MVP5.B3.2.B)
+// =============================================================================
+
+describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
+  it('W-AUD-A: audio OGG válido → processor AUDIO, RPC audio, 200', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    const processorArgs = mockDownloadAndStoreInboundMedia.mock.calls[0][0];
+    expect(processorArgs.companyId).toBe(FAKE_COMPANY_ID);
+    expect(processorArgs.mediaId).toBe(FAKE_MEDIA_ID);
+    expect(processorArgs.expectedMediaType).toBe('AUDIO');
+    expect(processorArgs.maxBytes).toBe(16 * 1024 * 1024);
+    expect(processorArgs.hintFilename).toBeUndefined();
+    expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
+    expect(processorArgs).not.toHaveProperty('voice');
+
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
+    expect(rpcName).toBe('process_meta_inbound_media_message');
+    expect(rpcArgs).toMatchObject({
+      p_company_id:     FAKE_COMPANY_ID,
+      p_instance_id:    FAKE_INSTANCE_ID,
+      p_media_asset_id: FAKE_ASSET_ID,
+      p_message_type:   'audio',
+    });
+    expect(rpcArgs).not.toHaveProperty('p_body');
+    expect(rpcArgs).not.toHaveProperty('p_voice');
+    expect(JSON.stringify(rpcArgs)).not.toContain('sha256_fake_audio_for_tests');
+  });
+
+  it('W-AUD-C: voice true e false → mesma RPC; flag não persistida', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(
+      makeAudioPayload({ messages: [makeAudioMessage({ voice: true })] }),
+    )));
+    setupDocumentDb();
+    await handler(makePostReq(), makeRes());
+
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(
+      makeAudioPayload({ messages: [makeAudioMessage({ id: 'wamid.voice_false', voice: false })] }),
+    )));
+    setupDocumentDb();
+    await handler(makePostReq(), makeRes());
+
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('audio');
+    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('audio');
+    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_voice');
+    expect(mockSvc.rpc.mock.calls[1][1]).not.toHaveProperty('p_voice');
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain('"voice"');
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[1][1])).not.toContain('"voice"');
+  });
+
+  it.each([
+    ['ausente', makeAudioMessage({ audioId: null })],
+    ['vazio', makeAudioMessage({ audioId: '' })],
+    ['whitespace', makeAudioMessage({ audioId: '   ' })],
+    ['não-string', (() => {
+      const msg = makeAudioMessage({ audioId: null });
+      msg.audio = { id: 123, mime_type: 'audio/ogg', voice: true };
+      return msg;
+    })()],
+  ])('W-AUD-D: audio.id %s → skip 200; zero decrypt/download/RPC', async (_label, msg) => {
+    const payload = makeAudioPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-I: inbound_media_type_mismatch → 200; zero RPC', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_type_mismatch'),
+    );
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-G: inbound_media_too_large → 200; zero RPC', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_too_large'),
+    );
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-H: falha transitória de download → HTTP 500', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockDownloadAndStoreInboundMedia.mockRejectedValueOnce(
+      makeMediaError('inbound_media_download_failed'),
+    );
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-J: wamid já persistido → 200; zero decrypt/download/RPC', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain({ id: 'existing-audio-uuid' }));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-K: HMAC inválido → 401; zero DB; zero RPC', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-L: company_id/instance_id do payload ignorados; usa instância', async () => {
+    const spoofCompany  = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    const spoofInstance = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    const payload = makeAudioPayload();
+    payload.entry[0].id = spoofCompany;
+    payload.entry[0].changes[0].value.metadata.company_id = spoofCompany;
+    payload.entry[0].changes[0].value.metadata.instance_id = spoofInstance;
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].companyId).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[0][1].p_instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).not.toBe(spoofCompany);
+  });
+
+  it('W-AUD-M: RPC falha → HTTP 500', async () => {
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
+  });
+
+  it('W-AUD-N: regressão text/button/image/video/document intactos', async () => {
+    const textPayload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(textPayload)));
+    setupInboundDb();
+    const textRes = makeRes();
+    await handler(makePostReq(), textRes);
+    expect(textRes._status).toBe(200);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe(FAKE_BODY);
+
+    const btnPayload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(btnPayload)));
+    setupInboundDb();
+    const btnRes = makeRes();
+    await handler(makePostReq(), btnRes);
+    expect(btnRes._status).toBe(200);
+    expect(mockSvc.rpc.mock.calls[1][1].p_body).toBe(FAKE_BUTTON_TEXT);
+
+    const docPayload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(docPayload)));
+    setupDocumentDb();
+    const docRes = makeRes();
+    await handler(makePostReq(), docRes);
+    expect(docRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].expectedMediaType).toBe('DOCUMENT');
+  });
+
+  it('W-AUD-O: location/sticker/unknown continuam skipped', async () => {
+    const skipped = makeInboundPayload({
+      messages: [
+        { id: 'wamid_loc_aud', from: FAKE_WA_ID, type: 'location', location: { latitude: 0, longitude: 0 }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_stk_aud', from: FAKE_WA_ID, type: 'sticker', sticker: { id: '2' }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_unk_aud', from: FAKE_WA_ID, type: 'unknown', timestamp: FAKE_TIMESTAMP },
+      ],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(skipped)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const skipRes = makeRes();
+    await handler(makePostReq(), skipRes);
+    expect(skipRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('W-AUD-P: logs não contêm wa_id, token, media_id, voice nem MIME de payload', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const payload = makeAudioPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupDocumentDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    const logs = collectHandlerLogs(logSpy, errSpy);
+    expect(logs).not.toContain(FAKE_WA_ID);
+    expect(logs).not.toContain(FAKE_PLAIN_TOKEN);
+    expect(logs).not.toContain(FAKE_APP_SECRET);
+    expect(logs).not.toContain(FAKE_MEDIA_ID);
+    expect(logs).not.toContain('audio/ogg');
+    expect(logs).not.toContain('codecs=opus');
+    expect(logs).not.toContain('sha256_fake_audio_for_tests');
+    expect(logs.toLowerCase()).not.toContain('voice=true');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_WA_ID);
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_MEDIA_ID);
+
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+});
+
+// =============================================================================
 // MVP4C.12.A1 — inbound type=button (QUICK_REPLY)
 // =============================================================================
 
@@ -2407,10 +2707,9 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
     ]);
   });
 
-  it('BTN-10: audio/sticker continuam skipped; document/image/video intactos', async () => {
+  it('BTN-10: sticker continua skipped; document intacto', async () => {
     const skipped = makeInboundPayload({
       messages: [
-        { id: 'wamid_aud_btn', from: FAKE_WA_ID, type: 'audio', audio: { id: '1' }, timestamp: FAKE_TIMESTAMP },
         { id: 'wamid_stk_btn', from: FAKE_WA_ID, type: 'sticker', sticker: { id: '2' }, timestamp: FAKE_TIMESTAMP },
       ],
     });
@@ -2759,10 +3058,9 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
     });
   });
 
-  it('INT-N: audio/location/sticker/unknown continuam skipped; image/document/video intactos', async () => {
+  it('INT-N: location/sticker/unknown continuam skipped; document intacto', async () => {
     const skipped = makeInboundPayload({
       messages: [
-        { id: 'wamid_aud_int', from: FAKE_WA_ID, type: 'audio', audio: { id: '1' }, timestamp: FAKE_TIMESTAMP },
         { id: 'wamid_loc_int', from: FAKE_WA_ID, type: 'location', location: { latitude: 0, longitude: 0 }, timestamp: FAKE_TIMESTAMP },
         { id: 'wamid_stk_int', from: FAKE_WA_ID, type: 'sticker', sticker: { id: '2' }, timestamp: FAKE_TIMESTAMP },
         { id: 'wamid_unk_int', from: FAKE_WA_ID, type: 'unknown', timestamp: FAKE_TIMESTAMP },

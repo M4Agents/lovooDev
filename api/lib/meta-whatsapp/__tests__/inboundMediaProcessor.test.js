@@ -210,7 +210,7 @@ describe('INPUT — validação de parâmetros', () => {
   });
 
   it('B-04: expectedMediaType inválido → inbound_media_invalid_input, sem I/O', async () => {
-    for (const bad of ['AUDIO', 'document', 'image', '', null, undefined]) {
+    for (const bad of ['STICKER', 'document', 'image', '', null, undefined]) {
       const { svc } = makeSvc();
       await expect(
         downloadAndStoreInboundMedia({ ...BASE_PARAMS, svc, expectedMediaType: bad }),
@@ -419,6 +419,146 @@ describe('BYTES — MIME detection e limites', () => {
         maxBytes:          5 * 1024 * 1024,
       }),
     ).rejects.toMatchObject({ code: 'inbound_media_type_mismatch' });
+  });
+
+  it('B-AUD-01: AUDIO + OGG válido → sucesso; file_type=audio; filename inbound.ogg', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/ogg', ext: 'ogg' });
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(40 * 1024));
+    const { svc, mockInsert } = makeSvc();
+
+    const result = await downloadAndStoreInboundMedia({
+      ...BASE_PARAMS,
+      svc,
+      expectedMediaType: 'AUDIO',
+      hintFilename:      undefined,
+      maxBytes:          16 * 1024 * 1024,
+    });
+
+    expect(result.mimeType).toBe('audio/ogg');
+    expect(result.reused).toBe(false);
+    expect(mockInsert.mock.calls[0][0].file_type).toBe('audio');
+    expect(mockInsert.mock.calls[0][0].original_filename).toBe('inbound.ogg');
+    expect(mockInsert.mock.calls[0][0].company_id).toBe(FAKE_COMPANY_ID);
+    expect(mockInsert.mock.calls[0][0]).not.toHaveProperty('voice');
+  });
+
+  it('B-AUD-01b: AUDIO + audio/ogg; codecs=opus → sucesso', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/ogg; codecs=opus', ext: 'ogg' });
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(20 * 1024));
+    const { svc, mockInsert } = makeSvc();
+
+    const result = await downloadAndStoreInboundMedia({
+      ...BASE_PARAMS,
+      svc,
+      expectedMediaType: 'AUDIO',
+      hintFilename:      undefined,
+      maxBytes:          16 * 1024 * 1024,
+    });
+
+    expect(result.mimeType).toBe('audio/ogg; codecs=opus');
+    expect(mockInsert.mock.calls[0][0].original_filename).toBe('inbound.ogg');
+  });
+
+  it('B-AUD-02: AUDIO + MPEG válido → sucesso', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/mpeg', ext: 'mp3' });
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(80 * 1024));
+    const { svc, mockInsert } = makeSvc();
+
+    const result = await downloadAndStoreInboundMedia({
+      ...BASE_PARAMS,
+      svc,
+      expectedMediaType: 'AUDIO',
+      hintFilename:      undefined,
+      maxBytes:          16 * 1024 * 1024,
+    });
+
+    expect(result.mimeType).toBe('audio/mpeg');
+    expect(mockInsert.mock.calls[0][0].original_filename).toBe('inbound.mp3');
+  });
+
+  it('B-AUD-03: AUDIO + JPEG → inbound_media_type_mismatch', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'image/jpeg', ext: 'jpg' });
+    const { svc, mockUpload } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({
+        ...BASE_PARAMS,
+        svc,
+        expectedMediaType: 'AUDIO',
+        maxBytes:          16 * 1024 * 1024,
+      }),
+    ).rejects.toMatchObject({ code: 'inbound_media_type_mismatch' });
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('B-AUD-04: AUDIO + video/mp4 → inbound_media_type_mismatch', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'video/mp4', ext: 'mp4' });
+    const { svc, mockUpload } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({
+        ...BASE_PARAMS,
+        svc,
+        expectedMediaType: 'AUDIO',
+        maxBytes:          16 * 1024 * 1024,
+      }),
+    ).rejects.toMatchObject({ code: 'inbound_media_type_mismatch' });
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('B-AUD-05: AUDIO + audio/mp4 (M4A excluído) → inbound_media_type_mismatch', async () => {
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/mp4', ext: 'm4a' });
+    const { svc, mockUpload } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({
+        ...BASE_PARAMS,
+        svc,
+        expectedMediaType: 'AUDIO',
+        maxBytes:          16 * 1024 * 1024,
+      }),
+    ).rejects.toMatchObject({ code: 'inbound_media_type_mismatch' });
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('B-AUD-06: AUDIO acima de 16 MiB → inbound_media_too_large', async () => {
+    const maxBytes = 16 * 1024 * 1024;
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(maxBytes + 1));
+    const { svc, mockUpload } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({
+        ...BASE_PARAMS,
+        svc,
+        expectedMediaType: 'AUDIO',
+        maxBytes,
+      }),
+    ).rejects.toMatchObject({ code: 'inbound_media_too_large' });
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('B-AUD-07: metadata.mime_type mentiroso; bytes OGG → persiste audio/ogg', async () => {
+    downloadMediaMetadata.mockResolvedValueOnce({
+      url:       FAKE_CDN_URL,
+      mime_type: 'video/mp4',
+      sha256:    'payload-sha-ignored',
+      file_size: 12 * 1024,
+    });
+    fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/ogg', ext: 'ogg' });
+    downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(12 * 1024));
+    const { svc, mockInsert } = makeSvc();
+
+    const result = await downloadAndStoreInboundMedia({
+      ...BASE_PARAMS,
+      svc,
+      expectedMediaType: 'AUDIO',
+      hintFilename:      undefined,
+      maxBytes:          16 * 1024 * 1024,
+    });
+
+    expect(result.mimeType).toBe('audio/ogg');
+    expect(mockInsert.mock.calls[0][0].mime_type).toBe('audio/ogg');
+    expect(mockInsert.mock.calls[0][0].mime_type).not.toBe('video/mp4');
   });
 });
 

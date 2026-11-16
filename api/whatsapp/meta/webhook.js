@@ -3,7 +3,7 @@
 //
 // GET  → Verificação do challenge Meta (setup do webhook no App Dashboard)
 // POST → Recebimento de eventos: statuses[] outbound (MVP2) + messages[] inbound
-//        TEXT (MVP3A), DOCUMENT/IMAGE/VIDEO, BUTTON/QUICK_REPLY (MVP4C.12)
+//        TEXT (MVP3A), DOCUMENT/IMAGE/VIDEO/AUDIO, BUTTON/QUICK_REPLY (MVP4C.12)
 //        e INTERACTIVE button_reply/list_reply (MVP5.B3.1)
 //
 // Segurança:
@@ -37,7 +37,8 @@
 //     ou usados como tenant
 //   - Grupos (message.group_id presente) ignorados silenciosamente
 //   - played ignorado silenciosamente
-//   - audio, location, sticker, interactive de outro subtipo e unknown: type_skipped
+//   - type='audio' persistido via process_meta_inbound_media_message (MVP5.B3.2.B)
+//   - location, sticker, interactive de outro subtipo e unknown: type_skipped
 //
 // Decisão UNKNOWN_WAMID (B1):
 //   - Meta retenta não-200 por até 7 dias (documentado oficialmente)
@@ -544,8 +545,32 @@ async function handlePost(req, res) {
           });
           if (vidTransient) hasTransientFailure = true;
 
+        } else if (message.type === 'audio') {
+          // ── B.5.4b AUDIO inbound (MVP5.B3.2.B) ──────────────────────────
+          // mime_type, sha256 e voice do payload NÃO são autoridade nem persistidos.
+          // media_id: somente audio.id string não vazia. Filename: inbound.<ext>.
+          const mediaId = message.audio?.id;
+          if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
+            console.log('[meta/webhook] event_type=inbound_audio outcome=invalid_media_id');
+            continue;
+          }
+          const audTransient = await processInboundMediaMessage({
+            svc,
+            instance,
+            message,
+            contactName,
+            providerTimestamp,
+            mediaId,
+            expectedMediaType: 'AUDIO',
+            rpcMessageType:    'audio',
+            hintFilename:      undefined,
+            maxBytes:          MEDIA_SIZE_LIMITS.AUDIO,
+            logEvent:          'inbound_audio',
+          });
+          if (audTransient) hasTransientFailure = true;
+
         } else {
-          // ── B.5.5 Tipos não suportados (audio, sticker, location, etc.) ────
+          // ── B.5.5 Tipos não suportados (sticker, location, etc.) ────
           console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
           continue;
         }
@@ -553,7 +578,7 @@ async function handlePost(req, res) {
     }
   }
 
-  // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE/VIDEO do payload.
+  // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE/VIDEO/AUDIO do payload.
   // Meta reenviará o payload inteiro — idempotência garante segurança do retry.
   if (hasTransientFailure) {
     return res.status(500).json({ error: 'Internal error' });
@@ -567,14 +592,14 @@ async function handlePost(req, res) {
 // =============================================================================
 
 /**
- * Pipeline compartilhado DOCUMENT + IMAGE + VIDEO inbound.
+ * Pipeline compartilhado DOCUMENT + IMAGE + VIDEO + AUDIO inbound.
  *
  * Preserva a semântica validada do ramo DOCUMENT:
  *   dedupe wamid → credencial lazy (instance.id do banco) → processor existente
  *   → RPC process_meta_inbound_media_message (body=NULL; caption fora do MVP).
  *
  * NÃO baixa mídia, NÃO chama Graph, NÃO chama RPC se o caller já rejeitou mediaId.
- * NÃO processa AUDIO / STICKER.
+ * NÃO processa STICKER / LOCATION. AUDIO usa este pipeline.
  *
  * @returns {Promise<boolean>} true = falha transiente (caller marca hasTransientFailure)
  */

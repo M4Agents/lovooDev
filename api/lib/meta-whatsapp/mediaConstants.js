@@ -4,19 +4,24 @@
 // Extraídas de mediaAsset.js (MVP4B.4C.1) para uso compartilhado pelo
 // endpoint de importação (MVP4B.4D.2B) sem duplicação de lógica.
 //
-// IMPORTANTE: qualquer alteração aqui impacta simultaneamente:
+// IMPORTANTE: VALID_MEDIA_TYPES impacta outbound simultaneamente:
 //   - api/lib/meta-whatsapp/mediaAsset.js   (validateMediaAsset)
 //   - api/whatsapp/meta/media/import.js      (importação lead_media_unified)
+// AUDIO inbound NÃO entra em VALID_MEDIA_TYPES. Usar VALID_INBOUND_MEDIA_TYPES.
 // =============================================================================
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Outbound / template HEADER / import / picker. Sem AUDIO de propósito.
 export const VALID_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+// Webhook inbound apenas. Inclui AUDIO sem liberar upload/template/import.
+export const VALID_INBOUND_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO']);
 
 // Limite máximo de tamanho por tipo de media.
 //
-// IMAGE e VIDEO: valores per Meta Cloud API documentation (endpoint /media).
+// IMAGE, VIDEO e AUDIO: valores per Meta Cloud API documentation (endpoint /media).
 // DOCUMENT: ENGINEERING SAFETY LIMIT — NÃO é o limite oficial da Meta.
 //   A Meta permite até 100 MB no endpoint /media para documentos.
 //   Este limite de 30 MB é uma decisão de engenharia conservadora para:
@@ -26,6 +31,7 @@ export const VALID_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
 export const MEDIA_SIZE_LIMITS = {
   IMAGE:    5  * 1024 * 1024, //  5 MB — Meta documentation
   VIDEO:    16 * 1024 * 1024, // 16 MB — Meta documentation
+  AUDIO:    16 * 1024 * 1024, // 16 MB — Meta documentation (inbound)
   DOCUMENT: 30 * 1024 * 1024, // 30 MB — ENGINEERING SAFETY LIMIT (not Meta limit)
 };
 
@@ -39,11 +45,18 @@ export const MEDIA_SIZE_LIMITS = {
 //
 // Fail-closed: qualquer MIME fora desta whitelist é rejeitado.
 export const MIME_TO_MEDIA_TYPE = new Map([
-  ['image/jpeg',      'IMAGE'],
-  ['image/png',       'IMAGE'],
-  ['video/mp4',       'VIDEO'],
-  ['video/3gpp',      'VIDEO'],
-  ['application/pdf', 'DOCUMENT'],
+  ['image/jpeg',             'IMAGE'],
+  ['image/png',              'IMAGE'],
+  ['video/mp4',              'VIDEO'],
+  ['video/3gpp',             'VIDEO'],
+  ['application/pdf',        'DOCUMENT'],
+  // Inbound audio — file-type 20.5.0. video/mp4 permanece VIDEO.
+  // audio/mp4 (M4A) excluído: ISO-BMFF ambíguo vs vídeo.
+  // audio/aac excluído: file-type 20.5.0 não lista o MIME.
+  ['audio/ogg',              'AUDIO'],
+  ['audio/ogg; codecs=opus', 'AUDIO'],
+  ['audio/mpeg',             'AUDIO'],
+  ['audio/amr',              'AUDIO'],
 ]);
 
 export const MAX_FILENAME_LEN      = 200;

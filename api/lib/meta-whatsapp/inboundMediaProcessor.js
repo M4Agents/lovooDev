@@ -39,7 +39,7 @@ import { fileTypeFromBlob }           from 'file-type';
 import { downloadMediaMetadata, downloadMediaBytes } from './graphClient.js';
 import {
   UUID_RE,
-  VALID_MEDIA_TYPES,
+  VALID_INBOUND_MEDIA_TYPES,
   MEDIA_SIZE_LIMITS,
   MIME_TO_MEDIA_TYPE,
   FALLBACK_DOC_FILENAME,
@@ -66,11 +66,15 @@ const WAMID_MAX_LEN = 200;
 // Usada para gerar filenames de fallback para IMAGE/VIDEO.
 // PDF (DOCUMENT) usa extensão do filename original sanitizado.
 const MIME_TO_EXT = new Map([
-  ['image/jpeg',      'jpg'],
-  ['image/png',       'png'],
-  ['video/mp4',       'mp4'],
-  ['video/3gpp',      '3gp'],
-  ['application/pdf', 'pdf'],
+  ['image/jpeg',             'jpg'],
+  ['image/png',              'png'],
+  ['video/mp4',              'mp4'],
+  ['video/3gpp',             '3gp'],
+  ['application/pdf',        'pdf'],
+  ['audio/ogg',              'ogg'],
+  ['audio/ogg; codecs=opus', 'ogg'],
+  ['audio/mpeg',             'mp3'],
+  ['audio/amr',              'amr'],
 ]);
 
 // =============================================================================
@@ -110,13 +114,13 @@ async function cleanupDestination(svc, destinationKey) {
  * Resolve o filename de display para o asset a ser armazenado.
  *
  * DOCUMENT: usa hintFilename sanitizado; fallback = FALLBACK_DOC_FILENAME ('document.pdf').
- * IMAGE/VIDEO: usa hintFilename sanitizado se fornecido; fallback = 'inbound.<ext>'
+ * IMAGE/VIDEO/AUDIO: usa hintFilename sanitizado se fornecido; fallback = 'inbound.<ext>'
  *   onde ext vem dos bytes detectados — nunca do payload.
  *
  * NÃO usa extensão do hintFilename para determinar formato.
  * Filename é apenas metadata de display — bytes são autoridade de MIME.
  *
- * @param {'IMAGE'|'VIDEO'|'DOCUMENT'} expectedMediaType
+ * @param {'IMAGE'|'VIDEO'|'DOCUMENT'|'AUDIO'} expectedMediaType
  * @param {unknown} hintFilename
  * @param {string}  detectedExt   — ext dos bytes reais (MIME_TO_EXT)
  * @returns {string}
@@ -126,7 +130,7 @@ function resolveFilename(expectedMediaType, hintFilename, detectedExt) {
     // sanitizeFilename trata fallback para FALLBACK_DOC_FILENAME
     return sanitizeFilename(hintFilename);
   }
-  // IMAGE / VIDEO: usa hintFilename quando fornecido; caso contrário, fallback determinístico
+  // IMAGE / VIDEO / AUDIO: usa hintFilename quando fornecido; caso contrário, fallback determinístico
   if (typeof hintFilename === 'string' && hintFilename.trim().length > 0) {
     return sanitizeFilename(hintFilename);
   }
@@ -154,7 +158,7 @@ function resolveFilename(expectedMediaType, hintFilename, detectedExt) {
  *   Media ID recebido no webhook (numeric string — validado pelo graphClient).
  * @param {string} params.wamid
  *   Message ID único do webhook. Chave de idempotência.
- * @param {'IMAGE'|'VIDEO'|'DOCUMENT'} params.expectedMediaType
+ * @param {'IMAGE'|'VIDEO'|'DOCUMENT'|'AUDIO'} params.expectedMediaType
  *   Tipo esperado — deve corresponder ao 'type' do webhook (verificado via bytes).
  * @param {unknown} [params.hintFilename]
  *   Filename original do payload. Não confiável — sempre sanitizado.
@@ -202,7 +206,7 @@ export async function downloadAndStoreInboundMedia({
   if (typeof mediaId !== 'string' || mediaId.trim().length === 0) {
     throw makeError('inbound_media_invalid_input', 'inboundMediaProcessor: mediaId inválido');
   }
-  if (!VALID_MEDIA_TYPES.has(expectedMediaType)) {
+  if (!VALID_INBOUND_MEDIA_TYPES.has(expectedMediaType)) {
     throw makeError('inbound_media_invalid_input', 'inboundMediaProcessor: expectedMediaType inválido');
   }
   const sizeLimit = MEDIA_SIZE_LIMITS[expectedMediaType];
