@@ -44,6 +44,7 @@ import type {
   MetaChatMessage,
   MetaDeliveryStatus,
   MetaHistoricalTemplateButton,
+  MetaMessageMedia,
   MetaWhatsAppTemplate,
   MetaTemplateParameterValues,
 } from '../../../types/meta-whatsapp'
@@ -343,6 +344,47 @@ interface MetaMessageBubbleProps {
   message: MetaChatMessage
 }
 
+interface MetaInboundAudioPlayerProps {
+  media: MetaMessageMedia
+}
+
+function MetaInboundAudioPlayer({ media }: MetaInboundAudioPlayerProps) {
+  const [playbackFailed, setPlaybackFailed] = useState(false)
+  const url = media.url
+  if (!url) return null
+
+  return (
+    <div className="mb-2">
+      {!playbackFailed ? (
+        <audio
+          data-testid="msg-media-audio"
+          src={url}
+          controls
+          preload="metadata"
+          className="w-full min-w-[200px]"
+          onError={() => setPlaybackFailed(true)}
+        />
+      ) : (
+        <p
+          data-testid="msg-media-audio-unsupported"
+          className="text-xs italic opacity-70 mb-1"
+        >
+          Este formato de áudio não pode ser reproduzido neste navegador.
+        </p>
+      )}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="msg-media-audio-link"
+        className="mt-1 flex items-center gap-2 text-xs underline underline-offset-2 opacity-80 hover:opacity-100"
+      >
+        {media.filename ?? 'Abrir arquivo de áudio'}
+      </a>
+    </div>
+  )
+}
+
 function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   const isInbound = message.direction === 'inbound'
   const time      = formatTime(message.provider_timestamp ?? message.created_at)
@@ -351,6 +393,7 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
   // INBOUND-DOC-C2: document inbound com media.type='document' também é renderizável.
   // INBOUND-IMG: image inbound somente com media.type='image' e URL válida.
   // INBOUND-VID: video inbound somente com media.type='video' e URL válida.
+  // INBOUND-AUD: audio inbound somente com media.type='audio' e URL válida.
   // Tipos desconhecidos continuam "Mensagem não suportada".
   const isInboundImage =
     message.message_type === 'image' &&
@@ -360,19 +403,25 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
     message.message_type === 'video' &&
     message.media?.type === 'video' &&
     Boolean(message.media.url)
+  const isInboundAudio =
+    message.message_type === 'audio' &&
+    message.media?.type === 'audio' &&
+    Boolean(message.media.url)
   const isRenderable =
     message.message_type === 'text'     ||
     message.message_type === 'template' ||
     (message.message_type === 'document' && message.media?.type === 'document') ||
     isInboundImage ||
-    isInboundVideo
+    isInboundVideo ||
+    isInboundAudio
 
-  // Fail-closed: image/video sem URL, sem media, ou media.type divergente → hasMedia = false.
+  // Fail-closed: image/video/audio sem URL, sem media, ou media.type divergente → hasMedia = false.
   const hasMedia =
     (message.message_type === 'template' && message.media != null) ||
     (message.message_type === 'document' && message.media?.type === 'document') ||
     isInboundImage ||
-    isInboundVideo
+    isInboundVideo ||
+    isInboundAudio
   const mediaType = hasMedia ? message.media!.type : null
 
   return (
@@ -411,6 +460,11 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
               className="w-full max-h-48 bg-black/80"
             />
           </div>
+        )}
+
+        {/* ── AUDIO inbound ─────────────────────────────────────────────────── */}
+        {hasMedia && mediaType === 'audio' && message.media!.url && (
+          <MetaInboundAudioPlayer media={message.media!} />
         )}
 
         {/* ── DOCUMENT header ───────────────────────────────────────────────── */}
@@ -456,7 +510,7 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
         {/* ── Body / fallback ───────────────────────────────────────────────── */}
         {/* Fail-closed: se não renderizável → "Mensagem não suportada".          */}
         {/* Body somente quando há conteúdo real: evita <p> vazio para document   */}
-        {/* / image / video inbound (body=null). Não fabrica caption.             */}
+        {/* / image / video / audio inbound (body=null). Não fabrica caption.     */}
         {/* TEXT e TEMPLATE sempre têm body não-nulo.                             */}
         {!isRenderable ? (
           <p className="text-sm italic opacity-70">

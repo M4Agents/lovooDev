@@ -1016,9 +1016,9 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     expect(companyCall[1]).toBe(FAKE_COMPANY_ID); // auth.companyId, não do caller
   });
 
-  it('B-09: asset file_type=audio → media:null (tipo não aceito)', async () => {
+  it('B-09: message_type=template + asset file_type=audio → media:null (audio só com message_type=audio)', async () => {
     const dbMsg = makeMsgWithAsset('msg-audio-001', FAKE_ASSET_ID_1);
-    const asset = makeAsset(FAKE_ASSET_ID_1, 'audio', { mime_type: 'audio/mp3', file_type: 'audio' });
+    const asset = makeAsset(FAKE_ASSET_ID_1, 'audio', { mime_type: 'audio/mpeg', file_type: 'audio' });
 
     mockSvc.from
       .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
@@ -1030,7 +1030,7 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    // audio não é aceito → media:null
+    // Isolamento: AUDIO não é anexado a template/image/video/document
     expect(res._body.messages[0].media).toBeNull();
   });
 
@@ -1134,6 +1134,181 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 
     // media_asset_id nunca exposto no DTO público
     expect(msg).not.toHaveProperty('media_asset_id');
+  });
+
+  // ── D-AUD — inbound AUDIO DTO (MVP5.B3.2.C) ────────────────────────────────
+  it('D-AUD-01: message_type=audio inbound + asset audio same-company → DTO completo', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-001', FAKE_ASSET_ID_1, {
+      direction:         'inbound',
+      message_type:      'audio',
+      body:              null,
+      template_name:     null,
+      template_language: null,
+    });
+    const audioAsset = makeAsset(FAKE_ASSET_ID_1, 'audio', {
+      mime_type:         'audio/ogg',
+      original_filename: 'inbound.ogg',
+      file_size:         48000,
+      preview_url:       'https://storage.example.com/inbound.ogg',
+      file_type:         'audio',
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(makeAssetChain([audioAsset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const msg = res._body.messages[0];
+    expect(msg.direction).toBe('inbound');
+    expect(msg.message_type).toBe('audio');
+    expect(msg.body).toBeNull();
+    expect(msg.media).toEqual({
+      type:      'audio',
+      url:       'https://storage.example.com/inbound.ogg',
+      filename:  'inbound.ogg',
+      mime_type: 'audio/ogg',
+      file_size: 48000,
+    });
+    expect(msg).not.toHaveProperty('media_asset_id');
+  });
+
+  it('D-AUD-02: asset de outra empresa → media:null; boundary tenant explícita', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-xten', FAKE_ASSET_ID_1, {
+      direction:    'inbound',
+      message_type: 'audio',
+      body:         null,
+    });
+    const assetChain = makeAssetChain([]);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(assetChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media).toBeNull();
+
+    const companyCall = assetChain.eq.mock.calls.find(c => c[0] === 'company_id');
+    expect(companyCall).toBeDefined();
+    expect(companyCall[1]).toBe(FAKE_COMPANY_ID);
+    expect(companyCall[1]).not.toBe(OTHER_COMPANY_ID);
+  });
+
+  it('D-AUD-03: asset ausente → media:null (fail-closed)', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-miss', FAKE_ASSET_ID_1, {
+      direction:    'inbound',
+      message_type: 'audio',
+      body:         null,
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(makeAssetChain([]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media).toBeNull();
+  });
+
+  it('D-AUD-04: message_type=audio + asset.file_type=video → media:null', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-mismatch', FAKE_ASSET_ID_1, {
+      direction:    'inbound',
+      message_type: 'audio',
+      body:         null,
+    });
+    const videoAsset = makeAsset(FAKE_ASSET_ID_1, 'video', { mime_type: 'video/mp4' });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(makeAssetChain([videoAsset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media).toBeNull();
+  });
+
+  it('D-AUD-05: preview_url null → DTO com url:null; sem URL inventada', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-nourl', FAKE_ASSET_ID_1, {
+      direction:    'inbound',
+      message_type: 'audio',
+      body:         null,
+    });
+    const audioAsset = makeAsset(FAKE_ASSET_ID_1, 'audio', {
+      mime_type:         'audio/mpeg',
+      original_filename: 'inbound.mp3',
+      file_type:         'audio',
+      preview_url:       null,
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(makeAssetChain([audioAsset]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const media = res._body.messages[0].media;
+    expect(media).not.toBeNull();
+    expect(media.type).toBe('audio');
+    expect(media.url).toBeNull();
+    expect(JSON.stringify(res._body)).not.toContain('https://');
+  });
+
+  it('D-AUD-06: campos internos e sensíveis ausentes do DTO', async () => {
+    const inboundAudioMsg = makeMsgWithAsset('msg-inb-aud-sec', FAKE_ASSET_ID_1, {
+      direction:    'inbound',
+      message_type: 'audio',
+      body:         null,
+    });
+    const assetWithSecrets = {
+      ...makeAsset(FAKE_ASSET_ID_1, 'audio', {
+        mime_type:         'audio/ogg',
+        original_filename: 'inbound.ogg',
+        file_type:         'audio',
+        preview_url:       'https://storage.example.com/inbound.ogg',
+      }),
+      s3_key:     'private/bucket/inbound.ogg',
+      company_id: FAKE_COMPANY_ID,
+    };
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([inboundAudioMsg]))
+      .mockReturnValueOnce(makeAssetChain([assetWithSecrets]));
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const responseBody = JSON.stringify(res._body);
+    expect(responseBody).not.toContain('media_asset_id');
+    expect(responseBody).not.toContain('s3_key');
+    expect(responseBody).not.toContain('private/bucket/inbound.ogg');
+    expect(res._body.messages[0]).not.toHaveProperty('meta_message_id');
+    expect(res._body.messages[0].media).not.toHaveProperty('company_id');
+    expect(res._body.messages[0].media).not.toHaveProperty('id');
+    expect(responseBody).not.toContain('wamid');
   });
 
   it('B-12: filtros originais de conversation/company/instance preservados com media resolution', async () => {

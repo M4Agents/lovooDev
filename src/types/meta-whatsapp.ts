@@ -193,11 +193,12 @@ export interface MetaChatConversation {
 // futuros tipos (image, document, etc.) serão adicionados sem breaking change.
 
 // MVP4B.6C — DTO de mídia para templates IMAGE / VIDEO / DOCUMENT.
+// MVP5.B3.2.C — inbound AUDIO reutiliza o mesmo shape.
 // url = preview_url do asset (campo público do storage).
-// type vem do file_type do asset — somente 'image' | 'video' | 'document' aceitos.
+// type vem do file_type do asset — 'image' | 'video' | 'document' | 'audio'.
 // Campos não expostos: media_asset_id, s3_key, company_id do asset, Meta media_id.
 export interface MetaMessageMedia {
-  type:      'image' | 'video' | 'document'
+  type:      'image' | 'video' | 'document' | 'audio'
   url:       string | null
   filename:  string | null
   mime_type: string | null

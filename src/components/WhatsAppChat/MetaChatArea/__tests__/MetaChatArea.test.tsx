@@ -1194,12 +1194,13 @@ describe('MetaChatArea — MVP4A Templates', () => {
     expect(screen.queryByText('Mensagem não suportada')).toBeNull()
   })
 
-  // MA-66 — outros message_type continuam "Mensagem não suportada"
-  it('MA-66: message_type="audio" permanece "Mensagem não suportada"', () => {
+  // MA-66 — audio sem media válida continua fail-closed
+  it('MA-66: message_type="audio" sem media válida → "Mensagem não suportada"', () => {
     const audioMsg = makeMsg('msg-audio-001', 'inbound', 'audio', '')
     mockIdle({ messages: [audioMsg] })
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
   })
 
   // MA-67 — race A→B para sendTemplate
@@ -2310,5 +2311,152 @@ describe('MetaChatArea — delivery ticks (MVP5.B1.1)', () => {
     expect(screen.getByTestId('msg-media-image').getAttribute('src')).toBe(media.url)
     expect(screen.getByTestId('meta-delivery-status').getAttribute('data-status')).toBe('delivered')
     expect(screen.queryByText(FAKE_WAMID)).toBeNull()
+  })
+})
+
+// =============================================================================
+// F-INB-AUD — INBOUND AUDIO render (fail-closed)
+// =============================================================================
+
+describe('MetaChatArea — INBOUND AUDIO render', () => {
+  const INBOUND_AUD_MEDIA: MetaMessageMedia = {
+    type:      'audio',
+    url:       'https://example.com/inbound.ogg',
+    filename:  'inbound.ogg',
+    mime_type: 'audio/ogg; codecs=opus',
+    file_size: 48_000,
+  }
+
+  function makeInboundAudMsg(
+    mediaOverride?: Partial<MetaMessageMedia> | null,
+    body: string | null = null,
+  ): MetaChatMessage {
+    const media =
+      mediaOverride === null
+        ? null
+        : { ...INBOUND_AUD_MEDIA, ...mediaOverride }
+    return {
+      id:                 'inb-aud-test-001',
+      conversation_id:    CONV_ID,
+      instance_id:        'inst-001',
+      direction:          'inbound',
+      message_type:       'audio',
+      body:               body as unknown as string,
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at:         '2026-09-21T15:00:00.000Z',
+      media,
+      template_buttons:   null,
+    } as MetaChatMessage
+  }
+
+  it('F-INB-AUD-01: OGG/Opus válido → audio controls, preload=metadata, sem autoplay', () => {
+    mockIdle({ messages: [makeInboundAudMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const audio = screen.getByTestId('msg-media-audio') as HTMLAudioElement
+    expect(audio.src).toContain('inbound.ogg')
+    expect(audio.controls).toBe(true)
+    expect(audio.preload).toBe('metadata')
+    expect(audio.autoplay).toBe(false)
+    expect(audio.hasAttribute('autoplay')).toBe(false)
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('F-INB-AUD-02: MPEG/MP3 renderiza player', () => {
+    mockIdle({
+      messages: [makeInboundAudMsg({
+        url:       'https://example.com/inbound.mp3',
+        filename:  'inbound.mp3',
+        mime_type: 'audio/mpeg',
+      })],
+    })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const audio = screen.getByTestId('msg-media-audio') as HTMLAudioElement
+    expect(audio.src).toContain('inbound.mp3')
+    expect(audio.controls).toBe(true)
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('F-INB-AUD-03: URL ausente → Mensagem não suportada', () => {
+    mockIdle({ messages: [makeInboundAudMsg({ url: null })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
+    expect(screen.queryByTestId('msg-media-audio-link')).toBeNull()
+  })
+
+  it('F-INB-AUD-04: media null ou type divergente → fallback', () => {
+    mockIdle({ messages: [makeInboundAudMsg(null)] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
+
+    cleanup()
+    mockIdle({ messages: [makeInboundAudMsg({ type: 'video', url: 'https://example.com/clip.mp4' })] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByText('Mensagem não suportada')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
+    expect(screen.queryByTestId('msg-media-video')).toBeNull()
+  })
+
+  it('F-INB-AUD-05: body null → nenhum texto inventado', () => {
+    mockIdle({ messages: [makeInboundAudMsg()] })
+    expect(() =>
+      render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    ).not.toThrow()
+    expect(screen.getByTestId('msg-media-audio')).toBeTruthy()
+    expect(screen.queryByText('Áudio')).toBeNull()
+    expect(screen.queryByText('[Áudio]')).toBeNull()
+    expect(screen.queryByText('null')).toBeNull()
+    expect(screen.queryByText('Mensagem não suportada')).toBeNull()
+  })
+
+  it('F-INB-AUD-06: link de acesso com target e rel seguros', () => {
+    mockIdle({ messages: [makeInboundAudMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const link = screen.getByTestId('msg-media-audio-link') as HTMLAnchorElement
+    expect(link.href).toContain('inbound.ogg')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+    expect(link.textContent).toContain('inbound.ogg')
+  })
+
+  it('F-INB-AUD-07: erro de reprodução → mensagem de incompatibilidade e link preservado', () => {
+    mockIdle({ messages: [makeInboundAudMsg()] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const audio = screen.getByTestId('msg-media-audio')
+    fireEvent.error(audio)
+    expect(screen.getByTestId('msg-media-audio-unsupported').textContent).toContain(
+      'Este formato de áudio não pode ser reproduzido neste navegador.',
+    )
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
+    const link = screen.getByTestId('msg-media-audio-link') as HTMLAnchorElement
+    expect(link.href).toContain('inbound.ogg')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toBe('noopener noreferrer')
+  })
+
+  it('F-INB-AUD-08: IMAGE/VIDEO/DOCUMENT inbound continuam renderizando', () => {
+    const img: MetaChatMessage = {
+      id: 'inb-img-after-aud',
+      conversation_id: CONV_ID,
+      instance_id: 'inst-001',
+      direction: 'inbound',
+      message_type: 'image',
+      body: null as unknown as string,
+      provider_timestamp: '2026-09-21T15:30:00.000Z',
+      created_at: '2026-09-21T15:00:00.000Z',
+      media: {
+        type: 'image',
+        url: 'https://example.com/foto.jpg',
+        filename: 'foto.jpg',
+        mime_type: 'image/jpeg',
+        file_size: 1024,
+      },
+      template_buttons: null,
+    }
+    mockIdle({ messages: [img] })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByTestId('msg-media-image')).toBeTruthy()
+    expect(screen.queryByTestId('msg-media-audio')).toBeNull()
   })
 })

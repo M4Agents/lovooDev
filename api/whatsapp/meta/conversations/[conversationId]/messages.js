@@ -98,8 +98,22 @@ const ALLOWED_DELIVERY_STATUS = new Set([
 const ASSET_FIELDS = 'id, preview_url, original_filename, mime_type, file_type, file_size';
 
 // Tipos de file_type aceitos no DTO de mídia — fail-closed.
-// audio, outros, null, desconhecido → media:null.
-const ALLOWED_MEDIA_TYPES = new Set(['image', 'video', 'document']);
+// Outros, null, desconhecido → media:null.
+// AUDIO só é anexado quando message_type === 'audio' (não altera template/image/video/document).
+const ALLOWED_MEDIA_TYPES = new Set(['image', 'video', 'document', 'audio']);
+
+/**
+ * AUDIO exige correspondência estrita message_type ↔ file_type.
+ * IMAGE/VIDEO/DOCUMENT preservam o contrato atual (template HEADER usa
+ * message_type='template' com file_type image/video/document).
+ */
+function isCompatibleMediaType(messageType, fileType) {
+  if (!ALLOWED_MEDIA_TYPES.has(fileType)) return false;
+  if (fileType === 'audio' || messageType === 'audio') {
+    return messageType === 'audio' && fileType === 'audio';
+  }
+  return true;
+}
 
 export default async function handler(req, res) {
   // ── 1. Method guard ────────────────────────────────────────────────────────
@@ -213,7 +227,8 @@ export default async function handler(req, res) {
   // Fail-closed:
   //   - asset inexistente   → media:null (nunca fallback global)
   //   - asset outro tenant  → media:null (boundary: company_id = auth.companyId)
-  //   - file_type inválido  → media:null (audio, outros não aceitos)
+  //   - file_type inválido  → media:null (fora da allowlist)
+  //   - audio com file_type divergente → media:null (fail-closed)
   //   - asset query error   → 500 (consistente com padrão do endpoint)
   // media_asset_id nunca aparece no DTO final.
   const mediaIds = [...new Set(
@@ -279,7 +294,7 @@ export default async function handler(req, res) {
     let media = null;
     if (media_asset_id) {
       const asset = assetMap.get(media_asset_id);
-      if (asset && ALLOWED_MEDIA_TYPES.has(asset.file_type)) {
+      if (asset && isCompatibleMediaType(msg.message_type, asset.file_type)) {
         media = {
           type:      asset.file_type,
           url:       asset.preview_url        ?? null,
