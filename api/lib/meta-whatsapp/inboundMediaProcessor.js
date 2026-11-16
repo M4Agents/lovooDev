@@ -9,7 +9,7 @@
 //   → metadata Graph
 //   → bytes Graph/CDN (anti-SSRF, redirect controlado, limite de stream)
 //   → validação real dos bytes (MIME pelos bytes, não pelo payload)
-//   → Supabase Storage
+//   → AUDIO: AWS S3 via awsUpload.js; IMAGE/VIDEO/DOCUMENT: Supabase Storage
 //   → company_media_library (idempotente via source_ref)
 //
 // NÃO conhece req/res.
@@ -22,7 +22,8 @@
 //   source_ref = 'meta-inbound:<wamid>'
 //   partial unique index (company_id, source_ref) WHERE source_ref IS NOT NULL
 //   precheck ANTES de qualquer I/O caro — ZERO Graph/Storage em hit.
-//   race 23505 → cleanup + re-query winner.
+//   AUDIO 23505 + winner com s3_key distinta → cleanup só da key local.
+//   AUDIO INSERT erro sem winner confirmado → NÃO apaga (ambíguo; preferir órfão).
 //
 // SEGURANÇA:
 //   - token e metadata.url NUNCA presentes em mensagens de erro ou logs
@@ -37,6 +38,10 @@
 
 import { fileTypeFromBlob }           from 'file-type';
 import { downloadMediaMetadata, downloadMediaBytes } from './graphClient.js';
+import {
+  uploadMetaInboundAudio,
+  deleteMetaInboundAudioObject,
+} from './awsUpload.js';
 import {
   UUID_RE,
   VALID_INBOUND_MEDIA_TYPES,
@@ -111,6 +116,37 @@ async function cleanupDestination(svc, destinationKey) {
 }
 
 /**
+ * Cleanup AWS da key criada NESTA tentativa. Nunca recebe winner.s3_key.
+ * Best-effort: falha de delete não mascara o erro primário.
+ * NUNCA loga objectKey, credenciais ou bytes.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} svc
+ * @param {string} companyId
+ * @param {string} objectKey
+ */
+async function cleanupAwsAudioAttempt(svc, companyId, objectKey) {
+  try {
+    await deleteMetaInboundAudioObject({ svc, companyId, objectKey });
+  } catch {
+    console.error('[inboundMediaProcessor] cleanup-destination-failed — orphan possible');
+  }
+}
+
+/**
+ * Falhas do helper AWS → inbound_media_storage_failed (transitório no webhook).
+ * Não promove aws_credentials_unavailable a skip permanente.
+ * Não trata aws_upload_conflict como sucesso. Não dispara DeleteObject aqui.
+ * Mensagem sanitizada — sem keys, tokens ou signed URLs.
+ *
+ * @param {unknown} err
+ * @returns {Error & { code: string }}
+ */
+function mapAwsUploadError(err) {
+  void err;
+  return makeError('inbound_media_storage_failed', 'inboundMediaProcessor: upload falhou');
+}
+
+/**
  * Resolve o filename de display para o asset a ser armazenado.
  *
  * DOCUMENT: usa hintFilename sanitizado; fallback = FALLBACK_DOC_FILENAME ('document.pdf').
@@ -142,7 +178,9 @@ function resolveFilename(expectedMediaType, hintFilename, detectedExt) {
 // =============================================================================
 
 /**
- * Baixa, valida e persiste uma mídia inbound Meta no Supabase Storage e CML.
+ * Baixa, valida e persiste uma mídia inbound Meta.
+ * AUDIO: AWS S3 (object key durável, preview_url null).
+ * IMAGE/VIDEO/DOCUMENT: Supabase Storage (URL pública).
  *
  * Idempotente via source_ref = 'meta-inbound:<wamid>'.
  * Em hit de precheck: retorna asset existente sem nenhum I/O adicional.
@@ -294,46 +332,73 @@ export async function downloadAndStoreInboundMedia({
   // hintFilename é não confiável — sempre sanitizado.
   // Extensão do fallback vem dos bytes detectados (MIME_TO_EXT).
   const ext      = MIME_TO_EXT.get(detected.mime) ?? 'bin';
-  const filename = resolveFilename(expectedMediaType, hintFilename, ext);
-
-  // ── 9. Storage path (gerado server-side) ─────────────────────────────────
-  // companyId e importId são gerados/validados server-side.
-  // Bucket e prefixo hardcoded — nunca aceitos do caller.
-  const importId        = crypto.randomUUID();
-  const destinationKey  = `${STORAGE_INBOUND_BASE}/${companyId}/meta-inbound/${importId}/${filename}`;
-
-  // ── 10. Upload para Supabase Storage ─────────────────────────────────────
-  // Conversão Blob → ArrayBuffer imediatamente antes do upload.
-  // Motivação: @supabase/storage-js v2.79.0 detecta Blob via instanceof e o
-  // envolve em FormData (SDK line ~50-51), ignorando options.contentType.
-  // O campo do arquivo fica com Content-Type = blob.type, que é "" quando o
-  // Blob foi criado sem type (caso de downloadMediaBytes → new Blob(chunks)).
-  // O Storage rejeita porque "" não está em allowed_mime_types do bucket.
-  // ArrayBuffer segue o branch direto (else) onde o SDK aplica:
-  //   headers['content-type'] = options.contentType   ← 'application/pdf' ✅
-  // fileTypeFromBlob continua usando o Blob original (passos 6–8 acima).
-  const uploadBody = await blob.arrayBuffer();
-  const { error: uploadErr } = await svc.storage
-    .from(STORAGE_BUCKET)
-    .upload(destinationKey, uploadBody, {
-      contentType: detected.mime,
-      upsert:      false, // Nunca sobrescrever — importId garante unicidade
-    });
-
-  if (uploadErr) {
-    throw makeError('inbound_media_storage_failed', 'inboundMediaProcessor: upload falhou');
+  let filename   = resolveFilename(expectedMediaType, hintFilename, ext);
+  if (expectedMediaType === 'AUDIO') {
+    // Helper AWS rejeita espaços e caracteres de path. inbound.<ext> é sempre seguro.
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,198}$/.test(filename) ||
+      filename.includes('..')
+    ) {
+      filename = `inbound.${ext}`;
+    }
   }
 
-  // ── 11. Preview URL ───────────────────────────────────────────────────────
-  // getPublicUrl() é síncrono e nunca falha — gera URL pública do bucket.
-  const { data: urlData } = svc.storage
-    .from(STORAGE_BUCKET)
-    .getPublicUrl(destinationKey);
-  const previewUrl = urlData?.publicUrl ?? null;
+  // ── 9–11. Persistência dos bytes ─────────────────────────────────────────
+  // AUDIO: AWS S3 (helper). Não usa supabase.storage nem URL pública.
+  // IMAGE/VIDEO/DOCUMENT: Supabase Storage (caminho original, intacto).
+  const isAudio = expectedMediaType === 'AUDIO';
+  let destinationKey;
+  let previewUrl = null;
+
+  if (isAudio) {
+    const objectId   = crypto.randomUUID();
+    const uploadBody = await blob.arrayBuffer();
+    let uploaded;
+    try {
+      uploaded = await uploadMetaInboundAudio({
+        svc,
+        companyId,
+        objectId,
+        bytes:    uploadBody,
+        mimeType: detected.mime,
+        filename,
+      });
+    } catch (err) {
+      // Sem DeleteObject: upload falhou, conflito 409/412 ou credencial ausente.
+      throw mapAwsUploadError(err);
+    }
+    destinationKey = uploaded.objectKey;
+    previewUrl     = null;
+  } else {
+    // companyId e importId gerados/validados server-side. Bucket hardcoded.
+    const importId = crypto.randomUUID();
+    destinationKey = `${STORAGE_INBOUND_BASE}/${companyId}/meta-inbound/${importId}/${filename}`;
+
+    // Conversão Blob → ArrayBuffer imediatamente antes do upload.
+    // Motivação: @supabase/storage-js v2.79.0 detecta Blob via instanceof e o
+    // envolve em FormData (SDK line ~50-51), ignorando options.contentType.
+    const uploadBody = await blob.arrayBuffer();
+    const { error: uploadErr } = await svc.storage
+      .from(STORAGE_BUCKET)
+      .upload(destinationKey, uploadBody, {
+        contentType: detected.mime,
+        upsert:      false,
+      });
+
+    if (uploadErr) {
+      throw makeError('inbound_media_storage_failed', 'inboundMediaProcessor: upload falhou');
+    }
+
+    const { data: urlData } = svc.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(destinationKey);
+    previewUrl = urlData?.publicUrl ?? null;
+  }
 
   // ── 12. INSERT em company_media_library ───────────────────────────────────
   // created_by = NULL: ingestão automática de sistema, sem contexto de usuário.
   // Schema: created_by UUID REFERENCES users(id) — sem NOT NULL → aceita NULL.
+  // AUDIO: s3_key = object key AWS; preview_url = null (signed URL não é persistida).
   const { data: inserted, error: insertErr } = await svc
     .from('company_media_library')
     .insert({
@@ -353,6 +418,38 @@ export async function downloadAndStoreInboundMedia({
 
   // ── 13. Tratamento de erros de INSERT ─────────────────────────────────────
   if (insertErr) {
+    if (isAudio) {
+      const { data: winner } = await svc
+        .from('company_media_library')
+        .select('id, mime_type, file_size, original_filename, s3_key')
+        .eq('company_id', companyId)
+        .eq('source_ref', sourceRef)
+        .maybeSingle();
+
+      if (winner) {
+        // Winner confirmado: só apaga a key DESTA tentativa se ela não for a do vencedor.
+        // Ausência de row na resposta do INSERT NÃO prova que esta key está órfã.
+        if (typeof winner.s3_key === 'string' && winner.s3_key !== destinationKey) {
+          await cleanupAwsAudioAttempt(svc, companyId, destinationKey);
+        }
+        return {
+          assetId:  winner.id,
+          mimeType: winner.mime_type,
+          fileSize: winner.file_size,
+          filename: winner.original_filename,
+          reused:   true,
+        };
+      }
+
+      // Sem winner confirmado: o INSERT pode ter persistido mesmo com erro no client.
+      // Não apaga. Não declara sucesso. Webhook trata como transitório (HTTP 500).
+      if (insertErr.code === '23505') {
+        throw makeError('inbound_media_conflict', 'inboundMediaProcessor: conflito de insert não resolvido');
+      }
+
+      throw makeError('inbound_media_persistence_failed', 'inboundMediaProcessor: insert falhou');
+    }
+
     if (insertErr.code === '23505') {
       // Race condition: precheck passou, mas outro processo inseriu antes.
       // 1. Cleanup best-effort do objeto Storage criado por este processo.

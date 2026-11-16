@@ -16,6 +16,7 @@
 //   5. [somente após auth.ok] Lookup de meta_conversations com auth.companyId
 //   6. [somente após conversa válida] Query de meta_messages com auth.companyId
 //   7. [somente após messages] Resolução batched de assets de mídia (MVP4B.6C)
+//      AUDIO AWS inbound: signed GetObject (TTL 3600) via helper; s3_key nunca no DTO
 //   8. [somente outbound com wamid] Tracking batched em meta_whatsapp_messages
 //      (MVP5.B1.1 — delivery_status; wamid nunca no DTO)
 //
@@ -50,6 +51,7 @@
 import { getSupabaseAdmin }                   from '../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { sanitizeTemplateButtonsSnapshot }    from '../../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
+import { signMetaInboundAudioGetUrl }         from '../../../../lib/meta-whatsapp/awsUpload.js';
 
 // UUID v4 básico — rejeita inputs obviamente inválidos antes de qualquer query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -93,9 +95,12 @@ const ALLOWED_DELIVERY_STATUS = new Set([
   'failed',
 ]);
 
-// Campos retornados de company_media_library para enriquecimento do DTO de mídia.
-// Nunca incluir: s3_key (confidencial), company_id (nunca exposto ao frontend).
-const ASSET_FIELDS = 'id, preview_url, original_filename, mime_type, file_type, file_size';
+// Campos internos de company_media_library para enriquecimento do DTO de mídia.
+// s3_key e company_id: somente para assinatura AWS AUDIO e boundary de tenant.
+// Nunca expostos no DTO.
+const ASSET_FIELDS = 'id, company_id, preview_url, original_filename, mime_type, file_type, file_size, s3_key';
+
+const AWS_AUDIO_KEY_INFIX = 'meta-inbound';
 
 // Tipos de file_type aceitos no DTO de mídia — fail-closed.
 // Outros, null, desconhecido → media:null.
@@ -113,6 +118,30 @@ function isCompatibleMediaType(messageType, fileType) {
     return messageType === 'audio' && fileType === 'audio';
   }
   return true;
+}
+
+function hasPublicPreviewUrl(previewUrl) {
+  return typeof previewUrl === 'string' && previewUrl.trim().length > 0;
+}
+
+/**
+ * Roteamento: AUDIO AWS inbound usa prefixo do helper.
+ * Autorização efetiva permanece em signMetaInboundAudioGetUrl (tenant + path).
+ * Não aceita key do caller — somente s3_key do asset já filtrado por company_id.
+ */
+function isAwsMetaInboundAudioKey(companyId, s3Key) {
+  if (typeof companyId !== 'string' || typeof s3Key !== 'string') return false;
+  const key = s3Key.trim();
+  if (key.length === 0) return false;
+  return key.startsWith(`clientes/${companyId}/${AWS_AUDIO_KEY_INFIX}/`);
+}
+
+function shouldSignAwsInboundAudio(messageType, asset, companyId) {
+  if (messageType !== 'audio') return false;
+  if (!asset || asset.file_type !== 'audio') return false;
+  if (asset.company_id !== companyId) return false;
+  if (hasPublicPreviewUrl(asset.preview_url)) return false;
+  return isAwsMetaInboundAudioKey(companyId, asset.s3_key);
 }
 
 export default async function handler(req, res) {
@@ -252,6 +281,35 @@ export default async function handler(req, res) {
     }
   }
 
+  // AUDIO AWS: URL assinada por asset, após tenant boundary.
+  // Falha de signer → media.url null nesta mensagem; demais mensagens intactas.
+  // Nunca logar object key, signed URL ou credenciais.
+  const signedUrlByAssetId = new Map();
+  {
+    const toSign = new Map();
+    for (const msg of rawMessages) {
+      if (msg.message_type !== 'audio' || !msg.media_asset_id) continue;
+      const asset = assetMap.get(msg.media_asset_id);
+      if (!shouldSignAwsInboundAudio(msg.message_type, asset, auth.companyId)) continue;
+      toSign.set(asset.id, asset.s3_key);
+    }
+
+    for (const [assetId, objectKey] of toSign) {
+      try {
+        const signed = await signMetaInboundAudioGetUrl({
+          svc,
+          companyId: auth.companyId,
+          objectKey,
+        });
+        if (typeof signed?.url === 'string' && signed.url.length > 0) {
+          signedUrlByAssetId.set(assetId, signed.url);
+        }
+      } catch {
+        console.error('[meta/messages] aws_audio_sign_failed');
+      }
+    }
+  }
+
   // ── 8. Delivery status — batched, tenant-safe ─────────────────────────────
   // Somente outbound com wamid. Uma query para o lote; nunca N+1.
   // Filtros: auth.companyId + instance_id da conversa validada + wamids do lote.
@@ -295,9 +353,13 @@ export default async function handler(req, res) {
     if (media_asset_id) {
       const asset = assetMap.get(media_asset_id);
       if (asset && isCompatibleMediaType(msg.message_type, asset.file_type)) {
+        let url = hasPublicPreviewUrl(asset.preview_url) ? asset.preview_url : null;
+        if (signedUrlByAssetId.has(asset.id)) {
+          url = signedUrlByAssetId.get(asset.id);
+        }
         media = {
           type:      asset.file_type,
-          url:       asset.preview_url        ?? null,
+          url,
           filename:  asset.original_filename  ?? null,
           mime_type: asset.mime_type          ?? null,
           file_size: asset.file_size          ?? null,

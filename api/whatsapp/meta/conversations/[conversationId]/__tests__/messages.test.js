@@ -26,9 +26,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mocks (vi.hoisted garante disponibilidade antes do hoist de vi.mock)
 // =============================================================================
 
-const { mockValidateMetaCaller, mockSvc } = vi.hoisted(() => ({
-  mockValidateMetaCaller: vi.fn(),
-  mockSvc:                { from: vi.fn() },
+const { mockValidateMetaCaller, mockSvc, mockSignMetaInboundAudioGetUrl } = vi.hoisted(() => ({
+  mockValidateMetaCaller:            vi.fn(),
+  mockSvc:                           { from: vi.fn() },
+  mockSignMetaInboundAudioGetUrl:    vi.fn(),
 }));
 
 vi.mock('../../../../../lib/meta-whatsapp/validateMetaCaller.js', () => ({
@@ -38,6 +39,10 @@ vi.mock('../../../../../lib/meta-whatsapp/validateMetaCaller.js', () => ({
 
 vi.mock('../../../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
+}));
+
+vi.mock('../../../../../lib/meta-whatsapp/awsUpload.js', () => ({
+  signMetaInboundAudioGetUrl: (...args) => mockSignMetaInboundAudioGetUrl(...args),
 }));
 
 import handler from '../messages.js';
@@ -205,9 +210,19 @@ function makeOutboundDbMsg(id, wamid, overrides = {}) {
 // Setup padrão
 // =============================================================================
 
+const FAKE_AUDIO_OBJECT_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
+const FAKE_AWS_AUDIO_KEY =
+  `clientes/${FAKE_COMPANY_ID}/meta-inbound/${FAKE_AUDIO_OBJECT_ID}/inbound.ogg`;
+const FAKE_SIGNED_AUDIO_URL =
+  'https://s3.example.test/get?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=fakesignature3600';
+
 beforeEach(() => {
   vi.resetAllMocks();
   mockValidateMetaCaller.mockResolvedValue(FAKE_AUTH_OK);
+  mockSignMetaInboundAudioGetUrl.mockResolvedValue({
+    url:       FAKE_SIGNED_AUDIO_URL,
+    expiresIn: 3600,
+  });
 });
 
 /** Configura happy path: conv lookup OK + messages query OK. */
@@ -1695,5 +1710,308 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     expect(res._status).toBe(200);
     expect(res._body.messages).toEqual(FAKE_MSGS_ASC_DTO);
     expect(mockSvc.from).toHaveBeenCalledTimes(2);
+  });
+});
+
+// =============================================================================
+// AWS-AUD — signed GetObject para AUDIO inbound AWS (MVP5.B3.2.AWS-3)
+// =============================================================================
+
+function makeInboundAudioDbMsg(id, assetId, overrides = {}) {
+  return makeMsgWithAsset(id, assetId, {
+    direction:         'inbound',
+    message_type:      'audio',
+    body:              null,
+    template_name:     null,
+    template_language: null,
+    ...overrides,
+  });
+}
+
+function makeAwsAudioAsset(id, overrides = {}) {
+  return makeAsset(id, 'audio', {
+    mime_type:         'audio/ogg',
+    original_filename: 'inbound.ogg',
+    file_size:         48000,
+    preview_url:       null,
+    file_type:         'audio',
+    company_id:        FAKE_COMPANY_ID,
+    s3_key:            FAKE_AWS_AUDIO_KEY,
+    ...overrides,
+  });
+}
+
+describe('GET messages — AWS inbound AUDIO signed URL (MVP5.B3.2.AWS-3)', () => {
+  it('AWS-AUD-01: AUDIO AWS com preview_url null e s3_key válida gera signed URL no DTO', async () => {
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-aud-001', FAKE_ASSET_ID_1);
+    const asset = makeAwsAudioAsset(FAKE_ASSET_ID_1);
+    const assetChain = makeAssetChain([asset]);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(assetChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    const msg = res._body.messages[0];
+    expect(msg.media).toEqual({
+      type:      'audio',
+      url:       FAKE_SIGNED_AUDIO_URL,
+      filename:  'inbound.ogg',
+      mime_type: 'audio/ogg',
+      file_size: 48000,
+    });
+    expect(msg).not.toHaveProperty('s3_key');
+    expect(msg.media).not.toHaveProperty('s3_key');
+    expect(JSON.stringify(res._body)).not.toContain('"s3_key"');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_AWS_AUDIO_KEY);
+
+    expect(mockSignMetaInboundAudioGetUrl).toHaveBeenCalledOnce();
+    expect(mockSignMetaInboundAudioGetUrl).toHaveBeenCalledWith({
+      svc:       mockSvc,
+      companyId: FAKE_COMPANY_ID,
+      objectKey: FAKE_AWS_AUDIO_KEY,
+    });
+
+    const companyCall = assetChain.eq.mock.calls.find((c) => c[0] === 'company_id');
+    expect(companyCall[1]).toBe(FAKE_COMPANY_ID);
+    expect(assetChain.select.mock.calls[0][0]).toContain('s3_key');
+  });
+
+  it('AWS-AUD-02: preview_url existente preserva URL atual e não assina', async () => {
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-aud-preview', FAKE_ASSET_ID_1);
+    const asset = makeAwsAudioAsset(FAKE_ASSET_ID_1, {
+      preview_url: 'https://storage.example.com/inbound.ogg',
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media.url).toBe('https://storage.example.com/inbound.ogg');
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+  });
+
+  it('AWS-AUD-03: IMAGE/VIDEO/DOCUMENT não chamam o signer', async () => {
+    const imgMsg = makeMsgWithAsset('msg-aws-img', FAKE_ASSET_ID_1);
+    const vidMsg = makeMsgWithAsset('msg-aws-vid', FAKE_ASSET_ID_2, { message_type: 'video' });
+    const docMsg = makeMsgWithAsset('msg-aws-doc', FAKE_ASSET_ID_3, { message_type: 'document' });
+    const assets = [
+      makeAsset(FAKE_ASSET_ID_1, 'image', { s3_key: FAKE_AWS_AUDIO_KEY, company_id: FAKE_COMPANY_ID }),
+      makeAsset(FAKE_ASSET_ID_2, 'video', { mime_type: 'video/mp4', s3_key: FAKE_AWS_AUDIO_KEY, company_id: FAKE_COMPANY_ID }),
+      makeAsset(FAKE_ASSET_ID_3, 'document', { mime_type: 'application/pdf', s3_key: FAKE_AWS_AUDIO_KEY, company_id: FAKE_COMPANY_ID }),
+    ];
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([imgMsg, vidMsg, docMsg]))
+      .mockReturnValueOnce(makeAssetChain(assets));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+    expect(res._body.messages.map((m) => m.media?.type).sort()).toEqual(['document', 'image', 'video']);
+  });
+
+  it('AWS-AUD-04: texto e interativo não chamam o signer', async () => {
+    const textMsg = { ...FAKE_MSG_OLDEST, message_type: 'text' };
+    const interactiveMsg = {
+      ...FAKE_MSG_MIDDLE,
+      message_type: 'interactive',
+      body:         'Sim',
+    };
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([interactiveMsg, textMsg]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+    expect(res._body.messages[0].media).toBeNull();
+    expect(res._body.messages[1].media).toBeNull();
+  });
+
+  it('AWS-AUD-05: conversa de outro tenant → 404; signer não é chamado', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok:         true,
+      companyId:  OTHER_COMPANY_ID,
+      userId:     'user-1',
+      role:       'admin',
+      accessPath: 'direct',
+    });
+    mockSvc.from.mockReturnValueOnce(makeConvChain(null));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(404);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+  });
+
+  it('AWS-AUD-06: asset de outro company_id não é assinado', async () => {
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-xten', FAKE_ASSET_ID_1);
+    const foreignAsset = makeAwsAudioAsset(FAKE_ASSET_ID_1, {
+      company_id: OTHER_COMPANY_ID,
+      s3_key:     `clientes/${OTHER_COMPANY_ID}/meta-inbound/${FAKE_AUDIO_OBJECT_ID}/inbound.ogg`,
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([foreignAsset]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+    expect(res._body.messages[0].media.url).toBeNull();
+    expect(JSON.stringify(res._body)).not.toContain('"s3_key"');
+  });
+
+  it('AWS-AUD-07: key fora de clientes/{companyId}/meta-inbound/ não é assinada', async () => {
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-badkey', FAKE_ASSET_ID_1);
+    const asset = makeAwsAudioAsset(FAKE_ASSET_ID_1, {
+      s3_key: `clientes/${FAKE_COMPANY_ID}/whatsapp/2026/11/16/${FAKE_AUDIO_OBJECT_ID}/inbound.ogg`,
+    });
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([asset]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+    expect(res._body.messages[0].media.url).toBeNull();
+  });
+
+  it('AWS-AUD-08: s3_key vazia ou null não é assinada', async () => {
+    for (const s3Key of [null, '', '   ']) {
+      mockSignMetaInboundAudioGetUrl.mockClear();
+      const dbMsg = makeInboundAudioDbMsg('msg-aws-emptykey', FAKE_ASSET_ID_1);
+      const asset = makeAwsAudioAsset(FAKE_ASSET_ID_1, { s3_key: s3Key });
+
+      mockSvc.from
+        .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+        .mockReturnValueOnce(makeMsgChain([dbMsg]))
+        .mockReturnValueOnce(makeAssetChain([asset]));
+
+      const res = makeRes();
+      await handler(makeReq(), res);
+
+      expect(res._status).toBe(200);
+      expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+      expect(res._body.messages[0].media.url).toBeNull();
+    }
+  });
+
+  it('AWS-AUD-09: aws_credentials_unavailable → url null; sem vazamento interno', async () => {
+    mockSignMetaInboundAudioGetUrl.mockRejectedValueOnce(
+      Object.assign(new Error('AWS credentials unavailable for tenant'), {
+        code: 'aws_credentials_unavailable',
+      }),
+    );
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-creds', FAKE_ASSET_ID_1);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([makeAwsAudioAsset(FAKE_ASSET_ID_1)]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media.url).toBeNull();
+    const body = JSON.stringify(res._body);
+    expect(body).not.toContain('aws_credentials_unavailable');
+    expect(body).not.toContain('credentials');
+    expect(body).not.toContain(FAKE_AWS_AUDIO_KEY);
+    expect(body).not.toContain('AKIA');
+    expect(body).not.toContain('"s3_key"');
+  });
+
+  it('AWS-AUD-10: falha de assinatura não produz URL falsa; demais mensagens intactas', async () => {
+    mockSignMetaInboundAudioGetUrl.mockRejectedValueOnce(
+      Object.assign(new Error('AWS request failed'), { code: 'aws_sign_failed' }),
+    );
+    const audioMsg = makeInboundAudioDbMsg('msg-aws-signfail', FAKE_ASSET_ID_1);
+    const textMsg  = { ...FAKE_MSG_OLDEST, id: 'msg-aws-text-ok' };
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([audioMsg, textMsg]))
+      .mockReturnValueOnce(makeAssetChain([makeAwsAudioAsset(FAKE_ASSET_ID_1)]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toHaveLength(2);
+    const audio = res._body.messages.find((m) => m.message_type === 'audio');
+    const text  = res._body.messages.find((m) => m.message_type === 'text');
+    expect(audio.media.url).toBeNull();
+    expect(audio.media.url).not.toBe(FAKE_SIGNED_AUDIO_URL);
+    expect(text.body).toBe('Mensagem mais antiga');
+    expect(JSON.stringify(res._body)).not.toContain('aws_sign_failed');
+  });
+
+  it('AWS-AUD-11: paginação e ordenação preservadas com AUDIO AWS no lote', async () => {
+    const newest = makeInboundAudioDbMsg('msg-aws-new', FAKE_ASSET_ID_1, {
+      provider_timestamp: '2026-09-21T14:00:00.000Z',
+      created_at:         '2026-09-21T14:00:00.000Z',
+    });
+    const oldest = {
+      ...FAKE_MSG_OLDEST,
+      provider_timestamp: '2026-09-21T13:00:00.000Z',
+    };
+    const msgChain = makeMsgChain([newest, oldest]);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(msgChain)
+      .mockReturnValueOnce(makeAssetChain([makeAwsAudioAsset(FAKE_ASSET_ID_1)]));
+
+    const res = makeRes();
+    await handler(makeReq({ limit: '50' }), res);
+
+    expect(res._status).toBe(200);
+    expect(msgChain.order).toHaveBeenCalledTimes(2);
+    expect(msgChain.limit).toHaveBeenCalledWith(50);
+    expect(res._body.messages[0].id).toBe(FAKE_MSG_ID_A);
+    expect(res._body.messages[1].message_type).toBe('audio');
+    expect(res._body.messages[1].media.url).toBe(FAKE_SIGNED_AUDIO_URL);
+  });
+
+  it('AWS-AUD-12: signer vazio não inventa URL', async () => {
+    mockSignMetaInboundAudioGetUrl.mockResolvedValueOnce({ url: '', expiresIn: 3600 });
+    const dbMsg = makeInboundAudioDbMsg('msg-aws-emptyurl', FAKE_ASSET_ID_1);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([dbMsg]))
+      .mockReturnValueOnce(makeAssetChain([makeAwsAudioAsset(FAKE_ASSET_ID_1)]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages[0].media.url).toBeNull();
   });
 });

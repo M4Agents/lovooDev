@@ -22,8 +22,18 @@ vi.mock('file-type', () => ({
   fileTypeFromBlob: vi.fn(),
 }));
 
+vi.mock('../awsUpload.js', () => ({
+  uploadMetaInboundAudio:        vi.fn(),
+  deleteMetaInboundAudioObject:  vi.fn(),
+  signMetaInboundAudioGetUrl:    vi.fn(),
+}));
+
 import { downloadMediaMetadata, downloadMediaBytes } from '../graphClient.js';
 import { fileTypeFromBlob }                         from 'file-type';
+import {
+  uploadMetaInboundAudio,
+  deleteMetaInboundAudioObject,
+} from '../awsUpload.js';
 import { downloadAndStoreInboundMedia }             from '../inboundMediaProcessor.js';
 
 // =============================================================================
@@ -36,6 +46,10 @@ const FAKE_MEDIA_ID   = '987654321098765';
 const FAKE_WAMID      =
   'wamid.HBgLNTUxMTk5OTk5OTkVAgASGBQxNzE2MjExNzA2NzE2MjExNzA2AA==';
 const FAKE_ASSET_UUID = 'f1e2d3c4-b5a6-7890-cdef-012345678901';
+const FAKE_OBJECT_ID  = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
+const LOCAL_ATTEMPT_S3_KEY =
+  `clientes/${FAKE_COMPANY_ID}/meta-inbound/${FAKE_OBJECT_ID}/inbound.ogg`;
+const WINNER_S3_KEY   = `clientes/${FAKE_COMPANY_ID}/meta-inbound/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/inbound.ogg`;
 // FAKE_CDN_URL nunca logada — apenas usada internamente por downloadMediaBytes mock
 const FAKE_CDN_URL    = 'https://cdn.fbcdn.net/fake-inbound-document-fixture.pdf';
 
@@ -157,6 +171,15 @@ beforeEach(() => {
   downloadMediaMetadata.mockResolvedValue(FAKE_METADATA);
   downloadMediaBytes.mockResolvedValue(makeMockBlob());
   fileTypeFromBlob.mockResolvedValue({ mime: 'application/pdf', ext: 'pdf' });
+  uploadMetaInboundAudio.mockImplementation(async ({ filename, mimeType, bytes }) => {
+    const size = bytes?.byteLength ?? bytes?.length ?? 1024;
+    return {
+      objectKey:   `clientes/${FAKE_COMPANY_ID}/meta-inbound/${FAKE_OBJECT_ID}/${filename}`,
+      contentType: mimeType,
+      sizeBytes:   size,
+    };
+  });
+  deleteMetaInboundAudioObject.mockResolvedValue({ objectKey: 'unused' });
 });
 
 afterEach(() => {
@@ -365,6 +388,7 @@ describe('BYTES — MIME detection e limites', () => {
 
     expect(result.mimeType).toBe('image/jpeg');
     expect(result.reused).toBe(false);
+    expect(uploadMetaInboundAudio).not.toHaveBeenCalled();
   });
 
   it('B-12: VIDEO + MP4 válido → sucesso', async () => {
@@ -381,6 +405,7 @@ describe('BYTES — MIME detection e limites', () => {
 
     expect(result.mimeType).toBe('video/mp4');
     expect(result.reused).toBe(false);
+    expect(uploadMetaInboundAudio).not.toHaveBeenCalled();
   });
 
   it('B-13: buffer.size > maxBytes → inbound_media_too_large (defense in depth)', async () => {
@@ -424,7 +449,7 @@ describe('BYTES — MIME detection e limites', () => {
   it('B-AUD-01: AUDIO + OGG válido → sucesso; file_type=audio; filename inbound.ogg', async () => {
     fileTypeFromBlob.mockResolvedValueOnce({ mime: 'audio/ogg', ext: 'ogg' });
     downloadMediaBytes.mockResolvedValueOnce(makeMockBlob(40 * 1024));
-    const { svc, mockInsert } = makeSvc();
+    const { svc, mockInsert, mockUpload } = makeSvc();
 
     const result = await downloadAndStoreInboundMedia({
       ...BASE_PARAMS,
@@ -439,7 +464,14 @@ describe('BYTES — MIME detection e limites', () => {
     expect(mockInsert.mock.calls[0][0].file_type).toBe('audio');
     expect(mockInsert.mock.calls[0][0].original_filename).toBe('inbound.ogg');
     expect(mockInsert.mock.calls[0][0].company_id).toBe(FAKE_COMPANY_ID);
+    expect(mockInsert.mock.calls[0][0].preview_url).toBeNull();
+    expect(mockInsert.mock.calls[0][0].s3_key).toMatch(
+      new RegExp(`^clientes/${FAKE_COMPANY_ID}/meta-inbound/[0-9a-f-]{36}/inbound\\.ogg$`),
+    );
+    expect(mockInsert.mock.calls[0][0].source_ref).toBe(`meta-inbound:${FAKE_WAMID}`);
     expect(mockInsert.mock.calls[0][0]).not.toHaveProperty('voice');
+    expect(uploadMetaInboundAudio).toHaveBeenCalledOnce();
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 
   it('B-AUD-01b: AUDIO + audio/ogg; codecs=opus → sucesso', async () => {
@@ -670,6 +702,7 @@ describe('STORAGE — destinationKey e upload', () => {
     await downloadAndStoreInboundMedia({ ...BASE_PARAMS, svc });
 
     expect(mockStorageFrom).toHaveBeenCalledWith('aws-lovoocrm-media');
+    expect(uploadMetaInboundAudio).not.toHaveBeenCalled();
     const uploadKey = mockUpload.mock.calls[0][0];
     expect(uploadKey).toMatch(
       new RegExp(`^biblioteca/companies/${FAKE_COMPANY_ID}/meta-inbound/[0-9a-f-]{36}/`),
@@ -931,6 +964,265 @@ describe('SEGURANÇA — token, URL e company_id', () => {
     // Todos os from() foram 'company_media_library'
     for (const call of mockFrom.mock.calls) {
       expect(call[0]).toBe('company_media_library');
+    }
+  });
+});
+
+// =============================================================================
+// AWS AUDIO — B-AWS-01..16
+// =============================================================================
+
+const AUDIO_PARAMS = {
+  ...BASE_PARAMS,
+  expectedMediaType: 'AUDIO',
+  hintFilename:      undefined,
+  maxBytes:          16 * 1024 * 1024,
+};
+
+function awsErr(code) {
+  return Object.assign(new Error('aws helper error'), { code });
+}
+
+describe('AWS AUDIO — upload S3 e isolamento', () => {
+  beforeEach(() => {
+    fileTypeFromBlob.mockResolvedValue({ mime: 'audio/ogg', ext: 'ogg' });
+    downloadMediaBytes.mockResolvedValue(makeMockBlob(40 * 1024));
+  });
+
+  it('B-AWS-01: AUDIO chama uploadMetaInboundAudio com companyId, objectId UUID, bytes e MIME', async () => {
+    const { svc } = makeSvc();
+    await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(uploadMetaInboundAudio).toHaveBeenCalledOnce();
+    const args = uploadMetaInboundAudio.mock.calls[0][0];
+    expect(args.svc).toBe(svc);
+    expect(args.companyId).toBe(FAKE_COMPANY_ID);
+    expect(args.objectId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(args.mimeType).toBe('audio/ogg');
+    expect(args.filename).toBe('inbound.ogg');
+    expect(args.bytes).toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('B-AWS-02: AUDIO não chama Supabase Storage upload nem getPublicUrl', async () => {
+    const { svc, mockUpload, mockPublicUrl, mockStorageFrom } = makeSvc();
+    await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockPublicUrl).not.toHaveBeenCalled();
+    expect(mockStorageFrom).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-03: AUDIO grava s3_key AWS e preview_url null', async () => {
+    const { svc, mockInsert } = makeSvc();
+    await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    const row = mockInsert.mock.calls[0][0];
+    expect(row.s3_key).toBe(
+      `clientes/${FAKE_COMPANY_ID}/meta-inbound/${FAKE_OBJECT_ID}/inbound.ogg`,
+    );
+    expect(row.s3_key).not.toContain('/whatsapp/');
+    expect(row.s3_key).not.toContain('biblioteca/companies/');
+    expect(row.preview_url).toBeNull();
+    expect(row).not.toHaveProperty('url');
+  });
+
+  it('B-AWS-04: AUDIO preserva company_id, source_ref e file_type=audio', async () => {
+    const { svc, mockInsert } = makeSvc();
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    const row = mockInsert.mock.calls[0][0];
+    expect(row.company_id).toBe(FAKE_COMPANY_ID);
+    expect(row.source_ref).toBe(`meta-inbound:${FAKE_WAMID}`);
+    expect(row.file_type).toBe('audio');
+    expect(row.mime_type).toBe('audio/ogg');
+    expect(row.file_size).toBe(40 * 1024);
+    expect(row.created_by).toBeNull();
+    expect(result.assetId).toBe(FAKE_ASSET_UUID);
+    expect(result.reused).toBe(false);
+  });
+
+  it('B-AWS-05: falha AWS transitória não cria asset nem DeleteObject', async () => {
+    uploadMetaInboundAudio.mockRejectedValueOnce(awsErr('aws_upload_transient'));
+    const { svc, mockInsert } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_storage_failed' });
+
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-06: credencial AWS ausente não vira sucesso silencioso', async () => {
+    uploadMetaInboundAudio.mockRejectedValueOnce(awsErr('aws_credentials_unavailable'));
+    const { svc, mockInsert } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_storage_failed' });
+
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-07: aws_upload_conflict não dispara DeleteObject nem INSERT', async () => {
+    uploadMetaInboundAudio.mockRejectedValueOnce(awsErr('aws_upload_conflict'));
+    const { svc, mockInsert } = makeSvc();
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_storage_failed' });
+
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-08: 23505 com vencedor limpa somente objeto novo, nunca winner.s3_key', async () => {
+    const winner = {
+      id:                'winner-audio-uuid-aaaa-bbbb-cccc-dddddddddddd',
+      mime_type:         'audio/ogg',
+      file_size:         40000,
+      original_filename: 'inbound.ogg',
+      s3_key:            WINNER_S3_KEY,
+    };
+    const { svc, mockRemove } = makeSvc({
+      insertError:    { code: '23505', message: 'unique violation' },
+      raceWinnerData: winner,
+    });
+
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(result.assetId).toBe(winner.id);
+    expect(result.reused).toBe(true);
+    expect(deleteMetaInboundAudioObject).toHaveBeenCalledOnce();
+    const delArgs = deleteMetaInboundAudioObject.mock.calls[0][0];
+    expect(delArgs.companyId).toBe(FAKE_COMPANY_ID);
+    expect(delArgs.objectKey).toBe(LOCAL_ATTEMPT_S3_KEY);
+    expect(delArgs.objectKey).not.toBe(WINNER_S3_KEY);
+    expect(mockRemove).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-09: 23505 sem vencedor não declara sucesso e não apaga', async () => {
+    const { svc } = makeSvc({
+      insertError:    { code: '23505', message: 'unique violation' },
+      raceWinnerData: null,
+    });
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_conflict' });
+
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-10: INSERT não-23505 sem winner NÃO apaga e propaga erro transitório', async () => {
+    const { svc } = makeSvc({
+      insertError: { code: '23000', message: 'fk violation' },
+    });
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_persistence_failed' });
+
+    expect(uploadMetaInboundAudio).toHaveBeenCalledOnce();
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-14: INSERT persistido com resposta perdida + winner mesma s3_key → reusa e não apaga', async () => {
+    const winner = {
+      id:                FAKE_ASSET_UUID,
+      mime_type:         'audio/ogg',
+      file_size:         40000,
+      original_filename: 'inbound.ogg',
+      s3_key:            LOCAL_ATTEMPT_S3_KEY,
+    };
+    const { svc } = makeSvc({
+      insertError:    { message: 'TypeError: fetch failed' },
+      raceWinnerData: winner,
+    });
+
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(result.assetId).toBe(FAKE_ASSET_UUID);
+    expect(result.reused).toBe(true);
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-15: INSERT erro sem code Postgres + re-query vazia NÃO apaga', async () => {
+    const { svc } = makeSvc({
+      insertError: { message: 'network timeout' },
+    });
+
+    await expect(
+      downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc }),
+    ).rejects.toMatchObject({ code: 'inbound_media_persistence_failed' });
+
+    expect(uploadMetaInboundAudio).toHaveBeenCalledOnce();
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-16: 23505 com winner na mesma s3_key reutiliza e não apaga', async () => {
+    const winner = {
+      id:                FAKE_ASSET_UUID,
+      mime_type:         'audio/ogg',
+      file_size:         40000,
+      original_filename: 'inbound.ogg',
+      s3_key:            LOCAL_ATTEMPT_S3_KEY,
+    };
+    const { svc } = makeSvc({
+      insertError:    { code: '23505', message: 'unique violation' },
+      raceWinnerData: winner,
+    });
+
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(result.assetId).toBe(FAKE_ASSET_UUID);
+    expect(result.reused).toBe(true);
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-11: INSERT sucesso não chama DeleteObject (RPC posterior não apaga aqui)', async () => {
+    const { svc } = makeSvc();
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(result.reused).toBe(false);
+    expect(result.assetId).toBe(FAKE_ASSET_UUID);
+    expect(deleteMetaInboundAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-12: precheck reutiliza asset sem AWS e sem Storage', async () => {
+    const existing = {
+      id:                FAKE_ASSET_UUID,
+      mime_type:         'audio/ogg',
+      file_size:         1234,
+      original_filename: 'inbound.ogg',
+    };
+    const { svc, mockInsert, mockUpload } = makeSvc({ precheckData: existing });
+
+    const result = await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+
+    expect(result.reused).toBe(true);
+    expect(result.assetId).toBe(FAKE_ASSET_UUID);
+    expect(uploadMetaInboundAudio).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(downloadMediaMetadata).not.toHaveBeenCalled();
+  });
+
+  it('B-AWS-13: erro AWS não contém object key nem códigos crus na mensagem', async () => {
+    uploadMetaInboundAudio.mockRejectedValueOnce(awsErr('aws_upload_failed'));
+    const { svc } = makeSvc();
+
+    try {
+      await downloadAndStoreInboundMedia({ ...AUDIO_PARAMS, svc });
+      expect.fail('deveria ter lançado');
+    } catch (err) {
+      expect(err.code).toBe('inbound_media_storage_failed');
+      expect(err.message).not.toContain('clientes/');
+      expect(err.message).not.toContain(FAKE_TOKEN);
+      expect(err.message).not.toContain('AKIA');
     }
   });
 });
