@@ -3,7 +3,8 @@
 //
 // GET  → Verificação do challenge Meta (setup do webhook no App Dashboard)
 // POST → Recebimento de eventos: statuses[] outbound (MVP2) + messages[] inbound
-//        TEXT (MVP3A), DOCUMENT/IMAGE/VIDEO e BUTTON/QUICK_REPLY (MVP4C.12)
+//        TEXT (MVP3A), DOCUMENT/IMAGE/VIDEO, BUTTON/QUICK_REPLY (MVP4C.12)
+//        e INTERACTIVE button_reply/list_reply (MVP5.B3.1)
 //
 // Segurança:
 //   - GET: timing-safe comparison do verify token (nunca logar)
@@ -28,13 +29,15 @@
 //   - Um mesmo value pode conter ambos — ambos são processados
 //   - Tenant resolution compartilhada (uma query por value)
 //
-// MVP3A/MVP4C.12 escopo (messages[]):
+// MVP3A/MVP4C.12/MVP5.B3.1 escopo (messages[]):
 //   - type='text' persistido via process_meta_inbound_message
 //   - type='button' persistido via a mesma RPC, usando somente button.text
-//   - button.payload nunca logado, persistido, retornado ou usado como tenant
+//   - type='interactive' button_reply/list_reply via a mesma RPC, somente title
+//   - button.payload, interactive ids e payloads nunca logados, persistidos
+//     ou usados como tenant
 //   - Grupos (message.group_id presente) ignorados silenciosamente
 //   - played ignorado silenciosamente
-//   - interactive e demais tipos continuam type_skipped
+//   - audio, location, sticker, interactive de outro subtipo e unknown: type_skipped
 //
 // Decisão UNKNOWN_WAMID (B1):
 //   - Meta retenta não-200 por até 7 dias (documentado oficialmente)
@@ -72,6 +75,10 @@ const SUPPORTED_STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
 //   - Pressão de memória Vercel: ~2–3× tamanho → ~15 MB pico com 5 MB PDF (seguro).
 //   - Revisável em C3 após validação E2E e decisão operacional.
 const MAX_INBOUND_DOCUMENT_BYTES = 5 * 1024 * 1024; // 5 MB
+
+// Teto do body de texto inbound (Cloud API / Graph). Interactive title usa o mesmo
+// contrato: string após trim, não vazia, no máximo este comprimento. Acima → skip.
+const MAX_INBOUND_TEXT_BODY_LENGTH = 4096;
 
 // =============================================================================
 // State machine — matriz de transições explícita
@@ -433,6 +440,37 @@ async function handlePost(req, res) {
           const created = rpcData?.created === true;
           console.log('[meta/webhook] event_type=inbound_message created=%s', created);
 
+        } else if (message.type === 'interactive') {
+          // ── B.5.1c INTERACTIVE inbound (MVP5.B3.1) ───────────────────────
+          // Somente button_reply.title e list_reply.title. IDs, description e
+          // o objeto interactive completo não são persistidos nem logados.
+          const body = extractInteractiveReplyTitle(message.interactive);
+          if (body == null) {
+            console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', 'interactive');
+            continue;
+          }
+
+          const { data: rpcData, error: rpcErr } = await svc.rpc(
+            'process_meta_inbound_message',
+            {
+              p_company_id:         instance.company_id,
+              p_instance_id:        instance.id,
+              p_wa_id:              message.from,
+              p_meta_message_id:    message.id,
+              p_body:               body,
+              p_contact_name:       contactName,
+              p_provider_timestamp: providerTimestamp,
+            },
+          );
+
+          if (rpcErr) {
+            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+            return res.status(500).json({ error: 'Internal error' });
+          }
+
+          const created = rpcData?.created === true;
+          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+
         } else if (message.type === 'document') {
           // ── B.5.2 DOCUMENT inbound (INBOUND-DOC-C2) ──────────────────────
           // mime_type e sha256 do payload NÃO são autoridade — bytes reais.
@@ -507,7 +545,7 @@ async function handlePost(req, res) {
           if (vidTransient) hasTransientFailure = true;
 
         } else {
-          // ── B.5.5 Tipos não suportados (audio, sticker, etc.) ────
+          // ── B.5.5 Tipos não suportados (audio, sticker, location, etc.) ────
           console.log('[meta/webhook] event_type=inbound_message type_skipped=%s', message.type ?? 'unknown');
           continue;
         }
@@ -680,6 +718,37 @@ function parseMetaTimestamp(raw) {
   const d = new Date(n * 1000);
   if (isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+/**
+ * Extrai o title de interactive.button_reply ou interactive.list_reply.
+ * Retorna a string após trim, ou null para skip (subtipo desconhecido,
+ * estrutura incompleta, title não-string, vazio ou acima do teto inbound).
+ * IDs, description e o objeto interactive não são retornados.
+ *
+ * @param {unknown} interactive
+ * @returns {string|null}
+ */
+function extractInteractiveReplyTitle(interactive) {
+  if (interactive == null || typeof interactive !== 'object' || Array.isArray(interactive)) {
+    return null;
+  }
+
+  const subtype = interactive.type;
+  let title;
+  if (subtype === 'button_reply') {
+    title = interactive.button_reply?.title;
+  } else if (subtype === 'list_reply') {
+    title = interactive.list_reply?.title;
+  } else {
+    return null;
+  }
+
+  if (typeof title !== 'string') return null;
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > MAX_INBOUND_TEXT_BODY_LENGTH) return null;
+  return trimmed;
 }
 
 /**

@@ -2376,32 +2376,35 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
     });
   });
 
-  it('BTN-09: interactive.button_reply e list_reply continuam skipped', async () => {
+  it('BTN-09: button e interactive no mesmo payload → ambos persistidos via RPC de texto', async () => {
     const messages = [
-      {
-        id: FAKE_INBOUND_WAMID,
-        from: FAKE_WA_ID,
-        type: 'interactive',
-        timestamp: FAKE_TIMESTAMP,
-        interactive: { type: 'button_reply', button_reply: { id: '1', title: 'Confirmar' } },
-      },
-      {
-        id: 'wamid.INBOUND_FAKE_LIST_REPLY',
-        from: FAKE_WA_ID,
-        type: 'interactive',
-        timestamp: FAKE_TIMESTAMP,
-        interactive: { type: 'list_reply', list_reply: { id: '1', title: 'Opção' } },
-      },
+      makeButtonMessage({ id: 'wamid.INBOUND_FAKE_BTN_MIX' }),
+      makeInteractiveMessage({
+        id: 'wamid.INBOUND_FAKE_INT_MIX',
+        subtype: 'button_reply',
+        title: 'Opção A',
+      }),
     ];
     const payload = makeInboundPayload({ messages });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc
+      .mockResolvedValueOnce(makeRpcResult())
+      .mockResolvedValueOnce(makeRpcResult());
 
     const res = makeRes();
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc.mock.calls[0]).toEqual([
+      'process_meta_inbound_message',
+      expectedTextRpcArgs({ body: FAKE_BUTTON_TEXT, wamid: 'wamid.INBOUND_FAKE_BTN_MIX' }),
+    ]);
+    expect(mockSvc.rpc.mock.calls[1]).toEqual([
+      'process_meta_inbound_message',
+      expectedTextRpcArgs({ body: 'Opção A', wamid: 'wamid.INBOUND_FAKE_INT_MIX' }),
+    ]);
   });
 
   it('BTN-10: audio/sticker continuam skipped; document/image/video intactos', async () => {
@@ -2427,6 +2430,392 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
     expect(docRes._status).toBe(200);
     expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledTimes(1);
     expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
+  });
+});
+
+// =============================================================================
+// MVP5.B3.1 — inbound type=interactive (button_reply / list_reply)
+// =============================================================================
+
+const FAKE_INTERACTIVE_BUTTON_TITLE = 'Confirmar pedido';
+const FAKE_INTERACTIVE_LIST_TITLE   = 'Plano mensal';
+const FAKE_INTERACTIVE_OPTION_ID    = 'opt_internal_id_never_persist';
+const FAKE_INTERACTIVE_DESCRIPTION  = 'Descrição da opção — nunca persistir';
+const MAX_INBOUND_TEXT_BODY_LENGTH  = 4096;
+
+function makeInteractiveMessage({
+  id          = FAKE_INBOUND_WAMID,
+  from        = FAKE_WA_ID,
+  timestamp   = FAKE_TIMESTAMP,
+  subtype     = 'button_reply',
+  title       = FAKE_INTERACTIVE_BUTTON_TITLE,
+  optionId    = FAKE_INTERACTIVE_OPTION_ID,
+  interactive = undefined,
+} = {}) {
+  const msg = { id, from, type: 'interactive', timestamp };
+  if (interactive === null) return msg;
+  if (interactive !== undefined) {
+    msg.interactive = interactive;
+    return msg;
+  }
+
+  const reply = { id: optionId, title };
+  if (subtype === 'list_reply') {
+    reply.description = FAKE_INTERACTIVE_DESCRIPTION;
+    msg.interactive = { type: 'list_reply', list_reply: reply };
+  } else {
+    msg.interactive = { type: subtype, button_reply: reply };
+  }
+  return msg;
+}
+
+function collectHandlerLogs(logSpy, errSpy) {
+  return [...logSpy.mock.calls, ...errSpy.mock.calls]
+    .map(c => c.map(part => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '))
+    .join('\n');
+}
+
+describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
+  it('INT-A: button_reply válido → RPC de texto com title; HTTP 200', async () => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ subtype: 'button_reply' })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledWith(
+      'process_meta_inbound_message',
+      expectedTextRpcArgs({ body: FAKE_INTERACTIVE_BUTTON_TITLE }),
+    );
+    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_message_type');
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain(FAKE_INTERACTIVE_OPTION_ID);
+  });
+
+  it('INT-B: list_reply válido → RPC de texto com title; HTTP 200', async () => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({
+        subtype: 'list_reply',
+        title: FAKE_INTERACTIVE_LIST_TITLE,
+      })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledWith(
+      'process_meta_inbound_message',
+      expectedTextRpcArgs({ body: FAKE_INTERACTIVE_LIST_TITLE }),
+    );
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain(FAKE_INTERACTIVE_OPTION_ID);
+    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain(FAKE_INTERACTIVE_DESCRIPTION);
+  });
+
+  it('INT-C: title com espaços → persiste somente o valor após trim', async () => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ title: '  Confirmar pedido  ' })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe('Confirmar pedido');
+  });
+
+  it.each([
+    ['title vazio', ''],
+    ['title somente espaços', '   '],
+    ['title só quebra de linha', '\n\t'],
+  ])('INT-D: %s → HTTP 200; RPC 0', async (_label, title) => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ title })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['number', 1],
+    ['boolean', true],
+    ['object', { nested: 'x' }],
+    ['array', ['x']],
+    ['null', null],
+  ])('INT-E: title %s → HTTP 200; RPC 0', async (_label, title) => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ title })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('INT-F: title acima de 4096 após trim → skip; 4096 persiste', async () => {
+    const over = 'A'.repeat(MAX_INBOUND_TEXT_BODY_LENGTH + 1);
+    const overPayload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ title: over })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(overPayload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const overRes = makeRes();
+    await handler(makePostReq(), overRes);
+
+    expect(overRes._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    const exact = 'B'.repeat(MAX_INBOUND_TEXT_BODY_LENGTH);
+    const exactPayload = makeInboundPayload({
+      messages: [makeInteractiveMessage({ id: 'wamid.INBOUND_FAKE_INT_MAX', title: exact })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(exactPayload)));
+    setupInboundDb();
+
+    const exactRes = makeRes();
+    await handler(makePostReq(), exactRes);
+
+    expect(exactRes._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe(exact);
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toHaveLength(MAX_INBOUND_TEXT_BODY_LENGTH);
+  });
+
+  it.each([
+    ['nfm_reply', 'nfm_reply'],
+    ['product_list', 'product_list'],
+    ['button', 'button'],
+    ['desconhecido', 'unknown_subtype'],
+  ])('INT-G: interactive.type=%s → HTTP 200; RPC 0', async (_label, subtype) => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({
+        subtype,
+        title: FAKE_INTERACTIVE_BUTTON_TITLE,
+      })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['interactive ausente', makeInteractiveMessage({ interactive: null })],
+    ['interactive não-objeto', makeInteractiveMessage({ interactive: 'x' })],
+    ['button_reply null', {
+      id: FAKE_INBOUND_WAMID,
+      from: FAKE_WA_ID,
+      type: 'interactive',
+      timestamp: FAKE_TIMESTAMP,
+      interactive: { type: 'button_reply', button_reply: null },
+    }],
+    ['button_reply ausente', {
+      id: FAKE_INBOUND_WAMID,
+      from: FAKE_WA_ID,
+      type: 'interactive',
+      timestamp: FAKE_TIMESTAMP,
+      interactive: { type: 'button_reply' },
+    }],
+    ['list_reply ausente', {
+      id: FAKE_INBOUND_WAMID,
+      from: FAKE_WA_ID,
+      type: 'interactive',
+      timestamp: FAKE_TIMESTAMP,
+      interactive: { type: 'list_reply' },
+    }],
+    ['title ausente', {
+      id: FAKE_INBOUND_WAMID,
+      from: FAKE_WA_ID,
+      type: 'interactive',
+      timestamp: FAKE_TIMESTAMP,
+      interactive: { type: 'button_reply', button_reply: { id: FAKE_INTERACTIVE_OPTION_ID } },
+    }],
+    ['interactive array', makeInteractiveMessage({ interactive: [] })],
+  ])('INT-H: %s → HTTP 200; RPC 0', async (_label, msg) => {
+    const payload = makeInboundPayload({ messages: [msg] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('INT-I: mesmo wamid com created=false → HTTP 200; RPC ainda chamada (dedup na RPC)', async () => {
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage()],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb({ rpcResult: makeRpcResult({ created: false }) });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe(FAKE_INBOUND_WAMID);
+  });
+
+  it('INT-J: HMAC inválido → 401; zero DB; zero RPC', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage()],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('INT-K: company_id e instance_id vêm da instância, não do payload', async () => {
+    const spoofCompany  = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    const spoofInstance = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage()],
+    });
+    payload.entry[0].id = spoofCompany;
+    payload.entry[0].changes[0].value.metadata.company_id = spoofCompany;
+    payload.entry[0].changes[0].value.metadata.instance_id = spoofInstance;
+
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls[0][0]).toBe('meta_whatsapp_instances');
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[0][1].p_instance_id).toBe(FAKE_INSTANCE_ID);
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).not.toBe(spoofCompany);
+    expect(mockSvc.rpc.mock.calls[0][1].p_instance_id).not.toBe(spoofInstance);
+  });
+
+  it('INT-L: regressão button.text → RPC inalterada', async () => {
+    const payload = makeInboundPayload({ messages: [makeButtonMessage()] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledWith(
+      'process_meta_inbound_message',
+      expectedTextRpcArgs(),
+    );
+  });
+
+  it('INT-M: regressão text → RPC inalterada', async () => {
+    const payload = makeInboundPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).toHaveBeenCalledWith('process_meta_inbound_message', {
+      p_company_id:         FAKE_COMPANY_ID,
+      p_instance_id:        FAKE_INSTANCE_ID,
+      p_wa_id:              FAKE_WA_ID,
+      p_meta_message_id:    FAKE_INBOUND_WAMID,
+      p_body:               FAKE_BODY,
+      p_contact_name:       FAKE_CONTACT_NAME,
+      p_provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
+    });
+  });
+
+  it('INT-N: audio/location/sticker/unknown continuam skipped; image/document/video intactos', async () => {
+    const skipped = makeInboundPayload({
+      messages: [
+        { id: 'wamid_aud_int', from: FAKE_WA_ID, type: 'audio', audio: { id: '1' }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_loc_int', from: FAKE_WA_ID, type: 'location', location: { latitude: 0, longitude: 0 }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_stk_int', from: FAKE_WA_ID, type: 'sticker', sticker: { id: '2' }, timestamp: FAKE_TIMESTAMP },
+        { id: 'wamid_unk_int', from: FAKE_WA_ID, type: 'unknown', timestamp: FAKE_TIMESTAMP },
+      ],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(skipped)));
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const skipRes = makeRes();
+    await handler(makePostReq(), skipRes);
+    expect(skipRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    const docPayload = makeDocumentPayload();
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(docPayload)));
+    setupDocumentDb();
+    const docRes = makeRes();
+    await handler(makePostReq(), docRes);
+    expect(docRes._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].expectedMediaType).toBe('DOCUMENT');
+    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('document');
+  });
+
+  it('INT-O: logs e resposta HTTP não contém title, wa_id, option id, token nem payload interativo', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const payload = makeInboundPayload({
+      messages: [makeInteractiveMessage({
+        subtype: 'list_reply',
+        title: FAKE_INTERACTIVE_LIST_TITLE,
+      })],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    setupInboundDb();
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    const logs = collectHandlerLogs(logSpy, errSpy);
+    expect(logs).not.toContain(FAKE_INTERACTIVE_LIST_TITLE);
+    expect(logs).not.toContain(FAKE_INTERACTIVE_OPTION_ID);
+    expect(logs).not.toContain(FAKE_INTERACTIVE_DESCRIPTION);
+    expect(logs).not.toContain(FAKE_WA_ID);
+    expect(logs).not.toContain(FAKE_PLAIN_TOKEN);
+    expect(logs).not.toContain(FAKE_APP_SECRET);
+    expect(logs).not.toContain('list_reply');
+    expect(logs).not.toContain('button_reply');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_INTERACTIVE_LIST_TITLE);
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_INTERACTIVE_OPTION_ID);
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_WA_ID);
+
+    logSpy.mockRestore();
+    errSpy.mockRestore();
   });
 });
 
