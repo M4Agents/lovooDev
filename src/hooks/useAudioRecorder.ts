@@ -9,6 +9,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 
+export type AudioRecorderMicError = 'permission_denied' | 'unavailable' | 'unknown'
+
 export interface UseAudioRecorderReturn {
   // Estados de gravação
   isRecording: boolean
@@ -19,6 +21,9 @@ export interface UseAudioRecorderReturn {
   audioPreviewUrl: string | null
   audioMimeType: string | null
   previewDurationSeconds: number
+
+  // Permissão / dispositivo — Uazapi pode ignorar; Meta diagnóstico usa.
+  micError: AudioRecorderMicError | null
 
   // Ações
   startRecording: () => Promise<void>
@@ -45,6 +50,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
   const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0)
+  const [micError, setMicError] = useState<AudioRecorderMicError | null>(null)
 
   // Refs internas — não causam re-render
   const streamRef = useRef<MediaStream | null>(null)
@@ -93,6 +99,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     if (audioBlobPreview) return
 
     try {
+      setMicError(null)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
@@ -155,6 +162,14 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       stopStream()
       clearTimer()
       setIsRecording(false)
+      const name = error instanceof DOMException ? error.name : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicError('permission_denied')
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        setMicError('unavailable')
+      } else {
+        setMicError('unknown')
+      }
     }
   }, [audioBlobPreview])
 
@@ -227,6 +242,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     audioPreviewUrl,
     audioMimeType,
     previewDurationSeconds,
+    micError,
     startRecording,
     stopRecording,
     cancelRecording,

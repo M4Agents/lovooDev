@@ -10,6 +10,7 @@
 //   discoverAuthorizedWabas(token)                                           → string[]  — WABA IDs via debug_token
 //   listMessageTemplates(token, wabaId, options)                             → { templates, nextCursor }
 //   sendTemplateMessage(token, phoneNumberId, to, tpl)                       → { messageId }
+//   sendAudioMessage(token, phoneNumberId, to, mediaId, options?)            → { messageId }
 //   uploadMedia(token, phoneNumberId, bytes, mimeType, filename?)            → { mediaId }  (MVP4B.4A)
 //
 // SEGURANÇA:
@@ -855,6 +856,142 @@ export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
   const messageId = payload?.messages?.[0]?.id;
   if (typeof messageId !== 'string' || messageId.length === 0) {
     throw makeError('send_invalid_response', 'Meta send invalid response');
+  }
+
+  return { messageId };
+}
+
+// =============================================================================
+// sendAudioMessage
+// =============================================================================
+
+/**
+ * Envia uma mensagem de áudio via WhatsApp Cloud API a partir de um media_id
+ * já obtido (uploadMedia). Primitiva de transporte — sem auth, tenant, S3,
+ * validação de MIME ou janela de 24h.
+ *
+ * Endpoint: POST /{graphVersion}/{phoneNumberId}/messages
+ *
+ * Payload construído INTERNAMENTE — não aceita payload arbitrário do caller.
+ * Estrutura enviada ao Graph:
+ *   { messaging_product, recipient_type, to, type: 'audio', audio: { id [, voice] } }
+ *
+ * `audio.voice` entra SOMENTE quando options.voice === true (booleano estrito).
+ * false, omitido ou options ausente → campo voice omitido (áudio básico).
+ * O caller é responsável por garantir OGG Opus antes de passar voice: true.
+ *
+ * Exatamente UMA tentativa HTTP — sem retry automático.
+ * Timeout: GRAPH_TIMEOUT_MS (10 s) — JSON, igual sendTextMessage.
+ *
+ * SEGURANÇA:
+ *   - accessToken nunca logado, nunca presente em mensagem de erro
+ *   - to e mediaId nunca logados
+ *   - URL construída internamente — sem SSRF por valor externo
+ *   - Payload construído internamente — sem injection de campos arbitrários
+ *
+ * @param {string}  accessToken   Business token da instância (nunca logar)
+ * @param {string}  phoneNumberId Phone Number ID da instância (numeric string)
+ * @param {string}  to            Número de destino — somente dígitos, sem '+'
+ * @param {string}  mediaId       ID numérico retornado por uploadMedia
+ * @param {{ voice?: boolean }} [options]
+ *   voice: true → inclui audio.voice=true. Qualquer outro valor de voice
+ *   que não seja boolean → send_audio_invalid_input (fail-closed).
+ * @returns {Promise<{ messageId: string }>}
+ * @throws {Error} err.code in:
+ *   send_audio_invalid_input    — validação falhou antes do fetch (sem rede)
+ *   send_audio_failed           — HTTP não-2xx do Graph
+ *                                (pode incluir metaErrorCode/metaSubcode numéricos;
+ *                                 nunca inclui Graph message, type ou fbtrace_id)
+ *   send_audio_timeout          — AbortError / timeout expirado
+ *   send_audio_network_error    — falha de rede não-timeout
+ *   send_audio_invalid_response — HTTP 2xx mas response sem message id válido
+ */
+export async function sendAudioMessage(accessToken, phoneNumberId, to, mediaId, options) {
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+  }
+
+  if (typeof phoneNumberId !== 'string' || !META_ID_RE.test(phoneNumberId)) {
+    throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+  }
+
+  if (typeof to !== 'string' || !TO_PHONE_RE.test(to)) {
+    throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+  }
+
+  if (typeof mediaId !== 'string' || !META_ID_RE.test(mediaId)) {
+    throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+  }
+
+  let voiceEnabled = false;
+  if (options !== undefined) {
+    if (options == null || typeof options !== 'object' || Array.isArray(options)) {
+      throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+    }
+    if (options.voice !== undefined && typeof options.voice !== 'boolean') {
+      throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+    }
+    voiceEnabled = options.voice === true;
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${phoneNumberId}/messages`);
+
+  const audio = { id: mediaId };
+  if (voiceEnabled) {
+    audio.voice = true;
+  }
+
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to,
+    type:              'audio',
+    audio,
+  });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('send_audio_timeout', 'Meta send audio request timed out');
+    }
+    throw makeError('send_audio_network_error', 'Meta send audio network error');
+  }
+
+  if (!res.ok) {
+    const errObj = makeError('send_audio_failed', 'Meta send audio failed');
+    errObj.graphStatus = res.status;
+    const raw = await readSendErrorBodyLimited(res, GRAPH_SEND_ERROR_BODY_MAX_BYTES);
+    if (raw != null) {
+      try {
+        attachSafeSendMetaCodes(errObj, JSON.parse(raw));
+      } catch {
+        // JSON inválido — send_audio_failed sem metaErrorCode.
+      }
+    }
+    throw errObj;
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch {
+    throw makeError('send_audio_invalid_response', 'Meta send audio invalid response');
+  }
+
+  const messageId = payload?.messages?.[0]?.id;
+  if (typeof messageId !== 'string' || messageId.length === 0) {
+    throw makeError('send_audio_invalid_response', 'Meta send audio invalid response');
   }
 
   return { messageId };

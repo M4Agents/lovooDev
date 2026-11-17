@@ -15,7 +15,7 @@
 // Fora do escopo:
 //   - LeadPanel, sugestões de IA
 //   - Paginação histórica
-//   - Mídia, áudio, documentos
+//   - Envio de áudio/mídia/documentos de sessão (B2: só diagnóstico DEV)
 //
 // Isolamento (invariantes de segurança):
 //   - Zero wa_id/to usado para envio — destinatário resolvido pelo backend
@@ -35,6 +35,8 @@ import { AlertCircle, Check, CheckCheck, Clock } from 'lucide-react'
 import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
 import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
+import { MetaAudioDiagnosticRecorder } from './MetaAudioDiagnosticRecorder'
+import { isMetaAudioRecorderDiagnosticEnabled } from '../../../utils/metaAudioRecorderDiagnostic'
 import {
   buildHistoricalTelHref,
   isSafeHistoricalHref,
@@ -718,6 +720,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
 
   const canSend        = !isSending && !!conversation?.instance_id && !!text.trim()
   const canOpenPicker  = !isSending && !!conversation?.instance_id
+  const showAudioDiagnostic = isMetaAudioRecorderDiagnosticEnabled()
 
   return (
     <div className="flex flex-col h-full bg-white/60 backdrop-blur-sm">
@@ -761,6 +764,12 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
           <p role="alert" className="text-xs text-red-600 mb-2 leading-relaxed">
             {sendError}
           </p>
+        )}
+        {showAudioDiagnostic && (
+          <MetaAudioDiagnosticRecorder
+            conversationId={conversationId}
+            disabled={!conversation?.instance_id || isSending}
+          />
         )}
         <div className="flex items-end gap-2">
           {/* Botão Template — MVP4A */}
