@@ -149,21 +149,21 @@ afterEach(() => {
 })
 
 describe('MetaChatArea — B2 áudio diagnóstico', () => {
-  it('B2-01: flag desligada → microfone ausente', () => {
+  it('B2-01: hostname produção (gate falso) → microfone ausente', () => {
     mockEnabled.mockReturnValue(false)
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.queryByTestId('meta-audio-mic-button')).toBeNull()
     expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
   })
 
-  it('B2-02: flag ligada no DEV → microfone disponível', () => {
+  it('B2-02: hostname DEV (gate verdadeiro) → microfone disponível', () => {
     mockEnabled.mockReturnValue(true)
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.getByTestId('meta-audio-mic-button')).toBeTruthy()
     expect(screen.getByTestId('meta-audio-send-blocked-notice').textContent).toMatch(/envio ainda indisponível/i)
   })
 
-  it('B2-03: função de gate falsa (produção/host bloqueado) → microfone ausente', () => {
+  it('B2-03: gate falso (produção/host bloqueado) → microfone ausente', () => {
     mockEnabled.mockReturnValue(false)
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.queryByTestId('meta-audio-mic-button')).toBeNull()

@@ -8,35 +8,55 @@ import {
 } from '../metaAudioRecorderDiagnostic'
 
 describe('isMetaAudioRecorderDiagnosticEnabled', () => {
-  it('flag ausente → desligado mesmo em localhost', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled(undefined, 'localhost')).toBe(false)
-    expect(isMetaAudioRecorderDiagnosticEnabled('', 'localhost')).toBe(false)
-    expect(isMetaAudioRecorderDiagnosticEnabled('TRUE', 'localhost')).toBe(false)
-    expect(isMetaAudioRecorderDiagnosticEnabled('1', 'lovoo-dev.vercel.app')).toBe(false)
+  it('localhost habilitado sem flag', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('localhost')).toBe(true)
   })
 
-  it('flag true + localhost → ligado', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'localhost')).toBe(true)
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', '127.0.0.1')).toBe(true)
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', '::1')).toBe(true)
+  it('127.0.0.1 habilitado sem flag', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('127.0.0.1')).toBe(true)
   })
 
-  it('flag true + lovoo-dev.vercel.app → ligado', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'lovoo-dev.vercel.app')).toBe(true)
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'LOVOO-DEV.VERCEL.APP')).toBe(true)
+  it('::1 habilitado sem flag', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('::1')).toBe(true)
   })
 
-  it('flag true + app.lovoocrm.com → desligado', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'app.lovoocrm.com')).toBe(false)
+  it('lovoo-dev.vercel.app habilitado sem flag', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-dev.vercel.app')).toBe(true)
+    expect(isMetaAudioRecorderDiagnosticEnabled('LOVOO-DEV.VERCEL.APP')).toBe(true)
+    expect(isMetaAudioRecorderDiagnosticEnabled('  lovoo-dev.vercel.app  ')).toBe(true)
   })
 
-  it('flag true + hostname de preview/produção extra → desligado', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'lovoocrm.com')).toBe(false)
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', 'example.vercel.app')).toBe(false)
+  it('app.lovoocrm.com bloqueado', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('app.lovoocrm.com')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('APP.LOVOOCRM.COM')).toBe(false)
   })
 
-  it('hostname vazio → desligado', () => {
-    expect(isMetaAudioRecorderDiagnosticEnabled('true', '')).toBe(false)
+  it('outros domínios de produção bloqueados', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoocrm.com')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('www.lovoocrm.com')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('www.app.lovoocrm.com')).toBe(false)
+  })
+
+  it('previews Vercel não autorizados bloqueados', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('example.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-dev-git-main.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-xxxxx.vercel.app')).toBe(false)
+  })
+
+  it('hostname vazio bloqueado', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('   ')).toBe(false)
+  })
+
+  it('subdomínios falsos, substring e hostnames malformados bloqueados', () => {
+    expect(isMetaAudioRecorderDiagnosticEnabled('www.lovoo-dev.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('evil.lovoo-dev.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-dev.vercel.app.evil.com')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('notlovoo-dev.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('https://lovoo-dev.vercel.app')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-dev.vercel.app/chat')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('lovoo-dev.vercel.app:443')).toBe(false)
+    expect(isMetaAudioRecorderDiagnosticEnabled('user@lovoo-dev.vercel.app')).toBe(false)
   })
 })
 

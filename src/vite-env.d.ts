@@ -11,12 +11,6 @@ interface ImportMetaEnv {
   readonly VITE_FEATURE_TAG_GROUPS?: string
   /** Só a string "true" exibe Abrir chat na lista de Leads. Definir apenas no LovooDev. */
   readonly VITE_FEATURE_LEADS_OPEN_CHAT?: string
-  /**
-   * Diagnóstico de gravação de áudio no chat Meta.
-   * Somente a string exata "true" habilita, e apenas em hostname DEV allowlist.
-   * Ausente/outro valor = desligado. Nunca ligar em produção.
-   */
-  readonly VITE_META_AUDIO_RECORDER_DIAGNOSTIC?: string
 }
 
 interface ImportMeta {

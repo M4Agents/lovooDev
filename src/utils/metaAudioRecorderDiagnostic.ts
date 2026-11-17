@@ -2,11 +2,10 @@
 // Diagnóstico local de áudio Meta — somente UI DEV.
 //
 // Não envia Blob, não chama Graph, S3 ou Supabase.
-// Flag VITE_META_AUDIO_RECORDER_DIAGNOSTIC === 'true' E hostname allowlist.
-// app.lovoocrm.com é bloqueado mesmo com a flag.
+// Gate visual por hostname EXATO (allowlist). Sem flag de ambiente.
+// app.lovoocrm.com e qualquer host fora da lista permanecem bloqueados.
+// Não é autorização de dados, RBAC, company_id ou RLS.
 // =============================================================================
-
-export const META_AUDIO_DIAGNOSTIC_ENV_KEY = 'VITE_META_AUDIO_RECORDER_DIAGNOSTIC'
 
 export const META_AUDIO_DIAGNOSTIC_ALLOWED_HOSTS = [
   'localhost',
@@ -58,12 +57,21 @@ export interface MetaAudioBlobAnalysis {
   codecConfirmed: false
 }
 
+export function normalizeDiagnosticHostname(hostname: string): string | null {
+  if (typeof hostname !== 'string') return null
+  let host = hostname.trim().toLowerCase()
+  if (!host) return null
+  if (host.endsWith('.')) host = host.slice(0, -1)
+  if (!host) return null
+  if (/[\s/?#@\\]/.test(host)) return null
+  if (host.includes(':') && host !== '::1') return null
+  return host
+}
+
 export function isMetaAudioRecorderDiagnosticEnabled(
-  envValue: string | undefined = import.meta.env.VITE_META_AUDIO_RECORDER_DIAGNOSTIC,
   hostname: string = typeof window !== 'undefined' ? window.location.hostname : '',
 ): boolean {
-  if (envValue !== 'true') return false
-  const host = hostname.trim().toLowerCase()
+  const host = normalizeDiagnosticHostname(hostname)
   if (!host) return false
   if ((META_AUDIO_DIAGNOSTIC_BLOCKED_HOSTS as readonly string[]).includes(host)) {
     return false
