@@ -16,6 +16,7 @@ const recorder = {
   audioMimeType: null as string | null,
   previewDurationSeconds: 0,
   micError: null as 'permission_denied' | 'unavailable' | 'unknown' | null,
+  recorderError: null as 'unsupported_mime' | 'start_failed' | 'stop_failed' | null,
   startRecording: vi.fn(async () => {}),
   stopRecording: vi.fn(),
   cancelRecording: vi.fn(),
@@ -113,6 +114,7 @@ function resetRecorder() {
   recorder.audioMimeType = null
   recorder.previewDurationSeconds = 0
   recorder.micError = null
+  recorder.recorderError = null
   recorder.startRecording.mockClear()
   recorder.stopRecording.mockClear()
   recorder.cancelRecording.mockClear()
@@ -331,5 +333,71 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.getByTestId('meta-audio-diagnostic-panel').textContent).toMatch(/WebM/)
     expect(recorder.stopRecording).toHaveBeenCalled()
+  })
+
+  it('B2-18: modo automático chama startRecording sem MIME explícito', async () => {
+    mockEnabled.mockReturnValue(true)
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByTestId('meta-audio-mode-auto')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
+    })
+    expect(recorder.startRecording).toHaveBeenCalledTimes(1)
+    expect(recorder.startRecording.mock.calls[0].length).toBe(0)
+  })
+
+  it('B2-19: MP4 suportado pode ser selecionado e passa MIME ao gravador', async () => {
+    mockEnabled.mockReturnValue(true)
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
+    })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    const mp4 = screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement
+    expect(mp4.disabled).toBe(false)
+    fireEvent.click(mp4)
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
+    })
+    expect(recorder.startRecording).toHaveBeenCalledWith({
+      mimeType: expect.stringMatching(/^audio\/mp4/),
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('B2-20: MP4 não suportado não inicia gravação nesse modo', () => {
+    mockEnabled.mockReturnValue(true)
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime === 'audio/webm',
+    })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect((screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByTestId('meta-audio-mp4-unsupported')).toBeTruthy()
+    vi.unstubAllGlobals()
+  })
+
+  it('B2-21: falha de inicialização e finalização são visíveis', () => {
+    mockEnabled.mockReturnValue(true)
+    recorder.recorderError = 'start_failed'
+    const { rerender } = render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
+    )
+    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/iniciar/i)
+    recorder.recorderError = 'stop_failed'
+    rerender(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/encerrar/i)
+  })
+
+  it('B2-22: troca de modo cancela gravação anterior', () => {
+    mockEnabled.mockReturnValue(true)
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
+    })
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    recorder.cancelRecording.mockClear()
+    recorder.clearPreview.mockClear()
+    fireEvent.click(screen.getByTestId('meta-audio-mode-mp4'))
+    expect(recorder.cancelRecording).toHaveBeenCalled()
+    expect(recorder.clearPreview).toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })

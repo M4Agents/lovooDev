@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   analyzeAudioBlob,
   describeMetaAcceptance,
+  formatByteSignature,
   guessAudioContainer,
   isMetaAudioRecorderDiagnosticEnabled,
   probeMediaRecorderSupport,
+  selectSupportedMp4MimeType,
 } from '../metaAudioRecorderDiagnostic'
 
 describe('isMetaAudioRecorderDiagnosticEnabled', () => {
@@ -93,6 +95,56 @@ describe('analyzeAudioBlob', () => {
     expect(analysis.codecConfirmed).toBe(false)
     expect(analysis.metaAcceptance).toBe(describeMetaAcceptance('ogg'))
     expect(analysis.sizeBytes).toBe(blob.size)
+  })
+
+  it('Blob WebM/EBML continua identificado como WebM', () => {
+    const header = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0, 0, 0, 0, 0])
+    const blob = new Blob([header], { type: 'audio/webm' })
+    const analysis = analyzeAudioBlob(blob, 'audio/webm', 4, header.buffer)
+    expect(analysis.container).toBe('webm_or_ebml')
+    expect(analysis.codecConfirmed).toBe(false)
+  })
+
+  it('Blob com ftyp é identificado como MP4/ISO-BMFF, codec não confirmado', () => {
+    const header = new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20])
+    const blob = new Blob([header], { type: 'audio/mp4' })
+    const analysis = analyzeAudioBlob(blob, 'audio/mp4', 4, header.buffer)
+    expect(analysis.container).toBe('mp4_iso_bmff')
+    expect(analysis.codecConfirmed).toBe(false)
+    expect(analysis.containerNote).toMatch(/vídeo|M4A/i)
+  })
+
+  it('MIME declarado MP4 com assinatura WebM NÃO é tratado como MP4 válido', () => {
+    const header = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0, 0, 0, 0, 0])
+    const blob = new Blob([header], { type: 'audio/mp4' })
+    const analysis = analyzeAudioBlob(blob, 'audio/mp4', 2, header.buffer)
+    expect(analysis.container).toBe('webm_or_ebml')
+    expect(analysis.mimeContainerMismatch).toBe(true)
+    expect(analysis.metaAcceptance).toBe(describeMetaAcceptance('webm_or_ebml'))
+  })
+})
+
+describe('selectSupportedMp4MimeType', () => {
+  it('retorna o primeiro candidato suportado', () => {
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime === 'audio/mp4',
+    })
+    expect(selectSupportedMp4MimeType()).toBe('audio/mp4')
+    vi.unstubAllGlobals()
+  })
+
+  it('retorna null quando nenhuma variante MP4 é suportada', () => {
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: () => false,
+    })
+    expect(selectSupportedMp4MimeType()).toBeNull()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('formatByteSignature', () => {
+  it('formata os primeiros bytes em hex', () => {
+    expect(formatByteSignature(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]))).toBe('1A 45 DF A3')
   })
 })
 

@@ -26,7 +26,13 @@ const MIME_PROBE_LIST = [
   'audio/ogg',
   'audio/ogg;codecs=opus',
   'audio/mp4',
+  'audio/mp4;codecs=mp4a.40.2',
   'audio/mpeg',
+] as const
+
+export const META_MP4_MIME_CANDIDATES = [
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4',
 ] as const
 
 export type MetaAudioContainerGuess =
@@ -43,6 +49,7 @@ export interface MetaAudioSupportedTypes {
   'audio/ogg': boolean | null
   'audio/ogg;codecs=opus': boolean | null
   'audio/mp4': boolean | null
+  'audio/mp4;codecs=mp4a.40.2': boolean | null
   'audio/mpeg': boolean | null
 }
 
@@ -55,6 +62,8 @@ export interface MetaAudioBlobAnalysis {
   containerNote: string
   metaAcceptance: string
   codecConfirmed: false
+  byteSignature: string
+  mimeContainerMismatch: boolean
 }
 
 export function normalizeDiagnosticHostname(hostname: string): string | null {
@@ -79,6 +88,24 @@ export function isMetaAudioRecorderDiagnosticEnabled(
   return (META_AUDIO_DIAGNOSTIC_ALLOWED_HOSTS as readonly string[]).includes(host)
 }
 
+export function isMediaRecorderTypeSupported(mime: string): boolean | null {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return null
+  }
+  try {
+    return MediaRecorder.isTypeSupported(mime)
+  } catch {
+    return null
+  }
+}
+
+export function selectSupportedMp4MimeType(): string | null {
+  for (const mime of META_MP4_MIME_CANDIDATES) {
+    if (isMediaRecorderTypeSupported(mime) === true) return mime
+  }
+  return null
+}
+
 export function probeMediaRecorderSupport(): MetaAudioSupportedTypes {
   const empty: MetaAudioSupportedTypes = {
     'audio/webm': null,
@@ -86,20 +113,32 @@ export function probeMediaRecorderSupport(): MetaAudioSupportedTypes {
     'audio/ogg': null,
     'audio/ogg;codecs=opus': null,
     'audio/mp4': null,
+    'audio/mp4;codecs=mp4a.40.2': null,
     'audio/mpeg': null,
-  }
-  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
-    return empty
   }
   const result = { ...empty }
   for (const mime of MIME_PROBE_LIST) {
-    try {
-      result[mime] = MediaRecorder.isTypeSupported(mime)
-    } catch {
-      result[mime] = null
-    }
+    result[mime] = isMediaRecorderTypeSupported(mime)
   }
   return result
+}
+
+export function formatByteSignature(bytes: Uint8Array, length = 12): string {
+  const n = Math.min(bytes.length, length)
+  if (n === 0) return ''
+  return Array.from(bytes.subarray(0, n))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(' ')
+    .toUpperCase()
+}
+
+function mimeLooksLikeMp4(mime: string): boolean {
+  const m = mime.toLowerCase()
+  return m.includes('mp4') || m.includes('m4a')
+}
+
+function mimeLooksLikeWebm(mime: string): boolean {
+  return mime.toLowerCase().includes('webm')
 }
 
 export function guessAudioContainer(bytes: Uint8Array): {
@@ -166,14 +205,23 @@ export function analyzeAudioBlob(
 ): MetaAudioBlobAnalysis {
   const view = new Uint8Array(bytes)
   const guessed = guessAudioContainer(view)
+  const blobMime = blob.type || ''
+  const declared = `${recorderMimeType || ''} ${blobMime}`
+  const mimeContainerMismatch =
+    (mimeLooksLikeMp4(declared) && guessed.container === 'webm_or_ebml') ||
+    (mimeLooksLikeMp4(declared) && guessed.container === 'ogg') ||
+    (mimeLooksLikeWebm(declared) && guessed.container === 'mp4_iso_bmff') ||
+    (mimeLooksLikeMp4(blobMime) && guessed.container !== 'mp4_iso_bmff' && guessed.container !== 'empty' && guessed.container !== 'unknown')
   return {
     recorderMimeType,
-    blobMimeType: blob.type || '',
+    blobMimeType: blobMime,
     sizeBytes: blob.size,
     durationSeconds,
     container: guessed.container,
     containerNote: guessed.note,
     metaAcceptance: describeMetaAcceptance(guessed.container),
     codecConfirmed: false,
+    byteSignature: formatByteSignature(view),
+    mimeContainerMismatch,
   }
 }

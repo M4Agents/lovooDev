@@ -16,6 +16,8 @@ export interface AudioPreviewBarProps {
   onSend?: () => Promise<void> | void
   /** Default true. false esconde o botão de envio (diagnóstico Meta). */
   showSendButton?: boolean
+  onPlaybackCanPlay?: () => void
+  onPlaybackError?: () => void
 }
 
 function formatDuration(seconds: number): string {
@@ -31,6 +33,8 @@ export const AudioPreviewBar: React.FC<AudioPreviewBarProps> = ({
   onCancel,
   onSend,
   showSendButton = true,
+  onPlaybackCanPlay,
+  onPlaybackError,
 }) => {
   return (
     <div className="flex items-center gap-2 w-full px-1 py-1">
@@ -53,6 +57,8 @@ export const AudioPreviewBar: React.FC<AudioPreviewBarProps> = ({
           controls
           className="flex-1 min-w-0 h-8"
           style={{ maxHeight: 32 }}
+          onCanPlay={onPlaybackCanPlay}
+          onError={onPlaybackError}
         />
         <span className="text-xs font-medium text-gray-500 tabular-nums flex-shrink-0 ml-1">
           {formatDuration(durationSeconds)}

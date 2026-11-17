@@ -10,6 +10,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 export type AudioRecorderMicError = 'permission_denied' | 'unavailable' | 'unknown'
+export type AudioRecorderError = 'unsupported_mime' | 'start_failed' | 'stop_failed'
+
+export interface StartRecordingOptions {
+  /** Preferência explícita (diagnóstico Meta). Ausente = ordem MIME da Uazapi. */
+  mimeType?: string
+}
 
 export interface UseAudioRecorderReturn {
   // Estados de gravação
@@ -24,9 +30,10 @@ export interface UseAudioRecorderReturn {
 
   // Permissão / dispositivo — Uazapi pode ignorar; Meta diagnóstico usa.
   micError: AudioRecorderMicError | null
+  recorderError: AudioRecorderError | null
 
   // Ações
-  startRecording: () => Promise<void>
+  startRecording: (options?: StartRecordingOptions) => Promise<void>
   stopRecording: () => void
   cancelRecording: () => void
   clearPreview: () => void
@@ -51,6 +58,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [previewDurationSeconds, setPreviewDurationSeconds] = useState(0)
   const [micError, setMicError] = useState<AudioRecorderMicError | null>(null)
+  const [recorderError, setRecorderError] = useState<AudioRecorderError | null>(null)
 
   // Refs internas — não causam re-render
   const streamRef = useRef<MediaStream | null>(null)
@@ -92,7 +100,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   // startRecording
   // --------------------------------------------------
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (options?: StartRecordingOptions) => {
     // Ajuste 5: bloquear nova gravação enquanto existir prévia pendente.
     // Impede que o usuário inicie acidentalmente uma nova gravação antes
     // de decidir sobre a prévia atual (enviar ou cancelar).
@@ -100,13 +108,39 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
     try {
       setMicError(null)
+      setRecorderError(null)
+
+      const requestedMime = options?.mimeType?.trim() ?? ''
+      let mimeType = ''
+      if (requestedMime) {
+        if (
+          typeof MediaRecorder === 'undefined' ||
+          typeof MediaRecorder.isTypeSupported !== 'function' ||
+          !MediaRecorder.isTypeSupported(requestedMime)
+        ) {
+          setRecorderError('unsupported_mime')
+          return
+        }
+        mimeType = requestedMime
+      } else {
+        mimeType = detectMimeType()
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
-      const mimeType = detectMimeType()
       const recorderOptions = mimeType ? { mimeType } : {}
-      const recorder = new MediaRecorder(stream, recorderOptions)
-      // Captura o mimeType efetivo que o browser atribuiu
+      let recorder: MediaRecorder
+      try {
+        recorder = new MediaRecorder(stream, recorderOptions)
+      } catch {
+        stopStream()
+        clearTimer()
+        setIsRecording(false)
+        setRecorderError('start_failed')
+        return
+      }
+      // MIME efetivo do browser — nunca forçar/renomear o Blob para o MIME pedido.
       const effectiveMime = recorder.mimeType || mimeType || 'audio/webm'
 
       recordedChunksRef.current = []
@@ -116,6 +150,13 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         if (event.data.size > 0) {
           recordedChunksRef.current.push(event.data)
         }
+      }
+
+      recorder.onerror = () => {
+        clearTimer()
+        stopStream()
+        setIsRecording(false)
+        setRecorderError('start_failed')
       }
 
       recorder.onstop = () => {
@@ -185,6 +226,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       clearTimer()
       stopStream()
       setIsRecording(false)
+      setRecorderError('stop_failed')
     }
   }, [])
 
@@ -208,6 +250,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     setIsRecording(false)
     setRecordingSeconds(0)
     recordingSecondsRef.current = 0
+    setRecorderError(null)
   }, [])
 
   // --------------------------------------------------
@@ -243,6 +286,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     audioMimeType,
     previewDurationSeconds,
     micError,
+    recorderError,
     startRecording,
     stopRecording,
     cancelRecording,
