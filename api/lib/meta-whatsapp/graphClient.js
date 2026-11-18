@@ -47,6 +47,11 @@ const GRAPH_TIMEOUT_MS = 10_000; // 10 s — padrão para Graph calls simples (J
 // ao código, não resolvido aqui (plano Vercel é decisão operacional, não de código).
 const GRAPH_MEDIA_UPLOAD_TIMEOUT_MS = 60_000; // 60 s — upload de bytes de mídia (MVP4B.4A)
 
+// Teto conservador por chamada, alinhado ao maxDuration 60s de send-audio.
+// Não altera GRAPH_TIMEOUT_MS nem GRAPH_MEDIA_UPLOAD_TIMEOUT_MS.
+// Strings numéricas, 0, negativo, decimal, NaN, Infinity e valores > 60s são rejeitados.
+const GRAPH_CALL_TIMEOUT_MAX_MS = 60_000;
+
 const PAGE_LIMIT       = 100;    // máximo por request de paginação
 const MAX_PAGES        = 10;     // limite defensivo puro — não vinculado ao cap comercial
 
@@ -258,6 +263,29 @@ async function fetchWithTimeout(url, options, timeoutMs = GRAPH_TIMEOUT_MS) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Resolve timeout por chamada. Ausente → default da primitiva.
+ * Inválido → null (caller rejeita sem fetch; sem fallback silencioso).
+ *
+ * @param {unknown} timeoutMs
+ * @param {number} defaultMs
+ * @returns {number|null}
+ * @private
+ */
+function resolveTimeoutMs(timeoutMs, defaultMs) {
+  if (timeoutMs === undefined) return defaultMs;
+  if (
+    typeof timeoutMs !== 'number'
+    || !Number.isInteger(timeoutMs)
+    || !Number.isFinite(timeoutMs)
+    || timeoutMs <= 0
+    || timeoutMs > GRAPH_CALL_TIMEOUT_MAX_MS
+  ) {
+    return null;
+  }
+  return timeoutMs;
 }
 
 /**
@@ -881,7 +909,8 @@ export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
  * O caller é responsável por garantir OGG Opus antes de passar voice: true.
  *
  * Exatamente UMA tentativa HTTP — sem retry automático.
- * Timeout: GRAPH_TIMEOUT_MS (10 s) — JSON, igual sendTextMessage.
+ * Timeout: GRAPH_TIMEOUT_MS (10 s) por omissão. options.timeoutMs, se presente,
+ * substitui somente esta chamada (inteiro 1–60000 ms). Inválido → invalid_input.
  *
  * SEGURANÇA:
  *   - accessToken nunca logado, nunca presente em mensagem de erro
@@ -893,9 +922,10 @@ export async function sendTextMessage(accessToken, phoneNumberId, to, text) {
  * @param {string}  phoneNumberId Phone Number ID da instância (numeric string)
  * @param {string}  to            Número de destino — somente dígitos, sem '+'
  * @param {string}  mediaId       ID numérico retornado por uploadMedia
- * @param {{ voice?: boolean }} [options]
+ * @param {{ voice?: boolean, timeoutMs?: number }} [options]
  *   voice: true → inclui audio.voice=true. Qualquer outro valor de voice
  *   que não seja boolean → send_audio_invalid_input (fail-closed).
+ *   timeoutMs omitido → GRAPH_TIMEOUT_MS. Inválido → send_audio_invalid_input.
  * @returns {Promise<{ messageId: string }>}
  * @throws {Error} err.code in:
  *   send_audio_invalid_input    — validação falhou antes do fetch (sem rede)
@@ -924,6 +954,7 @@ export async function sendAudioMessage(accessToken, phoneNumberId, to, mediaId, 
   }
 
   let voiceEnabled = false;
+  let timeoutMs = GRAPH_TIMEOUT_MS;
   if (options !== undefined) {
     if (options == null || typeof options !== 'object' || Array.isArray(options)) {
       throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
@@ -932,6 +963,11 @@ export async function sendAudioMessage(accessToken, phoneNumberId, to, mediaId, 
       throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
     }
     voiceEnabled = options.voice === true;
+    const resolvedTimeout = resolveTimeoutMs(options.timeoutMs, GRAPH_TIMEOUT_MS);
+    if (resolvedTimeout == null) {
+      throw makeError('send_audio_invalid_input', 'Meta send audio: invalid input');
+    }
+    timeoutMs = resolvedTimeout;
   }
 
   const { graphVersion } = getMetaServerConfig();
@@ -960,7 +996,7 @@ export async function sendAudioMessage(accessToken, phoneNumberId, to, mediaId, 
         'Content-Type': 'application/json',
       },
       body,
-    });
+    }, timeoutMs);
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw makeError('send_audio_timeout', 'Meta send audio request timed out');
@@ -1377,8 +1413,9 @@ export async function sendTemplateMessage(token, phoneNumberId, to, template) {
  * NUNCA definir Content-Type manualmente (boundary incorreto causaria erro 400 no Graph).
  *
  * Exatamente UMA tentativa HTTP por chamada — sem retry automático.
- * Timeout: GRAPH_MEDIA_UPLOAD_TIMEOUT_MS (60 s) — maior que o padrão de 10 s
- * porque payloads de mídia podem chegar a 100 MB (DOCUMENT per Meta limits).
+ * Timeout: GRAPH_MEDIA_UPLOAD_TIMEOUT_MS (60 s) por omissão. timeoutMs, se
+ * presente, substitui somente esta chamada (inteiro 1–60000 ms). Inválido
+ * → upload_media_invalid_input, sem fetch. O default global permanece 60 s.
  *
  * SEGURANÇA:
  *   - token nunca logado, nunca presente em mensagem de erro
@@ -1391,6 +1428,7 @@ export async function sendTemplateMessage(token, phoneNumberId, to, template) {
  * @param {Buffer|Uint8Array|ArrayBuffer|Blob}  bytes         Conteúdo binário do arquivo
  * @param {string}                              mimeType      MIME type detectado server-side (ex: 'image/jpeg')
  * @param {string}                              [filename]    Hint de nome de arquivo para multipart (opcional)
+ * @param {number}                              [timeoutMs]   Timeout desta chamada em ms. Omitido → 60 s.
  * @returns {Promise<{ mediaId: string }>}
  * @throws {Error} err.code in:
  *   upload_media_invalid_input    — validação falhou antes do fetch (sem rede)
@@ -1399,7 +1437,7 @@ export async function sendTemplateMessage(token, phoneNumberId, to, template) {
  *   upload_media_network_error    — falha de rede não-timeout
  *   upload_media_invalid_response — HTTP 2xx mas id ausente, vazio ou não-string
  */
-export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filename) {
+export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filename, timeoutMs) {
   // ── Validação de entrada (fail-closed antes de qualquer fetch) ────────────
 
   if (typeof token !== 'string' || token.length === 0) {
@@ -1417,6 +1455,11 @@ export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filenam
   }
 
   if (typeof mimeType !== 'string' || mimeType.trim().length === 0) {
+    throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
+  }
+
+  const resolvedTimeout = resolveTimeoutMs(timeoutMs, GRAPH_MEDIA_UPLOAD_TIMEOUT_MS);
+  if (resolvedTimeout == null) {
     throw makeError('upload_media_invalid_input', 'Meta upload media: invalid input');
   }
 
@@ -1449,7 +1492,7 @@ export async function uploadMedia(token, phoneNumberId, bytes, mimeType, filenam
         headers: { Authorization: `Bearer ${token}` }, // sem Content-Type manual
         body:    form,
       },
-      GRAPH_MEDIA_UPLOAD_TIMEOUT_MS, // 60 s — distinto do padrão 10 s de outros calls
+      resolvedTimeout,
     );
   } catch (err) {
     if (err?.name === 'AbortError') {

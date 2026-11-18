@@ -66,6 +66,16 @@ function makeAbortError() {
   return err;
 }
 
+function captureTimeoutDelays() {
+  const delays = [];
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((_fn, ms) => {
+    delays.push(ms);
+    return 0;
+  });
+  vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {});
+  return delays;
+}
+
 function utf8(str) {
   return new TextEncoder().encode(str);
 }
@@ -111,6 +121,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   delete global.fetch;
 });
@@ -319,6 +330,61 @@ describe('sendAudioMessage', () => {
     fetch.mockResolvedValue(makeOkResponse({ messages: [{ id: '' }] }));
     await expect(sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID))
       .rejects.toMatchObject({ code: 'send_audio_invalid_response' });
+  });
+
+  it('SA-T01: sem options usa default 10000 ms', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const delays = captureTimeoutDelays();
+    await sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID);
+    expect(delays).toEqual([10_000]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('SA-T02: options sem timeoutMs usa default 10000 ms', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const delays = captureTimeoutDelays();
+    await sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID, {
+      voice: false,
+    });
+    expect(delays).toEqual([10_000]);
+  });
+
+  it('SA-T03: timeoutMs 8000 aplica à chamada e a seguinte volta ao default 10000', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    const delays = captureTimeoutDelays();
+    await sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID, {
+      timeoutMs: 8_000,
+    });
+    await sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID);
+    expect(delays).toEqual([8_000, 10_000]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negativo', -8_000],
+    ['decimal', 8_000.1],
+    ['string', '8000'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['acima do teto 60000', 60_001],
+  ])('SA-T04: timeoutMs %s rejeitado sem fetch', async (_label, timeoutMs) => {
+    await expect(
+      sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID, { timeoutMs }),
+    ).rejects.toMatchObject({ code: 'send_audio_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('SA-T05: timeoutMs não vaza no payload e voice omitido permanece omitido', async () => {
+    fetch.mockResolvedValue(makeSendOkResponse());
+    await sendAudioMessage(FAKE_TOKEN, FAKE_PHONE_NUMBER_ID, FAKE_TO, FAKE_MEDIA_ID, {
+      timeoutMs: 8_000,
+    });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.audio).toEqual({ id: FAKE_MEDIA_ID });
+    expect(body.audio).not.toHaveProperty('voice');
+    expect(body).not.toHaveProperty('timeoutMs');
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('SA-26: JSON inválido no 200 → send_audio_invalid_response', async () => {

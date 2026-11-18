@@ -87,6 +87,16 @@ function makeAbortError() {
   return err;
 }
 
+function captureTimeoutDelays() {
+  const delays = [];
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((_fn, ms) => {
+    delays.push(ms);
+    return 0;
+  });
+  vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {});
+  return delays;
+}
+
 // =============================================================================
 // Setup / Teardown
 // =============================================================================
@@ -97,6 +107,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   delete global.fetch;
 });
@@ -3179,6 +3190,52 @@ describe('uploadMedia', () => {
     const [, callOpts] = fetch.mock.calls[0];
     const file = callOpts.body.get('file');
     expect(file.size).toBeGreaterThan(0);
+  });
+
+  it('GM-T01: sem timeoutMs usa default 60000 ms', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const delays = captureTimeoutDelays();
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg');
+    expect(delays).toEqual([60_000]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('GM-T02: timeoutMs 20000 aplica somente à chamada e callers de 5 args seguem no default', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const delays = captureTimeoutDelays();
+    await uploadMedia(
+      FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg', 20_000,
+    );
+    await uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg');
+    expect(delays).toEqual([20_000, 60_000]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negativo', -1],
+    ['decimal', 20_000.5],
+    ['string', '20000'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['acima do teto 60000', 60_001],
+  ])('GM-T03: timeoutMs %s rejeitado sem fetch', async (_label, timeoutMs) => {
+    await expect(
+      uploadMedia(FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg', timeoutMs),
+    ).rejects.toMatchObject({ code: 'upload_media_invalid_input' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('GM-T04: timeoutMs 20000 válido chega ao fetch uma vez', async () => {
+    fetch.mockResolvedValue(makeMediaOkResponse());
+    const result = await uploadMedia(
+      FAKE_TOKEN, FAKE_PHONE_ID_MEDIA, FAKE_IMAGE_BYTES, 'image/jpeg', 'photo.jpg', 20_000,
+    );
+    expect(result).toEqual({ mediaId: FAKE_MEDIA_ID });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [, callOpts] = fetch.mock.calls[0];
+    expect(callOpts.body).toBeInstanceOf(FormData);
+    expect(callOpts.body.get('type')).toBe('image/jpeg');
   });
 
   // ── Regressão: sendTemplateMessage e sendTextMessage continuam inalterados ───

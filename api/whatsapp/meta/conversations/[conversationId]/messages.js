@@ -16,7 +16,10 @@
 //   5. [somente após auth.ok] Lookup de meta_conversations com auth.companyId
 //   6. [somente após conversa válida] Query de meta_messages com auth.companyId
 //   7. [somente após messages] Resolução batched de assets de mídia (MVP4B.6C)
-//      AUDIO AWS inbound: signed GetObject (TTL 3600) via helper; s3_key nunca no DTO
+//      AUDIO AWS inbound: signed GetObject (TTL 3600) via helper inbound
+//      AUDIO AWS outbound: signed GetObject (TTL 3600) só com s3_key
+//        clientes/{companyId}/meta-outbound/{operationId}/audio.m4a
+//      s3_key nunca no DTO
 //   8. [somente outbound com wamid] Tracking batched em meta_whatsapp_messages
 //      (MVP5.B1.1 — delivery_status; wamid nunca no DTO)
 //
@@ -48,10 +51,21 @@
 //   Conversa ativa sem mensagens ainda → 200 { messages: [] }
 // =============================================================================
 
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSupabaseAdmin }                   from '../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { sanitizeTemplateButtonsSnapshot }    from '../../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
-import { signMetaInboundAudioGetUrl }         from '../../../../lib/meta-whatsapp/awsUpload.js';
+import {
+  SIGNED_URL_TTL_SECONDS,
+  signMetaInboundAudioGetUrl,
+} from '../../../../lib/meta-whatsapp/awsUpload.js';
+import { parseOperationId } from '../../../../lib/meta-whatsapp/outboundAudioOperation.js';
+import {
+  buildMetaOutboundAudioS3Key,
+  META_OUTBOUND_AUDIO_S3_FILENAME,
+  META_OUTBOUND_AUDIO_S3_KEY_INFIX,
+} from '../../../../lib/meta-whatsapp/awsOutboundAudio.js';
 
 // UUID v4 básico — rejeita inputs obviamente inválidos antes de qualquer query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -101,6 +115,8 @@ const ALLOWED_DELIVERY_STATUS = new Set([
 const ASSET_FIELDS = 'id, company_id, preview_url, original_filename, mime_type, file_type, file_size, s3_key';
 
 const AWS_AUDIO_KEY_INFIX = 'meta-inbound';
+const AWS_CREDS_ERR = 'aws_credentials_unavailable';
+const AWS_SIGN_ERR = 'aws_sign_failed';
 
 // Tipos de file_type aceitos no DTO de mídia — fail-closed.
 // Outros, null, desconhecido → media:null.
@@ -142,6 +158,104 @@ function shouldSignAwsInboundAudio(messageType, asset, companyId) {
   if (asset.company_id !== companyId) return false;
   if (hasPublicPreviewUrl(asset.preview_url)) return false;
   return isAwsMetaInboundAudioKey(companyId, asset.s3_key);
+}
+
+function isUnsafeS3Key(key) {
+  return (
+    key.startsWith('http://')
+    || key.startsWith('https://')
+    || key.includes('\\')
+    || key.includes('\0')
+    || key.includes('..')
+    || key.includes('//')
+    || /%2e%2e/i.test(key)
+  );
+}
+
+/**
+ * Chave outbound autorizada: clientes/{companyId}/meta-outbound/{operationId}/audio.m4a
+ * operationId UUID v4. Compara com a chave determinística do helper B.1.
+ */
+function isAwsMetaOutboundAudioKey(companyId, s3Key) {
+  if (typeof companyId !== 'string' || typeof s3Key !== 'string') return false;
+  const key = s3Key.trim();
+  if (key.length === 0 || isUnsafeS3Key(key)) return false;
+  const parts = key.split('/');
+  if (parts.length !== 5) return false;
+  if (parts[0] !== 'clientes') return false;
+  if (parts[1].toLowerCase() !== companyId.toLowerCase()) return false;
+  if (parts[2] !== META_OUTBOUND_AUDIO_S3_KEY_INFIX) return false;
+  if (parts[4] !== META_OUTBOUND_AUDIO_S3_FILENAME) return false;
+  const parsed = parseOperationId(parts[3]);
+  if (!parsed.ok) return false;
+  const built = buildMetaOutboundAudioS3Key({
+    companyId,
+    operationId: parsed.operationId,
+  });
+  return built.ok === true && built.objectKey === key;
+}
+
+function shouldSignAwsOutboundAudio(message, asset, companyId) {
+  if (message?.direction !== 'outbound') return false;
+  if (message.message_type !== 'audio') return false;
+  if (!message.media_asset_id) return false;
+  if (!asset || asset.file_type !== 'audio') return false;
+  if (asset.company_id !== companyId) return false;
+  if (hasPublicPreviewUrl(asset.preview_url)) return false;
+  return isAwsMetaOutboundAudioKey(companyId, asset.s3_key);
+}
+
+function readAwsCredentialsRow(data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (
+    row == null
+    || typeof row.access_key_id !== 'string'
+    || row.access_key_id.length === 0
+    || typeof row.secret_access_key !== 'string'
+    || row.secret_access_key.length === 0
+    || typeof row.region !== 'string'
+    || row.region.length === 0
+    || typeof row.bucket !== 'string'
+    || row.bucket.length === 0
+  ) {
+    return null;
+  }
+  return row;
+}
+
+function makeAwsError(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+/**
+ * Signed GetObject para chave outbound já validada no caller.
+ * Credenciais por tenant via a mesma RPC inbound. Sem process.env. Sem URL pública.
+ */
+async function signMetaOutboundAudioGetUrl({ svc, companyId, objectKey }) {
+  const { data, error } = await svc.rpc('webhook_resolve_aws_credentials', {
+    p_company_id: companyId,
+  });
+  const creds = readAwsCredentialsRow(data);
+  if (error || !creds) {
+    throw makeAwsError(AWS_CREDS_ERR, 'AWS credentials unavailable for tenant');
+  }
+  const client = new S3Client({
+    region: creds.region,
+    credentials: {
+      accessKeyId: creds.access_key_id,
+      secretAccessKey: creds.secret_access_key,
+    },
+    maxAttempts: 1,
+  });
+  const url = await getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: creds.bucket, Key: objectKey }),
+    { expiresIn: SIGNED_URL_TTL_SECONDS },
+  );
+  if (typeof url !== 'string' || url.length === 0) {
+    throw makeAwsError(AWS_SIGN_ERR, 'AWS request failed');
+  }
+  return { url, expiresIn: SIGNED_URL_TTL_SECONDS };
 }
 
 export default async function handler(req, res) {
@@ -282,21 +396,43 @@ export default async function handler(req, res) {
   }
 
   // AUDIO AWS: URL assinada por asset, após tenant boundary.
+  // Inbound: helper meta-inbound. Outbound: chave determinística meta-outbound.
   // Falha de signer → media.url null nesta mensagem; demais mensagens intactas.
   // Nunca logar object key, signed URL ou credenciais.
   const signedUrlByAssetId = new Map();
   {
-    const toSign = new Map();
+    const inboundToSign = new Map();
+    const outboundToSign = new Map();
     for (const msg of rawMessages) {
       if (msg.message_type !== 'audio' || !msg.media_asset_id) continue;
       const asset = assetMap.get(msg.media_asset_id);
-      if (!shouldSignAwsInboundAudio(msg.message_type, asset, auth.companyId)) continue;
-      toSign.set(asset.id, asset.s3_key);
+      if (shouldSignAwsInboundAudio(msg.message_type, asset, auth.companyId)) {
+        inboundToSign.set(asset.id, asset.s3_key);
+        continue;
+      }
+      if (shouldSignAwsOutboundAudio(msg, asset, auth.companyId)) {
+        outboundToSign.set(asset.id, asset.s3_key);
+      }
     }
 
-    for (const [assetId, objectKey] of toSign) {
+    for (const [assetId, objectKey] of inboundToSign) {
       try {
         const signed = await signMetaInboundAudioGetUrl({
+          svc,
+          companyId: auth.companyId,
+          objectKey,
+        });
+        if (typeof signed?.url === 'string' && signed.url.length > 0) {
+          signedUrlByAssetId.set(assetId, signed.url);
+        }
+      } catch {
+        console.error('[meta/messages] aws_audio_sign_failed');
+      }
+    }
+
+    for (const [assetId, objectKey] of outboundToSign) {
+      try {
+        const signed = await signMetaOutboundAudioGetUrl({
           svc,
           companyId: auth.companyId,
           objectKey,
