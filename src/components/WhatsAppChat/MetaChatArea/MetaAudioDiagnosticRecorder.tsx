@@ -15,6 +15,12 @@ import {
   selectSupportedMp4MimeType,
   type MetaAudioBlobAnalysis,
 } from '../../../utils/metaAudioRecorderDiagnostic'
+import {
+  blobReadErrorValidation,
+  readDiagnosticBlobBytes,
+  validateDiagnosticAudioBytes,
+  type DiagnosticOutboundValidation,
+} from '../../../utils/metaOutboundAudioValidation'
 
 export type MetaAudioDiagnosticMode = 'auto' | 'mp4'
 
@@ -55,25 +61,6 @@ function formatSupported(value: boolean | null): string {
   return 'n/d'
 }
 
-function readBlobBytes(blob: Blob): Promise<ArrayBuffer | null> {
-  const withArrayBuffer = blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }
-  if (typeof withArrayBuffer.arrayBuffer === 'function') {
-    return withArrayBuffer.arrayBuffer().catch(() => null)
-  }
-  return new Promise((resolve) => {
-    try {
-      const reader = new FileReader()
-      reader.onload = () => {
-        resolve(reader.result instanceof ArrayBuffer ? reader.result : null)
-      }
-      reader.onerror = () => resolve(null)
-      reader.readAsArrayBuffer(blob)
-    } catch {
-      resolve(null)
-    }
-  })
-}
-
 export function MetaAudioDiagnosticRecorder({
   conversationId,
   disabled,
@@ -95,6 +82,7 @@ export function MetaAudioDiagnosticRecorder({
 
   const [mode, setMode] = useState<MetaAudioDiagnosticMode>('auto')
   const [analysis, setAnalysis] = useState<MetaAudioBlobAnalysis | null>(null)
+  const [validation, setValidation] = useState<DiagnosticOutboundValidation | null>(null)
   const [requestedMime, setRequestedMime] = useState<string | null>(null)
   const [playback, setPlayback] = useState<'n/d' | 'ok' | 'error'>('n/d')
   const supported = probeMediaRecorderSupport()
@@ -104,6 +92,7 @@ export function MetaAudioDiagnosticRecorder({
     cancelRecording()
     clearPreview()
     setAnalysis(null)
+    setValidation(null)
     setRequestedMime(null)
     setPlayback('n/d')
   }, [conversationId, cancelRecording, clearPreview])
@@ -112,6 +101,7 @@ export function MetaAudioDiagnosticRecorder({
     cancelRecording()
     clearPreview()
     setAnalysis(null)
+    setValidation(null)
     setRequestedMime(null)
     setPlayback('n/d')
   }, [mode, cancelRecording, clearPreview])
@@ -125,18 +115,29 @@ export function MetaAudioDiagnosticRecorder({
   useEffect(() => {
     if (!audioBlobPreview) {
       setAnalysis(null)
+      setValidation(null)
       return
     }
     let cancelled = false
-    void readBlobBytes(audioBlobPreview).then((buffer) => {
-      if (cancelled || !buffer) return
+    setValidation(null)
+    void (async () => {
+      const buffer = await readDiagnosticBlobBytes(audioBlobPreview)
+      if (cancelled) return
+      if (!buffer) {
+        setAnalysis(null)
+        setValidation(blobReadErrorValidation())
+        return
+      }
       setAnalysis(analyzeAudioBlob(
         audioBlobPreview,
         audioMimeType,
         previewDurationSeconds,
         buffer,
       ))
-    })
+      const result = await validateDiagnosticAudioBytes(new Uint8Array(buffer))
+      if (cancelled) return
+      setValidation(result)
+    })()
     return () => { cancelled = true }
   }, [audioBlobPreview, audioMimeType, previewDurationSeconds])
 
@@ -296,8 +297,17 @@ export function MetaAudioDiagnosticRecorder({
             )}
             <div>Reprodução local: {playback === 'ok' ? 'ok' : playback === 'error' ? 'falhou' : 'não observada'}</div>
             <div>Meta: {analysis.metaAcceptance}</div>
-            <div>Codec: não confirmado. Não aprovado para envio à Meta nesta etapa.</div>
+            <div data-testid="meta-audio-b31-validation">
+              Validador B3.1: {validation ? validation.label : 'analisando bytes...'}
+            </div>
+            <div>Envio à Meta permanece bloqueado nesta etapa. Áudio não é salvo nem enviado.</div>
           </>
+        ) : validation ? (
+          <div data-testid="meta-audio-b31-validation">
+            Validador B3.1: {validation.label}
+          </div>
+        ) : audioBlobPreview ? (
+          <div data-testid="meta-audio-b31-validation">Validador B3.1: analisando bytes...</div>
         ) : (
           <div>Grave um áudio para inspecionar MIME, tamanho e contêiner (permanece neste navegador).</div>
         )}

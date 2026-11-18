@@ -442,6 +442,16 @@ describe('validateMetaOutboundAudioBytes — evidência de codec', () => {
     expect(result.aacProfile).toBe('lc');
   });
 
+  it('AB-28: Uint8Array puro sem métodos Buffer (ambiente browser)', () => {
+    const bytes = Uint8Array.from(buildAudioMp4({ withEsds: true }));
+    expect(Buffer.isBuffer(bytes)).toBe(false);
+    expect(typeof bytes.readUInt32BE).toBe('undefined');
+    const result = validateMetaOutboundAudioBytes(bytes);
+    expect(result.ok).toBe(true);
+    expect(result.audioCodec).toBe('aac');
+    expect(result.aacProfile).toBe('lc');
+  });
+
   it('AB-25: ftyp Chrome-like (isom) + AAC-LC sintético', () => {
     const fixture = buildAudioMp4({
       withEsds: true,

@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react'
 import { MetaChatArea } from '../MetaChatArea'
 import type { MetaChatConversation, MetaChatMessage } from '../../../../types/meta-whatsapp'
 
@@ -156,6 +156,7 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.queryByTestId('meta-audio-mic-button')).toBeNull()
     expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
+    expect(screen.queryByTestId('meta-audio-b31-validation')).toBeNull()
   })
 
   it('B2-02: hostname DEV (gate verdadeiro) → microfone disponível', () => {
@@ -399,5 +400,47 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
     expect(recorder.cancelRecording).toHaveBeenCalled()
     expect(recorder.clearPreview).toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+
+  it('B3.2B-01: Blob inválido é rejeitado pelo validador B3.1 no painel DEV', async () => {
+    mockEnabled.mockReturnValue(true)
+    recorder.audioBlobPreview = new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])], { type: 'audio/webm' })
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    recorder.audioMimeType = 'audio/webm'
+    recorder.previewDurationSeconds = 2
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.queryByRole('button', { name: /download/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/rejeitado/i)
+    })
+    expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('B3.2B-02: erro de leitura do Blob aparece só no diagnóstico', async () => {
+    mockEnabled.mockReturnValue(true)
+    const failing = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/mp4' })
+    Object.defineProperty(failing, 'arrayBuffer', {
+      value: () => Promise.reject(new Error('read fail')),
+    })
+    recorder.audioBlobPreview = failing
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    recorder.audioMimeType = 'audio/mp4'
+    recorder.previewDurationSeconds = 1
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/Erro ao ler o Blob/i)
+    })
+    expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('B3.2B-03: produção não exibe nem executa o validador B3.1', () => {
+    mockEnabled.mockReturnValue(false)
+    recorder.audioBlobPreview = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/webm' })
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
+    expect(screen.queryByTestId('meta-audio-b31-validation')).toBeNull()
+    expect(mockSendMessage).not.toHaveBeenCalled()
   })
 })

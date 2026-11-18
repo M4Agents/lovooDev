@@ -4,6 +4,9 @@
 // Função pura: inspecta bytes ISO-BMFF (MP4/M4A) sem rede, banco, filesystem,
 // Graph, S3 ou logs. Destinada ao futuro endpoint de envio de áudio.
 //
+// Isomórfico (Node e navegador): opera sobre Uint8Array. Buffer do Node é
+// aceito porque é uma Uint8Array. Sem fs, fetch, process ou polyfill.
+//
 // NÃO altera a whitelist inbound em mediaConstants.js.
 // NÃO declara AAC apenas por MIME, ftyp ou ocorrência textual de "mp4a".
 // =============================================================================
@@ -30,12 +33,18 @@ function fail(code, reason) {
   return { ok: false, code, reason };
 }
 
-function toBuffer(bytes) {
-  if (Buffer.isBuffer(bytes)) return bytes;
-  if (bytes instanceof Uint8Array) {
-    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  }
+function toBytes(bytes) {
+  if (bytes instanceof Uint8Array) return bytes;
   return null;
+}
+
+function readUInt32BE(bytes, offset) {
+  return (
+    bytes[offset] * 0x1000000 +
+    (bytes[offset + 1] << 16) +
+    (bytes[offset + 2] << 8) +
+    bytes[offset + 3]
+  ) >>> 0;
 }
 
 function readType(buf, offset) {
@@ -60,7 +69,7 @@ function sniffNonMp4(buf) {
 
 function readBoxHeader(buf, offset, end) {
   if (offset + 8 > end) return { reason: 'truncated' };
-  const size32 = buf.readUInt32BE(offset);
+  const size32 = readUInt32BE(buf, offset);
   const type = readType(buf, offset + 4);
 
   if (size32 === 1) {
@@ -334,7 +343,7 @@ function interpret(state) {
 /**
  * Valida bytes de áudio outbound para envio futuro via Meta Cloud API.
  *
- * @param {Buffer|Uint8Array} bytes arquivo completo
+ * @param {Uint8Array} bytes arquivo completo (Buffer do Node também é válido)
  * @returns {{
  *   ok: true,
  *   container: 'mp4',
@@ -350,7 +359,7 @@ function interpret(state) {
  * }}
  */
 export function validateMetaOutboundAudioBytes(bytes) {
-  const buf = toBuffer(bytes);
+  const buf = toBytes(bytes);
   if (!buf) return fail(CODE_INPUT, 'invalid_input');
   if (buf.length === 0) return fail(CODE_INPUT, 'empty');
   if (buf.length > META_OUTBOUND_AUDIO_MAX_BYTES) return fail(CODE_TOO_LARGE, 'too_large');
