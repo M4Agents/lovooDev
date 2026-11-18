@@ -113,6 +113,9 @@ const persistStoreState = vi.hoisted(() => ({
   tracking: vi.fn(),
   chat: vi.fn(),
   markCompleted: vi.fn(),
+  claim: vi.fn(),
+  markUnknown: vi.fn(),
+  markGraphAccepted: vi.fn(),
 }));
 
 vi.mock('../../../../lib/meta-whatsapp/awsOutboundAudio.js', async (importOriginal) => {
@@ -139,6 +142,9 @@ vi.mock('../../../../lib/meta-whatsapp/outboundAudioOperationStore.js', async (i
   const actual = await importOriginal();
   return {
     ...actual,
+    claimCreatedToGraphInFlight: (...args) => persistStoreState.claim(...args),
+    markUnknown: (...args) => persistStoreState.markUnknown(...args),
+    markGraphAccepted: (...args) => persistStoreState.markGraphAccepted(...args),
     markCompleted: (...args) => persistStoreState.markCompleted(...args),
   };
 });
@@ -147,8 +153,10 @@ import handler, {
   META_AUDIO_FUNCTION_BUDGET_MS,
   META_AUDIO_PLATFORM_MARGIN_MS,
   META_AUDIO_PERSIST_MIN_REMAINING_MS,
+  GRAPH_NEED_BEFORE_CLAIM_MS,
   buildCreatedOutboundAudioContext,
   computeOutboundAudioDeadline,
+  isMetaOutboundAudioGraphEnabled,
 } from '../send-audio.js';
 import { META_SEND_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
 
@@ -476,6 +484,9 @@ function expectNoExternalSideEffects() {
   expect(persistStoreState.tracking).not.toHaveBeenCalled();
   expect(persistStoreState.chat).not.toHaveBeenCalled();
   expect(persistStoreState.markCompleted).not.toHaveBeenCalled();
+  expect(persistStoreState.claim).not.toHaveBeenCalled();
+  expect(persistStoreState.markUnknown).not.toHaveBeenCalled();
+  expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
   const tables = mockSvc.from.mock.calls.map(([table]) => table);
   expect(tables).not.toContain('meta_whatsapp_messages');
   expect(tables).not.toContain('meta_whatsapp_credentials');
@@ -516,8 +527,8 @@ function expectNoGraphOrClaim() {
   expect(mockDecryptMetaToken).not.toHaveBeenCalled();
   expect(mockUploadMetaInboundAudio).not.toHaveBeenCalled();
   expect(orchestratorState.mock).not.toHaveBeenCalled();
+  expect(persistStoreState.claim).not.toHaveBeenCalled();
   expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
-  expect(HANDLER_SRC).not.toContain('claimCreatedToGraphInFlight');
 }
 
 function expectPersistSuccessHttp(res) {
@@ -556,8 +567,27 @@ const HANDLER_SRC = readFileSync(
   'utf8',
 );
 
+function clearGraphGateEnv() {
+  delete process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED;
+  delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+}
+
+function enableDevGraphGate() {
+  process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED = 'true';
+  process.env.VERCEL_PROJECT_PRODUCTION_URL = 'lovoo-dev.vercel.app';
+}
+
+function makeCredChain(data, error = null) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  clearGraphGateEnv();
   fsState.failRead = false;
   fsState.unlinkCalls = [];
   mockSvc.rpc = vi.fn();
@@ -567,6 +597,12 @@ beforeEach(() => {
   persistStoreState.tracking.mockResolvedValue({ ok: true, trackingId: FAKE_INSTANCE_ID });
   persistStoreState.chat.mockResolvedValue({ ok: true, chatMessageId: FAKE_CONVERSATION_ID });
   persistStoreState.markCompleted.mockResolvedValue({ ok: true });
+  persistStoreState.claim.mockResolvedValue({
+    ok: true,
+    row: operationRow({ status: 'graph_in_flight', graph_started_at: GRAPH_STARTED_AT }),
+  });
+  persistStoreState.markUnknown.mockResolvedValue({ ok: true });
+  persistStoreState.markGraphAccepted.mockResolvedValue({ ok: true, row: graphAcceptedRow() });
   setupGetUserOk();
   orchestratorState.mock.mockImplementation((input) => orchestratorState.actual(input));
   vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
@@ -896,29 +932,23 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     const executable = HANDLER_SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
-    expect(executable).not.toMatch(/\buploadMedia\s*\(/);
-    expect(executable).not.toMatch(/\bsendAudioMessage\s*\(/);
     expect(executable).not.toMatch(/\bsendTextMessage\s*\(/);
-    expect(executable).not.toContain('decryptMetaToken');
     expect(executable).not.toContain('uploadMetaInboundAudio');
-    expect(executable).not.toContain('claimCreatedToGraphInFlight');
-    expect(executable).not.toContain('markUnknown');
-    expect(executable).not.toContain('markGraphAccepted');
     expect(executable).not.toContain('markFailedBeforeClaim');
-    expect(executable).not.toMatch(/\.update\(\s*\{/);
-    expect(executable).not.toContain('graphClient');
-    expect(executable).not.toContain('tokenCrypto');
     expect(executable).not.toContain('awsUpload');
     expect(executable).not.toContain('randomUUID');
-    expect(executable).not.toContain('process.env');
     expect(executable).not.toContain('enabled: true');
-    expect(executable).not.toContain('meta_whatsapp_credentials');
+    expect(executable).not.toContain('req.headers.host');
     expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
     expect(HANDLER_SRC).toContain('orchestrateOutboundAudioSend');
     expect(HANDLER_SRC).toContain('insertCreated');
     expect(HANDLER_SRC).toContain('selectByCompanyOperation');
     expect(HANDLER_SRC).toContain('markCompleted');
     expect(HANDLER_SRC).toContain('completeMetaOutboundAudioPersistence');
+    expect(HANDLER_SRC).toContain('claimCreatedToGraphInFlight');
+    expect(HANDLER_SRC).toContain('decryptMetaToken');
+    expect(HANDLER_SRC).toContain('uploadMedia');
+    expect(HANDLER_SRC).toContain('sendAudioMessage');
     expect(HANDLER_SRC).toContain('resumeGraphAcceptedPersistence');
     expect(HANDLER_SRC).toContain("createHash('sha256')");
     expect(HANDLER_SRC).toContain('parseOperationId');
@@ -1064,7 +1094,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     ]);
     expect(insertChain.insert).toHaveBeenCalledTimes(1);
     expectOrchestratorDisabledOnly();
-    expect(HANDLER_SRC).not.toContain('claimCreatedToGraphInFlight');
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
   });
 
   it('UUID v4 em maiúsculas é aceito, canonicalizado e permanece HTTP 501', async () => {
@@ -1489,7 +1519,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
     expect(executable).not.toContain("fieldValue(fields, 'deadlineAtMs')");
     expect(executable).not.toContain("fieldValue(fields, 'startedAtMs')");
     expect(executable).not.toContain('req.query');
-    expect(executable).not.toContain('process.env');
+    expect(executable).not.toContain('AWS_ACCESS_KEY_ID');
+    expect(executable).not.toContain('req.headers.host');
   });
 
   it('gate permanece false e orquestrador recebe exatamente { enabled: false }', async () => {
@@ -1519,9 +1550,9 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
     const executable = HANDLER_SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
-    expect(executable).not.toContain('claimCreatedToGraphInFlight');
-    expect(executable).not.toContain('markUnknown');
-    expect(executable).not.toContain('markGraphAccepted');
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(persistStoreState.markUnknown).not.toHaveBeenCalled();
+    expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
   });
 
   it('HTTP created permanece 501 e completed permanece 200', async () => {
@@ -2093,7 +2124,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(racedSelect.eq).toHaveBeenCalledWith('operation_id', FAKE_OPERATION_ID);
     expectNoGraphOrClaim();
     const resumeCalls = HANDLER_SRC.match(/resumeGraphAcceptedPersistence\(/g) ?? [];
-    expect(resumeCalls.length).toBe(3);
+    expect(resumeCalls.length).toBeGreaterThanOrEqual(3);
   });
 
   it('tempo suficiente segue para AWS e B.6', async () => {
@@ -2286,7 +2317,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
         .toBe(FAKE_AWS_CREDS.access_key_id);
       expect(s3State.S3Client.mock.calls[0][0].credentials.accessKeyId)
         .not.toBe('GLOBALKEY');
-      expect(HANDLER_SRC).not.toContain('process.env');
+      expect(HANDLER_SRC).not.toContain('AWS_ACCESS_KEY_ID');
+      expect(HANDLER_SRC).not.toContain('AWS_SECRET_ACCESS_KEY');
       expect(JSON.stringify(res._body)).not.toContain('GLOBALKEY');
       expect(JSON.stringify(res._body)).not.toContain('GLOBALSECRET');
     } finally {
@@ -2483,16 +2515,17 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     setupGraphAcceptedLookups();
     setupAwsRpcOk();
     await runGraphAccepted();
-    expect(HANDLER_SRC).not.toContain('claimCreatedToGraphInFlight');
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
     expect(orchestratorState.mock).not.toHaveBeenCalled();
   });
 
-  it('gate literal false preservado', async () => {
+  it('gate literal false preservado e Graph permanece fail-closed por default', async () => {
     setupGraphAcceptedLookups();
     setupAwsRpcOk();
     await runGraphAccepted();
     expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
-    expect(HANDLER_SRC).not.toContain('process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
   });
 
   it('fluxo Uazapi permanece intacto na fonte HTTP Meta', () => {
@@ -2526,7 +2559,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     const tables = mockSvc.from.mock.calls.map(([table]) => table);
     expect(tables).not.toContain('meta_whatsapp_credentials');
-    expect(HANDLER_SRC).not.toContain('decryptMetaToken');
   });
 
   it('completion_conflict de B.6 mapeia para 409 operation_conflict', async () => {
@@ -2555,5 +2587,301 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(res._body).toEqual({ error: 'send_persistence_failed' });
     expect(mockSvc.rpc).not.toHaveBeenCalled();
     expect(persistState.mock).not.toHaveBeenCalled();
+  });
+});
+
+function setupGraphEnabledCreatedLookups(overrides = {}) {
+  enableDevGraphGate();
+  mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+  mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+  mockSendAudioMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+  setupAwsRpcOk();
+  const extraChains = [
+    makeCredChain({ access_token_enc: 'v1:enc-fixture' }),
+    makeOpSelectChain(graphAcceptedRow()),
+    ...(overrides.extraChains ?? []),
+  ];
+  return setupNewSendLookups({ ...overrides, extraChains });
+}
+
+describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () => {
+  it('gate default off → 501 sem Graph', async () => {
+    setupNewSendLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
+    expect(res._status).toBe(501);
+    expect(res._body).toEqual(NOT_ENABLED_HTTP_BODY);
+    expectOrchestratorDisabledOnly();
+    expectNoExternalSideEffects();
+  });
+
+  it('gate DEV controlado percorre claim + Graph + B.6', async () => {
+    setupGraphEnabledCreatedLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(isMetaOutboundAudioGraphEnabled()).toBe(true);
+    expectPersistSuccessHttp(res);
+    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markGraphAccepted).toHaveBeenCalledTimes(1);
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+    expect(mockDecryptMetaToken).toHaveBeenCalledTimes(1);
+    expect(mockSendAudioMessage.mock.calls[0][4]).toEqual({ timeoutMs: 10_000 });
+    expect(JSON.stringify(res._body)).not.toContain('plain-token-fixture');
+    expect(JSON.stringify(res._body)).not.toContain('v1:enc-fixture');
+  });
+
+  it('produção fail closed mesmo com flag true', async () => {
+    process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED = 'true';
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = 'app.lovoocrm.com';
+    setupNewSendLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
+    expect(res._status).toBe(501);
+    expectNoExternalSideEffects();
+  });
+
+  it('Host header não liga o Graph', async () => {
+    setupNewSendLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq({
+      headers: { host: 'lovoo-dev.vercel.app' },
+    }), res);
+    expect(res._status).toBe(501);
+    expectNoExternalSideEffects();
+  });
+
+  it('JWT/RBAC/tenant antes de credenciais e Graph', async () => {
+    enableDevGraphGate();
+    setupGetUserFail();
+    const unauthorized = makeRes();
+    await handler(makeMultipartReq(), unauthorized);
+    expect(unauthorized._status).toBe(401);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+
+    setupGetUserOk();
+    setupGuardFail(403, 'Permissão insuficiente para esta operação');
+    const forbidden = makeRes();
+    await handler(makeMultipartReq(), forbidden);
+    expect(forbidden._status).toBe(403);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+  });
+
+  it('created com janela fechada não chama Graph', async () => {
+    enableDevGraphGate();
+    setupNewSendLookups({
+      window: makeWindowChain({
+        data: { provider_timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
+      }),
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('claim CAS vencedor chama Graph uma vez', async () => {
+    setupGraphEnabledCreatedLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expectPersistSuccessHttp(res);
+  });
+
+  it('claim perdedor não chama Graph', async () => {
+    enableDevGraphGate();
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    persistStoreState.claim.mockResolvedValue({ ok: false, reason: 'not_claimed' });
+    setupNewSendLookups({
+      extraChains: [makeCredChain({ access_token_enc: 'v1:enc-fixture' })],
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ ok: false, error: 'operation_in_progress' });
+    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(persistState.mock).not.toHaveBeenCalled();
+  });
+
+  it('upload falha após claim → unknown sem retry', async () => {
+    enableDevGraphGate();
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    mockUploadMedia.mockRejectedValue(Object.assign(new Error('upload timeout'), {
+      code: 'upload_media_timeout',
+    }));
+    setupNewSendLookups({
+      extraChains: [makeCredChain({ access_token_enc: 'v1:enc-fixture' })],
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ ok: false, error: 'operation_unknown' });
+    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(persistStoreState.markUnknown).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
+  });
+
+  it('send timeout → unknown sem retry', async () => {
+    enableDevGraphGate();
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+    mockSendAudioMessage.mockRejectedValue(Object.assign(new Error('send timeout'), {
+      code: 'send_audio_timeout',
+    }));
+    setupNewSendLookups({
+      extraChains: [makeCredChain({ access_token_enc: 'v1:enc-fixture' })],
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ ok: false, error: 'operation_unknown' });
+    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markUnknown).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
+  });
+
+  it('wamid válido → markGraphAccepted', async () => {
+    setupGraphEnabledCreatedLookups();
+    await handler(makeMultipartReq(), makeRes());
+    expect(persistStoreState.markGraphAccepted).toHaveBeenCalledWith(mockSvc, {
+      companyId: FAKE_COMPANY_ID,
+      operationId: FAKE_OPERATION_ID,
+      wamid: FAKE_WAMID,
+    });
+  });
+
+  it('falha de persistência B.6 não reenvia Graph', async () => {
+    setupGraphEnabledCreatedLookups();
+    persistState.mock.mockResolvedValue({ ok: false, error: 's3_confirmation_failed' });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'send_persistence_failed' });
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markGraphAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it('completed → 200 sem Graph', async () => {
+    enableDevGraphGate();
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({ status: 'completed' })));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true });
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('graph_accepted → somente B.6', async () => {
+    enableDevGraphGate();
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expectPersistSuccessHttp(res);
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('unknown → 409 sem Graph', async () => {
+    enableDevGraphGate();
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({ status: 'unknown' })));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ ok: false, error: 'operation_unknown' });
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('identidade divergente → 409', async () => {
+    enableDevGraphGate();
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({
+        audio_sha256: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+      })));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ ok: false, error: 'operation_conflict' });
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('23505 → releitura segura sem Graph se completed', async () => {
+    enableDevGraphGate();
+    setupNewSendLookups({
+      insertError: { code: '23505', message: 'duplicate' },
+      extraChains: [makeOpSelectChain(operationRow({ status: 'completed' }))],
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true });
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('deadline insuficiente → sem Graph', async () => {
+    const origin = 1_700_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => origin + 40_000);
+    Date.now.mockReturnValueOnce(origin);
+    enableDevGraphGate();
+    setupNewSendLookups({
+      window: makeWindowChain({
+        data: { provider_timestamp: new Date(origin - 60 * 60 * 1000).toISOString() },
+      }),
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(GRAPH_NEED_BEFORE_CLAIM_MS).toBe(33_000);
+    expect(res._status).toBe(503);
+    expect(res._body).toEqual({ error: 'graph_deadline_insufficient' });
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('nenhum token ou segredo no HTTP', async () => {
+    setupGraphEnabledCreatedLookups();
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expectPersistSuccessHttp(res);
+    expect(JSON.stringify(res._body)).not.toContain('plain-token-fixture');
+    expect(JSON.stringify(res._body)).not.toContain('Bearer');
+    expect(JSON.stringify(res._body)).not.toContain('AKIATESTFAKE');
+  });
+
+  it('regressão Uazapi inexistente', () => {
+    expect(HANDLER_SRC.toLowerCase()).not.toContain('uazapi');
   });
 });

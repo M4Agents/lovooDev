@@ -570,6 +570,6 @@ describe('segurança e pureza', () => {
     expect(executable).not.toContain('@aws-sdk');
     expect(SEND_AUDIO_SRC).toMatch(/const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false/);
     expect(SEND_AUDIO_SRC).toContain('completeMetaOutboundAudioPersistence');
-    expect(SEND_AUDIO_SRC).not.toContain('claimCreatedToGraphInFlight');
+    expect(SEND_AUDIO_SRC).toContain('claimCreatedToGraphInFlight');
   });
 });

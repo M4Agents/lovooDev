@@ -694,9 +694,8 @@ describe('invariantes', () => {
     expect(SEND_AUDIO_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
     expect(executable).toContain('enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED');
     expect(executable).not.toContain('enabled: true');
-    expect(executable).not.toContain('process.env');
-    expect(executable).not.toContain('claimCreatedToGraphInFlight');
-    expect(executable).not.toContain('decryptMetaToken');
+    expect(executable).toContain('claimCreatedToGraphInFlight');
+    expect(executable).toContain('decryptMetaToken');
     expect(SEND_AUDIO_SRC).toContain("error: 'audio_send_not_enabled'");
     expect(fetch).not.toHaveBeenCalled();
   });

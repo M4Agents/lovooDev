@@ -535,11 +535,11 @@ describe('concorrência, tenant e HTTP', () => {
     expect(executable).not.toContain('sendAudioMessage');
     expect(executable).not.toContain('awsUpload');
     expect(executable).not.toContain('onConflict');
-    expect(SEND_AUDIO_SRC).not.toContain('markUnknown');
-    expect(SEND_AUDIO_SRC).not.toContain('markGraphAccepted');
+    expect(SEND_AUDIO_SRC).toContain('markUnknown');
+    expect(SEND_AUDIO_SRC).toContain('markGraphAccepted');
     expect(SEND_AUDIO_SRC).toContain('markCompleted');
     expect(SEND_AUDIO_SRC).not.toContain('markFailedBeforeClaim');
-    expect(SEND_AUDIO_SRC).not.toContain('claimCreatedToGraphInFlight');
+    expect(SEND_AUDIO_SRC).toContain('claimCreatedToGraphInFlight');
   });
 
   it('erro de banco não vira sucesso', async () => {

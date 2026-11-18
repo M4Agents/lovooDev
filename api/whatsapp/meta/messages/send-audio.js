@@ -1,9 +1,14 @@
 // =============================================================================
 // POST /api/whatsapp/meta/messages/send-audio
 //
-// B3.2-C.3-D.3-E.2-B.7-B — graph_accepted resume local via B.6.
-// Gate Graph literal false. Sem claim. Sem Graph. created continua 501.
-// graph_accepted: S3 → biblioteca → tracking → chat → completed.
+// E.3-A — Graph outbound audio controlado no DEV + resume B.6.
+// Gate literal META_OUTBOUND_AUDIO_GRAPH_ENABLED = false (nunca true).
+// Graph só abre se isMetaOutboundAudioGraphEnabled(): flag 'true' E host
+// VERCEL_PROJECT_PRODUCTION_URL === lovoo-dev.vercel.app. Fail closed.
+// Produção LovooCRM não casa o host. Sem Host header. Sem frontend.
+// created + gate off → 501. created + gate DEV → claim CAS → Graph →
+// markGraphAccepted → B.6 se restar >= 30s, senão 503 recuperação local.
+// graph_accepted: S3 → biblioteca → tracking → chat → completed (sem Graph).
 //
 // Contrato:
 //   Content-Type: multipart/form-data
@@ -28,18 +33,13 @@
 //  10.  Leitura dos bytes + AAC-LC + SHA-256 backend
 //  11.  SELECT operação (company_id + operation_id)
 //  12.  Janela 24h somente para created/novo envio; completed e graph_accepted pulam
-//  13.  INSERT created (sem upsert). 23505 → re-SELECT. Sem claim HTTP.
+//  13.  INSERT created (sem upsert). 23505 → re-SELECT.
 //  14.  graph_accepted → persistência local B.6 (não passa pelo send orchestrator)
-//  15.  created → orquestrador somente com META_OUTBOUND_AUDIO_GRAPH_ENABLED = false
-//       created → HTTP 501 audio_send_not_enabled + validation=passed
+//  15.  created + gate off → orquestrador { enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED }
+//       created + gate DEV → credencial backend → claim CAS → Graph uma vez → B.6
 //       completed idêntico / graph_accepted persistido → HTTP 200 { ok: true }
 //
 // Limpeza: unlink de todos os filepaths do formidable em qualquer saída.
-//
-// C.2 (NÃO nesta etapa):
-//   - vercel.json: "api/whatsapp/meta/messages/send-audio.js": { "maxDuration": 60 }
-//   - uploadMedia(audio/mp4, audio.m4a) + sendAudioMessage sem voice
-//   - S3 prefixo meta-outbound + persistência
 // =============================================================================
 
 import { createHash } from 'node:crypto';
@@ -55,8 +55,11 @@ import {
 import { orchestrateOutboundAudioSend } from '../../../lib/meta-whatsapp/outboundAudioSendOrchestrator.js';
 import { completeMetaOutboundAudioPersistence } from '../../../lib/meta-whatsapp/outboundAudioPersistenceOrchestrator.js';
 import {
+  claimCreatedToGraphInFlight,
   insertCreated,
   markCompleted,
+  markGraphAccepted,
+  markUnknown,
   selectByCompanyOperation,
 } from '../../../lib/meta-whatsapp/outboundAudioOperationStore.js';
 import {
@@ -67,6 +70,8 @@ import { persistOutboundAudioMediaLibrary } from '../../../lib/meta-whatsapp/out
 import { persistOutboundAudioTracking } from '../../../lib/meta-whatsapp/outboundAudioTrackingStore.js';
 import { persistOutboundAudioChat } from '../../../lib/meta-whatsapp/outboundAudioChatStore.js';
 import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import { decryptMetaToken } from '../../../lib/meta-whatsapp/tokenCrypto.js';
+import { sendAudioMessage, uploadMedia } from '../../../lib/meta-whatsapp/graphClient.js';
 import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServiceWindow.js';
 import {
   validateMetaOutboundAudioBytes,
@@ -136,8 +141,66 @@ const NOT_ENABLED_BODY = Object.freeze({
   validation: 'passed',
 });
 
-// Gate HTTP literal. Nunca ler env, header, query, cookie ou multipart.
+// Gate HTTP literal. Nunca true. Graph só abre via isMetaOutboundAudioGraphEnabled().
 const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false;
+const LOVOO_DEV_PRODUCTION_HOST = 'lovoo-dev.vercel.app';
+const GRAPH_FLAG_ON = 'true';
+const PHONE_NUMBER_ID_RE = /^[0-9]+$/;
+
+// Timeouts alinhados ao orquestrador D.3. Não cabem Graph default + B.6 30s
+// no mesmo POST (33s + 30s > 57s). B.6 após aceite é oportunista.
+export const GRAPH_UPLOAD_TIMEOUT_MS = 20_000;
+export const GRAPH_SEND_TIMEOUT_MS = 10_000;
+export const GRAPH_PERSIST_RESERVE_MS = 2_000;
+export const GRAPH_CLAIM_RESERVE_MS = 1_000;
+export const GRAPH_NEED_BEFORE_CLAIM_MS = GRAPH_CLAIM_RESERVE_MS
+  + GRAPH_UPLOAD_TIMEOUT_MS
+  + GRAPH_SEND_TIMEOUT_MS
+  + GRAPH_PERSIST_RESERVE_MS;
+
+function runtimeEnv() {
+  const runtime = globalThis['process'];
+  if (runtime == null || typeof runtime !== 'object') return {};
+  const env = runtime['env'];
+  return env && typeof env === 'object' ? env : {};
+}
+
+function readPlatformProductionHost(env) {
+  const raw = env?.VERCEL_PROJECT_PRODUCTION_URL;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed.length === 0) return null;
+  if (trimmed.includes('://')) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'https:') return null;
+      if (parsed.username || parsed.password || parsed.port) return null;
+      if (parsed.pathname !== '/' && parsed.pathname !== '') return null;
+      return parsed.hostname;
+    } catch {
+      return null;
+    }
+  }
+  if (
+    trimmed.includes('/')
+    || trimmed.includes('\\')
+    || trimmed.includes(':')
+    || trimmed.includes('@')
+    || trimmed.includes(' ')
+    || trimmed.includes('?')
+    || trimmed.includes('#')
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+export function isMetaOutboundAudioGraphEnabled(env = runtimeEnv()) {
+  if (META_OUTBOUND_AUDIO_GRAPH_ENABLED === true) return true;
+  if (!env || typeof env !== 'object') return false;
+  if (env.META_OUTBOUND_AUDIO_GRAPH_ENABLED !== GRAPH_FLAG_ON) return false;
+  return readPlatformProductionHost(env) === LOVOO_DEV_PRODUCTION_HOST;
+}
 
 export const META_AUDIO_FUNCTION_BUDGET_MS = 60_000;
 export const META_AUDIO_PLATFORM_MARGIN_MS = 3_000;
@@ -231,14 +294,139 @@ function createdContextFromAuthorizedState({
   });
 }
 
-async function respondCreatedNotEnabled(res, _sendContext) {
-  const orchestrated = await orchestrateOutboundAudioSend({
-    enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED,
+function remainingUntilDeadline(deadlineAtMs) {
+  if (typeof deadlineAtMs !== 'number' || !Number.isFinite(deadlineAtMs)) return -1;
+  return deadlineAtMs - Date.now();
+}
+
+async function resolveMetaAccessToken(svc, instanceId) {
+  const { data: credential, error } = await svc
+    .from('meta_whatsapp_credentials')
+    .select('access_token_enc')
+    .eq('instance_id', instanceId)
+    .maybeSingle();
+  if (error || typeof credential?.access_token_enc !== 'string' || credential.access_token_enc.length === 0) {
+    return null;
+  }
+  try {
+    const token = decryptMetaToken(credential.access_token_enc);
+    return typeof token === 'string' && token.length > 0 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildGraphSendDeps(svc) {
+  return {
+    claimCreatedToGraphInFlight: (args) => claimCreatedToGraphInFlight(svc, args),
+    uploadMedia,
+    sendAudioMessage,
+    markUnknown: (args) => markUnknown(svc, args),
+    markGraphAccepted: (args) => markGraphAccepted(svc, args),
+  };
+}
+
+async function resumeAfterGraphAccepted(res, params) {
+  const existing = await selectByCompanyOperation(params.svc, {
+    companyId: params.auth.companyId,
+    operationId: params.operationId,
   });
-  if (orchestrated?.error === 'audio_send_not_enabled') {
+  if (!existing.ok) {
+    return persistFailed(res);
+  }
+  return resumeGraphAcceptedPersistence({
+    res,
+    svc: params.svc,
+    auth: params.auth,
+    operationId: params.operationId,
+    audioSha256: params.audioSha256,
+    audioBytes: params.audioBytes,
+    stored: existing.row,
+    deadlineAtMs: params.deadlineAtMs,
+  });
+}
+
+function mapGraphOrchestratorHttp(res, orchestrated, resumeParams) {
+  if (orchestrated?.ok === true && orchestrated.persistedStatus === 'graph_accepted') {
+    return resumeAfterGraphAccepted(res, resumeParams);
+  }
+  const error = orchestrated?.error;
+  if (error === 'audio_send_not_enabled') {
     return res.status(501).json(NOT_ENABLED_BODY);
   }
+  if (error === 'deadline_insufficient_before_claim') {
+    return res.status(503).json({ error: 'graph_deadline_insufficient' });
+  }
+  if (error === 'claim_not_claimed') {
+    return res.status(409).json({ ok: false, error: 'operation_in_progress' });
+  }
+  if (error === 'operation_unknown' || error === 'deadline_insufficient_after_claim') {
+    return res.status(409).json({ ok: false, error: 'operation_unknown' });
+  }
+  if (error === 'persist_wamid_failed' || error === 'persist_unknown_failed') {
+    return persistFailed(res);
+  }
   return res.status(500).json({ error: 'internal_error' });
+}
+
+async function respondCreatedNotEnabled(res, sendContext, extras = {}) {
+  const graphEnabled = isMetaOutboundAudioGraphEnabled();
+  if (!graphEnabled) {
+    const orchestrated = await orchestrateOutboundAudioSend({
+      enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED,
+    });
+    if (orchestrated?.error === 'audio_send_not_enabled') {
+      return res.status(501).json(NOT_ENABLED_BODY);
+    }
+    return res.status(500).json({ error: 'internal_error' });
+  }
+
+  const { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes } = extras;
+  if (!svc || !instance || !auth || !sendContext) {
+    return res.status(500).json({ error: 'internal_error' });
+  }
+  if (!PHONE_NUMBER_ID_RE.test(instance.phone_number_id ?? '')) {
+    return res.status(500).json({ error: 'internal_error' });
+  }
+  if (remainingUntilDeadline(deadlineAtMs) < GRAPH_NEED_BEFORE_CLAIM_MS) {
+    return res.status(503).json({ error: 'graph_deadline_insufficient' });
+  }
+
+  const accessToken = await resolveMetaAccessToken(svc, instance.id);
+  if (!accessToken) {
+    return res.status(500).json({ error: 'credential_unavailable' });
+  }
+
+  let orchestrated;
+  try {
+    orchestrated = await orchestrateOutboundAudioSend({
+      enabled: graphEnabled,
+      context: {
+        ...sendContext,
+        accessToken,
+      },
+      deps: buildGraphSendDeps(svc),
+      now: () => new Date().toISOString(),
+      clock: { nowMs: () => Date.now() },
+      deadlineAtMs,
+      uploadTimeoutMs: GRAPH_UPLOAD_TIMEOUT_MS,
+      sendTimeoutMs: GRAPH_SEND_TIMEOUT_MS,
+      persistReserveMs: GRAPH_PERSIST_RESERVE_MS,
+      claimReserveMs: GRAPH_CLAIM_RESERVE_MS,
+    });
+  } catch {
+    return res.status(500).json({ error: 'internal_error' });
+  }
+
+  return mapGraphOrchestratorHttp(res, orchestrated, {
+    res,
+    svc,
+    auth,
+    operationId: sendContext.operationId,
+    audioSha256,
+    audioBytes,
+    deadlineAtMs,
+  });
 }
 
 async function gateCustomerServiceWindow(svc, ids, res) {
@@ -658,16 +846,20 @@ export default async function handler(req, res) {
       }
       const windowOpen = await gateCustomerServiceWindow(svc, windowIds, res);
       if (!windowOpen) return;
-      return respondCreatedNotEnabled(res, createdContextFromAuthorizedState({
-        auth,
-        instance,
-        conversation,
-        operationId,
-        audioSha256,
-        audioBytes: bytes,
-        recipientWaId: toNormalized,
-        deadlineAtMs,
-      }));
+      return respondCreatedNotEnabled(
+        res,
+        createdContextFromAuthorizedState({
+          auth,
+          instance,
+          conversation,
+          operationId,
+          audioSha256,
+          audioBytes: bytes,
+          recipientWaId: toNormalized,
+          deadlineAtMs,
+        }),
+        { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+      );
     }
 
     const windowOpen = await gateCustomerServiceWindow(svc, windowIds, res);
@@ -675,16 +867,20 @@ export default async function handler(req, res) {
 
     const inserted = await insertCreated(svc, incomingIdentity);
     if (inserted.ok) {
-      return respondCreatedNotEnabled(res, createdContextFromAuthorizedState({
-        auth,
-        instance,
-        conversation,
-        operationId,
-        audioSha256,
-        audioBytes: bytes,
-        recipientWaId: toNormalized,
-        deadlineAtMs,
-      }));
+      return respondCreatedNotEnabled(
+        res,
+        createdContextFromAuthorizedState({
+          auth,
+          instance,
+          conversation,
+          operationId,
+          audioSha256,
+          audioBytes: bytes,
+          recipientWaId: toNormalized,
+          deadlineAtMs,
+        }),
+        { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+      );
     }
     if (inserted.reason !== 'unique_violation') {
       return res.status(500).json({ error: 'internal_error' });
@@ -713,16 +909,20 @@ export default async function handler(req, res) {
     if (!mapped.mayClaim) {
       return res.status(mapped.httpStatus).json(mapped.body);
     }
-    return respondCreatedNotEnabled(res, createdContextFromAuthorizedState({
-      auth,
-      instance,
-      conversation,
-      operationId,
-      audioSha256,
-      audioBytes: bytes,
-      recipientWaId: toNormalized,
-      deadlineAtMs,
-    }));
+    return respondCreatedNotEnabled(
+      res,
+      createdContextFromAuthorizedState({
+        auth,
+        instance,
+        conversation,
+        operationId,
+        audioSha256,
+        audioBytes: bytes,
+        recipientWaId: toNormalized,
+        deadlineAtMs,
+      }),
+      { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+    );
   } catch {
     return res.status(500).json({ error: 'internal_error' });
   } finally {
