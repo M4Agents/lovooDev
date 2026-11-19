@@ -5,7 +5,7 @@
 // conversa, janela 24h, credencial backend). Sem variável de ambiente, host
 // ou empresa como gate. created → claim CAS → Graph uma vez → markGraphAccepted
 // → B.6 se restar >= 30s, senão 503 recuperação local.
-// graph_accepted: S3 → biblioteca → tracking → chat → completed (sem Graph).
+// graph_accepted: tracking → S3 → biblioteca → chat → completed (sem Graph).
 //
 // Contrato:
 //   Content-Type: multipart/form-data
@@ -32,6 +32,7 @@
 //  12.  Janela 24h somente para created/novo envio; completed e graph_accepted pulam
 //  13.  INSERT created (sem upsert). 23505 → re-SELECT.
 //  14.  graph_accepted → persistência local B.6 (não passa pelo send orchestrator)
+//       tracking antes de AWS/S3; biblioteca → chat → completed
 //  15.  created → credencial backend → claim CAS → Graph uma vez → B.6
 //       completed idêntico / graph_accepted persistido → HTTP 200 { ok: true }
 //
@@ -461,19 +462,32 @@ async function resolveOutboundAwsClient(svc, companyId) {
   return { s3Client, bucket: creds.bucket };
 }
 
-function buildPersistDependencies(svc, s3Client, bucket) {
+function buildPersistDependencies(svc, resolveAws) {
+  let awsPromise = null;
+  const getAws = () => {
+    if (awsPromise == null) {
+      awsPromise = Promise.resolve()
+        .then(resolveAws)
+        .catch(() => null);
+    }
+    return awsPromise;
+  };
   return {
     selectByCompanyOperation: (args) => selectByCompanyOperation(svc, args),
-    uploadMetaOutboundAudio: (args) => uploadMetaOutboundAudio({
-      ...args,
-      s3Client,
-      bucket,
-    }),
-    persistOutboundAudioMediaLibrary: (context) => persistOutboundAudioMediaLibrary({
+    persistOutboundAudioTracking: (context) => persistOutboundAudioTracking({
       supabase: svc,
       context,
     }),
-    persistOutboundAudioTracking: (context) => persistOutboundAudioTracking({
+    uploadMetaOutboundAudio: async (args) => {
+      const aws = await getAws();
+      if (!aws) return { ok: false, error: 'aws_credentials_unavailable' };
+      return uploadMetaOutboundAudio({
+        ...args,
+        s3Client: aws.s3Client,
+        bucket: aws.bucket,
+      });
+    },
+    persistOutboundAudioMediaLibrary: (context) => persistOutboundAudioMediaLibrary({
       supabase: svc,
       context,
     }),
@@ -520,16 +534,6 @@ async function resumeGraphAcceptedPersistence({
     return persistFailed(res);
   }
 
-  let aws;
-  try {
-    aws = await resolveOutboundAwsClient(svc, auth.companyId);
-  } catch {
-    return persistFailed(res);
-  }
-  if (!aws) {
-    return persistFailed(res);
-  }
-
   try {
     const result = await completeMetaOutboundAudioPersistence({
       context: {
@@ -545,7 +549,10 @@ async function resumeGraphAcceptedPersistence({
         providerTimestamp: stored.graph_started_at,
         completedAt: new Date().toISOString(),
       },
-      dependencies: buildPersistDependencies(svc, aws.s3Client, aws.bucket),
+      dependencies: buildPersistDependencies(
+        svc,
+        () => resolveOutboundAwsClient(svc, auth.companyId),
+      ),
     });
     return mapPersistOutcome(res, result);
   } catch {

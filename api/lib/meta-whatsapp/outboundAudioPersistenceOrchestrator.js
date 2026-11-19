@@ -2,7 +2,7 @@
 // outboundAudioPersistenceOrchestrator.js — Persistência local após
 // graph_accepted (B3.2-C.3-D.3-E.2-B.6)
 //
-// Ordem: operação durável → S3 → biblioteca → tracking → chat → markCompleted.
+// Ordem: operação durável → tracking → S3 → biblioteca → chat → markCompleted.
 // Dependências injetadas. Sem Graph, HTTP, getSupabaseAdmin, process.env,
 // Date.now, SQL direto, DELETE S3 ou segundo markCompleted.
 // =============================================================================
@@ -257,6 +257,19 @@ export async function completeMetaOutboundAudioPersistence({
     return failed('invalid_input');
   }
 
+  const tracking = await invoke(deps.persistOutboundAudioTracking, {
+    companyId: stored.company_id,
+    instanceId: stored.instance_id,
+    wamid: stored.wamid,
+  });
+  if (
+    !tracking.ok
+    || tracking.value?.ok !== true
+    || !isUuid(tracking.value.trackingId)
+  ) {
+    return failed('tracking_persistence_failed');
+  }
+
   const uploaded = await invoke(deps.uploadMetaOutboundAudio, {
     companyId: stored.company_id,
     operationId: stored.operation_id,
@@ -280,19 +293,6 @@ export async function completeMetaOutboundAudioPersistence({
     || !isUuid(library.value.mediaAssetId)
   ) {
     return failed('media_library_persistence_failed');
-  }
-
-  const tracking = await invoke(deps.persistOutboundAudioTracking, {
-    companyId: stored.company_id,
-    instanceId: stored.instance_id,
-    wamid: stored.wamid,
-  });
-  if (
-    !tracking.ok
-    || tracking.value?.ok !== true
-    || !isUuid(tracking.value.trackingId)
-  ) {
-    return failed('tracking_persistence_failed');
   }
 
   const chat = await invoke(deps.persistOutboundAudioChat, {

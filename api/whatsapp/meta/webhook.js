@@ -300,7 +300,10 @@ async function handlePost(req, res) {
         if (!row) {
           // Unknown wamid — decisão B1: 200 + log seguro, continuar batch
           // Não logar wamid completo nem phone_number_id
-          console.log('[meta/webhook] event_type=status instance_resolved=true wamid_found=false');
+          console.log(
+            '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
+            newStatus,
+          );
           continue;
         }
 

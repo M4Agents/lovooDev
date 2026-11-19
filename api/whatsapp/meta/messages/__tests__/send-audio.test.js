@@ -546,6 +546,29 @@ function lastPersistInput() {
   return persistState.mock.mock.calls[0][0];
 }
 
+async function mockPersistPipelineOk(input = {}) {
+  const deps = input.dependencies || {};
+  if (typeof deps.persistOutboundAudioTracking === 'function') {
+    const tracking = await deps.persistOutboundAudioTracking({
+      companyId: input.context?.companyId,
+      instanceId: input.context?.instanceId,
+      wamid: FAKE_WAMID,
+    });
+    if (tracking && tracking.ok === false) {
+      return { ok: false, error: 'tracking_persistence_failed' };
+    }
+  }
+  if (typeof deps.uploadMetaOutboundAudio === 'function') {
+    const uploaded = await deps.uploadMetaOutboundAudio({
+      companyId: input.context?.companyId,
+    });
+    if (uploaded && uploaded.ok === false) {
+      return { ok: false, error: 's3_confirmation_failed' };
+    }
+  }
+  return { ok: true };
+}
+
 function expectOrchestratorEnabledGraph() {
   expect(orchestratorState.mock).toHaveBeenCalled();
   for (const [input] of orchestratorState.mock.mock.calls) {
@@ -591,7 +614,7 @@ beforeEach(() => {
   fsState.failRead = false;
   fsState.unlinkCalls = [];
   mockSvc.rpc = vi.fn();
-  persistState.mock.mockResolvedValue({ ok: true });
+  persistState.mock.mockImplementation(mockPersistPipelineOk);
   persistStoreState.upload.mockResolvedValue({ ok: true });
   persistStoreState.library.mockResolvedValue({ ok: true, mediaAssetId: FAKE_INSTANCE_ID });
   persistStoreState.tracking.mockResolvedValue({ ok: true, trackingId: FAKE_INSTANCE_ID });
@@ -2198,7 +2221,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     const res = await runGraphAccepted();
     expect(res._status).toBe(500);
     expect(res._body).toEqual({ error: 'send_persistence_failed' });
-    expect(persistState.mock).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
     expect(s3State.S3Client).not.toHaveBeenCalled();
   });
 
@@ -2211,7 +2235,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     const res = await runGraphAccepted();
     expect(res._status).toBe(500);
     expect(res._body).toEqual({ error: 'send_persistence_failed' });
-    expect(persistState.mock).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
     expect(s3State.S3Client).not.toHaveBeenCalled();
   });
 
@@ -2222,7 +2247,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(res._status).toBe(500);
     expect(res._body).toEqual({ error: 'send_persistence_failed' });
     expect(JSON.stringify(res._body)).not.toContain('rpc fail');
-    expect(persistState.mock).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
   });
 
   it('RPC com exceção retorna 500 send_persistence_failed', async () => {
@@ -2232,7 +2258,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(res._status).toBe(500);
     expect(res._body).toEqual({ error: 'send_persistence_failed' });
     expect(JSON.stringify(res._body)).not.toContain('aws rpc exploded');
-    expect(persistState.mock).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
   });
 
   it('S3Client usa maxAttempts 1', async () => {
@@ -2240,6 +2267,45 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     setupAwsRpcOk();
     await runGraphAccepted();
     expect(s3State.S3Client.mock.calls[0][0].maxAttempts).toBe(1);
+  });
+
+  it('tracking é criado antes da RPC AWS e do upload S3', async () => {
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const res = await runGraphAccepted();
+    expectPersistSuccessHttp(res);
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.upload).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.tracking.mock.invocationCallOrder[0])
+      .toBeLessThan(mockSvc.rpc.mock.invocationCallOrder[0]);
+    expect(persistStoreState.tracking.mock.invocationCallOrder[0])
+      .toBeLessThan(persistStoreState.upload.mock.invocationCallOrder[0]);
+    expect(persistStoreState.tracking).toHaveBeenCalledWith({
+      supabase: mockSvc,
+      context: {
+        companyId: FAKE_COMPANY_ID,
+        instanceId: FAKE_INSTANCE_ID,
+        wamid: FAKE_WAMID,
+      },
+    });
+    const trackingIdx = HANDLER_SRC.indexOf('persistOutboundAudioTracking: (context)');
+    const uploadIdx = HANDLER_SRC.indexOf('uploadMetaOutboundAudio: async (args)');
+    expect(trackingIdx).toBeGreaterThan(0);
+    expect(uploadIdx).toBeGreaterThan(trackingIdx);
+  });
+
+  it('falha de tracking não inicia AWS/S3 nem Graph', async () => {
+    persistStoreState.tracking.mockResolvedValue({ ok: false, error: 'tracking_conflict' });
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const res = await runGraphAccepted();
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'send_persistence_failed' });
+    expect(persistStoreState.tracking).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(persistStoreState.upload).not.toHaveBeenCalled();
+    expect(s3State.S3Client).not.toHaveBeenCalled();
+    expectNoGraphOrClaim();
   });
 
   it('não faz fallback para process.env AWS', async () => {

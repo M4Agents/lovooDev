@@ -735,22 +735,56 @@ describe('POST /api/whatsapp/meta/webhook — unknown wamid', () => {
   it('WAMID-01: instance conhecida + wamid desconhecido → 200, sem INSERT, sem UPDATE', async () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      // instance encontrada, mas row não existe
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(null)); // row = null
 
-    // instance encontrada, mas row não existe
-    mockSvc.from
-      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeMsgSelectChain(null)); // row = null
+      const req = makePostReq();
+      const res = makeRes();
+      await handler(req, res);
 
-    const req = makePostReq();
-    const res = makeRes();
-    await handler(req, res);
+      expect(res._status).toBe(200);
+      // Apenas 2 DB calls (instance + select), sem update
+      expect(mockSvc.from).toHaveBeenCalledTimes(2);
+      // Resposta não expõe wamid nem phone_number_id
+      expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
+      expect(JSON.stringify(res._body)).not.toContain(FAKE_PHONE_NUM_ID);
+      expect(log).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
+        'sent',
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain(FAKE_WAMID);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(FAKE_PHONE_NUM_ID);
+    } finally {
+      log.mockRestore();
+    }
+  });
 
-    expect(res._status).toBe(200);
-    // Apenas 2 DB calls (instance + select), sem update
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
-    // Resposta não expõe wamid nem phone_number_id
-    expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
-    expect(JSON.stringify(res._body)).not.toContain(FAKE_PHONE_NUM_ID);
+  it('WAMID-01b: wamid desconhecido com failed loga status sem persistir', async () => {
+    const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'failed', timestamp: FAKE_TIMESTAMP }] });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(null));
+
+      const req = makePostReq();
+      const res = makeRes();
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+      expect(mockSvc.from).toHaveBeenCalledTimes(2);
+      expect(log).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
+        'failed',
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

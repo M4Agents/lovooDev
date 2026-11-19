@@ -152,7 +152,7 @@ afterEach(() => {
 });
 
 describe('identidade e estado', () => {
-  it('graph_accepted válido completa S3 → biblioteca → tracking → chat → completed', async () => {
+  it('graph_accepted válido completa tracking → S3 → biblioteca → chat → completed', async () => {
     const deps = makeDeps();
     const result = await run({ deps });
     expect(result).toEqual(successBody());
@@ -178,11 +178,11 @@ describe('identidade e estado', () => {
       s3Key: S3_KEY,
       completedAt: COMPLETED_AT,
     });
+    expect(deps.persistOutboundAudioTracking.mock.invocationCallOrder[0])
+      .toBeLessThan(deps.uploadMetaOutboundAudio.mock.invocationCallOrder[0]);
     expect(deps.uploadMetaOutboundAudio.mock.invocationCallOrder[0])
       .toBeLessThan(deps.persistOutboundAudioMediaLibrary.mock.invocationCallOrder[0]);
     expect(deps.persistOutboundAudioMediaLibrary.mock.invocationCallOrder[0])
-      .toBeLessThan(deps.persistOutboundAudioTracking.mock.invocationCallOrder[0]);
-    expect(deps.persistOutboundAudioTracking.mock.invocationCallOrder[0])
       .toBeLessThan(deps.persistOutboundAudioChat.mock.invocationCallOrder[0]);
     expect(deps.persistOutboundAudioChat.mock.invocationCallOrder[0])
       .toBeLessThan(deps.markCompleted.mock.invocationCallOrder[0]);
@@ -244,6 +244,7 @@ describe('identidade e estado', () => {
       const deps = item.deps ?? makeDeps();
       const result = await run({ ctx: item.ctx, deps });
       expect(result).toEqual({ ok: false, error: item.error });
+      expect(deps.persistOutboundAudioTracking).not.toHaveBeenCalled();
       expect(deps.uploadMetaOutboundAudio).not.toHaveBeenCalled();
       expect(deps.persistOutboundAudioMediaLibrary).not.toHaveBeenCalled();
       expect(deps.markCompleted).not.toHaveBeenCalled();
@@ -267,6 +268,7 @@ describe('identidade e estado', () => {
       });
       const result = await run({ deps });
       expect(result).toEqual({ ok: false, error: item.error });
+      expect(deps.persistOutboundAudioTracking).not.toHaveBeenCalled();
       expect(deps.uploadMetaOutboundAudio).not.toHaveBeenCalled();
       expect(deps.markCompleted).not.toHaveBeenCalled();
     }
@@ -305,7 +307,7 @@ describe('identidade e estado', () => {
 });
 
 describe('S3, biblioteca, tracking e chat', () => {
-  it('upload novo ou idempotente segue; falhas S3 não persistem', async () => {
+  it('upload novo ou idempotente segue; falhas S3 preservam tracking e não avançam', async () => {
     const idempotent = makeDeps({
       uploadMetaOutboundAudio: vi.fn(async () => s3Ok({ idempotent: true })),
     });
@@ -324,8 +326,8 @@ describe('S3, biblioteca, tracking e chat', () => {
       });
       const result = await run({ deps });
       expect(result).toEqual({ ok: false, error: 's3_confirmation_failed' });
+      expect(deps.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
       expect(deps.persistOutboundAudioMediaLibrary).not.toHaveBeenCalled();
-      expect(deps.persistOutboundAudioTracking).not.toHaveBeenCalled();
       expect(deps.markCompleted).not.toHaveBeenCalled();
     }
 
@@ -336,10 +338,11 @@ describe('S3, biblioteca, tracking e chat', () => {
       ok: false,
       error: 's3_confirmation_failed',
     });
+    expect(throwing.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
     expect(throwing.persistOutboundAudioMediaLibrary).not.toHaveBeenCalled();
   });
 
-  it('biblioteca nova/recuperada segue; falha ou id inválido não cria tracking', async () => {
+  it('biblioteca nova/recuperada segue; falha ou id inválido preserva tracking e não cria chat', async () => {
     const recovered = makeDeps({
       persistOutboundAudioMediaLibrary: vi.fn(async () => ({
         ok: true,
@@ -359,7 +362,7 @@ describe('S3, biblioteca, tracking e chat', () => {
       });
       const result = await run({ deps });
       expect(result).toEqual({ ok: false, error: 'media_library_persistence_failed' });
-      expect(deps.persistOutboundAudioTracking).not.toHaveBeenCalled();
+      expect(deps.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
       expect(deps.persistOutboundAudioChat).not.toHaveBeenCalled();
       expect(deps.markCompleted).not.toHaveBeenCalled();
     }
@@ -371,7 +374,8 @@ describe('S3, biblioteca, tracking e chat', () => {
       ok: false,
       error: 'media_library_persistence_failed',
     });
-    expect(throwing.persistOutboundAudioTracking).not.toHaveBeenCalled();
+    expect(throwing.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
+    expect(throwing.persistOutboundAudioChat).not.toHaveBeenCalled();
   });
 
   it('tracking e chat novos/recuperados; falha não avança', async () => {
@@ -400,6 +404,8 @@ describe('S3, biblioteca, tracking e chat', () => {
       ok: false,
       error: 'tracking_persistence_failed',
     });
+    expect(trackingFail.uploadMetaOutboundAudio).not.toHaveBeenCalled();
+    expect(trackingFail.persistOutboundAudioMediaLibrary).not.toHaveBeenCalled();
     expect(trackingFail.persistOutboundAudioChat).not.toHaveBeenCalled();
     expect(trackingFail.markCompleted).not.toHaveBeenCalled();
 
@@ -410,6 +416,7 @@ describe('S3, biblioteca, tracking e chat', () => {
       ok: false,
       error: 'tracking_persistence_failed',
     });
+    expect(trackingBadId.uploadMetaOutboundAudio).not.toHaveBeenCalled();
     expect(trackingBadId.persistOutboundAudioChat).not.toHaveBeenCalled();
 
     const trackingThrow = makeDeps({
@@ -419,6 +426,7 @@ describe('S3, biblioteca, tracking e chat', () => {
       ok: false,
       error: 'tracking_persistence_failed',
     });
+    expect(trackingThrow.uploadMetaOutboundAudio).not.toHaveBeenCalled();
 
     const chatFail = makeDeps({
       persistOutboundAudioChat: vi.fn(async () => ({ ok: false, error: 'chat_conflict' })),
@@ -446,6 +454,47 @@ describe('S3, biblioteca, tracking e chat', () => {
       error: 'chat_persistence_failed',
     });
     expect(chatThrow.markCompleted).not.toHaveBeenCalled();
+  });
+
+  it('tracking idempotente sent/delivered/read/failed segue S3 sem segundo Graph', async () => {
+    for (const status of ['sent', 'delivered', 'read', 'failed']) {
+      const deps = makeDeps({
+        persistOutboundAudioTracking: vi.fn(async () => ({
+          ok: true,
+          idempotent: true,
+          trackingId: TRACKING,
+          status,
+        })),
+      });
+      await expect(run({ deps })).resolves.toMatchObject({
+        ok: true,
+        trackingId: TRACKING,
+      });
+      expect(deps.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
+      expect(deps.uploadMetaOutboundAudio).toHaveBeenCalledTimes(1);
+      expect(deps.markCompleted).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(deps.persistOutboundAudioTracking.mock.calls[0][0]))
+        .not.toContain('status');
+    }
+  });
+
+  it('graph_accepted sem tracking cria tracking antes do S3; com tracking não duplica envio', async () => {
+    const created = makeDeps();
+    await expect(run({ deps: created })).resolves.toMatchObject({ ok: true, idempotent: false });
+    expect(created.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
+    expect(created.persistOutboundAudioTracking.mock.invocationCallOrder[0])
+      .toBeLessThan(created.uploadMetaOutboundAudio.mock.invocationCallOrder[0]);
+
+    const existing = makeDeps({
+      persistOutboundAudioTracking: vi.fn(async () => ({
+        ok: true,
+        idempotent: true,
+        trackingId: TRACKING,
+      })),
+    });
+    await expect(run({ deps: existing })).resolves.toMatchObject({ ok: true, trackingId: TRACKING });
+    expect(existing.persistOutboundAudioTracking).toHaveBeenCalledTimes(1);
+    expect(existing.uploadMetaOutboundAudio).toHaveBeenCalledTimes(1);
   });
 });
 
