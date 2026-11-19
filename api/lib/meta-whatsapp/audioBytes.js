@@ -280,6 +280,13 @@ function walk(buf, start, end, depth, state, track) {
       state.hasFtyp = true;
     }
     if (hdr.type === 'moov') state.hasMoov = true;
+    if (hdr.type === 'moof') state.hasMoof = true;
+    if (hdr.type === 'mvex') state.hasMvex = true;
+    if (hdr.type === 'stsz' && hdr.payloadEnd - hdr.payloadStart >= 12) {
+      const sampleCount = readUInt32BE(buf, hdr.payloadStart + 8);
+      state.stszSampleCount = sampleCount;
+      if (track) track.sampleCount = sampleCount;
+    }
 
     if (hdr.type === 'trak') {
       const child = {
@@ -289,6 +296,7 @@ function walk(buf, start, end, depth, state, track) {
         audioCodec: 'unconfirmed',
         aacProfile: null,
         unsupportedCodec: false,
+        sampleCount: null,
       };
       state.tracks.push(child);
       walk(buf, hdr.payloadStart, hdr.payloadEnd, depth + 1, state, child);
@@ -314,6 +322,8 @@ function interpret(state) {
   }
   if (!state.hasFtyp) return fail(CODE_FORMAT, 'missing_ftyp');
   if (!state.hasMoov) return fail(CODE_FORMAT, 'missing_moov');
+  if (state.hasMoof || state.hasMvex) return fail(CODE_FORMAT, 'fragmented_mp4');
+  if (state.stszSampleCount === 0) return fail(CODE_FORMAT, 'empty_sample_table');
 
   let hasVideo = false;
   let audioTrack = null;
@@ -371,6 +381,9 @@ export function validateMetaOutboundAudioBytes(bytes) {
     boxCount: 0,
     hasFtyp: false,
     hasMoov: false,
+    hasMoof: false,
+    hasMvex: false,
+    stszSampleCount: null,
     tracks: [],
     reason: null,
   };

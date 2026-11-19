@@ -476,6 +476,52 @@ describe('validateMetaOutboundAudioBytes — evidência de codec', () => {
     expect(result).not.toHaveProperty('mime');
   });
 
+  it('AB-29: fMP4 com mvex e moof é rejeitado', () => {
+    const result = validateMetaOutboundAudioBytes(Buffer.concat([
+      ftypBox(),
+      box('moov', [
+        audioTrack({ withEsds: true }),
+        box('mvex', [box('trex', Buffer.alloc(24))]),
+      ]),
+      box('moof', Buffer.alloc(16)),
+      box('mdat', Buffer.from([0x00, 0x00, 0x00, 0x00])),
+    ]));
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_audio_format',
+      reason: 'fragmented_mp4',
+    });
+  });
+
+  it('AB-30: stsz.sampleCount 0 é rejeitado mesmo sem moof', () => {
+    const stsz = box('stsz', Buffer.concat([
+      Buffer.alloc(4),
+      u32(0),
+      u32(0),
+    ]));
+    const trak = box('trak', [
+      box('mdia', [
+        hdlr('soun'),
+        box('minf', [
+          box('stbl', [
+            stsdWith(box('mp4a', mp4aPayload(esdsAacLc()))),
+            stsz,
+          ]),
+        ]),
+      ]),
+    ]);
+    const result = validateMetaOutboundAudioBytes(Buffer.concat([
+      ftypBox(),
+      box('moov', trak),
+      box('mdat', Buffer.from([0x00])),
+    ]));
+    expect(result).toEqual({
+      ok: false,
+      code: 'invalid_audio_format',
+      reason: 'empty_sample_table',
+    });
+  });
+
   it('AB-27: soun sem mp4a em stsd falha', () => {
     const trak = box('trak', [
       box('mdia', [

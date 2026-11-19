@@ -26,7 +26,7 @@ type SendAudioInput = {
   audio: File
 }
 
-const { MetaOutboundAudioSendError, sendAudio, mintId, validateSend, mp4MimeState } = vi.hoisted(() => {
+const { MetaOutboundAudioSendError, sendAudio, mintId, validateSend, mp4MimeState, remuxAudio } = vi.hoisted(() => {
   class MetaOutboundAudioSendError extends Error {
     status: number
     code: string
@@ -43,6 +43,7 @@ const { MetaOutboundAudioSendError, sendAudio, mintId, validateSend, mp4MimeStat
     mintId: vi.fn(() => 'a0b1c2d3-e4f5-4a67-8b90-123456789abc'),
     validateSend: vi.fn((_bytes?: Uint8Array) => ({ ok: true as boolean, code: null as string | null })),
     mp4MimeState: { mime: 'audio/mp4;codecs=mp4a.40.2' as string | null },
+    remuxAudio: vi.fn(async (bytes: Uint8Array) => ({ ok: true as const, bytes })),
   }
 })
 
@@ -70,6 +71,10 @@ vi.mock('../../../../utils/metaOutboundAudioSend', async (importOriginal) => {
 vi.mock('../../../../services/metaWhatsAppApi', () => ({
   MetaOutboundAudioSendError,
   metaWhatsAppApi: { sendAudio: (input: SendAudioInput) => sendAudio(input) },
+}))
+
+vi.mock('../../../../utils/metaOutboundAudioRemux', () => ({
+  remuxMetaOutboundAudioToProgressiveMp4: (bytes: Uint8Array) => remuxAudio(bytes),
 }))
 
 const COMPANY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -121,6 +126,8 @@ beforeEach(() => {
   mintId.mockClear()
   validateSend.mockReset()
   validateSend.mockReturnValue({ ok: true, code: null })
+  remuxAudio.mockReset()
+  remuxAudio.mockImplementation(async (bytes: Uint8Array) => ({ ok: true as const, bytes }))
   mp4MimeState.mime = 'audio/mp4;codecs=mp4a.40.2'
 })
 
@@ -245,6 +252,7 @@ describe('MetaOutboundAudioComposer', () => {
     expect(sendAudio.mock.calls[1][0].operationId).toBe(sendAudio.mock.calls[0][0].operationId)
     expect(sendAudio.mock.calls[1][0].audio).toBe(sendAudio.mock.calls[0][0].audio)
     expect(mintId).toHaveBeenCalledTimes(1)
+    expect(remuxAudio).toHaveBeenCalledTimes(1)
   })
 
   it('retry de persistência mantém UUID e bytes', async () => {
@@ -475,6 +483,26 @@ describe('MetaOutboundAudioComposer', () => {
     )
     await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar áudio' })).toBeTruthy())
     unmount()
+    expect(sendAudio).not.toHaveBeenCalled()
+  })
+
+  it('falha de remux impede envio e não cria operação', async () => {
+    remuxAudio.mockResolvedValue({ ok: false, code: 'audio_remux_failed' })
+    const { rerender } = renderComposer()
+    await readyPreview()
+    rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={CONV_A}
+        onSent={vi.fn()}
+      />,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('meta-outbound-audio-error').textContent).toMatch(/preparar o áudio/)
+    })
+    expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
+    expect(mintId).not.toHaveBeenCalled()
     expect(sendAudio).not.toHaveBeenCalled()
   })
 

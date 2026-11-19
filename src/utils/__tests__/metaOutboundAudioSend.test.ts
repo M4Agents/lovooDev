@@ -25,11 +25,17 @@ describe('metaOutboundAudioSend', () => {
     expect(file.size).toBe(4)
   })
 
-  it('rejeita WebM e arquivo grande demais', () => {
+  it('rejeita WebM, fMP4 fragmentado e arquivo grande demais', () => {
     const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])
     expect(validateOutboundAudioBytesForSend(webm)).toEqual({ ok: false, code: 'invalid_audio' })
     const huge = new Uint8Array(META_OUTBOUND_AUDIO_MAX_BYTES + 1)
     expect(validateOutboundAudioBytesForSend(huge).code).toBe('audio_too_large')
+    const fmp4 = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+      0x00, 0x00, 0x00, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x31,
+      0x00, 0x00, 0x00, 0x10, 0x6d, 0x6f, 0x6f, 0x76, 0x00, 0x00, 0x00, 0x08, 0x6d, 0x76, 0x65, 0x78,
+    ])
+    expect(validateOutboundAudioBytesForSend(fmp4)).toEqual({ ok: false, code: 'invalid_audio' })
   })
 
   it('classifica 501, 503, unknown e 200', () => {
@@ -70,6 +76,7 @@ describe('metaOutboundAudioSend', () => {
     expect(messageForMetaAudioSend('blocked', 'operation_unknown')).toMatch(/Não envie de novo/)
     expect(messageForMetaAudioSend('blocked', 'graph_in_flight')).toMatch(/Não envie de novo/)
     expect(messageForMetaAudioSend('blocked', 'operation_in_progress')).not.toMatch(/Enviar novamente/)
+    expect(messageForMetaAudioSend('error', 'audio_remux_failed')).toMatch(/Grave novamente/)
   })
 
   it('não usa crypto.randomUUID duas vezes no helper de mint por chamada', () => {

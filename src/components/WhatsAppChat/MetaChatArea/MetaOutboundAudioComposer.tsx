@@ -131,6 +131,10 @@ export function MetaOutboundAudioComposer({
       setEligible(false)
       return
     }
+    if (frozenFileRef.current) {
+      setEligible(true)
+      return
+    }
     let cancelled = false
     void (async () => {
       const buffer = await readDiagnosticBlobBytes(audioBlobPreview)
@@ -142,8 +146,20 @@ export function MetaOutboundAudioComposer({
         setStatusCode('invalid_audio')
         return
       }
-      const bytes = new Uint8Array(buffer)
-      const validation = validateOutboundAudioBytesForSend(bytes)
+      const { remuxMetaOutboundAudioToProgressiveMp4 } = await import(
+        '../../../utils/metaOutboundAudioRemux'
+      )
+      if (cancelled || !mountedRef.current) return
+      const remuxed = await remuxMetaOutboundAudioToProgressiveMp4(new Uint8Array(buffer))
+      if (cancelled || !mountedRef.current) return
+      if (!remuxed.ok) {
+        setEligible(false)
+        setPhase('error')
+        setStatusKind('error')
+        setStatusCode(remuxed.code)
+        return
+      }
+      const validation = validateOutboundAudioBytesForSend(remuxed.bytes)
       if (cancelled || !mountedRef.current) return
       if (!validation.ok) {
         setEligible(false)
@@ -156,7 +172,7 @@ export function MetaOutboundAudioComposer({
         operationIdRef.current = mintOutboundAudioOperationId()
       }
       if (!frozenFileRef.current) {
-        frozenFileRef.current = freezeOutboundAudioFile(bytes)
+        frozenFileRef.current = freezeOutboundAudioFile(remuxed.bytes)
       }
       setEligible(true)
       setPhase((current) => (

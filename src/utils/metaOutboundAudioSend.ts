@@ -138,6 +138,9 @@ export function messageForMetaAudioSend(kind: MetaAudioSendUiKind, code: string)
     case 'error':
       if (code === 'audio_too_large') return 'O áudio excede o limite de 4 MiB.'
       if (code === 'invalid_audio') return 'Este áudio não é MP4 AAC-LC e não pode ser enviado.'
+      if (code === 'audio_remux_failed') {
+        return 'Não foi possível preparar o áudio para envio. Grave novamente.'
+      }
       if (code === 'instance_not_connected') return 'A instância não está conectada.'
       if (code === 'operation_conflict') return 'Esta gravação conflita com um envio já registrado.'
       return 'Não foi possível enviar o áudio.'

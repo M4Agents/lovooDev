@@ -882,6 +882,31 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(mockValidateMetaCaller).not.toHaveBeenCalled();
   });
 
+  it('fMP4 AAC-LC é rejeitado antes do Graph e do S3', async () => {
+    setupHappyLookups();
+    const res = makeRes();
+    const fragmented = Buffer.concat([
+      ftypBox(),
+      box('moov', [
+        audioTrack(true),
+        box('mvex', [box('trex', Buffer.alloc(24))]),
+      ]),
+      box('moof', Buffer.alloc(16)),
+      box('mdat', Buffer.from([0x00, 0x00, 0x00, 0x00])),
+    ]);
+    await handler(makeMultipartReq({
+      file: {
+        fieldName: 'file',
+        filename: 'audio.m4a',
+        mime: 'audio/mp4',
+        buffer: fragmented,
+      },
+    }), res);
+    expect(res._status).toBe(400);
+    expect(res._body).toEqual({ error: 'invalid_audio' });
+    expectNoExternalSideEffects();
+  });
+
   it('WebM rejeitado mesmo com MIME de MP4', async () => {
     setupHappyLookups();
     const res = makeRes();
