@@ -16,6 +16,8 @@ export interface AudioPreviewBarProps {
   onSend?: () => Promise<void> | void
   /** Default true. false esconde o botão de envio (diagnóstico Meta). */
   showSendButton?: boolean
+  /** Default true. false impede descartar o rascunho em estado incerto. */
+  allowCancel?: boolean
   onPlaybackCanPlay?: () => void
   onPlaybackError?: () => void
 }
@@ -33,6 +35,7 @@ export const AudioPreviewBar: React.FC<AudioPreviewBarProps> = ({
   onCancel,
   onSend,
   showSendButton = true,
+  allowCancel = true,
   onPlaybackCanPlay,
   onPlaybackError,
 }) => {
@@ -42,7 +45,7 @@ export const AudioPreviewBar: React.FC<AudioPreviewBarProps> = ({
       <button
         type="button"
         onClick={onCancel}
-        disabled={isSending}
+        disabled={isSending || !allowCancel}
         aria-label="Cancelar áudio"
         title="Cancelar áudio"
         className="flex-shrink-0 p-2 rounded-full border-2 border-red-300 text-red-500 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

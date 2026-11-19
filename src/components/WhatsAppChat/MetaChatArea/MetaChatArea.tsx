@@ -15,7 +15,7 @@
 // Fora do escopo:
 //   - LeadPanel, sugestões de IA
 //   - Paginação histórica
-//   - Envio de áudio/mídia/documentos de sessão (B2: só diagnóstico DEV)
+//   - Envio de imagem/documento de sessão (áudio de sessão: compositor MP4 AAC-LC)
 //
 // Isolamento (invariantes de segurança):
 //   - Zero wa_id/to usado para envio — destinatário resolvido pelo backend
@@ -35,8 +35,7 @@ import { AlertCircle, Check, CheckCheck, Clock } from 'lucide-react'
 import { useMetaChatMessages }  from '../../../hooks/chat/useMetaChatMessages'
 import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
-import { MetaAudioDiagnosticRecorder } from './MetaAudioDiagnosticRecorder'
-import { isMetaAudioRecorderDiagnosticEnabled } from '../../../utils/metaAudioRecorderDiagnostic'
+import { MetaOutboundAudioComposer } from './MetaOutboundAudioComposer'
 import {
   buildHistoricalTelHref,
   isSafeHistoricalHref,
@@ -720,7 +719,6 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
 
   const canSend        = !isSending && !!conversation?.instance_id && !!text.trim()
   const canOpenPicker  = !isSending && !!conversation?.instance_id
-  const showAudioDiagnostic = isMetaAudioRecorderDiagnosticEnabled()
 
   return (
     <div className="flex flex-col h-full bg-white/60 backdrop-blur-sm">
@@ -765,12 +763,13 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
             {sendError}
           </p>
         )}
-        {showAudioDiagnostic && (
-          <MetaAudioDiagnosticRecorder
-            conversationId={conversationId}
-            disabled={!conversation?.instance_id || isSending}
-          />
-        )}
+        <MetaOutboundAudioComposer
+          key={conversationId}
+          companyId={companyId}
+          instanceId={conversation?.instance_id}
+          conversationId={conversationId}
+          onSent={refresh}
+        />
         <div className="flex items-end gap-2">
           {/* Botão Template — MVP4A */}
           <button

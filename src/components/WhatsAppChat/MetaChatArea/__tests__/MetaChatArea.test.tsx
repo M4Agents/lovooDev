@@ -86,6 +86,7 @@ vi.mock('../../../../services/metaWhatsAppApi', () => ({
     sendMessage:   vi.fn(),
     sendTemplate:  vi.fn(),
     importMedia:   vi.fn(),
+    sendAudio:     vi.fn(),
   },
 }))
 

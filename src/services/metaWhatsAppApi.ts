@@ -32,6 +32,11 @@
 
 import { supabase } from '../lib/supabase'
 import { sanitizeHistoricalTemplateButtons } from '../utils/historicalTemplateButtons'
+import {
+  META_OUTBOUND_AUDIO_FILENAME,
+  isOutboundAudioOperationId,
+} from '../utils/metaOutboundAudioSend'
+import { META_OUTBOUND_AUDIO_MAX_BYTES } from '../../api/lib/meta-whatsapp/audioBytes.js'
 import type {
   CompleteResult,
   GetMetaConversationsResponse,
@@ -42,6 +47,7 @@ import type {
   MetaChatConversation,
   MetaChatMessage,
   MetaMediaType,
+  MetaSendAudioResponse,
   MetaSendMessageResponse,
   MetaSendTemplateResponse,
   MetaTemplateParameter,
@@ -73,12 +79,32 @@ type CompleteRaw = {
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
-async function getAuthHeaders(): Promise<HeadersInit> {
+async function getAccessToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Sessão inválida ou expirada')
+  return session.access_token
+}
+
+async function getAuthHeaders(): Promise<HeadersInit> {
   return {
     'Content-Type': 'application/json',
-    Authorization:  `Bearer ${session.access_token}`,
+    Authorization:  `Bearer ${await getAccessToken()}`,
+  }
+}
+
+async function getBearerAuthHeaders(): Promise<HeadersInit> {
+  return { Authorization: `Bearer ${await getAccessToken()}` }
+}
+
+export class MetaOutboundAudioSendError extends Error {
+  readonly status: number
+  readonly code: string
+
+  constructor(status: number, code: string) {
+    super(code)
+    this.name = 'MetaOutboundAudioSendError'
+    this.status = status
+    this.code = code
   }
 }
 
@@ -798,5 +824,70 @@ export const metaWhatsAppApi = {
     }
 
     return { id: data.id }
+  },
+
+  /**
+   * Envia áudio de sessão Meta (multipart).
+   * POST /api/whatsapp/meta/messages/send-audio
+   *
+   * company_id vai no formulário porque o handler lê o campo, mas a
+   * autoridade continua JWT + company_users. Nunca envia to/token/wamid.
+   * Não define boundary. Retries devem reutilizar a mesma operation_id e o mesmo File.
+   */
+  async sendAudio(input: {
+    companyId: string
+    instanceId: string
+    conversationId: string
+    operationId: string
+    audio: Blob
+  }): Promise<MetaSendAudioResponse> {
+    if (!input.companyId) throw new MetaOutboundAudioSendError(400, 'invalid_request')
+    if (!input.instanceId) throw new MetaOutboundAudioSendError(400, 'invalid_request')
+    if (!input.conversationId) throw new MetaOutboundAudioSendError(400, 'invalid_request')
+    if (!isOutboundAudioOperationId(input.operationId)) {
+      throw new MetaOutboundAudioSendError(400, 'invalid_operation_id')
+    }
+    if (!input.audio || input.audio.size === 0) {
+      throw new MetaOutboundAudioSendError(400, 'invalid_audio')
+    }
+    if (input.audio.size > META_OUTBOUND_AUDIO_MAX_BYTES) {
+      throw new MetaOutboundAudioSendError(400, 'audio_too_large')
+    }
+
+    const headers = await getBearerAuthHeaders()
+    const form = new FormData()
+    form.append('company_id', input.companyId)
+    form.append('instance_id', input.instanceId)
+    form.append('conversation_id', input.conversationId)
+    form.append('operation_id', input.operationId.toLowerCase())
+    const file = input.audio instanceof File
+      ? input.audio
+      : new File([input.audio], META_OUTBOUND_AUDIO_FILENAME, { type: 'audio/mp4' })
+    form.append('file', file, META_OUTBOUND_AUDIO_FILENAME)
+
+    let res: Response
+    try {
+      res = await fetch('/api/whatsapp/meta/messages/send-audio', {
+        method: 'POST',
+        headers,
+        body: form,
+      })
+    } catch {
+      throw new MetaOutboundAudioSendError(0, 'network_error')
+    }
+
+    const data = await res.json().catch(() => ({})) as { ok?: unknown; error?: unknown }
+
+    if (res.ok) {
+      if (data.ok !== true) {
+        throw new MetaOutboundAudioSendError(res.status, 'invalid_response')
+      }
+      return { ok: true }
+    }
+
+    const code = typeof data.error === 'string' && data.error.length > 0
+      ? data.error
+      : 'internal_error'
+    throw new MetaOutboundAudioSendError(res.status, code)
   },
 }

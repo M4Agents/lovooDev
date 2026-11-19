@@ -298,6 +298,10 @@ export interface MetaSendMessageResponse {
   message_id: string
 }
 
+export interface MetaSendAudioResponse {
+  ok: true
+}
+
 // =============================================================================
 // MVP4A — MESSAGE TEMPLATES
 //

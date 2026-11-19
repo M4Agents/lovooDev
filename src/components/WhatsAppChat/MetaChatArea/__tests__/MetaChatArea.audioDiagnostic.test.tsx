@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 // =============================================================================
-// MetaChatArea.audioDiagnostic.test.tsx — B2 diagnóstico DEV, envio bloqueado
+// Diagnóstico DEV isolado + regressão do compositor Meta (texto/template).
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react'
 import { MetaChatArea } from '../MetaChatArea'
+import { MetaAudioDiagnosticRecorder } from '../MetaAudioDiagnosticRecorder'
 import type { MetaChatConversation, MetaChatMessage } from '../../../../types/meta-whatsapp'
 
 const recorder = {
@@ -31,7 +32,7 @@ vi.mock('../../../../utils/metaAudioRecorderDiagnostic', async (importOriginal) 
   const actual = await importOriginal<typeof import('../../../../utils/metaAudioRecorderDiagnostic')>()
   return {
     ...actual,
-    isMetaAudioRecorderDiagnosticEnabled: vi.fn(() => false),
+    isMetaAudioRecorderDiagnosticEnabled: vi.fn(() => true),
   }
 })
 
@@ -44,6 +45,7 @@ vi.mock('../../../../services/metaWhatsAppApi', () => ({
     sendMessage:  vi.fn(),
     sendTemplate: vi.fn(),
     importMedia:  vi.fn(),
+    sendAudio:    vi.fn(),
   },
 }))
 
@@ -86,6 +88,7 @@ import { isMetaAudioRecorderDiagnosticEnabled } from '../../../../utils/metaAudi
 const mockUseMetaChatMessages = useMetaChatMessages as ReturnType<typeof vi.fn>
 const mockSendMessage = metaWhatsAppApi.sendMessage as ReturnType<typeof vi.fn>
 const mockSendTemplate = metaWhatsAppApi.sendTemplate as ReturnType<typeof vi.fn>
+const mockSendAudio = metaWhatsAppApi.sendAudio as ReturnType<typeof vi.fn>
 const mockEnabled = isMetaAudioRecorderDiagnosticEnabled as ReturnType<typeof vi.fn>
 
 const COMPANY_ID = 'company-test-001'
@@ -121,6 +124,12 @@ function resetRecorder() {
   recorder.clearPreview.mockClear()
 }
 
+function renderDiagnostic(conversationId = CONV_ID) {
+  return render(
+    <MetaAudioDiagnosticRecorder conversationId={conversationId} disabled={false} />,
+  )
+}
+
 beforeEach(() => {
   if (typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer !== 'function') {
     Blob.prototype.arrayBuffer = function arrayBuffer() {
@@ -133,11 +142,13 @@ beforeEach(() => {
     }
   }
   resetRecorder()
-  mockEnabled.mockReturnValue(false)
+  mockEnabled.mockReturnValue(true)
   mockSendMessage.mockReset()
   mockSendMessage.mockResolvedValue({ ok: true })
   mockSendTemplate.mockReset()
   mockSendTemplate.mockResolvedValue({ ok: true })
+  mockSendAudio.mockReset()
+  mockSendAudio.mockResolvedValue({ ok: true })
   mockUseMetaChatMessages.mockReturnValue({
     messages: [],
     loading: false,
@@ -150,31 +161,15 @@ afterEach(() => {
   cleanup()
 })
 
-describe('MetaChatArea — B2 áudio diagnóstico', () => {
-  it('B2-01: hostname produção (gate falso) → microfone ausente', () => {
-    mockEnabled.mockReturnValue(false)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.queryByTestId('meta-audio-mic-button')).toBeNull()
-    expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
-    expect(screen.queryByTestId('meta-audio-b31-validation')).toBeNull()
-  })
-
-  it('B2-02: hostname DEV (gate verdadeiro) → microfone disponível', () => {
-    mockEnabled.mockReturnValue(true)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+describe('MetaAudioDiagnosticRecorder — B2 isolado', () => {
+  it('B2-02: microfone diagnóstico disponível', () => {
+    renderDiagnostic()
     expect(screen.getByTestId('meta-audio-mic-button')).toBeTruthy()
     expect(screen.getByTestId('meta-audio-send-blocked-notice').textContent).toMatch(/envio ainda indisponível/i)
   })
 
-  it('B2-03: gate falso (produção/host bloqueado) → microfone ausente', () => {
-    mockEnabled.mockReturnValue(false)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.queryByTestId('meta-audio-mic-button')).toBeNull()
-  })
-
   it('B2-04: clique no mic inicia gravação', async () => {
-    mockEnabled.mockReturnValue(true)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    renderDiagnostic()
     await act(async () => {
       fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
     })
@@ -182,98 +177,185 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
   })
 
   it('B2-05: durante gravação, Encerrar chama stopRecording', () => {
-    mockEnabled.mockReturnValue(true)
     recorder.isRecording = true
     recorder.recordingSeconds = 3
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByTestId('meta-audio-recording-bar')).toBeTruthy()
+    renderDiagnostic()
     fireEvent.click(screen.getByText('Encerrar'))
     expect(recorder.stopRecording).toHaveBeenCalledTimes(1)
   })
 
   it('B2-06: prévia aparece sem botão Enviar', () => {
-    mockEnabled.mockReturnValue(true)
     recorder.audioBlobPreview = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/webm' })
     recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
     recorder.audioMimeType = 'audio/webm'
     recorder.previewDurationSeconds = 2
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    renderDiagnostic()
     expect(screen.getByTestId('meta-audio-preview')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
   })
 
   it('B2-07: cancelar na barra de gravação chama cancelRecording', () => {
-    mockEnabled.mockReturnValue(true)
     recorder.isRecording = true
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    renderDiagnostic()
     fireEvent.click(screen.getByText('Cancelar'))
     expect(recorder.cancelRecording).toHaveBeenCalled()
   })
 
   it('B2-08: erro de permissão visível', () => {
-    mockEnabled.mockReturnValue(true)
     recorder.micError = 'permission_denied'
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+    renderDiagnostic()
     expect(screen.getByTestId('meta-audio-mic-error').textContent).toMatch(/negada/i)
   })
 
   it('B2-09: troca de conversa dispara cancel e clear da prévia', () => {
-    mockEnabled.mockReturnValue(true)
-    const { rerender } = render(
-      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
-    )
+    const { rerender } = renderDiagnostic(CONV_ID)
     recorder.cancelRecording.mockClear()
     recorder.clearPreview.mockClear()
-    rerender(
-      <MetaChatArea
-        companyId={COMPANY_ID}
-        conversationId={CONV_ID_B}
-        conversation={{ ...CONV_FULL, id: CONV_ID_B }}
-      />,
-    )
+    rerender(<MetaAudioDiagnosticRecorder conversationId={CONV_ID_B} disabled={false} />)
     expect(recorder.cancelRecording).toHaveBeenCalled()
     expect(recorder.clearPreview).toHaveBeenCalled()
   })
 
   it('B2-10: unmount não lança', () => {
-    mockEnabled.mockReturnValue(true)
-    const { unmount } = render(
-      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
-    )
+    const { unmount } = renderDiagnostic()
     expect(() => unmount()).not.toThrow()
   })
 
-  it('B2-11: envio de áudio impossível — sendMessage não é chamado pelo mic', async () => {
-    mockEnabled.mockReturnValue(true)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
+  it('B2-11: diagnóstico não chama sendMessage nem sendAudio', async () => {
+    renderDiagnostic()
     await act(async () => {
       fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
     })
     expect(mockSendMessage).not.toHaveBeenCalled()
-    expect(screen.getByTestId('meta-audio-send-blocked-notice')).toBeTruthy()
+    expect(mockSendAudio).not.toHaveBeenCalled()
   })
 
-  it('B2-12: compositor de texto permanece com flag ligada', () => {
-    mockEnabled.mockReturnValue(true)
+  it('B2-16: cancelar prévia chama clearPreview e não envia', () => {
+    recorder.audioBlobPreview = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/webm' })
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    recorder.previewDurationSeconds = 2
+    renderDiagnostic()
+    fireEvent.click(screen.getByLabelText('Cancelar áudio'))
+    expect(recorder.clearPreview).toHaveBeenCalled()
+    expect(mockSendAudio).not.toHaveBeenCalled()
+  })
+
+  it('B2-17: painel de diagnóstico visível e limite de 180s encerra gravação', () => {
+    recorder.isRecording = true
+    recorder.recordingSeconds = 180
+    renderDiagnostic()
+    expect(screen.getByTestId('meta-audio-diagnostic-panel').textContent).toMatch(/WebM/)
+    expect(recorder.stopRecording).toHaveBeenCalled()
+  })
+
+  it('B2-18: modo automático chama startRecording sem MIME explícito', async () => {
+    renderDiagnostic()
+    expect(screen.getByTestId('meta-audio-mode-auto')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
+    })
+    expect(recorder.startRecording).toHaveBeenCalledTimes(1)
+    expect(recorder.startRecording.mock.calls[0].length).toBe(0)
+  })
+
+  it('B2-19: MP4 suportado pode ser selecionado e passa MIME ao gravador', async () => {
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
+    })
+    renderDiagnostic()
+    const mp4 = screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement
+    expect(mp4.disabled).toBe(false)
+    fireEvent.click(mp4)
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
+    })
+    expect(recorder.startRecording).toHaveBeenCalledWith({
+      mimeType: expect.stringMatching(/^audio\/mp4/),
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('B2-20: MP4 não suportado não inicia gravação nesse modo', () => {
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime === 'audio/webm',
+    })
+    renderDiagnostic()
+    expect((screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByTestId('meta-audio-mp4-unsupported')).toBeTruthy()
+    vi.unstubAllGlobals()
+  })
+
+  it('B2-21: falha de inicialização e finalização são visíveis', () => {
+    recorder.recorderError = 'start_failed'
+    const { rerender } = renderDiagnostic()
+    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/iniciar/i)
+    recorder.recorderError = 'stop_failed'
+    rerender(<MetaAudioDiagnosticRecorder conversationId={CONV_ID} disabled={false} />)
+    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/encerrar/i)
+  })
+
+  it('B2-22: troca de modo cancela gravação anterior', () => {
+    vi.stubGlobal('MediaRecorder', {
+      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
+    })
+    renderDiagnostic()
+    recorder.cancelRecording.mockClear()
+    recorder.clearPreview.mockClear()
+    fireEvent.click(screen.getByTestId('meta-audio-mode-mp4'))
+    expect(recorder.cancelRecording).toHaveBeenCalled()
+    expect(recorder.clearPreview).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('B3.2B-01: Blob inválido é rejeitado pelo validador B3.1 no painel DEV', async () => {
+    recorder.audioBlobPreview = new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])], { type: 'audio/webm' })
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    recorder.audioMimeType = 'audio/webm'
+    recorder.previewDurationSeconds = 2
+    renderDiagnostic()
+    expect(screen.queryByRole('button', { name: /download/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/rejeitado/i)
+    })
+    expect(mockSendAudio).not.toHaveBeenCalled()
+  })
+
+  it('B3.2B-02: erro de leitura do Blob aparece só no diagnóstico', async () => {
+    const failing = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/mp4' })
+    Object.defineProperty(failing, 'arrayBuffer', {
+      value: () => Promise.reject(new Error('read fail')),
+    })
+    recorder.audioBlobPreview = failing
+    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
+    recorder.audioMimeType = 'audio/mp4'
+    recorder.previewDurationSeconds = 1
+    renderDiagnostic()
+    await waitFor(() => {
+      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/Erro ao ler o Blob/i)
+    })
+    expect(mockSendAudio).not.toHaveBeenCalled()
+  })
+})
+
+describe('MetaChatArea — compositor de texto após E.4', () => {
+  it('não monta o diagnóstico DEV no compositor', () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByLabelText('Mensagem')).toBeTruthy()
-    expect(screen.getByLabelText('Enviar')).toBeTruthy()
-    expect(screen.getByLabelText('Template')).toBeTruthy()
+    expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
+    expect(screen.getByTestId('meta-outbound-audio-root')).toBeTruthy()
   })
 
-  it('B2-13: envio de texto continua funcionando com diagnóstico ligado', async () => {
-    mockEnabled.mockReturnValue(true)
+  it('envio de texto permanece funcional', async () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'olá meta' } })
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Enviar'))
     })
     expect(mockSendMessage).toHaveBeenCalledTimes(1)
-    expect(mockSendMessage.mock.calls[0][0]).toBe(COMPANY_ID)
+    expect(mockSendAudio).not.toHaveBeenCalled()
   })
 
-  it('B2-14: envio de template continua funcionando com diagnóstico ligado', async () => {
-    mockEnabled.mockReturnValue(true)
+  it('envio de template permanece funcional', async () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     fireEvent.click(screen.getByLabelText('Template'))
     await act(async () => {
@@ -282,8 +364,7 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
     expect(mockSendTemplate).toHaveBeenCalledTimes(1)
   })
 
-  it('B2-15: player inbound de áudio permanece com diagnóstico ligado', () => {
-    mockEnabled.mockReturnValue(true)
+  it('player inbound de áudio permanece', () => {
     const inboundAudio: MetaChatMessage = {
       id: 'inb-aud-b2-001',
       conversation_id: CONV_ID,
@@ -312,135 +393,5 @@ describe('MetaChatArea — B2 áudio diagnóstico', () => {
     const audio = screen.getByTestId('msg-media-audio') as HTMLAudioElement
     expect(audio.src).toContain('inbound.ogg')
     expect(audio.controls).toBe(true)
-    expect(screen.getByTestId('meta-audio-mic-button')).toBeTruthy()
-  })
-
-  it('B2-16: cancelar prévia chama clearPreview e não envia', () => {
-    mockEnabled.mockReturnValue(true)
-    recorder.audioBlobPreview = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/webm' })
-    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
-    recorder.audioMimeType = 'audio/webm'
-    recorder.previewDurationSeconds = 2
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    fireEvent.click(screen.getByLabelText('Cancelar áudio'))
-    expect(recorder.clearPreview).toHaveBeenCalled()
-    expect(mockSendMessage).not.toHaveBeenCalled()
-  })
-
-  it('B2-17: painel de diagnóstico visível e limite de 180s encerra gravação', () => {
-    mockEnabled.mockReturnValue(true)
-    recorder.isRecording = true
-    recorder.recordingSeconds = 180
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByTestId('meta-audio-diagnostic-panel').textContent).toMatch(/WebM/)
-    expect(recorder.stopRecording).toHaveBeenCalled()
-  })
-
-  it('B2-18: modo automático chama startRecording sem MIME explícito', async () => {
-    mockEnabled.mockReturnValue(true)
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByTestId('meta-audio-mode-auto')).toBeTruthy()
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
-    })
-    expect(recorder.startRecording).toHaveBeenCalledTimes(1)
-    expect(recorder.startRecording.mock.calls[0].length).toBe(0)
-  })
-
-  it('B2-19: MP4 suportado pode ser selecionado e passa MIME ao gravador', async () => {
-    mockEnabled.mockReturnValue(true)
-    vi.stubGlobal('MediaRecorder', {
-      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
-    })
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    const mp4 = screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement
-    expect(mp4.disabled).toBe(false)
-    fireEvent.click(mp4)
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('meta-audio-mic-button'))
-    })
-    expect(recorder.startRecording).toHaveBeenCalledWith({
-      mimeType: expect.stringMatching(/^audio\/mp4/),
-    })
-    vi.unstubAllGlobals()
-  })
-
-  it('B2-20: MP4 não suportado não inicia gravação nesse modo', () => {
-    mockEnabled.mockReturnValue(true)
-    vi.stubGlobal('MediaRecorder', {
-      isTypeSupported: (mime: string) => mime === 'audio/webm',
-    })
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect((screen.getByTestId('meta-audio-mode-mp4') as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getByTestId('meta-audio-mp4-unsupported')).toBeTruthy()
-    vi.unstubAllGlobals()
-  })
-
-  it('B2-21: falha de inicialização e finalização são visíveis', () => {
-    mockEnabled.mockReturnValue(true)
-    recorder.recorderError = 'start_failed'
-    const { rerender } = render(
-      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
-    )
-    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/iniciar/i)
-    recorder.recorderError = 'stop_failed'
-    rerender(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.getByTestId('meta-audio-recorder-error').textContent).toMatch(/encerrar/i)
-  })
-
-  it('B2-22: troca de modo cancela gravação anterior', () => {
-    mockEnabled.mockReturnValue(true)
-    vi.stubGlobal('MediaRecorder', {
-      isTypeSupported: (mime: string) => mime.startsWith('audio/mp4') || mime === 'audio/webm',
-    })
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    recorder.cancelRecording.mockClear()
-    recorder.clearPreview.mockClear()
-    fireEvent.click(screen.getByTestId('meta-audio-mode-mp4'))
-    expect(recorder.cancelRecording).toHaveBeenCalled()
-    expect(recorder.clearPreview).toHaveBeenCalled()
-    vi.unstubAllGlobals()
-  })
-
-  it('B3.2B-01: Blob inválido é rejeitado pelo validador B3.1 no painel DEV', async () => {
-    mockEnabled.mockReturnValue(true)
-    recorder.audioBlobPreview = new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])], { type: 'audio/webm' })
-    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
-    recorder.audioMimeType = 'audio/webm'
-    recorder.previewDurationSeconds = 2
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.queryByRole('button', { name: /download/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
-    await waitFor(() => {
-      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/rejeitado/i)
-    })
-    expect(mockSendMessage).not.toHaveBeenCalled()
-  })
-
-  it('B3.2B-02: erro de leitura do Blob aparece só no diagnóstico', async () => {
-    mockEnabled.mockReturnValue(true)
-    const failing = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/mp4' })
-    Object.defineProperty(failing, 'arrayBuffer', {
-      value: () => Promise.reject(new Error('read fail')),
-    })
-    recorder.audioBlobPreview = failing
-    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
-    recorder.audioMimeType = 'audio/mp4'
-    recorder.previewDurationSeconds = 1
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    await waitFor(() => {
-      expect(screen.getByTestId('meta-audio-b31-validation').textContent).toMatch(/Erro ao ler o Blob/i)
-    })
-    expect(mockSendMessage).not.toHaveBeenCalled()
-  })
-
-  it('B3.2B-03: produção não exibe nem executa o validador B3.1', () => {
-    mockEnabled.mockReturnValue(false)
-    recorder.audioBlobPreview = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/webm' })
-    recorder.audioPreviewUrl = 'blob:http://localhost/fake-audio'
-    render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
-    expect(screen.queryByTestId('meta-audio-diagnostic-root')).toBeNull()
-    expect(screen.queryByTestId('meta-audio-b31-validation')).toBeNull()
-    expect(mockSendMessage).not.toHaveBeenCalled()
   })
 })
