@@ -4,6 +4,7 @@
 //
 // Dependências injetadas. Sem graphClient, Supabase, tokenCrypto, S3 ou HTTP.
 // enabled !== true → audio_send_not_enabled; zero claim, Graph, clock ou transições.
+// enabled é argumento explícito do handler após JWT/RBAC/tenant — não é env.
 // enabled true exige deadlineAtMs futuro + clock.nowMs. Sem deadline implícito.
 // Após claim: identidade completa. Orçamento insuficiente → markUnknown, sem Graph.
 // wamid conhecido → markGraphAccepted mesmo com deadline estourado.
@@ -248,7 +249,7 @@ async function persistUnknownForDeadline(deps, context) {
 
 /**
  * Orquestra claim + upload + send + persistência do wamid.
- * HTTP e autorização ficam fora. enabled deve ser true só em testes mockados.
+ * HTTP e autorização ficam fora. enabled true só após o handler autenticar.
  *
  * @param {{
  *   enabled?: boolean,

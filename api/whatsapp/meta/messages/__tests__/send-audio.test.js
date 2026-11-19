@@ -156,7 +156,6 @@ import handler, {
   GRAPH_NEED_BEFORE_CLAIM_MS,
   buildCreatedOutboundAudioContext,
   computeOutboundAudioDeadline,
-  isMetaOutboundAudioGraphEnabled,
 } from '../send-audio.js';
 import { META_SEND_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
 
@@ -494,9 +493,7 @@ function expectNoExternalSideEffects() {
     tables.includes('meta_messages') ? ['meta_messages'] : [],
   );
   expect(fetch).not.toHaveBeenCalled();
-  for (const [input] of orchestratorState.mock.mock.calls) {
-    expect(input).toEqual({ enabled: false });
-  }
+  expect(orchestratorState.mock).not.toHaveBeenCalled();
 }
 
 function graphAcceptedRow(overrides = {}) {
@@ -528,7 +525,7 @@ function expectNoGraphOrClaim() {
   expect(mockUploadMetaInboundAudio).not.toHaveBeenCalled();
   expect(orchestratorState.mock).not.toHaveBeenCalled();
   expect(persistStoreState.claim).not.toHaveBeenCalled();
-  expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
+  expect(HANDLER_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
 }
 
 function expectPersistSuccessHttp(res) {
@@ -549,12 +546,15 @@ function lastPersistInput() {
   return persistState.mock.mock.calls[0][0];
 }
 
-function expectOrchestratorDisabledOnly() {
+function expectOrchestratorEnabledGraph() {
   expect(orchestratorState.mock).toHaveBeenCalled();
-  expect(orchestratorState.mock.mock.calls.length).toBeGreaterThan(0);
   for (const [input] of orchestratorState.mock.mock.calls) {
-    expect(Object.keys(input)).toEqual(['enabled']);
-    expect(input).toEqual({ enabled: false });
+    expect(input.enabled).toBe(true);
+    expect(input.context).toEqual(expect.objectContaining({
+      companyId: expect.any(String),
+      operationId: expect.any(String),
+    }));
+    expect(input.deps).toEqual(expect.any(Object));
   }
 }
 
@@ -567,14 +567,13 @@ const HANDLER_SRC = readFileSync(
   'utf8',
 );
 
-function clearGraphGateEnv() {
-  delete process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED;
-  delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
-}
-
-function enableDevGraphGate() {
-  process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED = 'true';
-  process.env.VERCEL_PROJECT_PRODUCTION_URL = 'lovoo-dev.vercel.app';
+function expectCreatedGraphSuccess(res) {
+  expectPersistSuccessHttp(res);
+  expectOrchestratorEnabledGraph();
+  expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+  expect(mockUploadMedia).toHaveBeenCalledTimes(1);
+  expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+  expect(mockDecryptMetaToken).toHaveBeenCalledTimes(1);
 }
 
 function makeCredChain(data, error = null) {
@@ -587,7 +586,8 @@ function makeCredChain(data, error = null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  clearGraphGateEnv();
+  delete process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED;
+  delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   fsState.failRead = false;
   fsState.unlinkCalls = [];
   mockSvc.rpc = vi.fn();
@@ -890,8 +890,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(res._body).toEqual({ error: 'invalid_audio' });
   });
 
-  it('MP4/AAC-LC sintético válido chega a 501 audio_send_not_enabled', async () => {
-    const { insertChain } = setupNewSendLookups();
+  it('MP4/AAC-LC sintético válido envia Graph mockado e persiste', async () => {
+    const { insertChain } = setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq({
       file: {
@@ -901,12 +901,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
         buffer: buildAudioMp4(true),
       },
     }), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
+    expectCreatedGraphSuccess(res);
     expect(mockSvc.auth.getUser).toHaveBeenCalledTimes(1);
     expect(mockValidateMetaCaller).toHaveBeenCalledTimes(1);
     expect(mockSvc.auth.getUser.mock.invocationCallOrder[0])
@@ -916,19 +911,13 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(JSON.stringify(res._body)).not.toContain(FAKE_PHONE_NUM_ID);
     expect(insertChain.insert.mock.calls[0][0].audio_sha256).toBe(audioSha256());
     expect(insertChain.insert.mock.calls[0][0].company_id).toBe(FAKE_COMPANY_ID);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
     const tables = mockSvc.from.mock.calls.map(([table]) => table);
-    expect(tables).toEqual([
-      'meta_whatsapp_instances',
-      'meta_conversations',
-      'meta_outbound_audio_operations',
-      'meta_messages',
-      'meta_outbound_audio_operations',
-    ]);
+    expect(tables[0]).toBe('meta_whatsapp_instances');
+    expect(tables[1]).toBe('meta_conversations');
+    expect(tables).toContain('meta_whatsapp_credentials');
   });
 
-  it('nenhum teste chama Graph, S3 ou INSERT — fonte sem primitivas de envio', () => {
+  it('fonte HTTP não usa env, host ou 501 de gate', () => {
     const executable = HANDLER_SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
@@ -937,9 +926,10 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(executable).not.toContain('markFailedBeforeClaim');
     expect(executable).not.toContain('awsUpload');
     expect(executable).not.toContain('randomUUID');
-    expect(executable).not.toContain('enabled: true');
+    expect(executable).toContain('enabled: true');
     expect(executable).not.toContain('req.headers.host');
-    expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
+    expect(HANDLER_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+    expect(HANDLER_SRC).not.toContain("error: 'audio_send_not_enabled'");
     expect(HANDLER_SRC).toContain('orchestrateOutboundAudioSend');
     expect(HANDLER_SRC).toContain('insertCreated');
     expect(HANDLER_SRC).toContain('selectByCompanyOperation');
@@ -953,17 +943,16 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(HANDLER_SRC).toContain("createHash('sha256')");
     expect(HANDLER_SRC).toContain('parseOperationId');
     expect(HANDLER_SRC).toContain('const operationId = parsedOperationId.operationId');
-    expect(HANDLER_SRC).toContain("error: 'audio_send_not_enabled'");
     expect(HANDLER_SRC).toContain('maxFields: 8');
     expect(HANDLER_SRC).toContain('maxFieldsSize: 4096');
     expect(HANDLER_SRC).toContain('auth.getUser');
   });
 
-  it('arquivos temporários são removidos no sucesso 501', async () => {
-    setupNewSendLookups();
+  it('arquivos temporários são removidos após envio persistido', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
+    expectCreatedGraphSuccess(res);
     expect(fsState.unlinkCalls.length).toBeGreaterThan(0);
     for (const filepath of fsState.unlinkCalls) {
       expect(existsSync(filepath)).toBe(false);
@@ -1072,67 +1061,46 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expectNoExternalSideEffects();
   });
 
-  it('payload válido com operation_id v4 permanece HTTP 501 sem Graph, S3 ou escrita', async () => {
-    const { insertChain } = setupNewSendLookups();
+  it('payload válido com operation_id v4 envia Graph uma vez e persiste', async () => {
+    const { insertChain } = setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
+    expectCreatedGraphSuccess(res);
     expect(mockValidateMetaCaller).toHaveBeenCalledTimes(1);
-    expectNoExternalSideEffects();
-    const tables = mockSvc.from.mock.calls.map(([table]) => table);
-    expect(tables).toEqual([
-      'meta_whatsapp_instances',
-      'meta_conversations',
-      'meta_outbound_audio_operations',
-      'meta_messages',
-      'meta_outbound_audio_operations',
-    ]);
     expect(insertChain.insert).toHaveBeenCalledTimes(1);
-    expectOrchestratorDisabledOnly();
-    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
+    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
   });
 
-  it('UUID v4 em maiúsculas é aceito, canonicalizado e permanece HTTP 501', async () => {
-    const { insertChain } = setupNewSendLookups();
+  it('UUID v4 em maiúsculas é aceito, canonicalizado e reutilizado no Graph', async () => {
+    const canonical = 'a0b1c2d3-e4f5-4a67-8b90-123456789abc';
+    persistStoreState.claim.mockResolvedValue({
+      ok: true,
+      row: operationRow({
+        operation_id: canonical,
+        status: 'graph_in_flight',
+        graph_started_at: GRAPH_STARTED_AT,
+      }),
+    });
+    const { insertChain } = setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq({
       fields: defaultFields({
         operation_id: 'A0B1C2D3-E4F5-4A67-8B90-123456789ABC',
       }),
     }), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
-    expect(insertChain.insert.mock.calls[0][0].operation_id)
-      .toBe('a0b1c2d3-e4f5-4a67-8b90-123456789abc');
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
+    expect(insertChain.insert.mock.calls[0][0].operation_id).toBe(canonical);
+    expect(orchestratorState.mock.mock.calls[0][0].context.operationId).toBe(canonical);
   });
 
-  it('SELECT existente created com identidade igual retorna 501 sem INSERT extra', async () => {
-    setupGuardOk();
-    const selectChain = makeOpSelectChain(operationRow());
+  it('SELECT existente created com identidade igual recupera sem INSERT extra', async () => {
     const insertChain = makeOpInsertChain(operationRow());
-    mockSvc.from = vi.fn()
-      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
-      .mockReturnValueOnce(selectChain)
-      .mockReturnValueOnce(makeWindowChain());
+    setupExistingCreatedGraphLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
+    expectCreatedGraphSuccess(res);
     expect(insertChain.insert).not.toHaveBeenCalled();
-    expect(selectChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
-    expect(selectChain.eq).toHaveBeenCalledWith('operation_id', FAKE_OPERATION_ID);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
   });
 
   it('mesmo operation_id e áudio diferente retorna 409 operation_conflict', async () => {
@@ -1221,7 +1189,11 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expect(persistState.mock).toHaveBeenCalledTimes(1);
   });
 
-  it('INSERT 23505 com SELECT posterior created retorna 501', async () => {
+  it('INSERT 23505 com SELECT posterior created recupera a mesma operação', async () => {
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+    mockSendAudioMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+    setupAwsRpcOk();
     setupGuardOk();
     const insertChain = makeOpInsertChain(null, { code: '23505', message: 'duplicate key' });
     const racedSelect = makeOpSelectChain(operationRow());
@@ -1231,14 +1203,14 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
       .mockReturnValueOnce(makeOpSelectChain(null))
       .mockReturnValueOnce(makeWindowChain())
       .mockReturnValueOnce(insertChain)
-      .mockReturnValueOnce(racedSelect);
+      .mockReturnValueOnce(racedSelect)
+      .mockReturnValueOnce(makeCredChain({ access_token_enc: 'v1:enc-fixture' }))
+      .mockReturnValueOnce(makeOpSelectChain(graphAcceptedRow()));
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
+    expectCreatedGraphSuccess(res);
     expect(insertChain.insert).toHaveBeenCalledTimes(1);
     expect(racedSelect.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
   });
 
   it('INSERT 23505 sem linha recuperável retorna 500', async () => {
@@ -1269,6 +1241,18 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
   });
 
   it('mesmo operation_id em outra empresa filtra pelo company_id autorizado', async () => {
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+    mockSendAudioMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+    persistStoreState.claim.mockResolvedValue({
+      ok: true,
+      row: operationRow({
+        company_id: OTHER_COMPANY_ID,
+        status: 'graph_in_flight',
+        graph_started_at: GRAPH_STARTED_AT,
+      }),
+    });
+    setupAwsRpcOk();
     setupGuardOk(OTHER_COMPANY_ID);
     const selectChain = makeOpSelectChain(null);
     const insertChain = makeOpInsertChain(operationRow({ company_id: OTHER_COMPANY_ID }));
@@ -1277,17 +1261,18 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
       .mockReturnValueOnce(makeConvChain({ ...FAKE_CONVERSATION, company_id: OTHER_COMPANY_ID }))
       .mockReturnValueOnce(selectChain)
       .mockReturnValueOnce(makeWindowChain())
-      .mockReturnValueOnce(insertChain);
+      .mockReturnValueOnce(insertChain)
+      .mockReturnValueOnce(makeCredChain({ access_token_enc: 'v1:enc-fixture' }))
+      .mockReturnValueOnce(makeOpSelectChain(graphAcceptedRow({ company_id: OTHER_COMPANY_ID })));
     const res = makeRes();
     await handler(makeMultipartReq({
       fields: defaultFields({ company_id: OTHER_COMPANY_ID }),
     }), res);
-    expect(res._status).toBe(501);
+    expectPersistSuccessHttp(res);
     expect(selectChain.eq).toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
     expect(selectChain.eq).not.toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
     expect(insertChain.insert.mock.calls[0][0].company_id).toBe(OTHER_COMPANY_ID);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
+    expect(orchestratorState.mock.mock.calls[0][0].context.companyId).toBe(OTHER_COMPANY_ID);
   });
 
   it('completed com identidade divergente retorna 409 sem orquestrador', async () => {
@@ -1307,8 +1292,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     expectNoExternalSideEffects();
   });
 
-  it('query, header e campo multipart não ativam Graph', async () => {
-    setupNewSendLookups();
+  it('query, header e campo multipart não substituem a autorização', async () => {
+    setupGraphCreatedLookups();
     const req = makeMultipartReq({
       fields: defaultFields({ enabled: 'true' }),
       headers: { 'x-meta-outbound-audio-graph-enabled': 'true' },
@@ -1316,14 +1301,9 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     req.url = '/api/whatsapp/meta/messages/send-audio?enabled=true';
     const res = makeRes();
     await handler(req, res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
+    expect(orchestratorState.mock.mock.calls[0][0].enabled).toBe(true);
+    expect(HANDLER_SRC).not.toContain("fieldValue(fields, 'enabled')");
   });
 
   it('JWT inválido não chama o orquestrador', async () => {
@@ -1452,43 +1432,43 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
 
   it('deadline absoluto é startedAtMs + 57000 e não depende do tempo das validações', async () => {
     const origin = Date.now();
-    let ticks = 0;
-    vi.spyOn(Date, 'now').mockImplementation(() => origin + ticks++ * 10_000);
-    setupNewSendLookups();
+    vi.spyOn(Date, 'now').mockReturnValue(origin);
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expect(ticks).toBeGreaterThan(1);
+    expectCreatedGraphSuccess(res);
+    expect(orchestratorState.mock.mock.calls[0][0].deadlineAtMs).toBe(origin + 57_000);
     expect(computeOutboundAudioDeadline(origin)).toBe(origin + 57_000);
-    expect(computeOutboundAudioDeadline(origin)).not.toBe(origin + ticks * 10_000);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
   });
 
   it('duas requisições possuem tempos independentes', async () => {
     const t1 = Date.now();
     const t2 = t1 + 12_345;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(t1);
-    setupNewSendLookups();
+    setupGraphCreatedLookups();
     const res1 = makeRes();
     await handler(makeMultipartReq(), res1);
-    expect(res1._status).toBe(501);
+    expectCreatedGraphSuccess(res1);
+    expect(orchestratorState.mock.mock.calls[0][0].deadlineAtMs).toBe(t1 + 57_000);
+    orchestratorState.mock.mockClear();
+    persistStoreState.claim.mockClear();
+    mockUploadMedia.mockClear();
+    mockSendAudioMessage.mockClear();
+    mockDecryptMetaToken.mockClear();
+    persistState.mock.mockClear();
     nowSpy.mockReturnValue(t2);
-    setupNewSendLookups();
+    setupGraphCreatedLookups();
     const res2 = makeRes();
     await handler(makeMultipartReq(), res2);
-    expect(res2._status).toBe(501);
-    expect(computeOutboundAudioDeadline(t1)).toBe(t1 + 57_000);
-    expect(computeOutboundAudioDeadline(t2)).toBe(t2 + 57_000);
+    expectCreatedGraphSuccess(res2);
+    expect(orchestratorState.mock.mock.calls[0][0].deadlineAtMs).toBe(t2 + 57_000);
     expect(computeOutboundAudioDeadline(t1)).not.toBe(computeOutboundAudioDeadline(t2));
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
   });
 
   it('cliente não consegue alterar deadline por query, header ou multipart', async () => {
     const origin = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(origin);
-    setupNewSendLookups();
+    setupGraphCreatedLookups();
     const req = makeMultipartReq({
       fields: defaultFields({
         deadlineAtMs: '1',
@@ -1504,15 +1484,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
     req.url = '/api/whatsapp/meta/messages/send-audio?deadlineAtMs=1&startedAtMs=1';
     const res = makeRes();
     await handler(req, res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
-    expect(computeOutboundAudioDeadline(origin)).toBe(origin + 57_000);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
+    expect(orchestratorState.mock.mock.calls[0][0].deadlineAtMs).toBe(origin + 57_000);
     const executable = HANDLER_SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
@@ -1523,48 +1496,35 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
     expect(executable).not.toContain('req.headers.host');
   });
 
-  it('gate permanece false e orquestrador recebe exatamente { enabled: false }', async () => {
-    setupNewSendLookups();
+  it('handler passa enabled true após JWT/RBAC e não lê env de Graph', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expectOrchestratorDisabledOnly();
-    expect(orchestratorState.mock.mock.calls).toEqual([[{ enabled: false }]]);
-    expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
+    expect(orchestratorState.mock.mock.calls[0][0].enabled).toBe(true);
+    expect(HANDLER_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+    expect(HANDLER_SRC).not.toContain('process.env');
   });
 
-  it('zero claim, Graph, transições, credenciais ou decrypt no caminho created', async () => {
-    setupNewSendLookups();
+  it('credencial ausente bloqueia Graph após INSERT created', async () => {
+    setupNewSendLookups({ extraChains: [makeCredChain(null)] });
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'credential_unavailable' });
     expect(mockUploadMedia).not.toHaveBeenCalled();
     expect(mockSendAudioMessage).not.toHaveBeenCalled();
-    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
-    const tables = mockSvc.from.mock.calls.map(([table]) => table);
-    expect(tables).not.toContain('meta_whatsapp_credentials');
-    expectBodyHasNoSecrets(res);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
-    const executable = HANDLER_SRC
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/.*$/gm, '');
     expect(persistStoreState.claim).not.toHaveBeenCalled();
-    expect(persistStoreState.markUnknown).not.toHaveBeenCalled();
-    expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
+    expectBodyHasNoSecrets(res);
+    const tables = mockSvc.from.mock.calls.map(([table]) => table);
+    expect(tables).toContain('meta_whatsapp_credentials');
   });
 
-  it('HTTP created permanece 501 e completed permanece 200', async () => {
-    setupNewSendLookups();
+  it('HTTP created persiste 200 e completed permanece 200', async () => {
+    setupGraphCreatedLookups();
     const createdRes = makeRes();
     await handler(makeMultipartReq(), createdRes);
-    expect(createdRes._status).toBe(501);
-    expect(createdRes._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
+    expectCreatedGraphSuccess(createdRes);
     expectBodyHasNoSecrets(createdRes);
 
     setupGuardOk();
@@ -1637,11 +1597,11 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
     expectOrchestratorNotCalled();
   });
 
-  it('cleanup dos arquivos temporários permanece no created 501', async () => {
-    setupNewSendLookups();
+  it('cleanup dos arquivos temporários permanece no created persistido', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
+    expectCreatedGraphSuccess(res);
     expect(fsState.unlinkCalls.length).toBeGreaterThan(0);
     for (const filepath of fsState.unlinkCalls) {
       expect(existsSync(filepath)).toBe(false);
@@ -1665,25 +1625,16 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A dea
   });
 });
 
-const NOT_ENABLED_HTTP_BODY = {
-  ok: false,
-  error: 'audio_send_not_enabled',
-  validation: 'passed',
-};
-
 describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A.1 HTTP', () => {
-  it('instância connected com phone_number_id válido permanece 501', async () => {
-    setupNewSendLookups();
+  it('instância connected com phone_number_id válido envia Graph mockado', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual(NOT_ENABLED_HTTP_BODY);
-    expect(orchestratorState.mock.mock.calls).toEqual([[{ enabled: false }]]);
+    expectCreatedGraphSuccess(res);
     expectBodyHasNoSecrets(res);
-    expectNoExternalSideEffects();
   });
 
-  it('instância connected sem phone_number_id permanece 501', async () => {
+  it('instância connected sem phone_number_id retorna 500 sem Graph', async () => {
     const { insertChain } = setupNewSendLookups({
       instance: { ...FAKE_INSTANCE, phone_number_id: null },
     });
@@ -1691,47 +1642,45 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A.1 H
     await handler(makeMultipartReq({
       fields: defaultFields({ phone_number_id: '999999999999' }),
     }), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual(NOT_ENABLED_HTTP_BODY);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
     expect(insertChain.insert.mock.calls[0][0]).not.toHaveProperty('phone_number_id');
     expect(JSON.stringify(res._body)).not.toContain('999999999999');
     expect(JSON.stringify(res._body)).not.toContain(FAKE_PHONE_NUM_ID);
-    expect(orchestratorState.mock.mock.calls).toEqual([[{ enabled: false }]]);
     expect(mockUploadMedia).not.toHaveBeenCalled();
     expect(mockSendAudioMessage).not.toHaveBeenCalled();
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     const tables = mockSvc.from.mock.calls.map(([table]) => table);
     expect(tables).not.toContain('meta_whatsapp_credentials');
     expectBodyHasNoSecrets(res);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
+    expectOrchestratorNotCalled();
     expect(fsState.unlinkCalls.length).toBeGreaterThan(0);
     for (const filepath of fsState.unlinkCalls) {
       expect(existsSync(filepath)).toBe(false);
     }
   });
 
-  it('instância connected com phone_number_id vazio permanece 501', async () => {
+  it('instância connected com phone_number_id vazio retorna 500 sem Graph', async () => {
     setupNewSendLookups({
       instance: { ...FAKE_INSTANCE, phone_number_id: '' },
     });
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual(NOT_ENABLED_HTTP_BODY);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
     expect(res._body).not.toHaveProperty('phoneNumberId');
-    expect(orchestratorState.mock.mock.calls).toEqual([[{ enabled: false }]]);
-    expectNoExternalSideEffects();
+    expectOrchestratorNotCalled();
   });
 
-  it('contexto incompleto não vira 500: fonte não converte sendContext null em internal_error', () => {
-    const fnStart = HANDLER_SRC.indexOf('async function respondCreatedNotEnabled');
+  it('sendContext nulo é recusado antes do Graph', () => {
+    const fnStart = HANDLER_SRC.indexOf('async function respondCreatedGraphSend');
     const fnEnd = HANDLER_SRC.indexOf('async function gateCustomerServiceWindow', fnStart);
     const fnBody = HANDLER_SRC.slice(fnStart, fnEnd);
-    expect(fnBody).not.toMatch(/if\s*\(\s*!_?sendContext\s*\)/);
-    expect(fnBody).toContain('enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+    expect(fnStart).toBeGreaterThan(0);
+    expect(fnBody).toContain('!svc || !instance || !auth || !sendContext');
+    expect(fnBody).toContain('enabled: true');
     expect(HANDLER_SRC).toContain('buildCreatedOutboundAudioContext');
-    expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
+    expect(HANDLER_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
   });
 
   it('completed idêntico permanece 200 e conflitos permanecem 409', async () => {
@@ -1796,15 +1745,12 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-A.1 H
 
   it('deadline continua baseado no início da requisição', async () => {
     const origin = Date.now();
-    let ticks = 0;
-    vi.spyOn(Date, 'now').mockImplementation(() => origin + ticks++ * 10_000);
-    setupNewSendLookups({
-      instance: { ...FAKE_INSTANCE, phone_number_id: null },
-    });
+    vi.spyOn(Date, 'now').mockReturnValue(origin);
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(res._status).toBe(501);
-    expect(computeOutboundAudioDeadline(origin)).toBe(origin + 57_000);
+    expectCreatedGraphSuccess(res);
+    expect(orchestratorState.mock.mock.calls[0][0].deadlineAtMs).toBe(origin + 57_000);
     expect(HANDLER_SRC).toContain('computeOutboundAudioDeadline(startedAtMs)');
   });
 
@@ -2017,17 +1963,10 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expectNoGraphOrClaim();
   });
 
-  it('created com janela aberta permanece 501', async () => {
-    setupNewSendLookups();
+  it('created com janela aberta envia Graph mockado', async () => {
+    setupGraphCreatedLookups();
     const res = await runGraphAccepted();
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual({
-      ok: false,
-      error: 'audio_send_not_enabled',
-      validation: 'passed',
-    });
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
   });
 
   it('created com janela fechada permanece 409', async () => {
@@ -2519,13 +2458,13 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
     expect(orchestratorState.mock).not.toHaveBeenCalled();
   });
 
-  it('gate literal false preservado e Graph permanece fail-closed por default', async () => {
+  it('graph_accepted resume B.6 sem Graph mesmo sem env de gate', async () => {
     setupGraphAcceptedLookups();
     setupAwsRpcOk();
     await runGraphAccepted();
-    expect(HANDLER_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
-    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
+    expect(HANDLER_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
     expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
   });
 
   it('fluxo Uazapi permanece intacto na fonte HTTP Meta', () => {
@@ -2590,8 +2529,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
   });
 });
 
-function setupGraphEnabledCreatedLookups(overrides = {}) {
-  enableDevGraphGate();
+function setupGraphCreatedLookups(overrides = {}) {
   mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
   mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
   mockSendAudioMessage.mockResolvedValue({ messageId: FAKE_WAMID });
@@ -2604,58 +2542,53 @@ function setupGraphEnabledCreatedLookups(overrides = {}) {
   return setupNewSendLookups({ ...overrides, extraChains });
 }
 
-describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () => {
-  it('gate default off → 501 sem Graph', async () => {
-    setupNewSendLookups();
-    const res = makeRes();
-    await handler(makeMultipartReq(), res);
-    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
-    expect(res._status).toBe(501);
-    expect(res._body).toEqual(NOT_ENABLED_HTTP_BODY);
-    expectOrchestratorDisabledOnly();
-    expectNoExternalSideEffects();
-  });
+function setupExistingCreatedGraphLookups(rowOverrides = {}) {
+  mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+  mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+  mockSendAudioMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+  setupAwsRpcOk();
+  setupGuardOk();
+  mockSvc.from = vi.fn()
+    .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+    .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+    .mockReturnValueOnce(makeOpSelectChain(operationRow(rowOverrides)))
+    .mockReturnValueOnce(makeWindowChain())
+    .mockReturnValueOnce(makeCredChain({ access_token_enc: 'v1:enc-fixture' }))
+    .mockReturnValueOnce(makeOpSelectChain(graphAcceptedRow()));
+}
 
-  it('gate DEV controlado percorre claim + Graph + B.6', async () => {
-    setupGraphEnabledCreatedLookups();
+describe('POST /api/whatsapp/meta/messages/send-audio — Graph após validações reais', () => {
+  it('created válido percorre claim + Graph + B.6 sem env', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(isMetaOutboundAudioGraphEnabled()).toBe(true);
-    expectPersistSuccessHttp(res);
-    expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
-    expect(mockUploadMedia).toHaveBeenCalledTimes(1);
-    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expectCreatedGraphSuccess(res);
     expect(persistStoreState.markGraphAccepted).toHaveBeenCalledTimes(1);
-    expect(persistState.mock).toHaveBeenCalledTimes(1);
-    expect(mockDecryptMetaToken).toHaveBeenCalledTimes(1);
     expect(mockSendAudioMessage.mock.calls[0][4]).toEqual({ timeoutMs: 10_000 });
     expect(JSON.stringify(res._body)).not.toContain('plain-token-fixture');
     expect(JSON.stringify(res._body)).not.toContain('v1:enc-fixture');
   });
 
-  it('produção fail closed mesmo com flag true', async () => {
-    process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED = 'true';
+  it('env antiga e host de produção não bloqueiam nem autorizam o Graph', async () => {
+    process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED = 'false';
     process.env.VERCEL_PROJECT_PRODUCTION_URL = 'app.lovoocrm.com';
-    setupNewSendLookups();
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
-    expect(isMetaOutboundAudioGraphEnabled()).toBe(false);
-    expect(res._status).toBe(501);
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
   });
 
-  it('Host header não liga o Graph', async () => {
-    setupNewSendLookups();
+  it('Host header não substitui JWT nem credencial', async () => {
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq({
       headers: { host: 'lovoo-dev.vercel.app' },
     }), res);
-    expect(res._status).toBe(501);
-    expectNoExternalSideEffects();
+    expectCreatedGraphSuccess(res);
+    expect(HANDLER_SRC).not.toContain('req.headers.host');
   });
 
   it('JWT/RBAC/tenant antes de credenciais e Graph', async () => {
-    enableDevGraphGate();
     setupGetUserFail();
     const unauthorized = makeRes();
     await handler(makeMultipartReq(), unauthorized);
@@ -2674,7 +2607,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('created com janela fechada não chama Graph', async () => {
-    enableDevGraphGate();
     setupNewSendLookups({
       window: makeWindowChain({
         data: { provider_timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
@@ -2690,7 +2622,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('claim CAS vencedor chama Graph uma vez', async () => {
-    setupGraphEnabledCreatedLookups();
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
     expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
@@ -2700,7 +2632,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('claim perdedor não chama Graph', async () => {
-    enableDevGraphGate();
     mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
     persistStoreState.claim.mockResolvedValue({ ok: false, reason: 'not_claimed' });
     setupNewSendLookups({
@@ -2717,7 +2648,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('upload falha após claim → unknown sem retry', async () => {
-    enableDevGraphGate();
     mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
     mockUploadMedia.mockRejectedValue(Object.assign(new Error('upload timeout'), {
       code: 'upload_media_timeout',
@@ -2737,7 +2667,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('send timeout → unknown sem retry', async () => {
-    enableDevGraphGate();
     mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
     mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
     mockSendAudioMessage.mockRejectedValue(Object.assign(new Error('send timeout'), {
@@ -2756,7 +2685,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('wamid válido → markGraphAccepted', async () => {
-    setupGraphEnabledCreatedLookups();
+    setupGraphCreatedLookups();
     await handler(makeMultipartReq(), makeRes());
     expect(persistStoreState.markGraphAccepted).toHaveBeenCalledWith(mockSvc, {
       companyId: FAKE_COMPANY_ID,
@@ -2766,7 +2695,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('falha de persistência B.6 não reenvia Graph', async () => {
-    setupGraphEnabledCreatedLookups();
+    setupGraphCreatedLookups();
     persistState.mock.mockResolvedValue({ ok: false, error: 's3_confirmation_failed' });
     const res = makeRes();
     await handler(makeMultipartReq(), res);
@@ -2778,7 +2707,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('completed → 200 sem Graph', async () => {
-    enableDevGraphGate();
     setupGuardOk();
     mockSvc.from = vi.fn()
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
@@ -2793,7 +2721,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('graph_accepted → somente B.6', async () => {
-    enableDevGraphGate();
     setupGraphAcceptedLookups();
     setupAwsRpcOk();
     const res = makeRes();
@@ -2806,7 +2733,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('unknown → 409 sem Graph', async () => {
-    enableDevGraphGate();
     setupGuardOk();
     mockSvc.from = vi.fn()
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
@@ -2821,7 +2747,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('identidade divergente → 409', async () => {
-    enableDevGraphGate();
     setupGuardOk();
     mockSvc.from = vi.fn()
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
@@ -2838,7 +2763,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('23505 → releitura segura sem Graph se completed', async () => {
-    enableDevGraphGate();
     setupNewSendLookups({
       insertError: { code: '23505', message: 'duplicate' },
       extraChains: [makeOpSelectChain(operationRow({ status: 'completed' }))],
@@ -2855,7 +2779,6 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
     const origin = 1_700_000_000_000;
     vi.spyOn(Date, 'now').mockImplementation(() => origin + 40_000);
     Date.now.mockReturnValueOnce(origin);
-    enableDevGraphGate();
     setupNewSendLookups({
       window: makeWindowChain({
         data: { provider_timestamp: new Date(origin - 60 * 60 * 1000).toISOString() },
@@ -2872,7 +2795,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — E.3-A Graph DEV', () =
   });
 
   it('nenhum token ou segredo no HTTP', async () => {
-    setupGraphEnabledCreatedLookups();
+    setupGraphCreatedLookups();
     const res = makeRes();
     await handler(makeMultipartReq(), res);
     expectPersistSuccessHttp(res);

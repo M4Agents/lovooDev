@@ -551,7 +551,7 @@ describe('segurança e pureza', () => {
     expect(JSON.stringify(result)).not.toContain('EAA');
   });
 
-  it('fonte sem Graph, env, HTTP, SQL, DELETE S3, Date.now; gate HTTP continua false', () => {
+  it('fonte sem Graph, env, HTTP, SQL, DELETE S3, Date.now; HTTP sem env de gate', () => {
     const executable = SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
@@ -568,7 +568,7 @@ describe('segurança e pureza', () => {
     expect(executable).not.toContain('upsert');
     expect(executable).not.toContain('onConflict');
     expect(executable).not.toContain('@aws-sdk');
-    expect(SEND_AUDIO_SRC).toMatch(/const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false/);
+    expect(SEND_AUDIO_SRC).not.toMatch(/META_OUTBOUND_AUDIO_GRAPH_ENABLED/);
     expect(SEND_AUDIO_SRC).toContain('completeMetaOutboundAudioPersistence');
     expect(SEND_AUDIO_SRC).toContain('claimCreatedToGraphInFlight');
   });

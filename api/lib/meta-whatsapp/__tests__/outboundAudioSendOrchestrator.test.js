@@ -685,18 +685,17 @@ describe('invariantes', () => {
     expect(deps.markUnknown).toHaveBeenCalledTimes(1);
   });
 
-  it('HTTP chama o orquestrador somente com gate literal false', () => {
+  it('HTTP chama o orquestrador com enabled true após auth, sem env de gate', () => {
     const executable = SEND_AUDIO_SRC
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '');
     expect(SEND_AUDIO_SRC).toContain('orchestrateOutboundAudioSend');
     expect(SEND_AUDIO_SRC).toContain('outboundAudioSendOrchestrator');
-    expect(SEND_AUDIO_SRC).toContain('const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false');
-    expect(executable).toContain('enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED');
-    expect(executable).not.toContain('enabled: true');
+    expect(SEND_AUDIO_SRC).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+    expect(executable).toContain('enabled: true');
     expect(executable).toContain('claimCreatedToGraphInFlight');
     expect(executable).toContain('decryptMetaToken');
-    expect(SEND_AUDIO_SRC).toContain("error: 'audio_send_not_enabled'");
+    expect(SEND_AUDIO_SRC).not.toContain("error: 'audio_send_not_enabled'");
     expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -1,13 +1,10 @@
 // =============================================================================
 // POST /api/whatsapp/meta/messages/send-audio
 //
-// E.3-A — Graph outbound audio controlado no DEV + resume B.6.
-// Gate literal META_OUTBOUND_AUDIO_GRAPH_ENABLED = false (nunca true).
-// Graph só abre se isMetaOutboundAudioGraphEnabled(): flag 'true' E host
-// VERCEL_PROJECT_PRODUCTION_URL === lovoo-dev.vercel.app. Fail closed.
-// Produção LovooCRM não casa o host. Sem Host header. Sem frontend.
-// created + gate off → 501. created + gate DEV → claim CAS → Graph →
-// markGraphAccepted → B.6 se restar >= 30s, senão 503 recuperação local.
+// Graph outbound audio após validações reais (JWT, company_users, instância,
+// conversa, janela 24h, credencial backend). Sem variável de ambiente, host
+// ou empresa como gate. created → claim CAS → Graph uma vez → markGraphAccepted
+// → B.6 se restar >= 30s, senão 503 recuperação local.
 // graph_accepted: S3 → biblioteca → tracking → chat → completed (sem Graph).
 //
 // Contrato:
@@ -35,8 +32,7 @@
 //  12.  Janela 24h somente para created/novo envio; completed e graph_accepted pulam
 //  13.  INSERT created (sem upsert). 23505 → re-SELECT.
 //  14.  graph_accepted → persistência local B.6 (não passa pelo send orchestrator)
-//  15.  created + gate off → orquestrador { enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED }
-//       created + gate DEV → credencial backend → claim CAS → Graph uma vez → B.6
+//  15.  created → credencial backend → claim CAS → Graph uma vez → B.6
 //       completed idêntico / graph_accepted persistido → HTTP 200 { ok: true }
 //
 // Limpeza: unlink de todos os filepaths do formidable em qualquer saída.
@@ -135,16 +131,6 @@ function resolveSingleFile(files) {
   return { file: value };
 }
 
-const NOT_ENABLED_BODY = Object.freeze({
-  ok: false,
-  error: 'audio_send_not_enabled',
-  validation: 'passed',
-});
-
-// Gate HTTP literal. Nunca true. Graph só abre via isMetaOutboundAudioGraphEnabled().
-const META_OUTBOUND_AUDIO_GRAPH_ENABLED = false;
-const LOVOO_DEV_PRODUCTION_HOST = 'lovoo-dev.vercel.app';
-const GRAPH_FLAG_ON = 'true';
 const PHONE_NUMBER_ID_RE = /^[0-9]+$/;
 
 // Timeouts alinhados ao orquestrador D.3. Não cabem Graph default + B.6 30s
@@ -157,50 +143,6 @@ export const GRAPH_NEED_BEFORE_CLAIM_MS = GRAPH_CLAIM_RESERVE_MS
   + GRAPH_UPLOAD_TIMEOUT_MS
   + GRAPH_SEND_TIMEOUT_MS
   + GRAPH_PERSIST_RESERVE_MS;
-
-function runtimeEnv() {
-  const runtime = globalThis['process'];
-  if (runtime == null || typeof runtime !== 'object') return {};
-  const env = runtime['env'];
-  return env && typeof env === 'object' ? env : {};
-}
-
-function readPlatformProductionHost(env) {
-  const raw = env?.VERCEL_PROJECT_PRODUCTION_URL;
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim().toLowerCase();
-  if (trimmed.length === 0) return null;
-  if (trimmed.includes('://')) {
-    try {
-      const parsed = new URL(trimmed);
-      if (parsed.protocol !== 'https:') return null;
-      if (parsed.username || parsed.password || parsed.port) return null;
-      if (parsed.pathname !== '/' && parsed.pathname !== '') return null;
-      return parsed.hostname;
-    } catch {
-      return null;
-    }
-  }
-  if (
-    trimmed.includes('/')
-    || trimmed.includes('\\')
-    || trimmed.includes(':')
-    || trimmed.includes('@')
-    || trimmed.includes(' ')
-    || trimmed.includes('?')
-    || trimmed.includes('#')
-  ) {
-    return null;
-  }
-  return trimmed;
-}
-
-export function isMetaOutboundAudioGraphEnabled(env = runtimeEnv()) {
-  if (META_OUTBOUND_AUDIO_GRAPH_ENABLED === true) return true;
-  if (!env || typeof env !== 'object') return false;
-  if (env.META_OUTBOUND_AUDIO_GRAPH_ENABLED !== GRAPH_FLAG_ON) return false;
-  return readPlatformProductionHost(env) === LOVOO_DEV_PRODUCTION_HOST;
-}
 
 export const META_AUDIO_FUNCTION_BUDGET_MS = 60_000;
 export const META_AUDIO_PLATFORM_MARGIN_MS = 3_000;
@@ -351,9 +293,6 @@ function mapGraphOrchestratorHttp(res, orchestrated, resumeParams) {
     return resumeAfterGraphAccepted(res, resumeParams);
   }
   const error = orchestrated?.error;
-  if (error === 'audio_send_not_enabled') {
-    return res.status(501).json(NOT_ENABLED_BODY);
-  }
   if (error === 'deadline_insufficient_before_claim') {
     return res.status(503).json({ error: 'graph_deadline_insufficient' });
   }
@@ -369,18 +308,7 @@ function mapGraphOrchestratorHttp(res, orchestrated, resumeParams) {
   return res.status(500).json({ error: 'internal_error' });
 }
 
-async function respondCreatedNotEnabled(res, sendContext, extras = {}) {
-  const graphEnabled = isMetaOutboundAudioGraphEnabled();
-  if (!graphEnabled) {
-    const orchestrated = await orchestrateOutboundAudioSend({
-      enabled: META_OUTBOUND_AUDIO_GRAPH_ENABLED,
-    });
-    if (orchestrated?.error === 'audio_send_not_enabled') {
-      return res.status(501).json(NOT_ENABLED_BODY);
-    }
-    return res.status(500).json({ error: 'internal_error' });
-  }
-
+async function respondCreatedGraphSend(res, sendContext, extras = {}) {
   const { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes } = extras;
   if (!svc || !instance || !auth || !sendContext) {
     return res.status(500).json({ error: 'internal_error' });
@@ -400,7 +328,7 @@ async function respondCreatedNotEnabled(res, sendContext, extras = {}) {
   let orchestrated;
   try {
     orchestrated = await orchestrateOutboundAudioSend({
-      enabled: graphEnabled,
+      enabled: true,
       context: {
         ...sendContext,
         accessToken,
@@ -846,7 +774,7 @@ export default async function handler(req, res) {
       }
       const windowOpen = await gateCustomerServiceWindow(svc, windowIds, res);
       if (!windowOpen) return;
-      return respondCreatedNotEnabled(
+      return respondCreatedGraphSend(
         res,
         createdContextFromAuthorizedState({
           auth,
@@ -867,7 +795,7 @@ export default async function handler(req, res) {
 
     const inserted = await insertCreated(svc, incomingIdentity);
     if (inserted.ok) {
-      return respondCreatedNotEnabled(
+      return respondCreatedGraphSend(
         res,
         createdContextFromAuthorizedState({
           auth,
@@ -909,7 +837,7 @@ export default async function handler(req, res) {
     if (!mapped.mayClaim) {
       return res.status(mapped.httpStatus).json(mapped.body);
     }
-    return respondCreatedNotEnabled(
+    return respondCreatedGraphSend(
       res,
       createdContextFromAuthorizedState({
         auth,
