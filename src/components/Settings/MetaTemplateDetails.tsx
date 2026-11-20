@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import type { MetaAdminWhatsAppTemplate, MetaTemplateGraphStatus } from '../../types/meta-whatsapp'
 import {
   findComponent,
@@ -47,6 +47,8 @@ export function MetaTemplateDetails({
   template: MetaAdminWhatsAppTemplate
   onClose: () => void
 }) {
+  const [techOpen, setTechOpen] = useState(false)
+  const techId = useId()
   const header = findComponent(template.components, 'HEADER')
   const body = findComponent(template.components, 'BODY')
   const footer = findComponent(template.components, 'FOOTER')
@@ -54,6 +56,10 @@ export function MetaTemplateDetails({
   const buttons = graphButtons(buttonsComponent)
   const extras = unknownComponents(template.components)
   const media = headerMediaPreview(header)
+  const hasHeaderText = typeof header?.text === 'string' && header.text.length > 0
+  const hasBodyText = typeof body?.text === 'string' && body.text.length > 0
+  const hasFooterText = typeof footer?.text === 'string' && footer.text.length > 0
+  const hasMediaHeader = Boolean(media.format && media.format !== 'TEXT')
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -81,7 +87,7 @@ export function MetaTemplateDetails({
           <h3 className="text-base font-semibold text-slate-900 break-words">{template.name}</h3>
           <StatusBadge status={template.status} />
         </div>
-        <p className="text-xs text-slate-500 break-all">ID {template.id} · {template.language} · {template.category}</p>
+        <p className="text-xs text-slate-500 break-words">{template.language} · {template.category}</p>
         {template.rejected_reason ? (
           <p className="text-sm text-red-700 break-words whitespace-pre-wrap">
             Motivo de rejeição: {template.rejected_reason}
@@ -98,7 +104,7 @@ export function MetaTemplateDetails({
       <section className="space-y-3">
         <h4 className="text-sm font-semibold text-slate-900">Prévia da mensagem</h4>
         <div className="max-w-md rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-          {media.format && media.format !== 'TEXT' ? (
+          {hasMediaHeader ? (
             <div className="space-y-1">
               {media.format === 'IMAGE' && media.previewUrl ? (
                 <img src={media.previewUrl} alt="Prévia do cabeçalho" className="max-w-full rounded-lg" />
@@ -116,16 +122,14 @@ export function MetaTemplateDetails({
               ) : null}
             </div>
           ) : null}
-          {typeof header?.text === 'string' && header.text.length > 0 ? (
-            <p className="text-sm font-semibold text-slate-900 whitespace-pre-wrap break-words">{header.text}</p>
+          {hasHeaderText ? (
+            <p className="text-sm font-semibold text-slate-900 whitespace-pre-wrap break-words">{header?.text}</p>
           ) : null}
-          {typeof body?.text === 'string' ? (
-            <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{body.text}</p>
-          ) : (
-            <Empty>Sem corpo</Empty>
-          )}
-          {typeof footer?.text === 'string' && footer.text.length > 0 ? (
-            <p className="text-xs text-slate-500 whitespace-pre-wrap break-words">{footer.text}</p>
+          {hasBodyText ? (
+            <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{body?.text}</p>
+          ) : null}
+          {hasFooterText ? (
+            <p className="text-xs text-slate-500 whitespace-pre-wrap break-words">{footer?.text}</p>
           ) : null}
           {buttons.length > 0 ? (
             <div className="space-y-1.5 pt-1">
@@ -134,81 +138,103 @@ export function MetaTemplateDetails({
                   key={`preview-btn-${index}`}
                   className="rounded-lg border border-green-200 bg-white px-3 py-2 text-center text-sm text-green-800 whitespace-pre-wrap break-words"
                 >
-                  {typeof button.text === 'string' ? button.text : stringifyUnknown(button.type ?? `Botão ${index + 1}`)}
+                  {typeof button.text === 'string' && button.text.length > 0
+                    ? button.text
+                    : `Botão ${index + 1}`}
                 </div>
               ))}
             </div>
           ) : null}
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <h4 className="text-sm font-semibold text-slate-900">Conteúdo completo</h4>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nome">{template.name}</Field>
-          <Field label="ID">{template.id}</Field>
-          <Field label="Idioma">{template.language}</Field>
-          <Field label="Categoria">{template.category}</Field>
-          <Field label="Status">{template.status}</Field>
-          <Field label="Formato das variáveis">{template.parameter_format}</Field>
-          <Field label="Suportado no chat">{template.supported ? 'sim' : 'não'}</Field>
-          <Field label="Motivo unsupported">{template.unsupported_reason || <Empty>nenhum</Empty>}</Field>
-          <Field label="Motivo de rejeição">{template.rejected_reason || <Empty>nenhum</Empty>}</Field>
-          <Field label="Qualidade">
-            {template.quality_score
-              ? `${template.quality_score.score ?? '—'} ${template.quality_score.date ?? ''}`
-              : <Empty>não informado</Empty>}
-          </Field>
-        </div>
-
-        <ComponentBlock title="HEADER" component={header} extra={
-          media.format ? (
-            <div className="space-y-1">
-              <p>Formato de mídia: {media.format}</p>
-              {media.urls.map((url) => (
-                <p key={url} className="break-all">Exemplo de mídia: {url}</p>
-              ))}
-              {media.unavailableReason ? <p>{media.unavailableReason}</p> : null}
-            </div>
-          ) : null
-        } />
-        <ComponentBlock title="BODY" component={body} />
-        <ComponentBlock title="FOOTER" component={footer} />
-
-        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <p className="text-xs font-semibold text-slate-700">BUTTONS</p>
-          {buttons.length === 0 ? <Empty>Nenhum botão</Empty> : buttons.map((button, index) => (
-            <div key={`btn-${index}`} className="rounded-md bg-slate-50 p-3 space-y-1 text-sm whitespace-pre-wrap break-words">
-              {Object.entries(button).map(([key, value]) => (
-                <p key={key}><span className="text-slate-500">{key}:</span> {stringifyUnknown(value)}</p>
-              ))}
-            </div>
+          {extras.map((component, index) => (
+            <p key={`preview-extra-${index}`} className="text-xs text-slate-500">
+              Componente adicional: {component.type || 'desconhecido'}
+            </p>
           ))}
         </div>
-
-        <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-          <p className="text-xs font-semibold text-slate-700">Variáveis</p>
-          {template.parameters.length === 0 ? (
-            <Empty>Nenhuma variável extraída do texto</Empty>
-          ) : (
-            template.parameters.map((param) => (
-              <p key={`${param.component}:${param.key}`} className="text-sm whitespace-pre-wrap break-words">
-                {param.component} · {param.key}
-                {param.position != null ? ` · posição ${param.position}` : ''}
-                {param.example != null ? ` · exemplo: ${param.example}` : ' · exemplo: não informado'}
-              </p>
-            ))
-          )}
-        </div>
-
-        {extras.map((component, index) => (
-          <ComponentBlock
-            key={`extra-${component.type}-${index}`}
-            title={`Componente adicional: ${component.type || 'desconhecido'}`}
-            component={component}
-          />
-        ))}
       </section>
+
+      <div>
+        <button
+          type="button"
+          aria-expanded={techOpen}
+          aria-controls={techId}
+          onClick={() => setTechOpen((current) => !current)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+        >
+          {techOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {techOpen ? 'Ocultar detalhes técnicos' : 'Ver detalhes técnicos'}
+        </button>
+      </div>
+
+      {techOpen ? (
+        <section id={techId} className="space-y-4">
+          <h4 className="text-sm font-semibold text-slate-900">Detalhes técnicos</h4>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nome">{template.name}</Field>
+            <Field label="ID">{template.id}</Field>
+            <Field label="Idioma">{template.language}</Field>
+            <Field label="Categoria">{template.category}</Field>
+            <Field label="Status">{template.status}</Field>
+            <Field label="Formato das variáveis">{template.parameter_format}</Field>
+            <Field label="Suportado no chat">{template.supported ? 'sim' : 'não'}</Field>
+            <Field label="Motivo unsupported">{template.unsupported_reason || <Empty>nenhum</Empty>}</Field>
+            <Field label="Motivo de rejeição">{template.rejected_reason || <Empty>nenhum</Empty>}</Field>
+            <Field label="Qualidade">
+              {template.quality_score
+                ? `${template.quality_score.score ?? '—'} ${template.quality_score.date ?? ''}`
+                : <Empty>não informado</Empty>}
+            </Field>
+          </div>
+
+          <ComponentBlock title="HEADER" component={header} extra={
+            media.format ? (
+              <div className="space-y-1">
+                <p>Formato de mídia: {media.format}</p>
+                {media.urls.map((url) => (
+                  <p key={url} className="break-all">Exemplo de mídia: {url}</p>
+                ))}
+                {media.unavailableReason ? <p>{media.unavailableReason}</p> : null}
+              </div>
+            ) : null
+          } />
+          <ComponentBlock title="BODY" component={body} />
+          <ComponentBlock title="FOOTER" component={footer} />
+
+          <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+            <p className="text-xs font-semibold text-slate-700">BUTTONS</p>
+            {buttons.length === 0 ? <Empty>Nenhum botão</Empty> : buttons.map((button, index) => (
+              <div key={`btn-${index}`} className="rounded-md bg-slate-50 p-3 space-y-1 text-sm whitespace-pre-wrap break-words">
+                {Object.entries(button).map(([key, value]) => (
+                  <p key={key}><span className="text-slate-500">{key}:</span> {stringifyUnknown(value)}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+            <p className="text-xs font-semibold text-slate-700">Variáveis</p>
+            {template.parameters.length === 0 ? (
+              <Empty>Nenhuma variável extraída do texto</Empty>
+            ) : (
+              template.parameters.map((param) => (
+                <p key={`${param.component}:${param.key}`} className="text-sm whitespace-pre-wrap break-words">
+                  {param.component} · {param.key}
+                  {param.position != null ? ` · posição ${param.position}` : ''}
+                  {param.example != null ? ` · exemplo: ${param.example}` : ' · exemplo: não informado'}
+                </p>
+              ))
+            )}
+          </div>
+
+          {extras.map((component, index) => (
+            <ComponentBlock
+              key={`extra-${component.type}-${index}`}
+              title={`Componente adicional: ${component.type || 'desconhecido'}`}
+              component={component}
+            />
+          ))}
+        </section>
+      ) : null}
     </div>
   )
 }

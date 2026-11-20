@@ -158,7 +158,9 @@ describe('MetaOfficialTemplatesPanel', () => {
     render(<MetaOfficialTemplatesPanel />)
     await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' }))
-    expect(screen.getByText('Conteúdo completo')).toBeTruthy()
+    expect(screen.getByText('Prévia da mensagem')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ver detalhes técnicos' })).toBeTruthy()
+    expect(screen.queryByText('Detalhes técnicos')).toBeNull()
     expect(screen.getAllByText('Corpo completo do modelo').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /voltar à lista/i }))
     expect(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' })).toBeTruthy()
@@ -174,9 +176,9 @@ describe('MetaOfficialTemplatesPanel', () => {
     render(<MetaOfficialTemplatesPanel />)
     await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' }))
-    expect(screen.getByText('Conteúdo completo')).toBeTruthy()
+    expect(screen.getByText('Prévia da mensagem')).toBeTruthy()
     fireEvent.change(screen.getByRole('combobox'), { target: { value: FAKE_INSTANCE_B.id } })
-    await waitFor(() => expect(screen.queryByText('Conteúdo completo')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Prévia da mensagem')).toBeNull())
   })
 
   it('MOT-06: erro da listagem → retry dispara nova consulta', async () => {
