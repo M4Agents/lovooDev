@@ -362,6 +362,15 @@ describe('MetaTemplatePicker — carregamento', () => {
     expect(mockListTemplates.mock.calls[0][1]).toBe(INSTANCE)
   })
 
+  it('TP-04b: chat não envia status; continua em listTemplates', async () => {
+    mockListTemplates.mockResolvedValueOnce(makeListResp([]))
+    renderPicker()
+    await waitFor(() => expect(mockListTemplates).toHaveBeenCalled())
+    const opts = mockListTemplates.mock.calls[0][2] as { status?: string } | undefined
+    expect(opts?.status).toBeUndefined()
+    expect(mockListTemplates).toHaveBeenCalledTimes(1)
+  })
+
   // TP-05 — paginação até next_cursor null (2 páginas)
   it('TP-05: paginação — segue next_cursor até null (2 páginas)', async () => {
     mockListTemplates

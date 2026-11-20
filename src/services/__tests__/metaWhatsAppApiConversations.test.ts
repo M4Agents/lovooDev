@@ -64,7 +64,9 @@ import type {
   MetaChatMessage,
   MetaSendMessageResponse,
   MetaWhatsAppTemplate,
+  MetaAdminWhatsAppTemplate,
   GetMetaTemplatesResponse,
+  GetMetaAdminTemplatesResponse,
   MetaSendTemplateResponse,
 } from '../../types/meta-whatsapp'
 
@@ -1325,5 +1327,88 @@ describe('metaWhatsAppApi.sendTemplate', () => {
     await metaWhatsAppApi.sendTemplate(COMPANY_ID, INSTANCE_ID, CONV_ID, TMPL_NAME, TMPL_LANG, TMPL_PARAMS_BODY_ONLY)
     expect(calledParsedBody(okSpy).parameter_values).toEqual(TMPL_PARAMS_BODY_ONLY)
     expect(calledParsedBody(okSpy).parameter_values).not.toHaveProperty('url')
+  })
+})
+
+// =============================================================================
+// listAdminTemplates — Fase A (gerenciador Settings)
+//
+// Contrato separado de listTemplates(): o chat NÃO usa este método.
+// Sem status na URL o backend permanece APPROVED; o gerenciador envia ALL.
+// =============================================================================
+
+const FAKE_ADMIN_PENDING: MetaAdminWhatsAppTemplate = {
+  ...FAKE_TEMPLATE_POSITIONAL,
+  id:     'tpl-pending-0004',
+  name:   'welcome_pending',
+  status: 'PENDING',
+}
+
+const ADMIN_LIST_RESPONSE: GetMetaAdminTemplatesResponse = {
+  templates:   [FAKE_TEMPLATE_POSITIONAL, FAKE_ADMIN_PENDING],
+  next_cursor: 'cursor-admin-xyz',
+}
+
+describe('metaWhatsAppApi.listAdminTemplates', () => {
+  it('LAT-01: URL correta — /api/whatsapp/meta/templates', async () => {
+    const spy = mockFetch(ADMIN_LIST_RESPONSE)
+    await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, { status: 'ALL' })
+    expect(calledUrl(spy).pathname).toBe('/api/whatsapp/meta/templates')
+  })
+
+  it('LAT-02: status=ALL enviado na query', async () => {
+    const spy = mockFetch(ADMIN_LIST_RESPONSE)
+    await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, { status: 'ALL' })
+    expect(calledUrl(spy).searchParams.get('status')).toBe('ALL')
+  })
+
+  it('LAT-03: sem options.status → query sem status (contrato do chat intacto)', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(calledUrl(spy).searchParams.has('status')).toBe(false)
+  })
+
+  it('LAT-04: after e company_id/instance_id corretos', async () => {
+    const spy = mockFetch(ADMIN_LIST_RESPONSE)
+    await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, {
+      status: 'ALL',
+      after:  'cursor-admin-xyz==',
+    })
+    const url = calledUrl(spy)
+    expect(url.searchParams.get('company_id')).toBe(COMPANY_ID)
+    expect(url.searchParams.get('instance_id')).toBe(INSTANCE_ID)
+    expect(url.searchParams.get('after')).toBe('cursor-admin-xyz==')
+  })
+
+  it('LAT-05: aceita status PENDING no DTO administrativo', async () => {
+    mockFetch(ADMIN_LIST_RESPONSE)
+    const result = await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, { status: 'ALL' })
+    expect(result.templates.map((t) => t.status)).toEqual(['APPROVED', 'PENDING'])
+    expect(result.next_cursor).toBe('cursor-admin-xyz')
+  })
+
+  it('LAT-06: listTemplates() continua sem status na URL', async () => {
+    const spy = mockFetch(LIST_RESPONSE_POSITIONAL)
+    await metaWhatsAppApi.listTemplates(COMPANY_ID, INSTANCE_ID)
+    expect(calledUrl(spy).searchParams.has('status')).toBe(false)
+  })
+
+  it('LAT-07: nenhum campo proibido (waba_id, phone_number_id, token, limit)', async () => {
+    const spy = mockFetch(ADMIN_LIST_RESPONSE)
+    await metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, { status: 'ALL' })
+    const url = calledUrl(spy)
+    expect(url.searchParams.has('waba_id')).toBe(false)
+    expect(url.searchParams.has('phone_number_id')).toBe(false)
+    expect(url.searchParams.has('token')).toBe(false)
+    expect(url.searchParams.has('limit')).toBe(false)
+  })
+
+  it('LAT-08: status Graph desconhecido → throw fail-closed', async () => {
+    mockFetch({
+      templates: [{ ...FAKE_TEMPLATE_POSITIONAL, status: 'WEIRD' }],
+      next_cursor: null,
+    })
+    await expect(metaWhatsAppApi.listAdminTemplates(COMPANY_ID, INSTANCE_ID, { status: 'ALL' }))
+      .rejects.toThrow('Resposta inválida do servidor: template.status inválido')
   })
 })

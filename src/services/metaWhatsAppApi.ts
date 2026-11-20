@@ -42,6 +42,7 @@ import type {
   GetMetaConversationsResponse,
   GetMetaInstancesResponse,
   GetMetaMessagesResponse,
+  GetMetaAdminTemplatesResponse,
   GetMetaTemplatesResponse,
   GetMetaMediaPickerResponse,
   MetaChatConversation,
@@ -50,6 +51,9 @@ import type {
   MetaSendAudioResponse,
   MetaSendMessageResponse,
   MetaSendTemplateResponse,
+  MetaAdminWhatsAppTemplate,
+  MetaTemplateAdminStatusFilter,
+  MetaTemplateGraphStatus,
   MetaTemplateParameter,
   MetaTemplateParameterValues,
   MetaWabaSelectionOption,
@@ -648,6 +652,117 @@ export const metaWhatsAppApi = {
         supported:           tmpl.supported        as boolean,
         unsupported_reason:  tmpl.unsupported_reason as string | null,
         header_media_format: tmpl.header_media_format as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null, // MVP4B.3
+        buttons:             mapSanitizedButtons(tmpl.buttons),
+      })
+    }
+
+    return {
+      templates,
+      next_cursor: raw.next_cursor as string | null,
+    }
+  },
+
+  /**
+   * Listagem administrativa de templates (Settings → Modelos → API Oficial).
+   *
+   * GET /api/whatsapp/meta/templates
+   *   ?company_id=&instance_id=&status=ALL|APPROVED|PENDING|...
+   *   [&after=]
+   *
+   * O chat continua usando listTemplates() — este método NÃO é chamado pelo picker.
+   * Sem status na URL o backend permanece APPROVED; aqui o gerenciador envia ALL.
+   */
+  async listAdminTemplates(
+    companyId:  string,
+    instanceId: string,
+    options?: { after?: string; status?: MetaTemplateAdminStatusFilter },
+  ): Promise<GetMetaAdminTemplatesResponse> {
+    if (!companyId)  throw new Error('company_id é obrigatório')
+    if (!instanceId) throw new Error('instance_id é obrigatório')
+
+    const headers = await getAuthHeaders()
+    const params = new URLSearchParams({ company_id: companyId, instance_id: instanceId })
+    if (options?.after != null) params.set('after', options.after)
+    if (options?.status) params.set('status', options.status)
+
+    const res = await fetch(`/api/whatsapp/meta/templates?${params.toString()}`, {
+      method:  'GET',
+      headers: { Authorization: (headers as Record<string, string>)['Authorization'] },
+    })
+
+    const raw = await res.json().catch(() => ({}) as Record<string, unknown>) as Record<string, unknown> & { error?: string }
+
+    if (!res.ok) {
+      throw new Error(raw.error ?? 'Erro ao listar templates Meta WhatsApp')
+    }
+
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('Resposta inválida do servidor: corpo não é objeto')
+    }
+    if (!Array.isArray(raw.templates)) {
+      throw new Error('Resposta inválida do servidor: templates não é array')
+    }
+    if (raw.next_cursor !== null && typeof raw.next_cursor !== 'string') {
+      throw new Error('Resposta inválida do servidor: next_cursor inválido')
+    }
+
+    const allowedStatus: ReadonlySet<string> = new Set([
+      'APPROVED',
+      'PENDING',
+      'REJECTED',
+      'PAUSED',
+      'DISABLED',
+      'IN_APPEAL',
+      'PENDING_DELETION',
+    ])
+
+    const templates: MetaAdminWhatsAppTemplate[] = []
+    for (const t of raw.templates as unknown[]) {
+      if (t === null || typeof t !== 'object' || Array.isArray(t)) {
+        throw new Error('Resposta inválida do servidor: template não é objeto')
+      }
+      const tmpl = t as Record<string, unknown>
+      if (typeof tmpl.id       !== 'string' || !tmpl.id)       throw new Error('Resposta inválida do servidor: template.id inválido')
+      if (typeof tmpl.name     !== 'string' || !tmpl.name)     throw new Error('Resposta inválida do servidor: template.name inválido')
+      if (typeof tmpl.language !== 'string' || !tmpl.language) throw new Error('Resposta inválida do servidor: template.language inválido')
+      if (typeof tmpl.status   !== 'string' || !allowedStatus.has(tmpl.status)) {
+        throw new Error('Resposta inválida do servidor: template.status inválido')
+      }
+      if (typeof tmpl.category !== 'string' || !tmpl.category) {
+        throw new Error('Resposta inválida do servidor: template.category inválido')
+      }
+      if (tmpl.parameter_format !== 'POSITIONAL' && tmpl.parameter_format !== 'NAMED') {
+        throw new Error('Resposta inválida do servidor: template.parameter_format inválido')
+      }
+      if (!Array.isArray(tmpl.components)) throw new Error('Resposta inválida do servidor: template.components não é array')
+      if (!Array.isArray(tmpl.parameters)) throw new Error('Resposta inválida do servidor: template.parameters não é array')
+      if (typeof tmpl.supported !== 'boolean') {
+        throw new Error('Resposta inválida do servidor: template.supported inválido')
+      }
+      if (tmpl.unsupported_reason !== null && typeof tmpl.unsupported_reason !== 'string') {
+        throw new Error('Resposta inválida do servidor: template.unsupported_reason inválido')
+      }
+      if (
+        tmpl.header_media_format !== null &&
+        tmpl.header_media_format !== 'IMAGE' &&
+        tmpl.header_media_format !== 'VIDEO' &&
+        tmpl.header_media_format !== 'DOCUMENT'
+      ) {
+        throw new Error('Resposta inválida do servidor: template.header_media_format inválido')
+      }
+
+      templates.push({
+        id:                  tmpl.id as string,
+        name:                tmpl.name as string,
+        language:            tmpl.language as string,
+        status:              tmpl.status as MetaTemplateGraphStatus,
+        category:            tmpl.category as string,
+        parameter_format:    tmpl.parameter_format as 'POSITIONAL' | 'NAMED',
+        components:          tmpl.components as MetaWhatsAppTemplate['components'],
+        parameters:          tmpl.parameters as MetaWhatsAppTemplate['parameters'],
+        supported:           tmpl.supported as boolean,
+        unsupported_reason:  tmpl.unsupported_reason as string | null,
+        header_media_format: tmpl.header_media_format as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null,
         buttons:             mapSanitizedButtons(tmpl.buttons),
       })
     }

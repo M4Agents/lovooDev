@@ -15,6 +15,7 @@ import { CatalogSettings } from '../components/Settings/CatalogSettings';
 import { SaleTypesSettings } from '../components/Settings/SaleTypesSettings'
 import { LossTypesSettings } from '../components/Settings/LossTypesSettings';
 import { MessageTemplatesPanel } from '../components/Settings/MessageTemplatesPanel';
+import { MetaOfficialTemplatesPanel } from '../components/Settings/MetaOfficialTemplatesPanel';
 import { LovooAgentsPanel } from '../components/Settings/LovooAgentsPanel';
 import { CompanyAgentConfigPanel } from '../components/Settings/CompanyAgentConfigPanel';
 import { CompanyOwnAgentsPanel } from '../components/Settings/CompanyOwnAgentsPanel';
@@ -351,6 +352,7 @@ export const Settings: React.FC = () => {
   }, [activeTab, integracoesTab, searchParams, setSearchParams]);
 
   const [whatsappTab, setWhatsappTab] = useState<'whatsapp-life' | 'cloud-api' | 'modelos'>('whatsapp-life');
+  const [modelosSource, setModelosSource] = useState<'life' | 'meta'>('life');
   const [empresasTab, setEmpresasTab] = useState<'dados-principais' | 'endereco' | 'contatos' | 'dominios'>('dados-principais');
   
   // Estado para modal de documentação
@@ -1796,7 +1798,37 @@ export const Settings: React.FC = () => {
               
               {/* Modelos */}
               {whatsappTab === 'modelos' && company?.id && (
-                <MessageTemplatesPanel companyId={company.id} />
+                <div className="space-y-4">
+                  <div className="flex gap-1 p-1 bg-slate-100 rounded-lg w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setModelosSource('life')}
+                      className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        modelosSource === 'life'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {t('integrations.whatsappNav.templatesSource.life')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModelosSource('meta')}
+                      className={`flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        modelosSource === 'meta'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {t('integrations.whatsappNav.templatesSource.meta')}
+                    </button>
+                  </div>
+                  {modelosSource === 'life' ? (
+                    <MessageTemplatesPanel companyId={company.id} />
+                  ) : (
+                    <MetaOfficialTemplatesPanel />
+                  )}
+                </div>
               )}
             </div>
           )}

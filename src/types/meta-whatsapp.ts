@@ -362,6 +362,17 @@ export interface MetaTemplateButton {
 //   'DOCUMENT'      → HEADER DOCUMENT (suportado desde MVP4B.2)
 // O envio real de mídia e o campo asset_id pertencem à etapa 4B.4.
 
+export type MetaTemplateGraphStatus =
+  | 'APPROVED'
+  | 'PENDING'
+  | 'REJECTED'
+  | 'PAUSED'
+  | 'DISABLED'
+  | 'IN_APPEAL'
+  | 'PENDING_DELETION'
+
+export type MetaTemplateAdminStatusFilter = MetaTemplateGraphStatus | 'ALL'
+
 export interface MetaWhatsAppTemplate {
   id:                  string
   name:                string
@@ -381,6 +392,15 @@ export interface MetaWhatsAppTemplate {
 
 export interface GetMetaTemplatesResponse {
   templates:   MetaWhatsAppTemplate[]
+  next_cursor: string | null
+}
+
+export interface MetaAdminWhatsAppTemplate extends Omit<MetaWhatsAppTemplate, 'status'> {
+  status: MetaTemplateGraphStatus
+}
+
+export interface GetMetaAdminTemplatesResponse {
+  templates:   MetaAdminWhatsAppTemplate[]
   next_cursor: string | null
 }
 

@@ -26,7 +26,7 @@
 //   TPL-18  somente auth.companyId nos lookups de DB
 //   TPL-19  Graph recebe waba_id somente do banco
 //   TPL-20  Graph recebe token decriptado somente backend
-//   TPL-21  status APPROVED hardcoded na chamada Graph
+//   TPL-21  GET sem status → APPROVED (contrato do chat); status validado na listagem admin
 //   TPL-22  limit 100 hardcoded na chamada Graph
 //   TPL-23  DTO não contém token/waba/phone_number_id
 //   TPL-24  POSITIONAL body params — extração correta
@@ -395,6 +395,20 @@ describe('TPL-04 role inválida', () => {
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(403);
+  });
+
+  it('partner sem assignment → 403; Graph não é chamado', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Permissão insuficiente para esta operação',
+    });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(403);
+    expect(mockListMessageTemplates).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
   });
 });
 
@@ -766,22 +780,151 @@ describe('TPL-20 token decriptado no backend', () => {
 });
 
 // =============================================================================
-// TPL-21  status APPROVED hardcoded
+// TPL-21  GET sem status → APPROVED; listagem admin honra filtro validado
 // =============================================================================
 
-describe('TPL-21 status APPROVED hardcoded', () => {
-  it('listMessageTemplates sempre chamado com status=APPROVED', async () => {
-    // Mesmo que caller tente passar status diferente via query
+describe('TPL-21 filtro de status', () => {
+  it('GET sem status → Graph recebe APPROVED (contrato do chat)', async () => {
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const [, , options] = mockListMessageTemplates.mock.calls[0];
+    expect(options.status).toBe('APPROVED');
+  });
+
+  it('query status=REJECTED → Graph recebe REJECTED', async () => {
     const req = makeReq({ query: {
       company_id:  FAKE_COMPANY_ID,
       instance_id: FAKE_INSTANCE_ID,
-      status:      'REJECTED',  // não deve ser usado
+      status:      'REJECTED',
     }});
     const res = makeRes();
     await handler(req, res);
 
+    expect(res._status).toBe(200);
     const [, , options] = mockListMessageTemplates.mock.calls[0];
-    expect(options.status).toBe('APPROVED');
+    expect(options.status).toBe('REJECTED');
+  });
+
+  it('query status=ALL → Graph recebe status=null (omite filtro)', async () => {
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const [, , options] = mockListMessageTemplates.mock.calls[0];
+    expect(options.status).toBeNull();
+  });
+
+  it('query status inválido → 400; Graph não é chamado', async () => {
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'HACKED',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toBe('invalid_request');
+    expect(mockListMessageTemplates).not.toHaveBeenCalled();
+  });
+});
+
+describe('TPL-46 listagem administrativa', () => {
+  it('status=ALL inclui APPROVED, PENDING e REJECTED no DTO', async () => {
+    const pending = { ...FAKE_TEMPLATE_SIMPLE, id: 'pending-001', status: 'PENDING' };
+    const rejected = { ...FAKE_TEMPLATE_SIMPLE, id: 'rejected-001', status: 'REJECTED' };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([
+      FAKE_TEMPLATE_SIMPLE,
+      pending,
+      rejected,
+    ]));
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const ids = res._body.templates.map((t) => t.id);
+    expect(ids).toEqual(['tpl-001', 'pending-001', 'rejected-001']);
+    expect(res._body.templates.map((t) => t.status)).toEqual([
+      'APPROVED',
+      'PENDING',
+      'REJECTED',
+    ]);
+  });
+
+  it('GET sem status continua excluindo REJECTED do DTO (contrato do chat)', async () => {
+    const rejected = { ...FAKE_TEMPLATE_SIMPLE, id: 'rejected-001', status: 'REJECTED' };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([rejected, FAKE_TEMPLATE_SIMPLE]));
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+    const ids = res._body.templates.map((t) => t.id);
+    expect(ids).not.toContain('rejected-001');
+    expect(ids).toContain('tpl-001');
+  });
+
+  it('status=ALL + after → cursor e status=null são encaminhados juntos', async () => {
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+      after:       'cursor-admin-page-2',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const [, , options] = mockListMessageTemplates.mock.calls[0];
+    expect(options.status).toBeNull();
+    expect(options.after).toBe('cursor-admin-page-2');
+    expect(options.limit).toBe(100);
+  });
+
+  it('status=ALL não vaza token/waba_id', async () => {
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    const body = JSON.stringify(res._body);
+    expect(body).not.toContain(FAKE_TOKEN_PLAIN);
+    expect(body).not.toContain(FAKE_TOKEN_ENC);
+    expect(body).not.toContain(FAKE_WABA_ID);
+    expect(res._body).not.toHaveProperty('access_token');
+    expect(res._body).not.toHaveProperty('waba_id');
+  });
+
+  it('status=ALL ainda aplica validateMetaCaller com META_VIEW_ROLES', async () => {
+    const req = makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+    }});
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(mockValidateMetaCaller).toHaveBeenCalledWith(
+      req,
+      mockSvc,
+      FAKE_COMPANY_ID,
+      { roles: ['super_admin', 'system_admin', 'partner', 'admin', 'manager', 'seller'] },
+    );
+    expect(res._status).toBe(200);
   });
 });
 

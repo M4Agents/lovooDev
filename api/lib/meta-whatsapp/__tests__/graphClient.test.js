@@ -2319,6 +2319,13 @@ describe('listMessageTemplates', () => {
     expect(callUrl.searchParams.get('status')).toBe('PENDING');
   });
 
+  it('LIST-04c: status=null omite o parâmetro status na URL Graph', async () => {
+    fetch.mockResolvedValue(makeTemplateListResponse([]));
+    await listMessageTemplates(FAKE_TOKEN, FAKE_WABA, { status: null });
+    const [callUrl] = fetch.mock.calls[0];
+    expect(callUrl.searchParams.has('status')).toBe(false);
+  });
+
   // ── LIST-05: filtro name corretamente encoded ─────────────────────────────────
 
   it('LIST-05: filtro name enviado como query param corretamente codificado', async () => {

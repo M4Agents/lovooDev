@@ -315,16 +315,22 @@ function buildPhoneNumbersUrl(graphVersion, wabaId, after) {
  */
 function buildTemplatesUrl(graphVersion, wabaId, options) {
   const {
-    status = 'APPROVED',
+    status,
     name,
     limit  = PAGE_LIMIT,
     after,
-  } = options;
+  } = options ?? {};
 
   const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${wabaId}/message_templates`);
   url.searchParams.set('fields', 'id,name,language,status,category,parameter_format,components');
-  url.searchParams.set('status', String(status));
   url.searchParams.set('limit',  String(limit));
+
+  // status omitido (undefined) → APPROVED (contrato do chat).
+  // status === null → sem filtro (listagem administrativa ALL).
+  if (status !== null) {
+    const statusValue = typeof status === 'string' && status.length > 0 ? status : 'APPROVED';
+    url.searchParams.set('status', statusValue);
+  }
 
   // Filtro por nome — somente se fornecido como string não vazia
   if (typeof name === 'string' && name.length > 0) {
@@ -693,7 +699,7 @@ export async function discoverAuthorizedWabas(accessToken) {
  * @param {string} token              Business token da instância
  * @param {string} wabaId             WABA ID (numeric string — validado antes do fetch)
  * @param {object} [options={}]
- * @param {string} [options.status]   Filtro de status (padrão: 'APPROVED')
+ * @param {string|null} [options.status] Filtro de status (padrão: 'APPROVED'; null = todos)
  * @param {string} [options.name]     Filtro por nome exato do template
  * @param {number} [options.limit]    Itens por página (padrão: 100)
  * @param {string} [options.after]    Cursor para próxima página

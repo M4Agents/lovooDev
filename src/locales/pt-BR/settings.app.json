@@ -464,6 +464,10 @@
       "templates": {
         "title": "Modelos",
         "subtitle": "Templates"
+      },
+      "templatesSource": {
+        "life": "WhatsApp Life",
+        "meta": "API Oficial (Meta)"
       }
     },
     "tabs": {

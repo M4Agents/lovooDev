@@ -419,6 +419,10 @@
       "templates": {
         "title": "Plantillas",
         "subtitle": "Plantillas"
+      },
+      "templatesSource": {
+        "life": "WhatsApp Life",
+        "meta": "API Oficial (Meta)"
       }
     },
     "tabs": {

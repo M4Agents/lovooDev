@@ -7,6 +7,10 @@
 //   company_id   (UUID, obrigatório)
 //   instance_id  (UUID, obrigatório)
 //   after        (string, opcional) — cursor opaco de paginação
+//   status       (string, opcional) — filtro Graph. Omitido = APPROVED (contrato do chat).
+//                Valores: APPROVED | PENDING | REJECTED | PAUSED | DISABLED |
+//                IN_APPEAL | PENDING_DELETION | ALL.
+//                ALL omite o filtro status na Graph (listagem administrativa).
 //
 // Fluxo de segurança (ordem obrigatória — não alterar):
 //   1. Method guard (GET only)
@@ -18,7 +22,7 @@
 //   7. Verificar status connected
 //   8. Lookup meta_whatsapp_credentials
 //   9. decryptMetaToken
-//  10. listMessageTemplates (status=APPROVED, limit=100, after)
+//  10. listMessageTemplates (status do filtro validado; default APPROVED, limit=100, after)
 //  11. Sanitizar + classificar DTO
 //  12. Resposta 200
 //
@@ -73,6 +77,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // 1024 chars é margem confortável sem risco de buffer injection.
 const AFTER_MAX_LEN = 1024;
 
+// Status Graph aceitos na listagem administrativa. ALL = sem filtro na Graph.
+const GRAPH_TEMPLATE_STATUSES = new Set([
+  'APPROVED',
+  'PENDING',
+  'REJECTED',
+  'PAUSED',
+  'DISABLED',
+  'IN_APPEAL',
+  'PENDING_DELETION',
+]);
+const STATUS_FILTER_ALL = 'ALL';
+
 // (extração de parâmetros e classificação delegadas ao templateEngine.js)
 
 // =============================================================================
@@ -88,7 +104,28 @@ const AFTER_MAX_LEN = 1024;
  * @returns {object|null}
  * @private
  */
-function sanitizeTemplate(raw) {
+/**
+ * Interpreta o query param status.
+ * Ausente / vazio → APPROVED (contrato do chat).
+ * ALL → listagem sem filtro Graph.
+ * Outro valor fora da allowlist → inválido.
+ * @returns {{ ok: true, filter: string } | { ok: false }}
+ * @private
+ */
+function parseStatusFilter(raw) {
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: true, filter: 'APPROVED' };
+  }
+  if (typeof raw !== 'string') return { ok: false };
+  const value = raw.trim().toUpperCase();
+  if (value.length === 0) return { ok: true, filter: 'APPROVED' };
+  if (value === STATUS_FILTER_ALL || GRAPH_TEMPLATE_STATUSES.has(value)) {
+    return { ok: true, filter: value };
+  }
+  return { ok: false };
+}
+
+function sanitizeTemplate(raw, { requireApproved }) {
   // Campos mínimos obrigatórios — excluir do DTO se ausentes/inválidos
   if (typeof raw?.id !== 'string'       || raw.id.length === 0)       return null;
   if (typeof raw?.name !== 'string'     || raw.name.length === 0)     return null;
@@ -96,8 +133,12 @@ function sanitizeTemplate(raw) {
   if (typeof raw?.status !== 'string'   || raw.status.length === 0)   return null;
   if (typeof raw?.category !== 'string' || raw.category.length === 0) return null;
 
-  // status deve ser APPROVED (segunda linha de defesa após o filtro Graph)
-  if (raw.status !== 'APPROVED') return null;
+  if (requireApproved) {
+    // Segunda linha de defesa do chat: só APPROVED.
+    if (raw.status !== 'APPROVED') return null;
+  } else if (!GRAPH_TEMPLATE_STATUSES.has(raw.status)) {
+    return null;
+  }
 
   // Delegar análise completa ao engine.
   // Fonte canônica: component.text — component.example é somente hint de exemplo.
@@ -114,7 +155,7 @@ function sanitizeTemplate(raw) {
     id:                  raw.id,
     name:                raw.name,
     language:            raw.language,
-    status:              'APPROVED',
+    status:              requireApproved ? 'APPROVED' : raw.status,
     category:            raw.category,
     parameter_format:    analysis.parameter_format,
     components:          safeComponents,
@@ -194,6 +235,7 @@ export default async function handler(req, res) {
   const companyId  = req.query?.company_id;
   const instanceId = req.query?.instance_id;
   const afterParam = req.query?.after;
+  const statusParam = req.query?.status;
 
   if (!companyId) {
     return res.status(400).json({ error: 'invalid_request' });
@@ -217,6 +259,14 @@ export default async function handler(req, res) {
     }
     safeAfter = afterParam;
   }
+
+  const parsedStatus = parseStatusFilter(statusParam);
+  if (!parsedStatus.ok) {
+    return res.status(400).json({ error: 'invalid_request' });
+  }
+  const statusFilter = parsedStatus.filter;
+  const requireApproved = statusFilter === 'APPROVED';
+  const graphStatus = statusFilter === STATUS_FILTER_ALL ? null : statusFilter;
 
   // ── 4. Supabase admin client ───────────────────────────────────────────────
   let svc;
@@ -294,7 +344,7 @@ export default async function handler(req, res) {
   // ── 10. Listar templates via Graph API ─────────────────────────────────────
   // waba_id vem EXCLUSIVAMENTE de instance.waba_id (banco) — nunca do caller.
   // access_token é plainToken (decriptado) — nunca do caller.
-  // status='APPROVED' hardcoded — endpoint lista somente templates utilizáveis.
+  // status: omitido/APPROVED = chat; ALL = sem filtro Graph; demais = filtro validado.
   // limit=100 hardcoded — uma página por chamada; caller usa after para navegar.
   // after=safeAfter (cursor validado, opaco) — passado diretamente ao graphClient.
   //   O graphClient reconstrói a URL internamente — cursor nunca vira URL de fetch.
@@ -304,7 +354,7 @@ export default async function handler(req, res) {
       plainToken,
       instance.waba_id,
       {
-        status: 'APPROVED',
+        status: graphStatus,
         limit:  100,
         after:  safeAfter,
       },
@@ -325,7 +375,7 @@ export default async function handler(req, res) {
   // Um template malformed NÃO compromete os demais.
   // O objeto Graph bruto nunca é retornado diretamente.
   const sanitized = (listResult.templates ?? [])
-    .map(sanitizeTemplate)
+    .map((raw) => sanitizeTemplate(raw, { requireApproved }))
     .filter(t => t !== null);
 
   // ── 12. Resposta 200 ───────────────────────────────────────────────────────
