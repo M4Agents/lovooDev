@@ -155,6 +155,69 @@ describe('MetaTemplateCreateForm', () => {
     expect((screen.getByPlaceholderText('pedido_enviado') as HTMLInputElement).value).toBe('pedido_enviado')
   })
 
+  it('MTC-08: exemplos existentes são preservados e o novo campo aparece', async () => {
+    render(
+      <MetaTemplateCreateForm
+        companyId="company-1"
+        instanceId="inst-1"
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+      />,
+    )
+    const body = screen.getByLabelText('Mensagem', { exact: true }) as HTMLTextAreaElement
+    fireEvent.change(body, { target: { value: 'Olá {{1}} ', selectionStart: 10, selectionEnd: 10 } })
+    await waitFor(() => expect(screen.getByLabelText('Mensagem · {{1}}')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Mensagem · {{1}}'), { target: { value: 'João' } })
+    body.setSelectionRange(10, 10)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Consultar variáveis' })[1])
+    fireEvent.click(screen.getByRole('option', { name: /Próxima variável posicional/ }))
+    await waitFor(() => expect(screen.getByLabelText('Mensagem · {{2}}')).toBeTruthy())
+    expect((screen.getByLabelText('Mensagem · {{1}}') as HTMLInputElement).value).toBe('João')
+  })
+
+  it('MTC-09: prévia continua integral após inserir variável', async () => {
+    render(
+      <MetaTemplateCreateForm
+        companyId="company-1"
+        instanceId="inst-1"
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+      />,
+    )
+    const body = screen.getByLabelText('Mensagem', { exact: true }) as HTMLTextAreaElement
+    fireEvent.change(body, { target: { value: 'Linha 1\n{{', selectionStart: 10, selectionEnd: 10 } })
+    fireEvent.click(screen.getByRole('option', { name: /\{\{nome\}\}/ }))
+    await waitFor(() => expect(body.value).toContain('{{nome}}'))
+    expect(document.body.textContent).toContain('Linha 1')
+    expect(document.body.textContent).toContain('{{nome}}')
+    expect(screen.getByText('Prévia da mensagem')).toBeTruthy()
+  })
+
+  it('MTC-10: payload de criação permanece compatível após o seletor', async () => {
+    render(
+      <MetaTemplateCreateForm
+        companyId="company-1"
+        instanceId="inst-1"
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+      />,
+    )
+    fireEvent.change(screen.getByPlaceholderText('pedido_enviado'), { target: { value: 'pedido_enviado' } })
+    const body = screen.getByLabelText('Mensagem', { exact: true }) as HTMLTextAreaElement
+    fireEvent.change(body, { target: { value: '{{', selectionStart: 2, selectionEnd: 2 } })
+    fireEvent.click(screen.getByRole('option', { name: /\{\{nome\}\}/ }))
+    await waitFor(() => expect(screen.getByLabelText('Mensagem · {{nome}}')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Mensagem · {{nome}}'), { target: { value: 'João' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para aprovação da Meta' }))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    expect(mockCreate.mock.calls[0][0]).toMatchObject({
+      name: 'pedido_enviado',
+      body_text: '{{nome}}',
+      examples: { body: { nome: 'João' } },
+    })
+    expect(mockCreate.mock.calls[0][0].waba_id).toBeUndefined()
+  })
+
   it('MTC-06: sem instanceId o envio fica bloqueado', () => {
     render(
       <MetaTemplateCreateForm

@@ -11,6 +11,8 @@ import {
   validateCreateDraft,
   type CreateErrorField,
 } from './metaTemplateCreateModel'
+import { META_VARIABLE_PARAM_DISCLAIMER } from './metaTemplateVariableCatalog'
+import { MetaTemplateVariablePicker } from './MetaTemplateVariablePicker'
 
 type Category = 'UTILITY' | 'MARKETING'
 
@@ -121,8 +123,9 @@ export function MetaTemplateCreateForm({
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-slate-900">Criar modelo Meta</h3>
         <p className="text-xs text-slate-500">
-          A Meta analisa o conteúdo antes de liberar o envio. Use {'{{1}}'} ou {'{{nome_cliente}}'} para variáveis.
+          A Meta analisa o conteúdo antes de liberar o envio. Use {'{{1}}'} ou {'{{nome}}'} para variáveis.
         </p>
+        <p className="text-xs text-slate-500">{META_VARIABLE_PARAM_DISCLAIMER}</p>
       </div>
 
       <label className="block space-y-1">
@@ -165,29 +168,33 @@ export function MetaTemplateCreateForm({
         {fieldMessage('language') ? <p className="text-xs text-red-700">{fieldMessage('language')}</p> : null}
       </label>
 
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">Cabeçalho (opcional)</span>
-        <textarea
-          value={headerText}
-          onChange={(event) => setHeaderText(event.target.value)}
-          maxLength={TEMPLATE_CREATE_LIMITS.headerMax}
-          rows={2}
-          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
-        />
-        {fieldMessage('header') ? <p className="text-xs text-red-700">{fieldMessage('header')}</p> : null}
-      </label>
+      <MetaTemplateVariablePicker
+        id="meta-tpl-header"
+        label="Cabeçalho (opcional)"
+        value={headerText}
+        onChange={setHeaderText}
+        headerText={headerText}
+        bodyText={bodyText}
+        component="header"
+        maxLength={TEMPLATE_CREATE_LIMITS.headerMax}
+        rows={2}
+        error={fieldMessage('header')}
+        disabled={submitting}
+      />
 
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">Mensagem</span>
-        <textarea
-          value={bodyText}
-          onChange={(event) => setBodyText(event.target.value)}
-          maxLength={TEMPLATE_CREATE_LIMITS.bodyMax}
-          rows={5}
-          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
-        />
-        {fieldMessage('body') ? <p className="text-xs text-red-700">{fieldMessage('body')}</p> : null}
-      </label>
+      <MetaTemplateVariablePicker
+        id="meta-tpl-body"
+        label="Mensagem"
+        value={bodyText}
+        onChange={setBodyText}
+        headerText={headerText}
+        bodyText={bodyText}
+        component="body"
+        maxLength={TEMPLATE_CREATE_LIMITS.bodyMax}
+        rows={5}
+        error={fieldMessage('body')}
+        disabled={submitting}
+      />
 
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600">Rodapé (opcional)</span>
