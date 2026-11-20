@@ -351,6 +351,12 @@ export interface MetaTemplateButton {
   text?:      string
   url?:       string
   url_kind?:  'static' | 'dynamic' | 'unknown'
+  phone_number?: string
+}
+
+export interface MetaTemplateQualityScore {
+  score: string | null
+  date:  number | null
 }
 
 // ── Template de mensagem completo ─────────────────────────────────────────────
@@ -396,7 +402,9 @@ export interface GetMetaTemplatesResponse {
 }
 
 export interface MetaAdminWhatsAppTemplate extends Omit<MetaWhatsAppTemplate, 'status'> {
-  status: MetaTemplateGraphStatus
+  status:           MetaTemplateGraphStatus
+  rejected_reason?: string | null
+  quality_score?:   MetaTemplateQualityScore | null
 }
 
 export interface GetMetaAdminTemplatesResponse {

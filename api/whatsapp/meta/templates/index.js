@@ -140,18 +140,25 @@ function sanitizeTemplate(raw, { requireApproved }) {
     return null;
   }
 
+  const isAdmin = !requireApproved;
+
   // Delegar análise completa ao engine.
   // Fonte canônica: component.text — component.example é somente hint de exemplo.
   const analysis = analyzeTemplate(raw);
 
-  // DTO público: copia sem mutar o Graph original nem analysis.buttons interno.
-  // `example` é redundante (já normalizado em analysis.parameters) e expõe
-  // header_handle. `phone_number` fica só no snapshot histórico / engine interno.
+  // Chat: strip example/phone_number/payload (contrato do picker).
+  // Admin: preserva conteúdo Graph para visualização integral, sem token.
   const components     = Array.isArray(raw.components) ? raw.components : [];
-  const safeComponents = sanitizePublicComponents(components);
-  const publicButtons  = sanitizePublicAnalysisButtons(analysis.buttons);
+  const safeComponents = sanitizePublicComponents(components, {
+    includeExamples:    isAdmin,
+    includePhoneNumber: isAdmin,
+    includePayload:     isAdmin,
+  });
+  const publicButtons = sanitizePublicAnalysisButtons(analysis.buttons, {
+    includePhoneNumber: isAdmin,
+  });
 
-  return {
+  const dto = {
     id:                  raw.id,
     name:                raw.name,
     language:            raw.language,
@@ -165,6 +172,15 @@ function sanitizeTemplate(raw, { requireApproved }) {
     header_media_format: analysis.headerMediaFormat, // null | 'IMAGE' | 'VIDEO' | 'DOCUMENT' (MVP4B.3)
     buttons:             publicButtons,              // classificação sanitizada (MVP4C.2A / 4C.5B.B)
   };
+
+  if (isAdmin) {
+    dto.rejected_reason = typeof raw.rejected_reason === 'string' && raw.rejected_reason.length > 0
+      ? raw.rejected_reason
+      : null;
+    dto.quality_score = sanitizeQualityScore(raw.quality_score);
+  }
+
+  return dto;
 }
 
 /**
@@ -181,11 +197,13 @@ function omitPhoneNumberFromButton(button) {
 }
 
 /**
- * DTO público de analysis.buttons: type/index/text (e url/url_kind), sem phone_number.
+ * DTO público de analysis.buttons.
+ * Chat: sem phone_number. Admin: preserva o número da definição do template.
  * @private
  */
-function sanitizePublicAnalysisButtons(buttons) {
+function sanitizePublicAnalysisButtons(buttons, { includePhoneNumber } = {}) {
   if (!Array.isArray(buttons)) return [];
+  if (includePhoneNumber) return buttons.map((button) => cloneJsonValue(button));
   return buttons.map(omitPhoneNumberFromButton);
 }
 
@@ -194,28 +212,55 @@ function sanitizePublicAnalysisButtons(buttons) {
  * Preserva type/text/url e demais campos já públicos.
  * @private
  */
-function omitInternalFieldsFromGraphButton(button) {
+function omitInternalFieldsFromGraphButton(button, { includePhoneNumber, includePayload } = {}) {
   if (button === null || typeof button !== 'object' || Array.isArray(button)) {
     return button;
   }
-  const { phone_number: _phoneNumber, payload: _payload, ...rest } = button;
-  return rest;
+  const next = { ...button };
+  if (!includePhoneNumber) delete next.phone_number;
+  if (!includePayload) delete next.payload;
+  return next;
+}
+
+function cloneJsonValue(value) {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeQualityScore(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const score = typeof raw.score === 'string' ? raw.score : null;
+  const date  = typeof raw.date === 'number' ? raw.date : null;
+  if (score === null && date === null) return null;
+  return { score, date };
 }
 
 /**
- * Copia components Graph para o DTO: strip `example`, `phone_number` e `payload`.
+ * Copia components Graph para o DTO.
+ * Chat: strip `example`, `phone_number` e `payload`.
+ * Admin: preserva example/phone/payload para visualização integral.
  * Não muta o objeto Graph original usado pelo backend de envio.
  * @private
  */
-function sanitizePublicComponents(rawComponents) {
+function sanitizePublicComponents(rawComponents, options = {}) {
   if (!Array.isArray(rawComponents)) return [];
+  const { includeExamples, includePhoneNumber, includePayload } = options;
   return rawComponents.map((comp) => {
     if (comp === null || typeof comp !== 'object' || Array.isArray(comp)) return comp;
-    const { example: _ex, ...rest } = comp;
-    if (!Array.isArray(rest.buttons)) return rest;
+    const next = includeExamples ? cloneJsonValue(comp) : { ...comp };
+    if (!includeExamples) delete next.example;
+    if (!Array.isArray(next.buttons)) return next;
     return {
-      ...rest,
-      buttons: rest.buttons.map(omitInternalFieldsFromGraphButton),
+      ...next,
+      buttons: next.buttons.map((button) => omitInternalFieldsFromGraphButton(button, {
+        includePhoneNumber,
+        includePayload,
+      })),
     };
   });
 }

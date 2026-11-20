@@ -16,6 +16,8 @@ import type {
   MetaTemplateGraphStatus,
   MetaWhatsAppInstance,
 } from '../../types/meta-whatsapp'
+import { MetaTemplateDetails } from './MetaTemplateDetails'
+import { templateRowKey } from './metaTemplateDetailsModel'
 
 const STATUS_BADGE: Record<MetaTemplateGraphStatus, string> = {
   APPROVED:          'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -59,6 +61,7 @@ export function MetaOfficialTemplatesPanel() {
   const [loadingList, setLoadingList] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const fetchGenRef = useRef(0)
 
   useEffect(() => {
@@ -102,6 +105,10 @@ export function MetaOfficialTemplatesPanel() {
   }, [companyId])
 
   useEffect(() => {
+    setSelectedKey(null)
+  }, [selectedInstanceId])
+
+  useEffect(() => {
     if (!selectedInstanceId) {
       setTemplates([])
       setNextCursor(null)
@@ -110,6 +117,8 @@ export function MetaOfficialTemplatesPanel() {
     }
     void loadPage(selectedInstanceId)
   }, [selectedInstanceId, loadPage])
+
+  const selectedTemplate = templates.find((item) => templateRowKey(item) === selectedKey) ?? null
 
   if (!companyId) {
     return (
@@ -182,6 +191,13 @@ export function MetaOfficialTemplatesPanel() {
         </button>
       </div>
 
+      {selectedTemplate && (
+        <MetaTemplateDetails
+          template={selectedTemplate}
+          onClose={() => setSelectedKey(null)}
+        />
+      )}
+
       {loadingList && (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="w-6 h-6 animate-spin text-green-600" />
@@ -204,13 +220,13 @@ export function MetaOfficialTemplatesPanel() {
         </div>
       )}
 
-      {!loadingList && !listError && templates.length === 0 && (
+      {!selectedTemplate && !loadingList && !listError && templates.length === 0 && (
         <p className="text-sm text-slate-500 py-8 text-center">
           Nenhum modelo encontrado nesta conta Meta.
         </p>
       )}
 
-      {!loadingList && !listError && templates.length > 0 && (
+      {!selectedTemplate && !loadingList && !listError && templates.length > 0 && (
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
@@ -223,7 +239,20 @@ export function MetaOfficialTemplatesPanel() {
             </thead>
             <tbody>
               {templates.map((tmpl) => (
-                <tr key={`${tmpl.id}:${tmpl.language}`} className="border-t border-slate-100">
+                <tr
+                  key={templateRowKey(tmpl)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Abrir detalhes de ${tmpl.name}`}
+                  className="border-t border-slate-100 cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                  onClick={() => setSelectedKey(templateRowKey(tmpl))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setSelectedKey(templateRowKey(tmpl))
+                    }
+                  }}
+                >
                   <td className="px-3 py-2 font-medium text-slate-800">{tmpl.name}</td>
                   <td className="px-3 py-2 text-slate-600">{tmpl.language}</td>
                   <td className="px-3 py-2 text-slate-600">{tmpl.category}</td>
@@ -235,7 +264,7 @@ export function MetaOfficialTemplatesPanel() {
         </div>
       )}
 
-      {!loadingList && !listError && nextCursor && (
+      {!selectedTemplate && !loadingList && !listError && nextCursor && (
         <div className="flex justify-center">
           <button
             type="button"

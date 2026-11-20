@@ -926,6 +926,52 @@ describe('TPL-46 listagem administrativa', () => {
     );
     expect(res._status).toBe(200);
   });
+
+  it('status=ALL preserva example e phone_number; GET sem status continua removendo', async () => {
+    const withPhone = {
+      ...FAKE_TEMPLATE_SIMPLE,
+      id: 'tpl-phone-admin',
+      rejected_reason: 'NONE',
+      quality_score: { score: 'GREEN', date: 1710000000 },
+      components: [
+        {
+          type: 'BODY',
+          text: 'Olá, {{1}}!',
+          example: { body_text: [['João']] },
+        },
+        {
+          type: 'BUTTONS',
+          buttons: [
+            { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511999999999' },
+            { type: 'URL', text: 'Site', url: 'https://example.com/loja' },
+          ],
+        },
+      ],
+    };
+    mockListMessageTemplates.mockResolvedValue(makeListResult([withPhone]));
+
+    const adminRes = makeRes();
+    await handler(makeReq({ query: {
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      'ALL',
+    }}), adminRes);
+    expect(adminRes._status).toBe(200);
+    const adminTpl = adminRes._body.templates[0];
+    expect(adminTpl.components[0]).toHaveProperty('example');
+    expect(adminTpl.components[0].example).toEqual({ body_text: [['João']] });
+    expect(adminTpl.components[1].buttons[0].phone_number).toBe('+5511999999999');
+    expect(adminTpl.rejected_reason).toBe('NONE');
+    expect(adminTpl.quality_score).toEqual({ score: 'GREEN', date: 1710000000 });
+    expect(JSON.stringify(adminRes._body)).not.toContain(FAKE_TOKEN_PLAIN);
+
+    mockListMessageTemplates.mockResolvedValue(makeListResult([withPhone]));
+    const chatRes = makeRes();
+    await handler(makeReq(), chatRes);
+    expect(chatRes._body.templates[0].components[0]).not.toHaveProperty('example');
+    expect(chatRes._body.templates[0].components[1].buttons[0]).not.toHaveProperty('phone_number');
+    expect(chatRes._body.templates[0]).not.toHaveProperty('rejected_reason');
+  });
 });
 
 // =============================================================================

@@ -118,7 +118,10 @@ export class MetaOutboundAudioSendError extends Error {
  * Nunca copia payload ou phone_number.
  * Campo ausente/null → []; tipo inválido → throw (fail-closed).
  */
-function mapSanitizedButtons(raw: unknown): MetaTemplateButton[] {
+function mapSanitizedButtons(
+  raw: unknown,
+  options?: { includePhoneNumber?: boolean },
+): MetaTemplateButton[] {
   if (raw == null) return []
   if (!Array.isArray(raw)) {
     throw new Error('Resposta inválida do servidor: template.buttons inválido')
@@ -149,10 +152,38 @@ function mapSanitizedButtons(raw: unknown): MetaTemplateButton[] {
     if (b.url_kind === 'static' || b.url_kind === 'dynamic' || b.url_kind === 'unknown') {
       mapped.url_kind = b.url_kind
     }
+    if (options?.includePhoneNumber && typeof b.phone_number === 'string' && b.phone_number) {
+      mapped.phone_number = b.phone_number
+    }
     buttons.push(mapped)
   }
 
   return buttons
+}
+
+function mapRejectedReason(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw === 'string') return raw
+  throw new Error('Resposta inválida do servidor: template.rejected_reason inválido')
+}
+
+function mapQualityScore(raw: unknown): { score: string | null; date: number | null } | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Resposta inválida do servidor: template.quality_score inválido')
+  }
+  const value = raw as Record<string, unknown>
+  const score = value.score === undefined || value.score === null
+    ? null
+    : typeof value.score === 'string'
+      ? value.score
+      : (() => { throw new Error('Resposta inválida do servidor: template.quality_score.score inválido') })()
+  const date = value.date === undefined || value.date === null
+    ? null
+    : typeof value.date === 'number'
+      ? value.date
+      : (() => { throw new Error('Resposta inválida do servidor: template.quality_score.date inválido') })()
+  return { score, date }
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -763,7 +794,9 @@ export const metaWhatsAppApi = {
         supported:           tmpl.supported as boolean,
         unsupported_reason:  tmpl.unsupported_reason as string | null,
         header_media_format: tmpl.header_media_format as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null,
-        buttons:             mapSanitizedButtons(tmpl.buttons),
+        buttons:             mapSanitizedButtons(tmpl.buttons, { includePhoneNumber: true }),
+        rejected_reason:     mapRejectedReason(tmpl.rejected_reason),
+        quality_score:       mapQualityScore(tmpl.quality_score),
       })
     }
 

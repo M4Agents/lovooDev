@@ -147,6 +147,38 @@ describe('MetaOfficialTemplatesPanel', () => {
     expect(screen.getByText('promo_rejected')).toBeTruthy()
   })
 
+  it('MOT-07: clique na linha abre detalhes integrais e fechar volta à lista', async () => {
+    mockListAdmin.mockResolvedValue({
+      templates: [{
+        ...FAKE_ADMIN_TEMPLATE,
+        components: [{ type: 'BODY', text: 'Corpo completo do modelo' }],
+      }],
+      next_cursor: null,
+    })
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' }))
+    expect(screen.getByText('Conteúdo completo')).toBeTruthy()
+    expect(screen.getAllByText('Corpo completo do modelo').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: /voltar à lista/i }))
+    expect(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' })).toBeTruthy()
+  })
+
+  it('MOT-08: trocar instância fecha detalhes anteriores', async () => {
+    vi.mocked(useMetaWhatsAppInstances).mockReturnValue({
+      instances: [FAKE_INSTANCE, FAKE_INSTANCE_B],
+      loading:   false,
+      error:     null,
+      refresh:   mockRefresh as unknown as () => void,
+    })
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' }))
+    expect(screen.getByText('Conteúdo completo')).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: FAKE_INSTANCE_B.id } })
+    await waitFor(() => expect(screen.queryByText('Conteúdo completo')).toBeNull())
+  })
+
   it('MOT-06: erro da listagem → retry dispara nova consulta', async () => {
     mockListAdmin
       .mockRejectedValueOnce(new Error('provider_unavailable'))

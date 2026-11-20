@@ -322,7 +322,10 @@ function buildTemplatesUrl(graphVersion, wabaId, options) {
   } = options ?? {};
 
   const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${wabaId}/message_templates`);
-  url.searchParams.set('fields', 'id,name,language,status,category,parameter_format,components');
+  url.searchParams.set(
+    'fields',
+    'id,name,language,status,category,parameter_format,components,rejected_reason,quality_score',
+  );
   url.searchParams.set('limit',  String(limit));
 
   // status omitido (undefined) → APPROVED (contrato do chat).

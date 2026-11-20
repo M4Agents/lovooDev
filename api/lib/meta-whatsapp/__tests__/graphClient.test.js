@@ -2299,7 +2299,7 @@ describe('listMessageTemplates', () => {
     await listMessageTemplates(FAKE_TOKEN, FAKE_WABA);
     const [callUrl] = fetch.mock.calls[0];
     expect(callUrl.searchParams.get('fields')).toBe(
-      'id,name,language,status,category,parameter_format,components',
+      'id,name,language,status,category,parameter_format,components,rejected_reason,quality_score',
     );
   });
 
