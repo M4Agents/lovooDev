@@ -1412,3 +1412,44 @@ describe('metaWhatsAppApi.listAdminTemplates', () => {
       .rejects.toThrow('Resposta inválida do servidor: template.status inválido')
   })
 })
+
+describe('metaWhatsAppApi.createTemplate', () => {
+  it('CTC-01: POST /api/whatsapp/meta/templates/create sem waba/token', async () => {
+    const spy = mockFetch({
+      id: '594425479261596',
+      name: 'pedido_enviado',
+      language: 'pt_BR',
+      status: 'PENDING',
+      category: 'UTILITY',
+    })
+    const result = await metaWhatsAppApi.createTemplate({
+      companyId: COMPANY_ID,
+      instanceId: INSTANCE_ID,
+      name: 'pedido_enviado',
+      language: 'pt_BR',
+      category: 'UTILITY',
+      body_text: 'Olá {{1}}',
+      examples: { body: { '1': 'João' } },
+    })
+    expect(calledUrl(spy).pathname).toBe('/api/whatsapp/meta/templates/create')
+    expect(spy.mock.calls[0][1]).toMatchObject({ method: 'POST' })
+    const body = calledParsedBody(spy)
+    expect(body.company_id).toBe(COMPANY_ID)
+    expect(body.instance_id).toBe(INSTANCE_ID)
+    expect(body.waba_id).toBeUndefined()
+    expect(body.access_token).toBeUndefined()
+    expect(result.status).toBe('PENDING')
+  })
+
+  it('CTC-02: erro do backend vira err.message', async () => {
+    mockFetch({ error: 'authentication_not_supported' }, 400)
+    await expect(metaWhatsAppApi.createTemplate({
+      companyId: COMPANY_ID,
+      instanceId: INSTANCE_ID,
+      name: 'otp_login',
+      language: 'pt_BR',
+      category: 'UTILITY',
+      body_text: 'codigo',
+    })).rejects.toThrow('authentication_not_supported')
+  })
+})

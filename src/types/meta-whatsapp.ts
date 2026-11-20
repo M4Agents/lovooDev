@@ -412,6 +412,30 @@ export interface GetMetaAdminTemplatesResponse {
   next_cursor: string | null
 }
 
+export interface MetaCreateTemplateInput {
+  companyId: string
+  instanceId: string
+  name: string
+  language: string
+  category: 'UTILITY' | 'MARKETING'
+  header_text?: string
+  body_text: string
+  footer_text?: string
+  examples?: {
+    header?: Record<string, string>
+    body?: Record<string, string>
+  }
+}
+
+export interface MetaCreateTemplateResponse {
+  id: string
+  name: string
+  language: string
+  status: MetaTemplateGraphStatus
+  category: string
+  message?: string
+}
+
 // ── Valores dos parâmetros fornecidos pelo agente no picker ──────────────────
 // Espelha a estrutura aceita pelo backend send-template.js.
 // header é opcional (templates sem componente HEADER não o enviam).

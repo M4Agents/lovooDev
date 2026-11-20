@@ -52,6 +52,8 @@ import type {
   MetaSendMessageResponse,
   MetaSendTemplateResponse,
   MetaAdminWhatsAppTemplate,
+  MetaCreateTemplateInput,
+  MetaCreateTemplateResponse,
   MetaTemplateAdminStatusFilter,
   MetaTemplateGraphStatus,
   MetaTemplateParameter,
@@ -803,6 +805,58 @@ export const metaWhatsAppApi = {
     return {
       templates,
       next_cursor: raw.next_cursor as string | null,
+    }
+  },
+
+  /**
+   * Submete um template textual à Graph para análise.
+   * POST /api/whatsapp/meta/templates/create
+   * Nunca envia waba_id, token ou components Graph crus.
+   */
+  async createTemplate(input: MetaCreateTemplateInput): Promise<MetaCreateTemplateResponse> {
+    if (!input.companyId) throw new Error('company_id é obrigatório')
+    if (!input.instanceId) throw new Error('instance_id é obrigatório')
+
+    const headers = await getAuthHeaders()
+    const res = await fetch('/api/whatsapp/meta/templates/create', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        company_id: input.companyId,
+        instance_id: input.instanceId,
+        name: input.name,
+        language: input.language,
+        category: input.category,
+        header_text: input.header_text ?? '',
+        body_text: input.body_text,
+        footer_text: input.footer_text ?? '',
+        examples: input.examples,
+      }),
+    })
+
+    const raw = await res.json().catch(() => ({})) as Record<string, unknown> & { error?: string }
+    if (!res.ok) {
+      throw new Error(typeof raw.error === 'string' ? raw.error : 'Erro ao criar modelo Meta')
+    }
+    if (typeof raw.id !== 'string' || !raw.id) throw new Error('Resposta inválida do servidor: id inválido')
+    if (typeof raw.name !== 'string' || !raw.name) throw new Error('Resposta inválida do servidor: name inválido')
+    if (typeof raw.language !== 'string' || !raw.language) {
+      throw new Error('Resposta inválida do servidor: language inválido')
+    }
+    if (typeof raw.status !== 'string' || !raw.status) {
+      throw new Error('Resposta inválida do servidor: status inválido')
+    }
+    if (typeof raw.category !== 'string' || !raw.category) {
+      throw new Error('Resposta inválida do servidor: category inválido')
+    }
+
+    return {
+      id: raw.id,
+      name: raw.name,
+      language: raw.language,
+      status: raw.status as MetaTemplateGraphStatus,
+      category: raw.category,
+      message: typeof raw.message === 'string' ? raw.message : undefined,
     }
   },
 

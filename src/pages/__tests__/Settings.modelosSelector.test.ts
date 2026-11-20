@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const settingsSrc = readFileSync(join(here, '../Settings.tsx'), 'utf8')
+const uazapiPanelSrc = readFileSync(join(here, '../../components/Settings/MessageTemplatesPanel.tsx'), 'utf8')
 
 describe('Settings — seletor Modelos (Fase A)', () => {
   it('SMS-01: MessageTemplatesPanel permanece montado com companyId original', () => {
@@ -28,5 +29,13 @@ describe('Settings — seletor Modelos (Fase A)', () => {
     expect(modelosBlock).toContain('modelosSource === \'life\'')
     expect(modelosBlock).toContain('<MessageTemplatesPanel companyId={company.id} />')
     expect(modelosBlock).not.toContain('MessageTemplatesPanel companyId={company.id} source')
+  })
+
+  it('SMS-04: criação Meta não entra no painel Uazapi nem em Settings.tsx', () => {
+    expect(settingsSrc).not.toContain('MetaTemplateCreateForm')
+    expect(settingsSrc).not.toContain('createTemplate')
+    expect(settingsSrc).not.toContain('/api/whatsapp/meta/templates/create')
+    expect(uazapiPanelSrc).not.toContain('MetaTemplateCreateForm')
+    expect(uazapiPanelSrc).not.toContain('/api/whatsapp/meta/templates/create')
   })
 })

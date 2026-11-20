@@ -13,10 +13,14 @@ vi.mock('../../../hooks/useCompany', () => ({ useCompany: vi.fn() }))
 vi.mock('../../../hooks/useMetaWhatsAppInstances', () => ({
   useMetaWhatsAppInstances: vi.fn(),
 }))
+vi.mock('../../../hooks/useAccessControl', () => ({
+  useAccessControl: vi.fn(() => ({ canConnectMetaWhatsApp: true })),
+}))
 vi.mock('../../../services/metaWhatsAppApi', () => ({
-  metaWhatsAppApi: { listAdminTemplates: vi.fn() },
+  metaWhatsAppApi: { listAdminTemplates: vi.fn(), createTemplate: vi.fn() },
 }))
 
+import { useAccessControl } from '../../../hooks/useAccessControl'
 import { useCompany } from '../../../hooks/useCompany'
 import { useMetaWhatsAppInstances } from '../../../hooks/useMetaWhatsAppInstances'
 import { metaWhatsAppApi } from '../../../services/metaWhatsAppApi'
@@ -59,6 +63,7 @@ const FAKE_ADMIN_TEMPLATE: MetaAdminWhatsAppTemplate = {
 }
 
 const mockListAdmin = metaWhatsAppApi.listAdminTemplates as ReturnType<typeof vi.fn>
+const mockCreateTemplate = metaWhatsAppApi.createTemplate as ReturnType<typeof vi.fn>
 let mockRefresh: ReturnType<typeof vi.fn>
 
 afterEach(cleanup)
@@ -66,6 +71,8 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   mockRefresh = vi.fn()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.mocked(useAccessControl).mockReturnValue({ canConnectMetaWhatsApp: true } as any)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(useCompany).mockReturnValue({ company: COMPANY } as any)
   vi.mocked(useMetaWhatsAppInstances).mockReturnValue({
@@ -190,5 +197,82 @@ describe('MetaOfficialTemplatesPanel', () => {
     fireEvent.click(screen.getByText('Tentar novamente'))
     await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
     expect(mockListAdmin).toHaveBeenCalledTimes(2)
+  })
+
+  it('MOT-09: Criar modelo abre o formulário e cancelar volta à lista', async () => {
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Criar modelo' }))
+    expect(screen.getByText('Criar modelo Meta')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Abrir detalhes de hello_world' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /voltar à lista/i }))
+    expect(screen.getByRole('button', { name: 'Abrir detalhes de hello_world' })).toBeTruthy()
+  })
+
+  it('MOT-10: seller não vê criação', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAccessControl).mockReturnValue({ canConnectMetaWhatsApp: false } as any)
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Criar modelo' })).toBeNull()
+  })
+
+  it('MOT-11: sucesso atualiza a listagem e não afirma aprovação', async () => {
+    mockCreateTemplate.mockResolvedValue({
+      id: '594425479261596',
+      name: 'pedido_enviado',
+      language: 'pt_BR',
+      status: 'PENDING',
+      category: 'UTILITY',
+    })
+    mockListAdmin
+      .mockResolvedValueOnce({ templates: [FAKE_ADMIN_TEMPLATE], next_cursor: null })
+      .mockResolvedValueOnce({
+        templates: [
+          FAKE_ADMIN_TEMPLATE,
+          { ...FAKE_ADMIN_TEMPLATE, id: 'tpl-new', name: 'pedido_enviado', status: 'PENDING' },
+        ],
+        next_cursor: null,
+      })
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Criar modelo' }))
+    fireEvent.change(screen.getByPlaceholderText('pedido_enviado'), { target: { value: 'pedido_enviado' } })
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'Olá cliente' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para aprovação da Meta' }))
+    await waitFor(() => expect(mockCreateTemplate).toHaveBeenCalledTimes(1))
+    expect(mockCreateTemplate.mock.calls[0][0].instanceId).toBe(FAKE_INSTANCE.id)
+    await waitFor(() => expect(screen.getByText(/enviado para análise da Meta/)).toBeTruthy())
+    expect(screen.getByText(/Status atual: PENDING/)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/aprovado imediatamente/i)
+    await waitFor(() => expect(mockListAdmin).toHaveBeenCalledTimes(2))
+  })
+
+  it('MOT-12: instância é travada ao abrir o formulário', async () => {
+    mockCreateTemplate.mockResolvedValue({
+      id: '594425479261596',
+      name: 'pedido_enviado',
+      language: 'pt_BR',
+      status: 'PENDING',
+      category: 'UTILITY',
+    })
+    vi.mocked(useMetaWhatsAppInstances).mockReturnValue({
+      instances: [FAKE_INSTANCE, FAKE_INSTANCE_B],
+      loading: false,
+      error: null,
+      refresh: mockRefresh as unknown as () => void,
+    })
+    render(<MetaOfficialTemplatesPanel />)
+    await waitFor(() => expect(screen.getByText('hello_world')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Conta Meta'), { target: { value: FAKE_INSTANCE_B.id } })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar modelo' }))
+    expect((screen.getByLabelText('Conta Meta') as HTMLSelectElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Conta Meta'), { target: { value: FAKE_INSTANCE.id } })
+    fireEvent.change(screen.getByPlaceholderText('pedido_enviado'), { target: { value: 'pedido_enviado' } })
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'Olá cliente' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para aprovação da Meta' }))
+    await waitFor(() => expect(mockCreateTemplate).toHaveBeenCalledTimes(1))
+    expect(mockCreateTemplate.mock.calls[0][0].instanceId).toBe(FAKE_INSTANCE_B.id)
+    expect(mockCreateTemplate.mock.calls[0][0].instanceId).not.toBe(FAKE_INSTANCE.id)
   })
 })

@@ -9,6 +9,7 @@
 //   listWabaPhoneNumbers(token, wabaId)                                     → [{ id, displayPhoneNumber, verifiedName }]
 //   discoverAuthorizedWabas(token)                                           → string[]  — WABA IDs via debug_token
 //   listMessageTemplates(token, wabaId, options)                             → { templates, nextCursor }
+//   createMessageTemplate(token, wabaId, payload)                            → { id, status, category }
 //   sendTemplateMessage(token, phoneNumberId, to, tpl)                       → { messageId }
 //   sendAudioMessage(token, phoneNumberId, to, mediaId, options?)            → { messageId }
 //   uploadMedia(token, phoneNumberId, bytes, mimeType, filename?)            → { mediaId }  (MVP4B.4A)
@@ -778,6 +779,115 @@ export async function listMessageTemplates(token, wabaId, options = {}) {
     templates:  payload.data,
     nextCursor,
   };
+}
+
+const CREATE_TEMPLATE_STATUSES = new Set([
+  'APPROVED',
+  'PENDING',
+  'REJECTED',
+  'PAUSED',
+  'DISABLED',
+  'IN_APPEAL',
+  'PENDING_DELETION',
+]);
+
+/**
+ * Cria um message template na WABA via Graph API.
+ *
+ * Endpoint: POST /{graphVersion}/{wabaId}/message_templates
+ *
+ * O payload já deve ter sido validado por templateCreate.buildGraphCreatePayload.
+ * Este cliente reenvia somente campos allowlist — nunca waba_id extra, token
+ * ou componentes arbitrários além do array já sanitizado.
+ *
+ * @param {string} token
+ * @param {string} wabaId
+ * @param {object} payload
+ * @returns {Promise<{ id: string, status: string, category: string }>}
+ * @throws {Error} err.code in:
+ *   graph_templates_invalid_input
+ *   graph_template_create_failed
+ *   graph_timeout
+ *   graph_network_error
+ *   graph_invalid_response
+ */
+export async function createMessageTemplate(token, wabaId, payload) {
+  if (typeof token !== 'string' || token.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (typeof wabaId !== 'string' || !META_ID_RE.test(wabaId)) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (typeof payload.name !== 'string' || payload.name.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (typeof payload.language !== 'string' || payload.language.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (typeof payload.category !== 'string' || payload.category.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+  if (!Array.isArray(payload.components) || payload.components.length === 0) {
+    throw makeError('graph_templates_invalid_input', 'Meta Graph templates: invalid input');
+  }
+
+  const { graphVersion } = getMetaServerConfig();
+  const url = new URL(`${GRAPH_BASE_URL}/${graphVersion}/${wabaId}/message_templates`);
+
+  const body = JSON.stringify({
+    name: payload.name,
+    language: payload.language,
+    category: payload.category,
+    parameter_format: payload.parameter_format === 'NAMED' ? 'NAMED' : 'POSITIONAL',
+    allow_category_change: true,
+    components: payload.components,
+  });
+
+  let res;
+  try {
+    res = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw makeError('graph_timeout', 'Meta Graph request timed out');
+    }
+    throw makeError('graph_network_error', 'Meta Graph network error');
+  }
+
+  if (!res.ok) {
+    throw makeError('graph_template_create_failed', 'Meta Graph template create failed');
+  }
+
+  let graphPayload;
+  try {
+    graphPayload = await res.json();
+  } catch {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  const rawId = graphPayload?.id;
+  const id = typeof rawId === 'string'
+    ? rawId
+    : (typeof rawId === 'number' && Number.isFinite(rawId) ? String(rawId) : '');
+  const status = typeof graphPayload?.status === 'string' ? graphPayload.status.toUpperCase() : '';
+  const category = typeof graphPayload?.category === 'string' ? graphPayload.category.toUpperCase() : payload.category;
+  if (id.length === 0) {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+  if (!CREATE_TEMPLATE_STATUSES.has(status)) {
+    throw makeError('graph_invalid_response', 'Meta Graph invalid response');
+  }
+
+  return { id, status, category };
 }
 
 // =============================================================================

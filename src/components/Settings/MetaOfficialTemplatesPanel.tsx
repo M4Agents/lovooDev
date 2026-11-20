@@ -1,21 +1,24 @@
 // =============================================================================
-// MetaOfficialTemplatesPanel — Fase A
+// MetaOfficialTemplatesPanel — Fase A + Fase B
 //
-// Listagem administrativa de templates da API Oficial Meta.
-// Sem criação, edição, exclusão ou envio.
+// Listagem administrativa e criação textual de templates da API Oficial Meta.
+// Sem edição, exclusão, botões ou mídia nesta fase.
 // WABA e token nunca são escolhidos pelo frontend — só instance_id público.
 // =============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Cloud, Loader2, RefreshCw } from 'lucide-react'
+import { AlertCircle, Cloud, Loader2, Plus, RefreshCw } from 'lucide-react'
+import { useAccessControl } from '../../hooks/useAccessControl'
 import { useCompany } from '../../hooks/useCompany'
 import { useMetaWhatsAppInstances } from '../../hooks/useMetaWhatsAppInstances'
 import { metaWhatsAppApi } from '../../services/metaWhatsAppApi'
 import type {
   MetaAdminWhatsAppTemplate,
+  MetaCreateTemplateResponse,
   MetaTemplateGraphStatus,
   MetaWhatsAppInstance,
 } from '../../types/meta-whatsapp'
+import { MetaTemplateCreateForm } from './MetaTemplateCreateForm'
 import { MetaTemplateDetails } from './MetaTemplateDetails'
 import { templateRowKey } from './metaTemplateDetailsModel'
 
@@ -45,6 +48,7 @@ function StatusBadge({ status }: { status: MetaTemplateGraphStatus }) {
 }
 
 export function MetaOfficialTemplatesPanel() {
+  const { canConnectMetaWhatsApp } = useAccessControl()
   const { company } = useCompany()
   const companyId = company?.id
   const { instances, loading: instancesLoading, error: instancesError, refresh } =
@@ -62,6 +66,9 @@ export function MetaOfficialTemplatesPanel() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [createInstanceId, setCreateInstanceId] = useState('')
+  const [createSuccess, setCreateSuccess] = useState<MetaCreateTemplateResponse | null>(null)
   const fetchGenRef = useRef(0)
 
   useEffect(() => {
@@ -170,7 +177,8 @@ export function MetaOfficialTemplatesPanel() {
             <select
               value={selectedInstanceId}
               onChange={(event) => setSelectedInstanceId(event.target.value)}
-              className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+              disabled={creating}
+              className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white disabled:opacity-60"
             >
               {connected.map((instance) => (
                 <option key={instance.id} value={instance.id}>
@@ -183,28 +191,68 @@ export function MetaOfficialTemplatesPanel() {
         <button
           type="button"
           onClick={() => selectedInstanceId && void loadPage(selectedInstanceId)}
-          disabled={loadingList}
+          disabled={loadingList || creating}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingList ? 'animate-spin' : ''}`} />
           Atualizar
         </button>
+        {canConnectMetaWhatsApp && (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedKey(null)
+              setCreateSuccess(null)
+              setCreateInstanceId(selectedInstanceId)
+              setCreating(true)
+            }}
+            disabled={!selectedInstanceId || creating}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Criar modelo
+          </button>
+        )}
       </div>
 
-      {selectedTemplate && (
+      {createSuccess && !creating && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
+          {createSuccess.message || (
+            <>
+              Modelo <span className="font-medium">{createSuccess.name}</span> enviado para análise da Meta.
+              Status atual: {createSuccess.status}. A aprovação não é imediata.
+            </>
+          )}
+        </div>
+      )}
+
+      {creating && companyId && (
+        <MetaTemplateCreateForm
+          companyId={companyId}
+          instanceId={createInstanceId}
+          onCancel={() => setCreating(false)}
+          onCreated={(result) => {
+            setCreating(false)
+            setCreateSuccess(result)
+            void loadPage(createInstanceId || selectedInstanceId)
+          }}
+        />
+      )}
+
+      {!creating && selectedTemplate && (
         <MetaTemplateDetails
           template={selectedTemplate}
           onClose={() => setSelectedKey(null)}
         />
       )}
 
-      {loadingList && (
+      {!creating && loadingList && (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="w-6 h-6 animate-spin text-green-600" />
         </div>
       )}
 
-      {!loadingList && listError && (
+      {!creating && !loadingList && listError && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -220,13 +268,13 @@ export function MetaOfficialTemplatesPanel() {
         </div>
       )}
 
-      {!selectedTemplate && !loadingList && !listError && templates.length === 0 && (
+      {!creating && !selectedTemplate && !loadingList && !listError && templates.length === 0 && (
         <p className="text-sm text-slate-500 py-8 text-center">
           Nenhum modelo encontrado nesta conta Meta.
         </p>
       )}
 
-      {!selectedTemplate && !loadingList && !listError && templates.length > 0 && (
+      {!creating && !selectedTemplate && !loadingList && !listError && templates.length > 0 && (
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
@@ -264,7 +312,7 @@ export function MetaOfficialTemplatesPanel() {
         </div>
       )}
 
-      {!selectedTemplate && !loadingList && !listError && nextCursor && (
+      {!creating && !selectedTemplate && !loadingList && !listError && nextCursor && (
         <div className="flex justify-center">
           <button
             type="button"
