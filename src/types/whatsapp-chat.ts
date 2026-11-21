@@ -212,6 +212,12 @@ export interface LeadPanelProps {
   companyId: string
   userId: string
   onLeadSaved?: () => void
+  /**
+   * Adapter de canal. Opcional e retrocompatível.
+   * Sem adapter, o LeadPanel usa o caminho Uazapi (comportamento atual).
+   * ChatLayout / ChatLayoutMobile NÃO passam adapter nesta fase.
+   */
+  adapter?: import('./channel-crm-adapter').ChannelCrmAdapter
 }
 
 export interface MessageBubbleProps {

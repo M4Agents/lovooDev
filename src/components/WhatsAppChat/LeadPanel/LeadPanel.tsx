@@ -4,7 +4,7 @@
 // Painel com informações do lead e agendamento
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
@@ -14,10 +14,10 @@ import { InstanceSelector } from '../InstanceSelector'
 import { UserSelector } from '../UserSelector'
 import { supabase } from '../../../lib/supabase'
 import type { Lead } from '../../../lib/supabase'
-import { brMobilePhoneLookupValues } from '../../../lib/phone/canonicalizeBrMobile'
 import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
+import { createUazapiChannelAdapter } from './uazapiChannelAdapter'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -96,48 +96,6 @@ const convertChatContactToLead = (
   };
 };
 
-const ASSOCIATED_LEAD_SELECT = 'id, name, phone, email, responsible_user_id'
-
-async function resolveAssociatedLead(
-  companyId: string,
-  conversation: { lead_id?: number | null; contact_phone?: string | null }
-) {
-  if (conversation.lead_id) {
-    const { data } = await supabase
-      .from('leads')
-      .select(ASSOCIATED_LEAD_SELECT)
-      .eq('id', conversation.lead_id)
-      .eq('company_id', companyId)
-      .is('deleted_at', null)
-      .maybeSingle()
-    if (data) return data
-  }
-
-  const phones = brMobilePhoneLookupValues(conversation.contact_phone)
-  if (phones.length === 0) return null
-
-  const { data: byNormalized } = await supabase
-    .from('leads')
-    .select(ASSOCIATED_LEAD_SELECT)
-    .eq('company_id', companyId)
-    .is('deleted_at', null)
-    .in('phone_normalized', phones)
-    .limit(1)
-    .maybeSingle()
-  if (byNormalized) return byNormalized
-
-  const { data: byPhone } = await supabase
-    .from('leads')
-    .select(ASSOCIATED_LEAD_SELECT)
-    .eq('company_id', companyId)
-    .is('deleted_at', null)
-    .in('phone', phones)
-    .limit(1)
-    .maybeSingle()
-
-  return byPhone ?? null
-}
-
 // =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
@@ -146,7 +104,8 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   conversationId,
   companyId,
   userId,
-  onLeadSaved
+  onLeadSaved,
+  adapter
 }) => {
   const { t } = useTranslation('chat')
   const [contact, setContact] = useState<ChatContact | null>(null)
@@ -167,104 +126,44 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [summarySuccess, setSummarySuccess] = useState(false)
   const [messageLimit, setMessageLimit] = useState<number>(100)
 
+  const resolvedAdapter = useMemo(
+    () => adapter ?? createUazapiChannelAdapter({ conversationId, companyId }),
+    [adapter, conversationId, companyId]
+  )
+  const adapterRef = useRef(resolvedAdapter)
+  adapterRef.current = resolvedAdapter
+
   // =====================================================
   // BUSCAR DADOS
   // =====================================================
-
-  // Função para calcular tempo médio de resposta
-  const calculateAverageResponseTime = async (conversationId: string) => {
-    try {
-      const { data: messages, error } = await supabase
-        .from('chat_messages')
-        .select('timestamp, direction')
-        .eq('conversation_id', conversationId)
-        .order('timestamp', { ascending: true })
-      
-      if (error || !messages || messages.length < 2) {
-        return '--'
-      }
-      
-      const responseTimes: number[] = []
-      
-      // Calcular tempo entre mensagem inbound e próxima outbound
-      for (let i = 0; i < messages.length - 1; i++) {
-        if (messages[i].direction === 'inbound') {
-          // Buscar próxima mensagem outbound
-          for (let j = i + 1; j < messages.length; j++) {
-            if (messages[j].direction === 'outbound') {
-              const inboundTime = new Date(messages[i].timestamp).getTime()
-              const outboundTime = new Date(messages[j].timestamp).getTime()
-              const diffMs = outboundTime - inboundTime
-              
-              if (diffMs > 0) {
-                responseTimes.push(diffMs)
-              }
-              break
-            }
-          }
-        }
-      }
-      
-      if (responseTimes.length === 0) {
-        return '--'
-      }
-      
-      // Calcular média
-      const avgMs = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
-      
-      // Formatar tempo
-      const minutes = Math.floor(avgMs / (1000 * 60))
-      const hours = Math.floor(minutes / 60)
-      const days = Math.floor(hours / 24)
-      
-      if (days > 0) {
-        return `${days}d`
-      } else if (hours > 0) {
-        return `${hours}h`
-      } else if (minutes > 0) {
-        return `${minutes}m`
-      } else {
-        return '<1m'
-      }
-    } catch (error) {
-      console.error('Erro ao calcular tempo médio de resposta:', error)
-      return '--'
-    }
-  }
+  // Ordem e tratamento de erro iguais ao fetchData original.
+  // Sem adapter na prop, resolvedAdapter é o UazapiChannelAdapter.
 
   const fetchData = async () => {
+    const channelAdapter = adapterRef.current
     try {
       setLoading(true)
-      
-      // Buscar conversa diretamente por ID — evita o limite de paginação (50)
-      const { data: convData } = await supabase
-        .from('chat_conversations')
-        .select('*')
-        .eq('id', conversationId)
-        .eq('company_id', companyId)
-        .maybeSingle()
+
+      const convData = await channelAdapter.loadConversation()
       const conv = convData ?? undefined
       setConversation(conv)
-      
+
       if (conv) {
-        // Buscar informações do contato
-        const contactData = await chatApi.getContactInfo(companyId, conv.contact_phone)
+        const contactData = await channelAdapter.loadContact(conv.contact_phone)
         setContact(contactData)
-        
+
         try {
-          const leadData = await resolveAssociatedLead(companyId, conv)
+          const leadData = await channelAdapter.resolveAssociatedLead(conv)
           setAssociatedLead(leadData)
         } catch (error) {
           console.error('Erro ao buscar lead associado:', error)
           setAssociatedLead(null)
         }
-        
-        // Calcular tempo médio de resposta
-        const avgTime = await calculateAverageResponseTime(conversationId)
+
+        const avgTime = await channelAdapter.getAverageResponseTime()
         setAverageResponseTime(avgTime)
-        
-        // Buscar mensagens agendadas
-        const scheduledData = await chatApi.getScheduledMessages(companyId, conversationId)
+
+        const scheduledData = await channelAdapter.loadScheduledMessages()
         setScheduledMessages(scheduledData)
       }
     } catch (error) {
