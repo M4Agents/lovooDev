@@ -622,7 +622,7 @@ async function processInboundMediaMessage({
   // Early dedupe: ANTES de decrypt/Graph/Storage. RPC é autoridade final contra race.
   const { data: existingMsg, error: dedupeErr } = await svc
     .from('meta_messages')
-    .select('id')
+    .select('id, conversation_id')
     .eq('instance_id', instance.id)
     .eq('meta_message_id', message.id)
     .maybeSingle();
@@ -633,6 +633,25 @@ async function processInboundMediaMessage({
   }
 
   if (existingMsg) {
+    const waId = typeof message.from === 'string' ? message.from : '';
+    if (!existingMsg.conversation_id || waId.length === 0) {
+      console.error('[meta/webhook] event_type=%s outcome=lead_resolve_skipped', logEvent);
+      return false;
+    }
+
+    const { error: resolveErr } = await svc.rpc('resolve_meta_conversation_lead', {
+      p_company_id:      instance.company_id,
+      p_instance_id:     instance.id,
+      p_conversation_id: existingMsg.conversation_id,
+      p_wa_id:           waId,
+      p_contact_name:    contactName,
+    });
+
+    if (resolveErr) {
+      console.error('[meta/webhook] event_type=%s outcome=lead_resolve_failed', logEvent);
+      return true;
+    }
+
     console.log('[meta/webhook] event_type=%s outcome=already_persisted', logEvent);
     return false;
   }

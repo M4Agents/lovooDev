@@ -240,15 +240,6 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   const metaConversationId = selectedWAInstance.provider === 'meta'
     ? metaChatData.selectedConversationId
     : null
-  const metaLeadAdapter = useMetaChannelAdapter(
-    companyId,
-    metaConversationId,
-    {
-      beginCanonicalRead: metaChatData.beginCanonicalRead,
-      publishCanonicalConversation: metaChatData.publishCanonicalConversation,
-    },
-  )
-
   const selectedMetaConversation = useMemo(
     () =>
       metaChatData.selectedConversationId
@@ -257,6 +248,15 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
           )
         : undefined,
     [metaChatData.conversations, metaChatData.selectedConversationId]
+  )
+  const metaLeadAdapter = useMetaChannelAdapter(
+    companyId,
+    metaConversationId,
+    {
+      beginCanonicalRead: metaChatData.beginCanonicalRead,
+      publishCanonicalConversation: metaChatData.publishCanonicalConversation,
+    },
+    selectedMetaConversation?.lead_id ?? null,
   )
 
   // Conversa clicada que está bloqueada (lead is_over_plan = true) — apenas WhatsApp

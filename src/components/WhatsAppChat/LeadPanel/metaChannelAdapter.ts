@@ -161,12 +161,15 @@ export function useMetaChannelAdapter(
   companyId: string,
   conversationId: string | null,
   listSync: MetaListSync | null,
+  observedLeadId: number | null = null,
 ): ChannelCrmAdapter | null {
   const syncRef = useRef(listSync)
   syncRef.current = listSync
 
   return useMemo(() => {
     if (!conversationId || !companyId) return null
+    // observedLeadId só entra na identidade. A releitura usa o GET por id.
+    void observedLeadId
     return createMetaChannelAdapter({
       conversationId,
       companyId,
@@ -175,5 +178,5 @@ export function useMetaChannelAdapter(
         syncRef.current?.publishCanonicalConversation(token, row)
       },
     })
-  }, [companyId, conversationId])
+  }, [companyId, conversationId, observedLeadId])
 }

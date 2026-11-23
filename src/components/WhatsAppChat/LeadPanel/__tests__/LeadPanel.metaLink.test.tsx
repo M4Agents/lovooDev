@@ -176,6 +176,28 @@ describe('LeadPanel — vínculo Meta', () => {
     expect(screen.queryByTestId('opportunities-section')).toBeNull()
   })
 
+  it('reler o painel uma vez quando o lead da conversa passa a existir', async () => {
+    const unlinked = metaAdapter({ leadId: null })
+    const view = renderMeta(unlinked)
+    await waitFor(() => expect(unlinked.loadConversation).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Vincular lead')).toBeTruthy()
+
+    const linked = metaAdapter({ leadId: 42 })
+    view.rerender(
+      <LeadPanel
+        conversationId={linked.conversationId}
+        companyId={linked.companyId}
+        userId="user-1"
+        adapter={linked}
+      />,
+    )
+
+    await waitFor(() => expect(linked.loadConversation).toHaveBeenCalledTimes(1))
+    expect(unlinked.loadConversation).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.getByTestId('opportunities-section').textContent).toBe('42'))
+    expect(screen.queryByText('Vincular lead')).toBeNull()
+  })
+
   it('conversa vinculada mostra o lead e não oferece outro vínculo', async () => {
     renderMeta(metaAdapter({ leadId: 42 }))
     await waitFor(() => expect(screen.getByTestId('opportunities-section').textContent).toBe('42'))

@@ -131,21 +131,28 @@ describe('metaChannelAdapter', () => {
     })
   })
 
-  it('mantém a mesma referência enquanto conversa e empresa não mudam', () => {
+  it('mantém a mesma referência enquanto conversa, empresa e lead não mudam', () => {
     const { result, rerender } = renderHook(
-      (props: { companyId: string; conversationId: string | null }) =>
+      (props: { companyId: string; conversationId: string | null; leadId: number | null }) =>
         useMetaChannelAdapter(props.companyId, props.conversationId, {
           beginCanonicalRead: () => null,
           publishCanonicalConversation: () => {},
-        }),
-      { initialProps: { companyId: COMPANY_ID, conversationId: CONV_ID } },
+        }, props.leadId),
+      { initialProps: { companyId: COMPANY_ID, conversationId: CONV_ID, leadId: null as number | null } },
     )
     const first = result.current
-    rerender({ companyId: COMPANY_ID, conversationId: CONV_ID })
+    rerender({ companyId: COMPANY_ID, conversationId: CONV_ID, leadId: null })
     expect(result.current).toBe(first)
 
-    rerender({ companyId: 'company-test-002', conversationId: CONV_ID })
+    rerender({ companyId: COMPANY_ID, conversationId: CONV_ID, leadId: 42 })
     expect(result.current).not.toBe(first)
+    const linked = result.current
+
+    rerender({ companyId: COMPANY_ID, conversationId: CONV_ID, leadId: 42 })
+    expect(result.current).toBe(linked)
+
+    rerender({ companyId: 'company-test-002', conversationId: CONV_ID, leadId: 42 })
+    expect(result.current).not.toBe(linked)
   })
 
   it('não conserva lead em memória depois do POST', async () => {
