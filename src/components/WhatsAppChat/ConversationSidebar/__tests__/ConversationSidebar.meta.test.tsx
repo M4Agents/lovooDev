@@ -95,6 +95,7 @@ const META_CONV_WITH_NAME = {
   last_message_preview: 'Olá, tudo bem?',
   created_at:           '2026-09-21T10:00:00.000Z',
   updated_at:           '2026-09-21T15:00:00.000Z',
+  lead_id:              null,
   profile_picture_url:  null,
 }
 

@@ -12,6 +12,7 @@
 //   CONV-12 … CONV-14  Auth / RBAC
 //   CONV-15 … CONV-16  Erros de DB
 //   CONV-17 … CONV-18  Segurança: SELECT sem company_id, query usa auth.companyId
+//   CONV-25 … CONV-28  DTO lead_id (sem JOIN em leads, status=active)
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -69,6 +70,7 @@ const FAKE_CONV = {
   last_message_preview: '...',
   created_at:           '2026-09-21T13:40:49.000Z',
   updated_at:           '2026-09-21T13:40:52.000Z',
+  lead_id:              null,
 };
 
 // FAKE_CONV enriquecido (com foto) — resultado esperado após enrichment.
@@ -445,14 +447,15 @@ describe('GET /api/whatsapp/meta/conversations — segurança de resposta e quer
     const EXPECTED_PUBLIC_FIELDS = [
       'id', 'instance_id', 'wa_id', 'contact_name', 'status',
       'unread_count', 'last_message_at', 'last_message_preview',
-      'created_at', 'updated_at',
+      'created_at', 'updated_at', 'lead_id',
     ];
     for (const field of EXPECTED_PUBLIC_FIELDS) {
       expect(selectArg).toContain(field);
     }
 
-    // NÃO deve conter company_id nem usar SELECT *.
+    // NÃO deve conter company_id, JOIN de leads nem usar SELECT *.
     expect(selectArg).not.toContain('company_id');
+    expect(selectArg).not.toMatch(/\bleads\b/);
     expect(selectArg).not.toBe('*');
     expect(selectArg).not.toContain('*');
   });
@@ -595,5 +598,71 @@ describe('GET /api/whatsapp/meta/conversations — enriquecimento de foto (MVP3F
     const inArgs = contactsChain.in.mock.calls[0][1];
     expect(inArgs).toEqual([FAKE_WA_ID]);
     expect(inArgs).toHaveLength(1);
+  });
+});
+
+// =============================================================================
+// CONV-25 … CONV-28 — DTO lead_id (META-L1.4C.2A)
+// =============================================================================
+
+describe('GET /api/whatsapp/meta/conversations — DTO lead_id', () => {
+  it('CONV-25: conversa com lead_id numérico — campo retornado, sem JOIN em leads', async () => {
+    const linked = { ...FAKE_CONV, lead_id: 42 };
+    setupHappyPath({ conversations: [linked] });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations).toHaveLength(1);
+    expect(res._body.conversations[0].lead_id).toBe(42);
+    expect(mockSvc.from.mock.calls.map(c => c[0])).not.toContain('leads');
+  });
+
+  it('CONV-26: conversa com lead_id null permanece null', async () => {
+    setupHappyPath({ conversations: [FAKE_CONV] });
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations[0].lead_id).toBeNull();
+  });
+
+  it('CONV-27: DTO não expõe company_id nem dados pessoais adicionais do lead', async () => {
+    setupHappyPath();
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    const conv = res._body.conversations[0];
+    expect(conv).not.toHaveProperty('company_id');
+    expect(conv).not.toHaveProperty('name');
+    expect(conv).not.toHaveProperty('email');
+    expect(conv).not.toHaveProperty('phone');
+    expect(conv).not.toHaveProperty('owner_id');
+    expect(conv).not.toHaveProperty('assigned_to');
+    expect(mockSvc.from.mock.calls.map(c => c[0])).toEqual([
+      'meta_conversations',
+      'chat_contacts',
+    ]);
+  });
+
+  it('CONV-28: filtro status=active permanece (conversas arquivadas excluídas)', async () => {
+    const convChain = makeConvChain([]);
+    mockSvc.from.mockReturnValueOnce(convChain);
+
+    const req = makeReq();
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ conversations: [] });
+    const statusCall = convChain.eq.mock.calls.find(c => c[0] === 'status');
+    expect(statusCall).toBeDefined();
+    expect(statusCall[1]).toBe('active');
+    const companyCall = convChain.eq.mock.calls.find(c => c[0] === 'company_id');
+    expect(companyCall[1]).toBe(FAKE_COMPANY_ID);
   });
 });

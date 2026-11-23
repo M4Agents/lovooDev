@@ -163,6 +163,8 @@ export interface WhatsAppChatInstance {
 //   GET /api/whatsapp/meta/conversations
 //
 // Campos explicitamente excluídos pelo backend: company_id, meta_message_id.
+// lead_id é o vínculo explícito CRM (leads.id); null = sem vínculo.
+// O DTO NÃO faz JOIN com leads e NÃO inclui dados pessoais do lead.
 // Nullability reflete o schema real: last_message_at e last_message_preview
 // podem ser null em conversas sem mensagem ainda.
 
@@ -177,6 +179,7 @@ export interface MetaChatConversation {
   last_message_preview: string | null
   created_at:           string
   updated_at:           string
+  lead_id:              number | null
   // Foto do contato — enriquecida pelo backend via chat_contacts (MVP3F).
   // null quando não há correspondência por telefone na mesma company.
   profile_picture_url:  string | null

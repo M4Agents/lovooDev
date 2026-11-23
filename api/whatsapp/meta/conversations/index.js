@@ -53,6 +53,7 @@ const LIMIT_DEFAULT = 50;
 
 // Campos públicos retornados ao frontend.
 // Nunca incluir: company_id, deleted_at.
+// lead_id: FK nullable para leads.id — sem JOIN; null = sem vínculo.
 const PUBLIC_FIELDS = [
   'id',
   'instance_id',
@@ -64,6 +65,7 @@ const PUBLIC_FIELDS = [
   'last_message_preview',
   'created_at',
   'updated_at',
+  'lead_id',
 ].join(', ');
 
 export default async function handler(req, res) {

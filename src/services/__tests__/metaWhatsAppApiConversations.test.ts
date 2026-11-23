@@ -21,6 +21,9 @@
 //   GC-12  HTTP 403 → rejeitar com erro do backend
 //   GC-13  HTTP 500 → fallback de mensagem genérica
 //   GC-14  campo conversations ausente na resposta → array vazio
+//   GC-15  lead_id numérico aceito no contrato
+//   GC-16  lead_id null aceito no contrato
+//   GC-17  DTO sem company_id e sem campos pessoais do lead
 //
 // Cobertura — getMessages:
 //   GM-01  happy path com messages retornadas
@@ -134,6 +137,7 @@ const FAKE_CONVERSATION: MetaChatConversation = {
   last_message_preview: 'Olá',
   created_at:           '2026-09-20T10:00:00.000Z',
   updated_at:           '2026-09-21T12:00:00.000Z',
+  lead_id:              null,
   profile_picture_url:  null,  // campo obrigatório adicionado em MVP3F
 }
 
@@ -261,6 +265,32 @@ describe('metaWhatsAppApi.getConversations', () => {
     mockFetch({})
     const result = await metaWhatsAppApi.getConversations(COMPANY_ID)
     expect(result).toEqual([])
+  })
+
+  // GC-15 — lead_id numérico
+  it('GC-15: lead_id numérico é aceito no contrato', async () => {
+    const linked: MetaChatConversation = { ...FAKE_CONVERSATION, lead_id: 7 }
+    mockFetch({ conversations: [linked] })
+    const result = await metaWhatsAppApi.getConversations(COMPANY_ID)
+    expect(result[0].lead_id).toBe(7)
+    expect(result[0]).not.toHaveProperty('company_id')
+  })
+
+  // GC-16 — lead_id null
+  it('GC-16: lead_id null é aceito no contrato', async () => {
+    mockFetch({ conversations: [FAKE_CONVERSATION] })
+    const result = await metaWhatsAppApi.getConversations(COMPANY_ID)
+    expect(result[0].lead_id).toBeNull()
+  })
+
+  // GC-17 — sem company_id / dados pessoais do lead
+  it('GC-17: conversa não inclui company_id nem campos pessoais do lead', async () => {
+    mockFetch({ conversations: [FAKE_CONVERSATION] })
+    const result = await metaWhatsAppApi.getConversations(COMPANY_ID)
+    expect(result[0]).not.toHaveProperty('company_id')
+    expect(result[0]).not.toHaveProperty('name')
+    expect(result[0]).not.toHaveProperty('email')
+    expect(result[0]).not.toHaveProperty('phone')
   })
 })
 
