@@ -5,9 +5,10 @@
 //
 // Query params:
 //   company_id   (string, obrigatório)
+//   id           (UUID, opcional) — uma conversa, sem paginação
 //   instance_id  (UUID, opcional) — filtrar por instância específica
 //   filter       (string, opcional) — all | unread (padrão: all)
-//   limit        (integer, opcional) — padrão 50, máximo 100
+//   limit        (integer, opcional) — padrão 50, máximo 100; ignorado quando id está presente
 //
 // Fluxo de segurança (ordem obrigatória — não alterar):
 //   1. Method guard (GET only)
@@ -75,10 +76,11 @@ export default async function handler(req, res) {
   }
 
   // ── 2. Validar presença de company_id (sem DB) ─────────────────────────────
-  const companyId   = req.query?.company_id;
-  const instanceId  = req.query?.instance_id;
-  const filterParam = req.query?.filter;
-  const limitParam  = req.query?.limit;
+  const companyId      = req.query?.company_id;
+  const conversationId = req.query?.id;
+  const instanceId     = req.query?.instance_id;
+  const filterParam    = req.query?.filter;
+  const limitParam     = req.query?.limit;
 
   if (!companyId) {
     return res.status(400).json({ error: 'company_id é obrigatório' });
@@ -87,6 +89,10 @@ export default async function handler(req, res) {
   // ── 3. Validar formato de instance_id (sem DB) ─────────────────────────────
   if (instanceId !== undefined && !UUID_RE.test(instanceId)) {
     return res.status(400).json({ error: 'instance_id inválido' });
+  }
+
+  if (conversationId !== undefined && !UUID_RE.test(conversationId)) {
+    return res.status(400).json({ error: 'id inválido' });
   }
 
   // ── 4. Validar filter e limit (sem DB) ────────────────────────────────────
@@ -153,22 +159,49 @@ export default async function handler(req, res) {
   // Filtros obrigatórios: company_id + status=active.
   // limit() aplicado por último — filtros condicionais são adicionados antes
   // para garantir que o chain Supabase receba todos os filtros antes de resolver.
-  let query = svc
-    .from('meta_conversations')
-    .select(PUBLIC_FIELDS)
-    .eq('company_id', auth.companyId)
-    .eq('status', 'active')
-    .order('last_message_at', { ascending: false, nullsLast: true });
+  let conversations;
+  let queryErr;
 
-  if (instanceId) {
-    query = query.eq('instance_id', instanceId);
+  if (conversationId) {
+    // Leitura por ID: não aplica ordenação nem limit. Ausência, outro tenant,
+    // arquivada ou outra instância resolvem no mesmo 200 { conversations: [] }.
+    let byId = svc
+      .from('meta_conversations')
+      .select(PUBLIC_FIELDS)
+      .eq('id', conversationId)
+      .eq('company_id', auth.companyId)
+      .eq('status', 'active');
+
+    if (instanceId) {
+      byId = byId.eq('instance_id', instanceId);
+    }
+    if (filterType === 'unread') {
+      byId = byId.gt('unread_count', 0);
+    }
+
+    const byIdResult = await byId.maybeSingle();
+    queryErr = byIdResult.error;
+    conversations = byIdResult.data ? [byIdResult.data] : [];
+  } else {
+    let query = svc
+      .from('meta_conversations')
+      .select(PUBLIC_FIELDS)
+      .eq('company_id', auth.companyId)
+      .eq('status', 'active')
+      .order('last_message_at', { ascending: false, nullsLast: true });
+
+    if (instanceId) {
+      query = query.eq('instance_id', instanceId);
+    }
+
+    if (filterType === 'unread') {
+      query = query.gt('unread_count', 0);
+    }
+
+    const listResult = await query.limit(safeLimit);
+    queryErr = listResult.error;
+    conversations = listResult.data;
   }
-
-  if (filterType === 'unread') {
-    query = query.gt('unread_count', 0);
-  }
-
-  const { data: conversations, error: queryErr } = await query.limit(safeLimit);
 
   if (queryErr) {
     return res.status(500).json({ error: 'internal_error' });

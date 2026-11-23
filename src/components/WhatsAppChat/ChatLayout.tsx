@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { ConversationSidebar } from './ConversationSidebar/ConversationSidebar'
 import { ChatArea } from './ChatArea/ChatArea'
 import { LeadPanel } from './LeadPanel/LeadPanel'
+import { useMetaChannelAdapter } from './LeadPanel/metaChannelAdapter'
 import { LockedChatPanel } from './LockedChatPanel'
 import { InstagramMainArea, InstagramRightPanel } from './InstagramAreaRenderer'
 import { MetaChatArea } from './MetaChatArea/MetaChatArea'
@@ -236,6 +237,18 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   // MVP3C.4 — Conversa Meta selecionada derivada exclusivamente de metaChatData.
   // NÃO faz fetch adicional; NÃO usa instance ID para inferir provider.
   // undefined quando nenhuma conversa estiver selecionada ou ID não encontrado.
+  const metaConversationId = selectedWAInstance.provider === 'meta'
+    ? metaChatData.selectedConversationId
+    : null
+  const metaLeadAdapter = useMetaChannelAdapter(
+    companyId,
+    metaConversationId,
+    {
+      beginCanonicalRead: metaChatData.beginCanonicalRead,
+      publishCanonicalConversation: metaChatData.publishCanonicalConversation,
+    },
+  )
+
   const selectedMetaConversation = useMemo(
     () =>
       metaChatData.selectedConversationId
@@ -491,22 +504,26 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
             activeTab={activeIgTab}
           />
         ) : selectedWAInstance.provider === 'meta' ? (
-          /* MVP3C.3 — Meta selecionado: LeadPanel Uazapi NÃO renderiza.
-             Integração de lead Meta será implementada em etapa futura. */
-          <div className="flex items-center justify-center h-full p-6">
-            <div className="text-center">
-              <div className="mb-4">
-                <div className="mx-auto h-14 w-14 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
-                  <svg className="h-7 w-7 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
+          metaLeadAdapter && metaChatData.selectedConversationId ? (
+            <LeadPanel
+              conversationId={metaChatData.selectedConversationId}
+              companyId={companyId}
+              userId={userId}
+              adapter={metaLeadAdapter}
+              onLeadSaved={metaChatData.refresh}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="text-center">
+                <h4 className="text-lg font-semibold text-slate-800 mb-2">
+                  {t('layout.leadPanelTitle')}
+                </h4>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  {t('layout.leadPanelBody')}
+                </p>
               </div>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Painel de lead disponível em breve para Meta WhatsApp.
-              </p>
             </div>
-          </div>
+          )
         ) : (
           /* Uazapi / 'all' — fluxo original intacto */
           selectedChannel === 'whatsapp' && !lockedConversation && chatData.selectedConversation ? (

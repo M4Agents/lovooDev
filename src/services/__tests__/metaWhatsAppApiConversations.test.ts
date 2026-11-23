@@ -232,6 +232,18 @@ describe('metaWhatsAppApi.getConversations', () => {
     expect(url.searchParams.has('limit')).toBe(false)
   })
 
+  it('GC-09b: id entra na URL quando informado', async () => {
+    const spy = mockFetch({ conversations: [] })
+    await metaWhatsAppApi.getConversations(COMPANY_ID, { id: CONV_ID })
+    expect(calledUrl(spy).searchParams.get('id')).toBe(CONV_ID)
+  })
+
+  it('GC-09c: id não entra na URL quando ausente', async () => {
+    const spy = mockFetch({ conversations: [] })
+    await metaWhatsAppApi.getConversations(COMPANY_ID)
+    expect(calledUrl(spy).searchParams.has('id')).toBe(false)
+  })
+
   // GC-10 — Bearer via helper
   it('GC-10: Authorization header segue helper de auth existente', async () => {
     const spy = mockFetch({ conversations: [] })

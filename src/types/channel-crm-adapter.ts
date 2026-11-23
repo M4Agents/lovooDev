@@ -5,8 +5,8 @@
 // O CRM compartilhado (leads, oportunidades, tags, notas, atividades)
 // NÃO entra neste contrato.
 //
-// META-L1.3: somente o caminho Uazapi é implementado.
-// Não há métodos exclusivos de Meta nesta fase.
+// A busca e o vínculo explícito só existem quando supportsExplicitLink é true.
+// O adapter Uazapi deixa esses métodos ausentes.
 
 import type { ChatContact, ChatScheduledMessage } from './whatsapp-chat'
 
@@ -19,6 +19,10 @@ export interface ChannelCrmCapabilities {
   readonly supportsExplicitLink: boolean
   /** Atribuir responsável cria lead se não houver. Uazapi: true. */
   readonly supportsAutoCreateOnAssign: boolean
+  /** chatApi.updateContactInfo pelo telefone da conversa. Uazapi: true. */
+  readonly supportsContactUpdateByPhone: boolean
+  /** POST /api/leads/sync-chat-assignment após mudar o responsável. Uazapi: true. */
+  readonly supportsChatAssignmentSync: boolean
   /** RPC change_conversation_instance. Uazapi: true. */
   readonly canChangeConversationInstance: boolean
   /** Fila chat_scheduled_messages. Uazapi: true. */
@@ -30,6 +34,21 @@ export interface ChannelCrmCapabilities {
   /** Drag-and-drop da biblioteca para o composer. Uazapi: true. */
   readonly supportsLibraryDropToComposer: boolean
 }
+
+export interface ExplicitLeadSearchHit {
+  id: number
+  name: string
+  phone: string | null
+  email: string | null
+}
+
+export type ExplicitLinkResult =
+  | { status: 'linked' | 'already_linked'; leadId: number }
+  | { status: 'aborted' }
+  | { status: 'conflict' }
+  | { status: 'forbidden' }
+  | { status: 'not_found' }
+  | { status: 'error' }
 
 export interface ChannelLeadLookupInput {
   lead_id?: number | null
@@ -74,4 +93,15 @@ export interface ChannelCrmAdapter {
   resolveAssociatedLead(conversation: ChannelLeadLookupInput): Promise<AssociatedLeadSnapshot | null>
   getAverageResponseTime(): Promise<string>
   loadScheduledMessages(): Promise<ChatScheduledMessage[]>
+
+  /** Somente supportsExplicitLink. Não cria lead e não vincula. */
+  searchLinkableLeads?(query: string): Promise<ExplicitLeadSearchHit[]>
+  /**
+   * Um POST. isStillCurrent é conferido depois da sessão e antes do fetch.
+   * Não há retry.
+   */
+  linkExplicitLead?(
+    input: { leadId: number; expectedLeadId: number | null },
+    isStillCurrent: () => boolean,
+  ): Promise<ExplicitLinkResult>
 }

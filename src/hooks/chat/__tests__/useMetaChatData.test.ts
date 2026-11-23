@@ -1177,3 +1177,123 @@ it('RT-SILENT-14: payload RT não é source of truth; GET canônico determina o 
   expect(result.current.conversations[0].last_message_preview).toBe('mensagem real do GET')
   expect(result.current.conversations[0].unread_count).not.toBe(999)
 })
+
+const OTHER_CONV: MetaChatConversation = {
+  ...FAKE_CONV,
+  id: 'conv-0000-0002',
+  contact_name: 'Outra',
+}
+
+it('CANON-01: sincroniza somente a linha do mesmo id e preserva a referência se nada mudou', async () => {
+  mockGetConversations.mockResolvedValueOnce([FAKE_CONV, OTHER_CONV])
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+  const before = result.current.conversations
+
+  const same = result.current.beginCanonicalRead()
+  expect(same).not.toBeNull()
+  act(() => {
+    result.current.publishCanonicalConversation(same!, FAKE_CONV)
+  })
+  expect(result.current.conversations).toBe(before)
+
+  const token = result.current.beginCanonicalRead()
+  act(() => {
+    result.current.publishCanonicalConversation(token!, { ...FAKE_CONV, lead_id: 7 })
+  })
+  expect(result.current.conversations[0].lead_id).toBe(7)
+  expect(result.current.conversations[1]).toBe(OTHER_CONV)
+  expect(mockGetConversations).toHaveBeenCalledTimes(1)
+})
+
+it('CANON-02: conversa ausente da página não é inserida', async () => {
+  mockGetConversations.mockResolvedValueOnce([OTHER_CONV])
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+  const before = result.current.conversations
+  const token = result.current.beginCanonicalRead()
+
+  act(() => {
+    result.current.publishCanonicalConversation(token!, { ...FAKE_CONV, lead_id: 7 })
+  })
+
+  expect(result.current.conversations).toBe(before)
+  expect(result.current.conversations.map((item) => item.id)).toEqual([OTHER_CONV.id])
+})
+
+it('CANON-03: troca de empresa descarta a leitura canônica anterior', async () => {
+  mockGetConversations.mockResolvedValueOnce([FAKE_CONV])
+  const companyBConversation: MetaChatConversation = {
+    ...FAKE_CONV,
+    id: 'conv-0000-0003',
+    instance_id: INSTANCE_A,
+    lead_id: null,
+  }
+  mockGetConversations.mockResolvedValueOnce([companyBConversation])
+
+  const { result, rerender } = renderHook(
+    ({ companyId }) => useMetaChatData(companyId, INSTANCE_A),
+    { initialProps: { companyId: COMPANY_A } },
+  )
+  await act(async () => { await Promise.resolve() })
+  const token = result.current.beginCanonicalRead()
+
+  await act(async () => {
+    rerender({ companyId: COMPANY_B })
+    await Promise.resolve()
+  })
+  act(() => {
+    result.current.publishCanonicalConversation(token!, { ...FAKE_CONV, lead_id: 7 })
+  })
+
+  expect(result.current.conversations.map((item) => item.id)).toEqual([companyBConversation.id])
+  expect(result.current.conversations[0].lead_id).toBeNull()
+})
+
+it('CANON-04: listagem Realtime mais nova não é sobrescrita pela leitura canônica anterior', async () => {
+  mockGetConversations.mockResolvedValueOnce([FAKE_CONV])
+  let resolveSilent!: (value: MetaChatConversation[]) => void
+  mockGetConversations.mockReturnValueOnce(new Promise((resolve) => { resolveSilent = resolve }))
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+  const token = result.current.beginCanonicalRead()
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+  })
+  act(() => {
+    result.current.publishCanonicalConversation(token!, { ...FAKE_CONV, lead_id: 7 })
+  })
+  expect(result.current.conversations[0].lead_id).toBeNull()
+
+  await act(async () => {
+    resolveSilent([{ ...FAKE_CONV, lead_id: 9 }])
+    await Promise.resolve()
+  })
+  expect(result.current.conversations[0].lead_id).toBe(9)
+})
+
+it('CANON-05: resposta antiga da lista não apaga o lead canônico mais novo', async () => {
+  mockGetConversations.mockResolvedValueOnce([FAKE_CONV])
+  let resolveSilent!: (value: MetaChatConversation[]) => void
+  mockGetConversations.mockReturnValueOnce(new Promise((resolve) => { resolveSilent = resolve }))
+
+  const { result } = renderHook(() => useMetaChatData(COMPANY_A, INSTANCE_A))
+  await act(async () => { await Promise.resolve() })
+
+  await act(async () => {
+    mockRtConv.last()?.simulateUpdate({})
+  })
+  const token = result.current.beginCanonicalRead()
+  act(() => {
+    result.current.publishCanonicalConversation(token!, { ...FAKE_CONV, lead_id: 7 })
+  })
+  expect(result.current.conversations[0].lead_id).toBe(7)
+
+  await act(async () => {
+    resolveSilent([{ ...FAKE_CONV, lead_id: null }])
+    await Promise.resolve()
+  })
+  expect(result.current.conversations[0].lead_id).toBe(7)
+})

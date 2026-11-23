@@ -4,7 +4,7 @@
 // Painel com informações do lead e agendamento
 // NÃO MODIFICA componentes existentes
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
 import { LeadModal } from '../../LeadModal'
@@ -18,6 +18,7 @@ import { useLeadPermissions } from '../../../hooks/useLeadPermissions'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
 import { createUazapiChannelAdapter } from './uazapiChannelAdapter'
+import { ExplicitLeadLinkSection } from './ExplicitLeadLinkSection'
 import data from '@emoji-mart/data'
 // @ts-ignore - tipos de emoji-mart podem não estar instalados
 import Picker from '@emoji-mart/react'
@@ -31,6 +32,7 @@ import type {
   ContactInfoForm,
   ScheduleMessageForm
 } from '../../../types/whatsapp-chat'
+import type { AssociatedLeadSnapshot, ChannelCrmAdapter, ChannelCrmCapabilities } from '../../../types/channel-crm-adapter'
 import type { LeadActivity } from '../../../types/calendar'
 
 // =====================================================
@@ -125,6 +127,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [summarySuccess, setSummarySuccess] = useState(false)
   const [messageLimit, setMessageLimit] = useState<number>(100)
+  const [linkNotice, setLinkNotice] = useState<string | null>(null)
 
   const resolvedAdapter = useMemo(
     () => adapter ?? createUazapiChannelAdapter({ conversationId, companyId }),
@@ -133,58 +136,134 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
   const adapterRef = useRef(resolvedAdapter)
   adapterRef.current = resolvedAdapter
 
+  // Geração da requisição, não dos IDs: o mesmo contexto pode recarregar várias vezes.
+  // O ref só muda em fetchData, no cleanup confirmado e no unmount.
+  const requestGenerationRef = useRef(0)
+  const contextEpochRef = useRef(0)
+  const mountedRef = useRef(true)
+
+  const contextIdentity = `${conversationId}\0${companyId}`
+  const [trackedContext, setTrackedContext] = useState<{
+    identity: string
+    adapter: ChannelCrmAdapter
+  }>({ identity: contextIdentity, adapter: resolvedAdapter })
+
+  const clearChannelSnapshot = () => {
+    setConversation(null)
+    setContact(null)
+    setAssociatedLead(null)
+    setScheduledMessages([])
+    setAverageResponseTime('--')
+  }
+
+  // Limpa antes do paint quando conversa, empresa ou adapter mudam.
+  // O setState durante o render é descartado junto com um render abortado.
+  if (
+    trackedContext.identity !== contextIdentity ||
+    trackedContext.adapter !== resolvedAdapter
+  ) {
+    setTrackedContext({ identity: contextIdentity, adapter: resolvedAdapter })
+    setLoading(Boolean(conversationId && companyId))
+    clearChannelSnapshot()
+    setSummaryError(null)
+    setSummarySuccess(false)
+    setShowLeadModal(false)
+    setLeadForEdit(null)
+    setLinkNotice(null)
+  }
+
   // =====================================================
   // BUSCAR DADOS
   // =====================================================
-  // Ordem e tratamento de erro iguais ao fetchData original.
   // Sem adapter na prop, resolvedAdapter é o UazapiChannelAdapter.
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    const generation = ++requestGenerationRef.current
     const channelAdapter = adapterRef.current
+    const stillCurrent = () =>
+      mountedRef.current && requestGenerationRef.current === generation
+
+    setLoading(true)
+    clearChannelSnapshot()
+
     try {
-      setLoading(true)
-
       const convData = await channelAdapter.loadConversation()
-      const conv = convData ?? undefined
-      setConversation(conv)
+      if (!stillCurrent()) return
+      const conv = convData ?? null
 
-      if (conv) {
-        const contactData = await channelAdapter.loadContact(conv.contact_phone)
-        setContact(contactData)
-
-        try {
-          const leadData = await channelAdapter.resolveAssociatedLead(conv)
-          setAssociatedLead(leadData)
-        } catch (error) {
-          console.error('Erro ao buscar lead associado:', error)
-          setAssociatedLead(null)
-        }
-
-        const avgTime = await channelAdapter.getAverageResponseTime()
-        setAverageResponseTime(avgTime)
-
-        const scheduledData = await channelAdapter.loadScheduledMessages()
-        setScheduledMessages(scheduledData)
+      if (!conv) {
+        clearChannelSnapshot()
+        return
       }
+
+      const contactData = await channelAdapter.loadContact(conv.contact_phone)
+      if (!stillCurrent()) return
+
+      let leadData: AssociatedLeadSnapshot | null = null
+      try {
+        leadData = await channelAdapter.resolveAssociatedLead(conv)
+      } catch (error) {
+        console.error('Erro ao buscar lead associado:', error)
+        leadData = null
+      }
+      if (!stillCurrent()) return
+
+      const avgTime = await channelAdapter.getAverageResponseTime()
+      if (!stillCurrent()) return
+
+      const scheduledData = channelAdapter.capabilities.supportsScheduledWhatsApp
+        ? await channelAdapter.loadScheduledMessages()
+        : []
+      if (!stillCurrent()) return
+
+      setConversation(conv)
+      setContact(contactData)
+      setAssociatedLead(leadData)
+      setAverageResponseTime(avgTime)
+      setScheduledMessages(scheduledData)
     } catch (error) {
       console.error('Error fetching lead data:', error)
+      if (!stillCurrent()) return
+      clearChannelSnapshot()
     } finally {
-      setLoading(false)
+      if (stillCurrent()) setLoading(false)
     }
-  }
+  }, [])
+
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    if (conversationId && companyId) {
+      void fetchData()
+    } else {
+      requestGenerationRef.current += 1
+    }
+
+    return () => {
+      mountedRef.current = false
+      contextEpochRef.current += 1
+      requestGenerationRef.current += 1
+    }
+  }, [conversationId, companyId, resolvedAdapter, fetchData])
 
   useEffect(() => {
-    if (conversationId && companyId) {
-      fetchData()
+    if (
+      activeTab === 'biblioteca' &&
+      !resolvedAdapter.capabilities.supportsConversationMediaLibrary
+    ) {
+      setActiveTab('info')
     }
-  }, [conversationId, companyId])
+  }, [activeTab, resolvedAdapter])
 
   // =====================================================
   // RESUMO DE IA
   // =====================================================
 
   const handleSummarize = useCallback(async () => {
+    if (!adapterRef.current.capabilities.supportsAiSummarize) return
     if (summarizing) return
+    const contextEpoch = contextEpochRef.current
+    const stillSameContext = () =>
+      mountedRef.current && contextEpochRef.current === contextEpoch
     setSummarizing(true)
     setSummaryError(null)
     setSummarySuccess(false)
@@ -208,15 +287,25 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
         throw new Error(result.error || 'Erro ao gerar resumo')
       }
 
+      if (!stillSameContext()) return
       setSummarySuccess(true)
-      setTimeout(() => setSummarySuccess(false), 4000)
+      setTimeout(() => {
+        if (mountedRef.current && contextEpochRef.current === contextEpoch) {
+          setSummarySuccess(false)
+        }
+      }, 4000)
       // Recarregar notas para exibir a nova nota de IA
-      fetchData()
+      void fetchData()
     } catch (err: any) {
+      if (!stillSameContext()) return
       setSummaryError(err?.message || 'Erro ao gerar resumo')
-      setTimeout(() => setSummaryError(null), 6000)
+      setTimeout(() => {
+        if (mountedRef.current && contextEpochRef.current === contextEpoch) {
+          setSummaryError(null)
+        }
+      }, 6000)
     } finally {
-      setSummarizing(false)
+      if (mountedRef.current) setSummarizing(false)
     }
   }, [summarizing, conversationId, messageLimit, fetchData])
 
@@ -264,16 +353,18 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           >
             {t('leadPanel.tabs.schedule')}
           </button>
-          <button
-            onClick={() => setActiveTab('biblioteca')}
-            className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
-              activeTab === 'biblioteca'
-                ? 'bg-blue-100 text-blue-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {t('leadPanel.tabs.library')}
-          </button>
+          {resolvedAdapter.capabilities.supportsConversationMediaLibrary && (
+            <button
+              onClick={() => setActiveTab('biblioteca')}
+              className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
+                activeTab === 'biblioteca'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {t('leadPanel.tabs.library')}
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('notas')}
             className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${
@@ -290,6 +381,28 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === 'info' ? (
+          <>
+            {linkNotice && (
+              <p className="mx-4 mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {linkNotice}
+              </p>
+            )}
+            {resolvedAdapter.capabilities.supportsExplicitLink
+              && conversation
+              && conversation.lead_id == null
+              && !associatedLead
+              && resolvedAdapter.searchLinkableLeads
+              && resolvedAdapter.linkExplicitLead && (
+              <ExplicitLeadLinkSection
+                key={`${companyId}:${conversationId}`}
+                searchLeads={resolvedAdapter.searchLinkableLeads}
+                linkLead={resolvedAdapter.linkExplicitLead}
+                expectedLeadId={conversation?.lead_id ?? null}
+                getContextEpoch={() => contextEpochRef.current}
+                onLinked={fetchData}
+                onNotice={setLinkNotice}
+              />
+            )}
           <ContactInfo
             contact={contact}
             conversation={conversation}
@@ -302,7 +415,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             averageResponseTime={averageResponseTime}
             associatedLeadId={associatedLead?.id ?? null}
             associatedLeadResponsibleUserId={associatedLead?.responsible_user_id ?? null}
+            capabilities={resolvedAdapter.capabilities}
           />
+          </>
         ) : activeTab === 'schedule' ? (
           conversation?.instance_id ? (
             <ScheduleMessages
@@ -314,6 +429,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               conversation={conversation}
               contact={contact}
               associatedLead={associatedLead}
+              schedulingEnabled={resolvedAdapter.capabilities.supportsScheduledWhatsApp}
             />
           ) : (
             <div className="p-8 text-center">
@@ -326,17 +442,18 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
               <p className="text-sm text-gray-600">{t('leadPanel.loadingConversation')}</p>
             </div>
           )
-        ) : activeTab === 'biblioteca' ? (
+        ) : activeTab === 'biblioteca' && resolvedAdapter.capabilities.supportsConversationMediaLibrary ? (
           <BibliotecaV2
             conversationId={conversationId}
             companyId={companyId}
             leadId={contact?.id}
+            conversationMediaEnabled
           />
         ) : activeTab === 'notas' ? (
           associatedLead?.id ? (
             <div className="flex flex-col h-full">
               {/* Botão Resumir com IA — só aparece quando conversation.lead_id existe */}
-              {conversation?.lead_id && (
+              {conversation?.lead_id && resolvedAdapter.capabilities.supportsAiSummarize && (
                 <div className="px-4 pt-3 pb-0 flex flex-col gap-2">
                   {/* Seletor de quantidade de mensagens */}
                   <div className="flex items-center justify-between gap-2">
@@ -418,7 +535,9 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
           }}
           lead={leadForEdit}
           onSave={async () => {
+            const contextEpoch = contextEpochRef.current
             await fetchData()
+            if (!mountedRef.current || contextEpochRef.current !== contextEpoch) return
             onLeadSaved?.()
             setShowLeadModal(false)
             setLeadForEdit(null)
@@ -444,6 +563,7 @@ interface ContactInfoProps {
   associatedLeadId: number | null
   /** responsible_user_id do lead no banco. Necessário para não sobrescrever com null no modal. */
   associatedLeadResponsibleUserId?: string | null
+  capabilities: ChannelCrmCapabilities
 }
 
 const ContactInfo: React.FC<ContactInfoProps> = ({
@@ -454,7 +574,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   onOpenLeadModal,
   averageResponseTime,
   associatedLeadId,
-  associatedLeadResponsibleUserId
+  associatedLeadResponsibleUserId,
+  capabilities
 }) => {
   const { t } = useTranslation('chat')
   const [editing, setEditing] = useState(false)
@@ -517,7 +638,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   // Carregar instâncias disponíveis
   useEffect(() => {
     const loadInstances = async () => {
-      if (!companyId) return
+      if (!capabilities.canChangeConversationInstance || !companyId) return
       
       try {
         setLoadingInstances(true)
@@ -548,7 +669,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
     
     loadInstances()
-  }, [companyId, conversation?.instance_id, isRestrictedSeller, user?.id])
+  }, [capabilities.canChangeConversationInstance, companyId, conversation?.instance_id, isRestrictedSeller, user?.id])
 
   // Carregar usuários da empresa para atribuição de responsável
   // Usa get_assignable_users (acessível a qualquer membro ativo, incluindo manager/seller)
@@ -580,8 +701,17 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     loadCompanyUsers()
   }, [companyId, allowAnyAssign, allowOwnReassign])
 
-  // Buscar informações do lead atual
+  // Buscar informações do lead atual.
+  // O fallback por telefone é operação do canal. Sem a capability, o painel
+  // usa somente o lead já resolvido pelo adapter.
   useEffect(() => {
+    if (!capabilities.supportsPhoneFallback) {
+      setCurrentLeadId(associatedLeadId)
+      setCurrentResponsibleId(associatedLeadResponsibleUserId || '')
+      setOriginalResponsibleId(associatedLeadResponsibleUserId ?? null)
+      return
+    }
+
     const loadLeadInfo = async () => {
       if (!conversation?.contact_phone || !companyId) return
       
@@ -637,10 +767,16 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
     }
     
     loadLeadInfo()
-  }, [conversation?.contact_phone, companyId])
+  }, [
+    capabilities.supportsPhoneFallback,
+    associatedLeadId,
+    associatedLeadResponsibleUserId,
+    conversation?.contact_phone,
+    companyId,
+  ])
 
   const handleSave = async () => {
-    if (!conversation) return
+    if (!capabilities.supportsContactUpdateByPhone || !conversation) return
 
     try {
       await chatApi.updateContactInfo(companyId, conversation.contact_phone, formData)
@@ -653,6 +789,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 
   // Função para trocar instância
   const handleChangeInstance = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!capabilities.canChangeConversationInstance) return
     const newInstanceId = e.target.value
     
     if (!conversation?.id || !companyId) return
@@ -758,12 +895,13 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       alert(t('leadPanel.contact.permissionDenied'))
       return
     }
+    if (!currentLeadId && !capabilities.supportsAutoCreateOnAssign) return
 
     setChangingResponsible(true)
     setResponsibleChangeSuccess(false)
     
     try {
-      // Se não tem lead, criar um novo
+      // Se não tem lead, criar um novo somente quando o canal permite.
       if (!currentLeadId) {
         const leadData: any = {
           company_id: companyId,
@@ -809,7 +947,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
         const normalizedResponsibleId =
           newResponsibleId && newResponsibleId.trim() !== '' ? newResponsibleId : null
 
-        if (currentLeadId) {
+        if (capabilities.supportsChatAssignmentSync && currentLeadId) {
           supabase.auth.getSession().then(({ data: sessionData }) => {
             const syncToken = sessionData.session?.access_token
             if (!syncToken) return
@@ -848,7 +986,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Seção de Oportunidades - limitada à altura do painel, não da janela */}
-      {conversation?.contact_phone && (
+      {conversation?.contact_phone && !(capabilities.supportsExplicitLink && conversation.lead_id == null) && (
         <div className="flex-shrink-0 overflow-y-auto max-h-[40%] min-h-0 px-4 pt-4">
           <OpportunitiesSection
             leadId={conversation.lead_id}
@@ -861,7 +999,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
       )}
 
       {/* Divisor visual */}
-      {conversation?.contact_phone && (
+      {conversation?.contact_phone && !(capabilities.supportsExplicitLink && conversation.lead_id == null) && (
         <div className="border-t border-gray-200 mx-4 my-4" />
       )}
 
@@ -932,7 +1070,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
           )}
         </div>
 
-        {/* Seletor de Instância de Envio - MODERNIZADO */}
+        {capabilities.canChangeConversationInstance && (
         <div className="space-y-2">
           <label className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
             <img src="/images/emails/wpp.png" alt="WhatsApp" className="w-4 h-4" />
@@ -966,6 +1104,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
             </>
           )}
         </div>
+        )}
 
         {/* Seletor de Responsável pelo Lead - MODERNIZADO */}
         <div className="space-y-2">
@@ -1072,6 +1211,7 @@ interface ScheduleMessagesProps {
   conversation?: any
   contact?: ChatContact | null
   associatedLead?: {id: number, name: string, phone?: string, email?: string} | null
+  schedulingEnabled?: boolean
 }
 
 const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
@@ -1082,7 +1222,8 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   onUpdate,
   conversation,
   contact,
-  associatedLead
+  associatedLead,
+  schedulingEnabled = true
 }) => {
   const { t } = useTranslation('chat')
 
@@ -1129,6 +1270,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   // Carregar instâncias disponíveis
   useEffect(() => {
     async function loadInstances() {
+      if (!schedulingEnabled) return
       try {
         setLoadingInstances(true)
         const allInstances = await chatApi.getCompanyInstances(companyId)
@@ -1159,7 +1301,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     }
     
     loadInstances()
-  }, [companyId, instanceId, isRestrictedSeller, user?.id])
+  }, [schedulingEnabled, companyId, instanceId, isRestrictedSeller, user?.id])
 
   // Função para selecionar emoji
   const handleSelectEmoji = (emoji: string) => {
@@ -1207,6 +1349,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   }, [isEmojiOpen])
 
   const handleSchedule = async () => {
+    if (!schedulingEnabled) return
     const hasContent = formData.content.trim()
     const hasMedia = selectedFile || formData.media_url
     
@@ -1262,12 +1405,13 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   }
 
   const handleCancelClick = (message: ChatScheduledMessage) => {
+    if (!schedulingEnabled) return
     setMessageToCancel(message)
     setShowCancelModal(true)
   }
   
   const handleConfirmCancel = async () => {
-    if (!messageToCancel) return
+    if (!schedulingEnabled || !messageToCancel) return
     
     try {
       await chatApi.cancelScheduledMessage(messageToCancel.id, companyId)
@@ -1280,6 +1424,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   }
   
   const handleEdit = (message: ChatScheduledMessage) => {
+    if (!schedulingEnabled) return
     setEditingMessage(message)
     const scheduledDate = new Date(message.scheduled_for)
     setFormData({
@@ -1296,7 +1441,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   }
   
   const handleUpdate = async () => {
-    if (!editingMessage || !instanceId) return
+    if (!schedulingEnabled || !editingMessage || !instanceId) return
     
     try {
       const scheduledDateTime = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`)
@@ -1437,12 +1582,14 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
     <div className="p-4 space-y-4">
       {/* Botões Agendar Mensagem e Atividades */}
       <div className="grid grid-cols-2 gap-3">
+        {schedulingEnabled && (
         <button
           onClick={() => setShowForm(!showForm)}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
         >
           {showForm ? t('leadPanel.schedule.scheduleMessageClose') : t('leadPanel.schedule.scheduleMessageOpen')}
         </button>
+        )}
         
         <button
           onClick={() => {
@@ -1456,7 +1603,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
       </div>
 
       {/* Formulário */}
-      {showForm && (
+      {schedulingEnabled && showForm && (
         <div className="space-y-4 p-4 border border-gray-200 rounded-lg">
           <h4 className="text-sm font-medium text-gray-700">
             {editingMessage ? t('leadPanel.schedule.editTitle') : t('leadPanel.schedule.newTitle')}
@@ -1764,7 +1911,7 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
         </div>
       )}
 
-      {/* Lista de Mensagens Agendadas */}
+      {schedulingEnabled && (
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-3">
           {t('leadPanel.schedule.scheduledList', { count: scheduledMessages.length })}
@@ -1902,9 +2049,10 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
           </div>
         )}
       </div>
+      )}
       
       {/* Modal de Confirmação de Cancelamento */}
-      {showCancelModal && messageToCancel && (
+      {schedulingEnabled && showCancelModal && messageToCancel && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md mx-4">
             <h3 className="text-lg font-bold text-gray-900 mb-2">

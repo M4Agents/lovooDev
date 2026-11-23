@@ -19,6 +19,8 @@ interface BibliotecaV2Props {
   conversationId: string
   companyId: string
   leadId?: string
+  /** Quando false, nenhuma leitura ou exclusão em chat_messages é executada. */
+  conversationMediaEnabled?: boolean
 }
 
 interface MediaFile {
@@ -60,7 +62,8 @@ interface Stats {
 export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   conversationId,
   companyId,
-  leadId
+  leadId,
+  conversationMediaEnabled = true
 }) => {
   const { t } = useTranslation('chat')
   
@@ -95,10 +98,11 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   // =====================================================
   
   useEffect(() => {
+    if (!conversationMediaEnabled) return
     if (companyId && conversationId) {
       fetchData()
     }
-  }, [companyId, conversationId])
+  }, [companyId, conversationId, conversationMediaEnabled])
   
   const fetchData = async () => {
     try {
@@ -124,6 +128,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     cursorValue: string | null = null,
     append = false
   ) => {
+    if (!conversationMediaEnabled) return
     try {
       let query = supabase
         .from('chat_messages')
@@ -194,6 +199,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   }
   
   const fetchChatStats = async () => {
+    if (!conversationMediaEnabled) return
     try {
       const base = () => supabase
         .from('chat_messages')
@@ -308,7 +314,7 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   }
   
   const handleConfirmDelete = async () => {
-    if (!fileToDelete) return
+    if (!conversationMediaEnabled || !fileToDelete) return
     
     try {
       // Deletar do Supabase

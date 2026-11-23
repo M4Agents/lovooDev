@@ -122,6 +122,8 @@ describe('UazapiChannelAdapter — contrato e capabilities', () => {
     expect(adapter.capabilities.supportsPhoneFallback).toBe(true)
     expect(adapter.capabilities.supportsExplicitLink).toBe(false)
     expect(adapter.capabilities.supportsAutoCreateOnAssign).toBe(true)
+    expect(adapter.capabilities.supportsContactUpdateByPhone).toBe(true)
+    expect(adapter.capabilities.supportsChatAssignmentSync).toBe(true)
     expect(adapter.capabilities.canChangeConversationInstance).toBe(true)
     expect(adapter.capabilities.supportsScheduledWhatsApp).toBe(true)
   })

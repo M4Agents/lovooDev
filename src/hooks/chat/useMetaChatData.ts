@@ -37,12 +37,19 @@
 //   - Eventos tardios de channels anteriores descartados antes de loadSilent()
 // =============================================================================
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type MutableRefObject } from 'react'
 import { metaWhatsAppApi }                          from '../../services/metaWhatsAppApi'
 import { supabase }                                 from '../../lib/supabase'
 import type { MetaChatConversation }                from '../../types/meta-whatsapp'
 
 // ── Contrato público do hook ──────────────────────────────────────────────────
+
+export interface CanonicalReadToken {
+  seq: number
+  epoch: number
+  companyId: string
+  instanceId: string
+}
 
 export interface UseMetaChatDataResult {
   conversations:           MetaChatConversation[]
@@ -51,6 +58,42 @@ export interface UseMetaChatDataResult {
   selectedConversationId:  string | null
   setSelectedConversation: (id: string | null) => void
   refresh:                 () => void
+  beginCanonicalRead:      () => CanonicalReadToken | null
+  publishCanonicalConversation: (
+    token: CanonicalReadToken,
+    row: MetaChatConversation | null,
+  ) => void
+}
+
+interface PendingCanonicalConversation {
+  token: CanonicalReadToken
+  row: MetaChatConversation
+}
+
+function replaceConversationRow(
+  list: MetaChatConversation[],
+  row: MetaChatConversation,
+): MetaChatConversation[] {
+  const index = list.findIndex((item) => item.id === row.id)
+  if (index < 0) return list
+  const current = list[index]
+  if (
+    current.lead_id === row.lead_id
+    && current.updated_at === row.updated_at
+    && current.unread_count === row.unread_count
+    && current.last_message_at === row.last_message_at
+    && current.last_message_preview === row.last_message_preview
+    && current.contact_name === row.contact_name
+    && current.status === row.status
+    && current.profile_picture_url === row.profile_picture_url
+    && current.instance_id === row.instance_id
+    && current.wa_id === row.wa_id
+  ) {
+    return list
+  }
+  const next = list.slice()
+  next[index] = row
+  return next
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -81,6 +124,8 @@ export function useMetaChatData(
 
   const fetchCountRef       = useRef(0)
   const normalFetchCountRef = useRef(0)
+  const canonicalSeqRef     = useRef(0)
+  const pendingCanonicalRef = useRef<PendingCanonicalConversation | null>(null)
 
   // Guard de unmount: evita setState após desmontagem do componente.
   const mountedRef = useRef(true)
@@ -130,11 +175,17 @@ export function useMetaChatData(
       .then((result) => {
         if (!mountedRef.current)                      return  // desmontado
         if (currentFetch !== fetchCountRef.current)   return  // stale — fetch mais recente ganhou
-        setConversations(result)
+        setConversations(mergeCanonicalRow(result, currentFetch, companyId, selectedInstanceId, canonicalSeqRef, pendingCanonicalRef))
       })
       .catch((err: unknown) => {
         if (!mountedRef.current)                      return
         if (currentFetch !== fetchCountRef.current)   return
+        // A lista mais nova falhou. A linha canônica já persistida permanece
+        // se ainda pertencer a esta empresa e instância.
+        const pending = currentCanonical(companyId, selectedInstanceId, canonicalSeqRef, pendingCanonicalRef)
+        if (pending) {
+          setConversations((prev) => replaceConversationRow(prev, pending.row))
+        }
         // Silent error: preservar lista atual silenciosamente.
         // Falha transitória de RT não substitui dados atuais por erro.
         if (!silent) {
@@ -178,6 +229,8 @@ export function useMetaChatData(
   // conversationId de uma instância anterior.
 
   useEffect(() => {
+    pendingCanonicalRef.current = null
+    canonicalSeqRef.current += 1
     setSelectedConversationId(null)
   }, [selectedInstanceId, companyId])
 
@@ -266,6 +319,40 @@ export function useMetaChatData(
     setSelectedConversationId(id)
   }, [])
 
+  const beginCanonicalRead = useCallback((): CanonicalReadToken | null => {
+    const currentCompanyId = activeCompanyRef.current
+    const currentInstanceId = activeInstanceRef.current
+    if (!currentCompanyId || !currentInstanceId) return null
+    const seq = ++canonicalSeqRef.current
+    return {
+      seq,
+      epoch: fetchCountRef.current,
+      companyId: currentCompanyId,
+      instanceId: currentInstanceId,
+    }
+  }, [])
+
+  const publishCanonicalConversation = useCallback((
+    token: CanonicalReadToken,
+    row: MetaChatConversation | null,
+  ) => {
+    if (token.seq !== canonicalSeqRef.current) return
+    if (activeCompanyRef.current !== token.companyId) return
+    if (activeInstanceRef.current !== token.instanceId) return
+    if (!row) {
+      if (pendingCanonicalRef.current?.token.seq === token.seq) {
+        pendingCanonicalRef.current = null
+      }
+      return
+    }
+    if (row.instance_id !== token.instanceId) return
+    pendingCanonicalRef.current = { token, row }
+    // Uma listagem iniciada depois desta leitura é mais nova e fica responsável
+    // pela lista. A linha só entra agora quando nenhuma listagem nova começou.
+    if (fetchCountRef.current !== token.epoch) return
+    setConversations((prev) => replaceConversationRow(prev, row))
+  }, [])
+
   // ── Retorno ───────────────────────────────────────────────────────────────
 
   return {
@@ -275,5 +362,39 @@ export function useMetaChatData(
     selectedConversationId,
     setSelectedConversation: handleSetSelectedConversation,
     refresh: load,
+    beginCanonicalRead,
+    publishCanonicalConversation,
   }
+}
+
+function currentCanonical(
+  companyId: string,
+  instanceId: string,
+  canonicalSeqRef: MutableRefObject<number>,
+  pendingCanonicalRef: MutableRefObject<PendingCanonicalConversation | null>,
+): PendingCanonicalConversation | null {
+  const pending = pendingCanonicalRef.current
+  if (!pending) return null
+  if (pending.token.seq !== canonicalSeqRef.current) return null
+  if (pending.token.companyId !== companyId) return null
+  if (pending.token.instanceId !== instanceId) return null
+  if (pending.row.instance_id !== instanceId) return null
+  return pending
+}
+
+function mergeCanonicalRow(
+  result: MetaChatConversation[],
+  currentFetch: number,
+  companyId: string,
+  instanceId: string,
+  canonicalSeqRef: MutableRefObject<number>,
+  pendingCanonicalRef: MutableRefObject<PendingCanonicalConversation | null>,
+): MetaChatConversation[] {
+  const pending = currentCanonical(companyId, instanceId, canonicalSeqRef, pendingCanonicalRef)
+  if (!pending) return result
+  if (pending.token.epoch < currentFetch) {
+    pendingCanonicalRef.current = null
+    return result
+  }
+  return replaceConversationRow(result, pending.row)
 }

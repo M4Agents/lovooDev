@@ -398,6 +398,7 @@ export const metaWhatsAppApi = {
    * GET /api/whatsapp/meta/conversations
    *   ?company_id=<uuid>
    *   [&instance_id=<uuid>]
+   *   [&id=<uuid>]
    *   [&filter=all|unread]
    *   [&limit=<n>]
    *
@@ -411,11 +412,13 @@ export const metaWhatsAppApi = {
       instanceId?: string
       filter?:     'all' | 'unread'
       limit?:      number
+      id?:         string
     }
   ): Promise<MetaChatConversation[]> {
     const headers = await getAuthHeaders()
 
     const params = new URLSearchParams({ company_id: companyId })
+    if (options?.id         != null) params.set('id',          options.id)
     if (options?.instanceId != null) params.set('instance_id', options.instanceId)
     if (options?.filter     != null) params.set('filter',      options.filter)
     if (options?.limit      != null) params.set('limit',       String(options.limit))
@@ -1091,5 +1094,92 @@ export const metaWhatsAppApi = {
       ? data.error
       : 'internal_error'
     throw new MetaOutboundAudioSendError(res.status, code)
+  },
+
+  /**
+   * GET /api/whatsapp/meta/conversations/:conversationId/leads/search
+   * Não vincula e não cria lead.
+   */
+  async searchConversationLeads(
+    companyId: string,
+    conversationId: string,
+    query: string,
+  ): Promise<Array<{ id: number; name: string; phone: string | null; email: string | null }>> {
+    const q = query.trim()
+    if (q.length < 2 || q.length > 80) {
+      throw new Error('q deve ter entre 2 e 80 caracteres')
+    }
+    const headers = await getAuthHeaders()
+    const params = new URLSearchParams({ company_id: companyId, q })
+    const encodedId = encodeURIComponent(conversationId)
+    const res = await fetch(
+      `/api/whatsapp/meta/conversations/${encodedId}/leads/search?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: { Authorization: (headers as Record<string, string>).Authorization },
+      },
+    )
+    const data = await res.json().catch(() => ({})) as { leads?: unknown; error?: string }
+    if (!res.ok) {
+      throw new Error('search_failed')
+    }
+    if (!Array.isArray(data.leads)) return []
+    return data.leads.flatMap((row) => {
+      if (row == null || typeof row !== 'object') return []
+      const lead = row as Record<string, unknown>
+      if (!Number.isInteger(lead.id) || (lead.id as number) <= 0) return []
+      return [{
+        id: lead.id as number,
+        name: typeof lead.name === 'string' ? lead.name : '',
+        phone: lead.phone == null ? null : String(lead.phone),
+        email: lead.email == null ? null : String(lead.email),
+      }]
+    })
+  },
+
+  /**
+   * POST /api/whatsapp/meta/conversations/:conversationId/leads/link
+   * Body somente company_id, lead_id e expected_lead_id. Sem retry.
+   */
+  async linkConversationLead(
+    companyId: string,
+    conversationId: string,
+    leadId: number,
+    expectedLeadId: number | null,
+    isStillCurrent: () => boolean = () => true,
+  ): Promise<
+    | { status: 'linked' | 'already_linked'; leadId: number }
+    | { status: 'aborted' | 'conflict' | 'forbidden' | 'not_found' | 'error' }
+  > {
+    const headers = await getAuthHeaders()
+    if (!isStillCurrent()) return { status: 'aborted' }
+
+    const encodedId = encodeURIComponent(conversationId)
+    const res = await fetch(
+      `/api/whatsapp/meta/conversations/${encodedId}/leads/link`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          company_id: companyId,
+          lead_id: leadId,
+          expected_lead_id: expectedLeadId,
+        }),
+      },
+    )
+    const data = await res.json().catch(() => ({})) as {
+      result?: unknown
+      lead_id?: unknown
+    }
+
+    if (res.status === 200 && (data.result === 'linked' || data.result === 'already_linked')) {
+      const linkedId = data.lead_id
+      if (linkedId !== leadId) return { status: 'error' }
+      return { status: data.result, leadId }
+    }
+    if (res.status === 409) return { status: 'conflict' }
+    if (res.status === 403) return { status: 'forbidden' }
+    if (res.status === 404) return { status: 'not_found' }
+    return { status: 'error' }
   },
 }

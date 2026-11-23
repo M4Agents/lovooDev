@@ -92,12 +92,14 @@ const FAKE_CONTACT = {
 function makeReq({
   method     = 'GET',
   company_id = FAKE_COMPANY_ID,
+  id,
   instance_id,
   filter,
   limit,
   headers    = { authorization: 'Bearer fake_token_for_tests' },
 } = {}) {
   const query = { company_id };
+  if (id          !== undefined) query.id          = id;
   if (instance_id !== undefined) query.instance_id = instance_id;
   if (filter      !== undefined) query.filter       = filter;
   if (limit       !== undefined) query.limit        = limit;
@@ -124,6 +126,17 @@ function makeInstChain(data, error = null) {
     is:          vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
   };
+}
+
+/** Chain para leitura por id: select().eq().eq().maybeSingle() */
+function makeConvByIdChain(data, error = null) {
+  const chain = {
+    select:      vi.fn().mockReturnThis(),
+    eq:          vi.fn().mockReturnThis(),
+    gt:          vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+  return chain;
 }
 
 /** Chain para meta_conversations: select().eq().eq().order().limit() */
@@ -664,5 +677,150 @@ describe('GET /api/whatsapp/meta/conversations — DTO lead_id', () => {
     expect(statusCall[1]).toBe('active');
     const companyCall = convChain.eq.mock.calls.find(c => c[0] === 'company_id');
     expect(companyCall[1]).toBe(FAKE_COMPANY_ID);
+  });
+});
+
+describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
+  const OTHER_COMPANY_ID = 'ffff0000-0000-0000-0000-000000000099';
+
+  function setupById({
+    conversation = FAKE_CONV,
+    withInstance = false,
+    contacts = [FAKE_CONTACT],
+  } = {}) {
+    const convChain = makeConvByIdChain(conversation);
+    const contactsChain = makeContactsChain(contacts);
+    if (withInstance) {
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain({ id: FAKE_INSTANCE_ID }))
+        .mockReturnValueOnce(convChain)
+        .mockReturnValueOnce(contactsChain);
+    } else if (conversation) {
+      mockSvc.from
+        .mockReturnValueOnce(convChain)
+        .mockReturnValueOnce(contactsChain);
+    } else {
+      mockSvc.from.mockReturnValueOnce(convChain);
+    }
+    return convChain;
+  }
+
+  it('CONV-29: sem id preserva limit da listagem', async () => {
+    const convChain = makeConvChain([FAKE_CONV]);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeContactsChain([FAKE_CONTACT]));
+
+    const res = makeRes();
+    await handler(makeReq({ limit: '20' }), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.limit).toHaveBeenCalledWith(20);
+    expect(convChain.maybeSingle).toBeUndefined();
+  });
+
+  it('CONV-30: id retorna somente a conversa solicitada, sem limit', async () => {
+    const convChain = setupById({
+      conversation: { ...FAKE_CONV, lead_id: 42 },
+    });
+    const res = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations).toHaveLength(1);
+    expect(res._body.conversations[0].id).toBe(FAKE_CONV_ID_A);
+    expect(res._body.conversations[0].lead_id).toBe(42);
+    expect(res._body.conversations[0].profile_picture_url).toBe(FAKE_PHOTO_URL);
+    expect(convChain.maybeSingle).toHaveBeenCalledTimes(1);
+    expect(convChain.eq).toHaveBeenCalledWith('id', FAKE_CONV_ID_A);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
+    expect(convChain.limit).toBeUndefined();
+  });
+
+  it('CONV-31: id inválido → 400 sem auth e sem DB', async () => {
+    const res = makeRes();
+    await handler(makeReq({ id: 'nao-e-uuid' }), res);
+
+    expect(res._status).toBe(400);
+    expect(res._body).toMatchObject({ error: expect.stringContaining('id') });
+    expect(mockValidateMetaCaller).not.toHaveBeenCalled();
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('CONV-32: JWT ausente ou inválido com id → 401 sem DB', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 401,
+      error: 'Sessão inválida ou expirada',
+    });
+    const res = makeRes();
+    await handler(makeReq({
+      id: FAKE_CONV_ID_A,
+      headers: { authorization: 'Bearer invalido' },
+    }), res);
+
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('CONV-33: empresa autenticada diferente não revela a conversa', async () => {
+    const convChain = setupById({ conversation: null });
+    const res = makeRes();
+    await handler(makeReq({
+      id: FAKE_CONV_ID_A,
+      company_id: OTHER_COMPANY_ID,
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ conversations: [] });
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).not.toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
+  });
+
+  it('CONV-34: conversa inexistente ou arquivada → 200 com lista vazia', async () => {
+    const convChain = setupById({ conversation: null });
+    const res = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_B }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ conversations: [] });
+    expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
+    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+  });
+
+  it('CONV-35: instância inválida com id preserva 404 e não consulta a conversa', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(null));
+    const res = makeRes();
+    await handler(makeReq({
+      id: FAKE_CONV_ID_A,
+      instance_id: FAKE_INSTANCE_ID,
+    }), res);
+
+    expect(res._status).toBe(404);
+    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from).toHaveBeenCalledWith('meta_whatsapp_instances');
+  });
+
+  it('CONV-36: id de outra instância da empresa → lista vazia', async () => {
+    const convChain = setupById({ conversation: null, withInstance: true });
+    const res = makeRes();
+    await handler(makeReq({
+      id: FAKE_CONV_ID_A,
+      instance_id: FAKE_INSTANCE_ID,
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ conversations: [] });
+    expect(convChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+  });
+
+  it('CONV-37: filter unread continua aplicado na leitura por id', async () => {
+    const convChain = setupById();
+    const res = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A, filter: 'unread' }), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.gt).toHaveBeenCalledWith('unread_count', 0);
   });
 });

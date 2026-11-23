@@ -21,6 +21,8 @@ export const UAZAPI_CHANNEL_CAPABILITIES: ChannelCrmCapabilities = {
   supportsPhoneFallback: true,
   supportsExplicitLink: false,
   supportsAutoCreateOnAssign: true,
+  supportsContactUpdateByPhone: true,
+  supportsChatAssignmentSync: true,
   canChangeConversationInstance: true,
   supportsScheduledWhatsApp: true,
   supportsConversationMediaLibrary: true,
