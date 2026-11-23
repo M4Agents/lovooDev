@@ -19,6 +19,9 @@
 //   TC-L  Acesso legítimo + feature flag OFF → 403
 //   TC-M  Feature flag SEMPRE obrigatória — sem bypass público
 //   TC-N  Nenhuma query de credentials/onboarding/instances deve ocorrer
+//   TC-O  Partner herdado: membership na pai + assignment na filha
+//   TC-P  Partner herdado negado: outra pai, assignment ausente, membership inativa
+//   TC-Q  Membership direta ativa prevalece sobre partner herdado
 //
 // ORDEM DE VALIDAÇÃO (implementação):
 //   1. Bearer check
@@ -687,6 +690,150 @@ describe('validateMetaCaller', () => {
       for (const table of queriedTables) {
         expect(ALLOWED_TABLES.has(table)).toBe(true);
       }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-O: partner herdado — membership na pai e assignment na filha
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-O: partner herdado', () => {
+    it('aceita partner ativo na pai com assignment ativo na filha', async () => {
+      const svc = makeSvc({
+        tableSeq: {
+          company_users: [
+            makeChain(null),
+            makeChain({
+              role:       'partner',
+              company_id: PARENT_ID,
+              companies:  { company_type: 'parent' },
+            }),
+          ],
+          companies: [
+            makeChain({ parent_company_id: PARENT_ID }),
+            makeChain({ meta_whatsapp_enabled: true }),
+          ],
+        },
+        tables: {
+          partner_company_assignments: makeChain({ id: ASSIGNMENT_ID }),
+        },
+      });
+      const req = makeReq();
+
+      const result = await validateMetaCaller(req, svc, COMPANY_ID, { roles: META_VIEW_ROLES });
+
+      expect(result).toEqual({
+        ok:         true,
+        userId:     USER_ID,
+        companyId:  COMPANY_ID,
+        role:       'partner',
+        accessPath: 'partner',
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-P: partner herdado negado
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-P: partner herdado negado', () => {
+    it('rejeita assignment de outra pai', async () => {
+      const svc = makeSvc({
+        tableSeq: {
+          company_users: [
+            makeChain(null),
+            makeChain({
+              role:       'partner',
+              company_id: PARENT_ID,
+              companies:  { company_type: 'parent' },
+            }),
+            makeChain(null),
+          ],
+          companies: [
+            makeChain({ parent_company_id: OTHER_CHILD_ID }),
+          ],
+        },
+      });
+      const req = makeReq();
+
+      const result = await validateMetaCaller(req, svc, COMPANY_ID, { roles: META_VIEW_ROLES });
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(403);
+    });
+
+    it('rejeita partner da pai sem assignment ativo na filha', async () => {
+      const svc = makeSvc({
+        tableSeq: {
+          company_users: [
+            makeChain(null),
+            makeChain({
+              role:       'partner',
+              company_id: PARENT_ID,
+              companies:  { company_type: 'parent' },
+            }),
+            makeChain(null),
+          ],
+          companies: [
+            makeChain({ parent_company_id: PARENT_ID }),
+          ],
+        },
+        tables: {
+          partner_company_assignments: makeChain(null),
+        },
+      });
+      const req = makeReq();
+
+      const result = await validateMetaCaller(req, svc, COMPANY_ID, { roles: META_VIEW_ROLES });
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(403);
+    });
+
+    it('rejeita membership de partner inativa na pai', async () => {
+      const svc = makeSvc({
+        tableSeq: {
+          company_users: [
+            makeChain(null),
+            makeChain(null),
+            makeChain(null),
+          ],
+          companies: [
+            makeChain({ parent_company_id: PARENT_ID }),
+          ],
+        },
+      });
+      const req = makeReq();
+
+      const result = await validateMetaCaller(req, svc, COMPANY_ID, { roles: META_VIEW_ROLES });
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(403);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TC-Q: membership direta ativa prevalece
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('TC-Q: membership direta prevalece sobre partner herdado', () => {
+    it('seller direto não é promovido a partner da pai', async () => {
+      const svc = makeSvc({
+        tables: {
+          company_users: makeChain({ role: 'seller' }),
+          companies:     makeChain({ meta_whatsapp_enabled: true, parent_company_id: PARENT_ID }),
+        },
+      });
+      const req = makeReq();
+
+      const result = await validateMetaCaller(req, svc, COMPANY_ID, { roles: META_VIEW_ROLES });
+
+      expect(result).toEqual({
+        ok:         true,
+        userId:     USER_ID,
+        companyId:  COMPANY_ID,
+        role:       'seller',
+        accessPath: 'direct',
+      });
+      const userLookups = svc.from.mock.calls.filter(([table]) => table === 'company_users');
+      expect(userLookups).toHaveLength(1);
     });
   });
 

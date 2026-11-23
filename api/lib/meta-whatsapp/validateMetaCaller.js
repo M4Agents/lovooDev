@@ -7,11 +7,14 @@
 //   1. Authorization: Bearer <token>  — prefixo obrigatório
 //   2. svc.auth.getUser(token)        — JWT validado remotamente
 //   3. Formato UUID do companyId      — rejeitado se inválido
-//   4. Membership ativa em company_users (is_active = true) — Trilha 1
+//   4. Membership direta ativa na empresa alvo — prevalece sobre a pai
 //   5. Role dentro da lista permitida pela ação
-//   6. Partner: exige assignment ativo em partner_company_assignments
-//   7. Trilha 2 (parent → child): super_admin ou system_admin de empresa pai
-//   8. Feature flag companies.meta_whatsapp_enabled — SEMPRE obrigatória
+//   6. Partner direto: assignment ativo na empresa alvo
+//   7. Sem membership direta: partner herdado só com membership ativa de
+//      partner na pai, company_type parent, assignment ativo na filha e
+//      parent_company_id da filha igual a essa pai
+//   8. Trilha seguinte: super_admin ou system_admin dessa mesma pai
+//   9. Feature flag companies.meta_whatsapp_enabled — SEMPRE obrigatória
 //
 // A feature flag não possui bypass público. Todo caller Meta deve operar em
 // empresa com meta_whatsapp_enabled = true. Se houver necessidade futura de
@@ -33,7 +36,8 @@
 //   - Nunca usar permission template como fonte de autorização.
 //   - Nunca usar companies.user_id ou companies.is_super_admin.
 //   - Usuário inativo (is_active = false) é tratado como sem acesso.
-//   - Partner role sozinha NÃO é suficiente: exige assignment ativo.
+//   - Partner, direto ou herdado, exige assignment ativo na empresa alvo.
+//   - Partner herdado também exige membership na pai e a mesma parent_company_id.
 //   - auth_user_is_platform_admin() NÃO utilizado (cross-tenant inseguro).
 //   - Nenhum dado sensível (token, key, ciphertext) é lido ou logado.
 // =============================================================================
@@ -188,22 +192,73 @@ export async function validateMetaCaller(req, svc, companyId, options = {}) {
     });
   }
 
-  // ── 5. Trilha 2: super_admin / system_admin de empresa pai → filha ─────────
+  // ── 5. Sem membership direta: partner herdado, depois admin da pai ────────
   //
-  // Acesso parental restrito a super_admin e system_admin — mesmo padrão de
-  // validateInstagramCaller e validateNuvemshopCaller.
+  // Partner real tem company_users na empresa pai e assignment na filha.
+  // A role isolada não libera a filha. Membership direta ativa, já tratada
+  // acima, não chega aqui.
+  const { data: childCompany } = await svc
+    .from('companies')
+    .select('parent_company_id')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  const parentCompanyId = childCompany?.parent_company_id ?? null;
+
+  if (parentCompanyId && roles.includes('partner')) {
+    const { data: partnerMem } = await svc
+      .from('company_users')
+      .select('role, company_id, companies!inner(company_type)')
+      .eq('user_id', user.id)
+      .eq('company_id', parentCompanyId)
+      .eq('is_active', true)
+      .eq('role', 'partner')
+      .maybeSingle();
+
+    const inheritedPartner = partnerMem?.role === 'partner'
+      && partnerMem.company_id === parentCompanyId
+      && partnerMem.companies?.company_type === 'parent';
+
+    if (inheritedPartner) {
+      const { data: inheritedAssignment } = await svc
+        .from('partner_company_assignments')
+        .select('id')
+        .eq('partner_user_id', user.id)
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (inheritedAssignment) {
+        return _checkFeatureFlagAndReturn(svc, {
+          companyId,
+          userId:     user.id,
+          role:       'partner',
+          accessPath: 'partner',
+        });
+      }
+    }
+  }
+
+  // ── 6. super_admin / system_admin da pai direta ───────────────────────────
   //
   // NÃO usar auth_user_is_platform_admin(): retorna true para qualquer usuário
   // com role elevada em QUALQUER empresa parent, violando isolamento multi-tenant.
-  const { data: parentMem } = await svc
+  let parentQuery = svc
     .from('company_users')
     .select('role, company_id, companies!inner(company_type)')
     .eq('user_id', user.id)
     .eq('is_active', true)
-    .in('role', ['super_admin', 'system_admin'])
-    .maybeSingle();
+    .in('role', ['super_admin', 'system_admin']);
 
-  if (!parentMem || parentMem.companies?.company_type !== 'parent') {
+  if (parentCompanyId) {
+    parentQuery = parentQuery.eq('company_id', parentCompanyId);
+  }
+
+  const { data: parentMem } = await parentQuery.maybeSingle();
+
+  if (!parentMem
+      || parentMem.companies?.company_type !== 'parent'
+      || (parentCompanyId && parentMem.company_id !== parentCompanyId)) {
     return { ok: false, status: 403, error: 'Acesso negado a esta empresa' };
   }
 
