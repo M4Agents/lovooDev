@@ -150,11 +150,17 @@ function makeMsgSelectChain(data, error = null) {
   };
 }
 
-/** Chain para meta_whatsapp_messages UPDATE: update().eq() → Promise */
-function makeUpdateChain(error = null) {
+/**
+ * Chain para meta_whatsapp_messages UPDATE condicional:
+ * update().eq().eq().eq().eq().select('id')
+ * data vazio significa que o predicado de status não encontrou linha.
+ * Erro do cliente não é tratado como atualização.
+ */
+function makeUpdateChain(error = null, data = [{ id: FAKE_MSG_ID }]) {
   return {
     update: vi.fn().mockReturnThis(),
-    eq:     vi.fn().mockResolvedValue({ data: null, error }),
+    eq:     vi.fn().mockReturnThis(),
+    select: vi.fn().mockResolvedValue({ data: error ? null : data, error }),
   };
 }
 
@@ -3294,5 +3300,366 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(res._body).toEqual({ received: true });
     expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
     expect(JSON.stringify(res._body)).not.toContain('updated_at');
+  });
+});
+
+// =============================================================================
+// Compare-and-swap do status outbound
+// Simulação determinística com mocks. Não exercita duas transações
+// PostgreSQL concorrentes.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — status compare-and-swap', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+
+  function trackingRow(status, extra = {}) {
+    return {
+      id:          FAKE_MSG_ID,
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status,
+      ...extra,
+    };
+  }
+
+  function postStatus(status, extra = {}) {
+    const payload = makePayload({
+      statuses: [{
+        id: FAKE_WAMID,
+        status,
+        timestamp: FAKE_TIMESTAMP,
+        ...extra,
+      }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    return makePostReq();
+  }
+
+  function casFilters(chain) {
+    return Object.fromEntries(chain.eq.mock.calls);
+  }
+
+  function expectScopedRead(selectChain) {
+    expect(selectChain.select).toHaveBeenCalledWith('id, company_id, instance_id, status');
+    expect(casFilters(selectChain)).toEqual({
+      company_id:      FAKE_COMPANY_ID,
+      instance_id:     FAKE_INSTANCE_ID,
+      meta_message_id: FAKE_WAMID,
+    });
+  }
+
+  function expectCas(chain, previousStatus, payloadFields) {
+    expect(chain.select).toHaveBeenCalledWith('id');
+    expect(casFilters(chain)).toEqual({
+      id:          FAKE_MSG_ID,
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      previousStatus,
+    });
+    const payload = chain.update.mock.calls[0][0];
+    expect(Object.keys(payload).sort()).toEqual(payloadFields.sort());
+    expect(payload.status).toBe(payloadFields.includes('status') ? payload.status : undefined);
+    return payload;
+  }
+
+  it('A/B: sent→delivered e delivered→read gravam só o timestamp da transição', async () => {
+    const deliveredSelect = makeMsgSelectChain(trackingRow('sent'));
+    const deliveredUpdate = makeUpdateChain();
+    const deliveredTouch  = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(deliveredSelect)
+      .mockReturnValueOnce(deliveredUpdate)
+      .mockReturnValueOnce(deliveredTouch);
+
+    const deliveredRes = makeRes();
+    await handler(postStatus('delivered'), deliveredRes);
+
+    expect(deliveredRes._status).toBe(200);
+    expectScopedRead(deliveredSelect);
+    const deliveredPayload = expectCas(
+      deliveredUpdate,
+      'sent',
+      ['status', 'delivered_at', 'updated_at'],
+    );
+    expect(deliveredPayload.status).toBe('delivered');
+    expect(deliveredPayload.delivered_at).toBe(new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString());
+    expect(deliveredPayload).not.toHaveProperty('read_at');
+    expect(deliveredPayload).not.toHaveProperty('error_code');
+    expect(deliveredTouch.update).toHaveBeenCalledTimes(1);
+
+    vi.resetAllMocks();
+    mockGetMetaServerConfig.mockReturnValue({ appSecret: FAKE_APP_SECRET });
+    mockGetMetaWebhookConfig.mockReturnValue({ verifyToken: FAKE_VERIFY_TOKEN });
+    mockVerifyMetaWebhookSignature.mockReturnValue(true);
+
+    const readSelect = makeMsgSelectChain(trackingRow('delivered'));
+    const readUpdate = makeUpdateChain();
+    const readTouch  = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(readSelect)
+      .mockReturnValueOnce(readUpdate)
+      .mockReturnValueOnce(readTouch);
+
+    const readRes = makeRes();
+    await handler(postStatus('read'), readRes);
+
+    expect(readRes._status).toBe(200);
+    const readPayload = expectCas(readUpdate, 'delivered', ['status', 'read_at', 'updated_at']);
+    expect(readPayload.status).toBe('read');
+    expect(readPayload).not.toHaveProperty('delivered_at');
+    expect(readTouch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('C/D: read não aceita delivered atrasado e sent duplicado não grava', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+    const lateRes = makeRes();
+    await handler(postStatus('delivered'), lateRes);
+    expect(lateRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')));
+    const dupRes = makeRes();
+    await handler(postStatus('sent'), dupRes);
+    expect(dupRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('E–H: duas leituras de sent; read vence e delivered atrasado vira NOOP', async () => {
+    const firstRead  = makeMsgSelectChain(trackingRow('sent'));
+    const lostUpdate = makeUpdateChain(null, []);
+    const reread     = makeMsgSelectChain(trackingRow('read'));
+    const touch      = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(firstRead)
+      .mockReturnValueOnce(lostUpdate)
+      .mockReturnValueOnce(reread)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(200);
+    expect(lostUpdate.update).toHaveBeenCalledTimes(1);
+    expectCas(lostUpdate, 'sent', ['status', 'delivered_at', 'updated_at']);
+    expect(reread.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(reread.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(touch.update).not.toHaveBeenCalled();
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('I: releitura ainda permite a transição e a segunda tentativa grava uma vez', async () => {
+    const firstUpdate = makeUpdateChain(null, []);
+    const secondUpdate = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(firstUpdate)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(secondUpdate)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(postStatus('read'), res);
+
+    expect(res._status).toBe(200);
+    expectCas(firstUpdate, 'sent', ['status', 'read_at', 'updated_at']);
+    expectCas(secondUpdate, 'sent', ['status', 'read_at', 'updated_at']);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(firstUpdate.select).toHaveBeenCalledTimes(1);
+    expect(secondUpdate.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('J: três CAS sem linha e a transição ainda válida → 500, sem touch', async () => {
+    const updates = [makeUpdateChain(null, []), makeUpdateChain(null, []), makeUpdateChain(null, [])];
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[0])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[1])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[2])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')));
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
+    expect(updates.every((chain) => chain.update.mock.calls.length === 1)).toBe(true);
+    expect(updates.map((chain) => casFilters(chain).status)).toEqual(['sent', 'sent', 'sent']);
+    expect(mockSvc.from).toHaveBeenCalledTimes(8);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('K: erro de banco no UPDATE → 500 sem releitura e sem touch', async () => {
+    const update = makeUpdateChain({ message: 'update timeout' });
+    const reread = makeMsgSelectChain(trackingRow('sent'));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('accepted')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(reread);
+
+    const res = makeRes();
+    await handler(postStatus('sent'), res);
+
+    expect(res._status).toBe(500);
+    expect(update.update).toHaveBeenCalledTimes(1);
+    expect(reread.maybeSingle).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+
+  it('L: erro de banco na releitura → 500 sem touch', async () => {
+    const update = makeUpdateChain(null, []);
+    const reread = makeMsgSelectChain(null, { message: 'select timeout' });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(reread);
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(500);
+    expect(update.select).toHaveBeenCalledWith('id');
+    expect(reread.maybeSingle).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('M: CAS rejeitado não aplica timestamp nem erro do evento perdedor', async () => {
+    const update = makeUpdateChain(null, []);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+
+    const res = makeRes();
+    await handler(postStatus('failed', { errors: [{ code: 131047, title: 'SHOULD_NOT_PERSIST' }] }), res);
+
+    expect(res._status).toBe(200);
+    const payload = expectCas(update, 'sent', ['status', 'failed_at', 'error_code', 'error_subcode', 'updated_at']);
+    expect(payload.status).toBe('failed');
+    expect(payload.error_code).toBe(131047);
+    expect(JSON.stringify(payload)).not.toContain('SHOULD_NOT_PERSIST');
+    expect(payload).not.toHaveProperty('read_at');
+    expect(payload).not.toHaveProperty('sent_at');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('N: failed permanece terminal e delivered não regride para failed', async () => {
+    const fromSent = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(fromSent)
+      .mockReturnValueOnce(touch);
+    const applied = makeRes();
+    await handler(postStatus('failed', { errors: [{ code: 131026 }] }), applied);
+    expect(applied._status).toBe(200);
+    const payload = expectCas(fromSent, 'sent', ['status', 'failed_at', 'error_code', 'error_subcode', 'updated_at']);
+    expect(payload.error_code).toBe(131026);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+
+    const callsAfterApplied = mockSvc.from.mock.calls.length;
+    for (const current of ['delivered', 'read', 'failed']) {
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(trackingRow(current)));
+      const res = makeRes();
+      await handler(postStatus('failed', { errors: [{ code: 1 }] }), res);
+      expect(res._status).toBe(200);
+    }
+    expect(mockSvc.from).toHaveBeenCalledTimes(callsAfterApplied + 6);
+    expect(mockSvc.from.mock.calls.slice(callsAfterApplied).map((call) => call[0])).not.toContain(
+      'meta_messages',
+    );
+  });
+
+  it('O: leitura e CAS ficam na empresa e instância resolvidas', async () => {
+    const selectChain = makeMsgSelectChain(trackingRow('sent'));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+    const ok = makeRes();
+    await handler(postStatus('delivered'), ok);
+    expect(ok._status).toBe(200);
+    expectScopedRead(selectChain);
+    expectCas(update, 'sent', ['status', 'delivered_at', 'updated_at']);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent', { company_id: OTHER_COMPANY_ID })));
+    const companyRes = makeRes();
+    await handler(postStatus('delivered'), companyRes);
+    expect(companyRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(6);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent', { instance_id: OTHER_INSTANCE_ID })));
+    const instanceRes = makeRes();
+    await handler(postStatus('read'), instanceRes);
+    expect(instanceRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(8);
+    expect(mockSvc.from.mock.calls.slice(-2).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('P: tentativa rejeitada e status nulo não tocam o chat', async () => {
+    const rejected = makeUpdateChain(null, []);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(rejected)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+    const rejectedRes = makeRes();
+    await handler(postStatus('delivered'), rejectedRes);
+    expect(rejectedRes._status).toBe(200);
+    expect(rejected.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow(null)));
+    const nullRes = makeRes();
+    await handler(postStatus('delivered'), nullRes);
+    expect(nullRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(6);
+    expect(mockSvc.from.mock.calls.slice(-2).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('Q: wamid desconhecido continua 200, sem INSERT e sem UPDATE', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null));
+    const res = makeRes();
+    await handler(postStatus('read'), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
   });
 });

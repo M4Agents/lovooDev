@@ -16,6 +16,7 @@
 //
 // Idempotência:
 //   - statuses[]: state machine explícita (TRANSITION_MATRIX) com NOOP
+//   - a transição só grava se o status lido ainda for o mesmo (compare-and-swap)
 //   - messages[]: RPC process_meta_inbound_message — UNIQUE (instance_id, wamid)
 //   - Retry Meta em 5xx é seguro: ambos os ramos são idempotentes
 //
@@ -106,6 +107,11 @@ const TRANSITION_MATRIX = {
   read:      { sent: false, delivered: false, read: false, failed: false },
   failed:    { sent: false, delivered: false, read: false, failed: false },
 };
+
+// Tentativas do compare-and-swap quando outra escrita ganhou a linha.
+// Cada tentativa relê o status. Esgotar o limite com a transição ainda
+// válida devolve 500 para o retry da Meta. Não é um loop aberto.
+const STATUS_CAS_ATTEMPT_LIMIT = 3;
 
 // =============================================================================
 // Handler principal
@@ -281,23 +287,15 @@ async function handlePost(req, res) {
         // Ignorar statuses fora do escopo (played, outros)
         if (!SUPPORTED_STATUSES.has(newStatus)) continue;
 
-        const effectiveTimestamp = parseMetaTimestamp(statusItem.timestamp);
+        // ── 10–12. Ler, avaliar a matriz e gravar só se o status lido permanecer ─
+        const outcome = await applyOutboundStatus(svc, instance, wamid, newStatus, statusItem);
 
-        // ── 10. SELECT row atual (read-before-update) ──────────────────────
-        // Correlação: (instance_id, meta_message_id) — nunca apenas por wamid
-        const { data: row, error: selectErr } = await svc
-          .from('meta_whatsapp_messages')
-          .select('id, status')
-          .eq('instance_id', instance.id)
-          .eq('meta_message_id', wamid)
-          .maybeSingle();
-
-        if (selectErr) {
-          console.error('[meta/webhook] select_failed db_error=true');
+        if (outcome === 'db_error' || outcome === 'exhausted') {
+          console.error('[meta/webhook] event_type=status status_persist_failed db_error=true');
           return res.status(500).json({ error: 'Internal error' });
         }
 
-        if (!row) {
+        if (outcome === 'unknown') {
           // Unknown wamid — decisão B1: 200 + log seguro, continuar batch
           // Não logar wamid completo nem phone_number_id
           console.log(
@@ -307,31 +305,23 @@ async function handlePost(req, res) {
           continue;
         }
 
-        // ── 11. Consultar state machine ────────────────────────────────────
-        if (!shouldApply(row.status, newStatus)) {
-          // NOOP: duplicata ou regressão não permitida
-          console.log('[meta/webhook] event_type=status transition_blocked=true status=%s', newStatus);
+        if (outcome === 'mismatch') {
+          console.log('[meta/webhook] event_type=status status_scope_mismatch=true');
           continue;
         }
 
-        // ── 12. Executar UPDATE ────────────────────────────────────────────
-        const updatePayload = buildUpdatePayload(newStatus, effectiveTimestamp, statusItem);
-
-        const { error: updateErr } = await svc
-          .from('meta_whatsapp_messages')
-          .update(updatePayload)
-          .eq('id', row.id);
-
-        if (updateErr) {
-          console.error('[meta/webhook] update_failed db_error=true');
-          return res.status(500).json({ error: 'Internal error' });
+        if (outcome !== 'applied') {
+          // NOOP: duplicata, regressão ou CAS que perdeu para um estado mais novo
+          console.log('[meta/webhook] event_type=status transition_blocked=true status=%s', newStatus);
+          continue;
         }
 
         console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
 
         // MVP5.B1.2 — sinal Realtime para ticks: UPDATE pontual de updated_at
-        // em meta_messages. Só após transição efetivamente aplicada no tracking.
-        // NOOP / duplicata / regressão / wamid desconhecido não chegam aqui.
+        // em meta_messages. Só após o CAS confirmar uma linha alterada.
+        // NOOP / duplicata / regressão / wamid desconhecido / tentativa perdida
+        // não chegam aqui. Uma transição não dispara um toque por tentativa.
         // Zero linhas: mensagem ainda não persistida no chat — no-op, sem INSERT.
         // Falha de DB: log sanitizado; tracking NÃO é revertido.
         // HTTP: 200 (retry Meta seria NOOP no tracking e não reaplicaria o sinal).
@@ -745,6 +735,98 @@ async function processInboundMediaMessage({
  */
 function shouldApply(currentStatus, newStatus) {
   return TRANSITION_MATRIX[currentStatus]?.[newStatus] === true;
+}
+
+/**
+ * Escopo da linha lida. company_id e instance_id precisam ser os da
+ * instância já resolvida. Status nulo ou vazio não entra na matriz:
+ * o schema declara status NOT NULL e um valor ausente não autoriza escrita.
+ *
+ * @returns {{ kind: 'ok', row: { id: string, companyId: string, instanceId: string, status: string } }|{ kind: 'mismatch' }|{ kind: 'invalid_status' }}
+ */
+function classifyTrackingRow(row, instance) {
+  if (!row || typeof row.id !== 'string' || row.id.length === 0) return { kind: 'mismatch' };
+  const companyId  = typeof row.company_id === 'string' ? row.company_id : instance.company_id;
+  const instanceId = typeof row.instance_id === 'string' ? row.instance_id : instance.id;
+  if (companyId !== instance.company_id || instanceId !== instance.id) return { kind: 'mismatch' };
+  if (typeof row.status !== 'string' || row.status.length === 0) return { kind: 'invalid_status' };
+  return { kind: 'ok', row: { id: row.id, companyId, instanceId, status: row.status } };
+}
+
+/**
+ * Lê o tracking no escopo da instância resolvida.
+ * Nunca correlaciona só pelo wamid.
+ */
+async function loadOutboundTracking(svc, instance, wamid) {
+  const { data, error } = await svc
+    .from('meta_whatsapp_messages')
+    .select('id, company_id, instance_id, status')
+    .eq('company_id', instance.company_id)
+    .eq('instance_id', instance.id)
+    .eq('meta_message_id', wamid)
+    .maybeSingle();
+
+  if (error) return { error: true, kind: 'db_error', row: null };
+  if (!data) return { error: false, kind: 'missing', row: null };
+
+  const classified = classifyTrackingRow(data, instance);
+  if (classified.kind !== 'ok') return { error: false, kind: classified.kind, row: null };
+  return { error: false, kind: 'ok', row: classified.row };
+}
+
+/**
+ * UPDATE condicional. Ausência de erro não prova gravação:
+ * só uma linha devolvida por select('id') conta como aplicada.
+ * O predicado de status é o valor lido, não o destino.
+ */
+async function casUpdateOutboundStatus(svc, tracked, payload) {
+  const { data, error } = await svc
+    .from('meta_whatsapp_messages')
+    .update(payload)
+    .eq('id', tracked.id)
+    .eq('company_id', tracked.companyId)
+    .eq('instance_id', tracked.instanceId)
+    .eq('status', tracked.status)
+    .select('id');
+
+  if (error) return { error: true, applied: false };
+  return { error: false, applied: Array.isArray(data) && data.length > 0 };
+}
+
+/**
+ * Aplica uma transição de status com compare-and-swap.
+ *
+ * @returns {'applied'|'noop'|'unknown'|'mismatch'|'db_error'|'exhausted'}
+ */
+async function applyOutboundStatus(svc, instance, wamid, newStatus, statusItem) {
+  const effectiveTimestamp = parseMetaTimestamp(statusItem.timestamp);
+  let loaded = await loadOutboundTracking(svc, instance, wamid);
+  if (loaded.error) return 'db_error';
+  if (loaded.kind === 'mismatch') return 'mismatch';
+  if (loaded.kind === 'invalid_status') return 'noop';
+  if (!loaded.row) return 'unknown';
+
+  let tracked = loaded.row;
+  for (let attempt = 1; attempt <= STATUS_CAS_ATTEMPT_LIMIT; attempt += 1) {
+    if (!shouldApply(tracked.status, newStatus)) return 'noop';
+
+    const written = await casUpdateOutboundStatus(
+      svc,
+      tracked,
+      buildUpdatePayload(newStatus, effectiveTimestamp, statusItem),
+    );
+    if (written.error) return 'db_error';
+    if (written.applied) return 'applied';
+
+    loaded = await loadOutboundTracking(svc, instance, wamid);
+    if (loaded.error) return 'db_error';
+    if (loaded.kind === 'mismatch') return 'mismatch';
+    if (loaded.kind === 'invalid_status') return 'noop';
+    if (!loaded.row) return 'unknown';
+    tracked = loaded.row;
+  }
+
+  return shouldApply(tracked.status, newStatus) ? 'exhausted' : 'noop';
 }
 
 /**
