@@ -41,10 +41,10 @@
 //   - type='audio' persistido via process_meta_inbound_media_message (MVP5.B3.2.B)
 //   - location, sticker, interactive de outro subtipo e unknown: type_skipped
 //
-// Decisão UNKNOWN_WAMID (B1):
-//   - Meta retenta não-200 por até 7 dias (documentado oficialmente)
-//   - Wamids não encontrados são mais provavelmente de mensagens externas ao Lovoo
-//   - Retornar 200 + log seguro evita retry storm de 7 dias
+// Status sem tracking:
+//   - O primeiro evento é inserido em meta_early_status_pendings.
+//   - Sem tracking depois da releitura, a pendência fica e o chat não é tocado.
+//   - HTTP 200 se essa persistência for a única ocorrência, sem falha transitória.
 // =============================================================================
 
 import { timingSafeEqual } from 'crypto';
@@ -62,9 +62,9 @@ import { downloadAndStoreInboundMedia } from '../../lib/meta-whatsapp/inboundMed
 import { MEDIA_SIZE_LIMITS }           from '../../lib/meta-whatsapp/mediaConstants.js';
 import {
   SUPPORTED_STATUSES,
-  applyOutboundStatus,
+  handleLiveOutboundStatus,
   parseMetaTimestamp,
-  touchOutboundChatMessage,
+  recoverOutboundStatusBacklog,
 }                                      from '../../lib/meta-whatsapp/outboundStatusTracking.js';
 
 // CRÍTICO: desabilitar body parser do Vercel — obrigatório para HMAC validation.
@@ -207,6 +207,16 @@ async function handlePost(req, res) {
   // Meta reenvia o payload inteiro — a idempotência fica na RPC, no wamid
   // e no compare-and-swap de status.
   let hasTransientFailure = false;
+  const recoveryScopes = new Map();
+  const rememberInstance = (resolved) => {
+    const scopeKey = `${resolved.company_id}:${resolved.id}`;
+    let scope = recoveryScopes.get(scopeKey);
+    if (!scope) {
+      scope = { instance: resolved, wamids: new Set() };
+      recoveryScopes.set(scopeKey, scope);
+    }
+    return scope;
+  };
 
   for (const entry of entries) {
     const changes = Array.isArray(entry.changes) ? entry.changes : [];
@@ -258,48 +268,17 @@ async function handlePost(req, res) {
         // Ignorar statuses fora do escopo (played, outros)
         if (!SUPPORTED_STATUSES.has(newStatus)) continue;
 
-        // ── 10–12. Ler, avaliar a matriz e gravar só se o status lido permanecer ─
-        const outcome = await applyOutboundStatus(svc, instance, wamid, newStatus, statusItem);
+        // ── 10–12. Pendências do wamid, depois o evento ao vivo, um toque ──
+        rememberInstance(instance).wamids.add(wamid);
 
-        if (outcome === 'db_error' || outcome === 'exhausted') {
-          console.error('[meta/webhook] event_type=status status_persist_failed db_error=true');
-          hasTransientFailure = true;
-          continue;
-        }
-
-        if (outcome === 'unknown') {
-          // Unknown wamid — decisão B1: 200 + log seguro, continuar batch
-          // Não logar wamid completo nem phone_number_id
-          console.log(
-            '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
-            newStatus,
-          );
-          continue;
-        }
-
-        if (outcome === 'mismatch') {
-          console.log('[meta/webhook] event_type=status status_scope_mismatch=true');
-          continue;
-        }
-
-        if (outcome !== 'applied' && outcome !== 'duplicate') {
-          // Regressão, transição inválida ou status persistido inválido.
-          // Duplicata exata não entra aqui: ela repete só o toque.
-          console.log('[meta/webhook] event_type=status transition_blocked=true status=%s', newStatus);
-          continue;
-        }
-
-        if (outcome === 'applied') {
-          console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
-        }
-
-        // Sinal Realtime: updated_at em meta_messages.
-        // Ocorre depois de applied e também na duplicata exata, uma vez por evento.
-        // Regressão, unknown, mismatch, db_error e exhausted não chegam aqui.
-        // missing: chat ainda sem a linha — sem indicador de falha (etapa 4.5).
-        // error: o tracking não é revertido; o lote segue e responde 500 no fim.
-        const touchResult = await touchOutboundChatMessage(svc, instance, wamid);
-        if (touchResult === 'error') hasTransientFailure = true;
+        const decision = await handleLiveOutboundStatus(
+          svc,
+          instance,
+          wamid,
+          newStatus,
+          statusItem,
+        );
+        if (decision.transient) hasTransientFailure = true;
       }
 
       // ── 13. Ramo B — messages[] inbound TEXT (MVP3A) ──────────────────────
@@ -355,6 +334,7 @@ async function handlePost(req, res) {
 
           // RPC idempotente por (instance_id, wamid). Erro ou exceção
           // desta mensagem não encerra o lote.
+          rememberInstance(instance);
           const textTransient = await persistInboundTextLikeMessage(
             svc, instance, message, body, contactName, providerTimestamp,
           );
@@ -370,6 +350,7 @@ async function handlePost(req, res) {
             continue;
           }
 
+          rememberInstance(instance);
           const buttonTransient = await persistInboundTextLikeMessage(
             svc, instance, message, body, contactName, providerTimestamp,
           );
@@ -385,6 +366,7 @@ async function handlePost(req, res) {
             continue;
           }
 
+          rememberInstance(instance);
           const interactiveTransient = await persistInboundTextLikeMessage(
             svc, instance, message, body, contactName, providerTimestamp,
           );
@@ -398,6 +380,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_document outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const docTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -423,6 +406,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_image outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const imgTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -448,6 +432,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_video outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const vidTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -472,6 +457,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_audio outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const audTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -494,6 +480,13 @@ async function handlePost(req, res) {
         }
       }
     }
+  }
+
+  // Uma vez por instância com status suportado ou inbound elegível.
+  // O wamid corrente já foi decidido e fica fora deste orçamento.
+  for (const scope of recoveryScopes.values()) {
+    const recovery = await recoverOutboundStatusBacklog(svc, scope.instance, scope.wamids);
+    if (recovery.transient) hasTransientFailure = true;
   }
 
   // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE/VIDEO/AUDIO do payload.
