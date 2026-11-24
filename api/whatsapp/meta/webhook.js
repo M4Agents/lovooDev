@@ -585,6 +585,36 @@ async function handlePost(req, res) {
 // =============================================================================
 
 /**
+ * Lê o ciphertext da instância resolvida.
+ * transient=true pede retry do lote e não inicia download.
+ *
+ * @returns {Promise<{ transient: true, outcome: string }|{ transient: false, accessTokenEnc: string }>}
+ */
+async function readInboundMediaCredential(svc, instanceId) {
+  let lookup;
+  try {
+    lookup = await svc
+      .from('meta_whatsapp_credentials')
+      .select('access_token_enc')
+      .eq('instance_id', instanceId)
+      .maybeSingle();
+  } catch {
+    return { transient: true, outcome: 'credential_lookup_failed' };
+  }
+
+  const credential = lookup?.data;
+  if (lookup?.error) return { transient: true, outcome: 'credential_lookup_failed' };
+  if (!credential) return { transient: true, outcome: 'credential_missing' };
+
+  const accessTokenEnc = credential.access_token_enc;
+  if (typeof accessTokenEnc !== 'string' || accessTokenEnc.trim().length === 0) {
+    return { transient: true, outcome: 'credential_token_absent' };
+  }
+
+  return { transient: false, accessTokenEnc };
+}
+
+/**
  * Pipeline compartilhado DOCUMENT + IMAGE + VIDEO + AUDIO inbound.
  *
  * Preserva a semântica validada do ramo DOCUMENT:
@@ -646,25 +676,28 @@ async function processInboundMediaMessage({
     return false;
   }
 
-  // Credencial lazy — fonte canônica: meta_whatsapp_credentials.
-  // instance.id: sempre do banco — nunca do payload.
-  const { data: credential, error: credErr } = await svc
-    .from('meta_whatsapp_credentials')
-    .select('access_token_enc')
-    .eq('instance_id', instance.id)
-    .maybeSingle();
-
-  if (credErr || !credential?.access_token_enc) {
-    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
-    return false;
+  // Credencial lazy — depois do dedupe, para mídia já persistida
+  // recuperar o lead sem Graph nem Storage.
+  // A tabela não tem company_id: o escopo é instance_id da instância
+  // resolvida no banco. Não há token global nem credencial de outra instância.
+  //
+  // Erro de consulta, linha ausente, token vazio e falha de descriptografia
+  // não provam configuração permanente. Confirmar 200 perderia a mídia.
+  // Todos esses casos são falha recuperável do lote. O módulo de criptografia
+  // não distingue chave ausente de ciphertext inválido; a falha de decrypt
+  // segue o mesmo caminho para não descartar a mensagem.
+  const credentialOutcome = await readInboundMediaCredential(svc, instance.id);
+  if (credentialOutcome.transient) {
+    console.error('[meta/webhook] event_type=%s outcome=%s', logEvent, credentialOutcome.outcome);
+    return true;
   }
 
   let plainToken;
   try {
-    plainToken = decryptMetaToken(credential.access_token_enc);
+    plainToken = decryptMetaToken(credentialOutcome.accessTokenEnc);
   } catch {
-    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
-    return false;
+    console.error('[meta/webhook] event_type=%s outcome=%s', logEvent, 'credential_decrypt_failed');
+    return true;
   }
 
   let mediaResult;

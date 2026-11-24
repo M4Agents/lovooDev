@@ -1681,9 +1681,9 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
   });
 
   // W-DOC-08 / CRED-02 — Credential row ausente em meta_whatsapp_credentials ——
-  // A instância existe mas não possui credencial (row null no lookup).
-  // Resultado: skip 200, zero download/RPC, nenhum segredo em resposta.
-  it('W-DOC-08 | credential row ausente → skip 200; zero download/RPC; nenhum segredo em res', async () => {
+  // A consulta não prova que a ausência é permanente. HTTP 500 pede retry
+  // e não inicia download. Nenhum segredo entra na resposta.
+  it('W-DOC-08 | credential row ausente → HTTP 500; zero download/RPC; nenhum segredo em res', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1698,7 +1698,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    expect(res._status).toBe(200);                                  // skip, não retry storm
+    expect(res._status).toBe(500);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
@@ -1889,8 +1889,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(selectArg).not.toContain('access_token_enc');
   });
 
-  // CRED-03 — Credential lookup DB error → HTTP 200 skip (não retry storm) ——————
-  it('CRED-03 | credential lookup DB error → HTTP 200; zero decrypt/download/RPC', async () => {
+  // CRED-03 — Erro de consulta da credencial é falha recuperável ————————————
+  it('CRED-03 | credential lookup DB error → HTTP 500; zero decrypt/download/RPC', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1903,8 +1903,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    // credErr → skip 200 (não retry storm — retry não resolve erro de configuração)
-    expect(res._status).toBe(200);
+    expect(res._status).toBe(500);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
@@ -1914,8 +1913,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(body).not.toContain('timeout');
   });
 
-  // CRED-04 — decryptMetaToken lança → HTTP 200 skip; segredo não vaza ————————
-  it('CRED-04 | decryptMetaToken lança → HTTP 200; zero download/RPC; nenhum segredo em res', async () => {
+  // CRED-04 — decrypt sem classificação permanente pede retry e não vaza segredo
+  it('CRED-04 | decryptMetaToken lança → HTTP 500; zero download/RPC; nenhum segredo em res', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1932,8 +1931,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    // decrypt failure → skip 200 (não retry storm)
-    expect(res._status).toBe(200);
+    expect(res._status).toBe(500);
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
     expect(mockSvc.rpc).not.toHaveBeenCalled();
     // Mensagem de erro interno NÃO deve vazar na resposta
@@ -3661,5 +3659,268 @@ describe('POST /api/whatsapp/meta/webhook — status compare-and-swap', () => {
     expect(res._body).toEqual({ received: true });
     expect(mockSvc.from).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
+  });
+});
+
+// =============================================================================
+// Credencial de mídia inbound — falha recuperável
+// Mocks. Não acessa banco, Meta nem storage.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — credencial de mídia', () => {
+  function postDocument() {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    return makePostReq();
+  }
+
+  function queueCredential(data, error = null) {
+    const credential = makeCredentialChain(data, error);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(credential);
+    return credential;
+  }
+
+  it('A: credencial válida mantém download e RPC', async () => {
+    const credential = queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const res = makeRes();
+    await handler(postDocument(), res);
+
+    expect(res._status).toBe(200);
+    expect(credential.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(credential.select).toHaveBeenCalledWith('access_token_enc');
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].companyId).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+  });
+
+  it('B/C: erro de banco e timeout pedem retry sem download', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(null, { message: 'connection reset' });
+      const dbRes = makeRes();
+      await handler(postDocument(), dbRes);
+      expect(dbRes._status).toBe(500);
+      expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+
+      queueCredential(null, { code: '57014', message: 'statement timeout' });
+      const timeoutRes = makeRes();
+      await handler(postDocument(), timeoutRes);
+      expect(timeoutRes._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_lookup_failed',
+      );
+      expect(JSON.stringify(errSpy.mock.calls)).not.toContain('statement timeout');
+      expect(JSON.stringify(errSpy.mock.calls)).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('D/E: credencial ausente e token vazio pedem retry sem descarte silencioso', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(null);
+      const missing = makeRes();
+      await handler(postDocument(), missing);
+      expect(missing._status).toBe(500);
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_missing',
+      );
+
+      for (const accessTokenEnc of ['', '   ', null]) {
+        queueCredential({ access_token_enc: accessTokenEnc });
+        const absent = makeRes();
+        await handler(postDocument(), absent);
+        expect(absent._status).toBe(500);
+      }
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_token_absent',
+      );
+      expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expect(mockSvc.rpc).not.toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('F/G/P: descriptografia e erro inesperado não confirmam sucesso nem vazam segredo', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(FAKE_CREDENTIAL);
+      mockDecryptMetaToken.mockImplementationOnce(() => {
+        throw new Error(FAKE_PLAIN_TOKEN);
+      });
+      const decryptRes = makeRes();
+      await handler(postDocument(), decryptRes);
+      expect(decryptRes._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_decrypt_failed',
+      );
+
+      const throwing = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockRejectedValue(new Error(FAKE_ACCESS_TOKEN_ENC)),
+      };
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeDedupeChain(null))
+        .mockReturnValueOnce(throwing);
+      const unexpected = makeRes();
+      await handler(postDocument(), unexpected);
+      expect(unexpected._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(logged).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+      expect(JSON.stringify(decryptRes._body)).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(JSON.stringify(unexpected._body)).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['document', () => makeDocumentPayload(), 'inbound_document'],
+    ['image', () => makeImagePayload(), 'inbound_image'],
+    ['video', () => makeVideoPayload(), 'inbound_video'],
+    ['audio', () => makeAudioPayload(), 'inbound_audio'],
+  ])('H: %s com falha de credencial não baixa nem envia', async (_type, buildPayload, logEvent) => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(buildPayload())));
+    queueCredential(null, { message: 'unavailable' });
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(logEvent.startsWith('inbound_')).toBe(true);
+  });
+
+  it('I: falha de credencial não impede a mídia seguinte do lote', async () => {
+    const first = makeDocumentMessage({ id: 'wamid_cred_fail', documentId: FAKE_MEDIA_ID });
+    const second = makeDocumentMessage({ id: 'wamid_cred_ok', documentId: '999888777666' });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(
+      makeDocumentPayload({ messages: [first, second] }),
+    )));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null, { message: 'unavailable' }))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].wamid).toBe('wamid_cred_ok');
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid_cred_ok');
+  });
+
+  it('J: retry após a credencial voltar persiste a mídia uma vez', async () => {
+    queueCredential(null, { message: 'unavailable' });
+    const first = makeRes();
+    await handler(postDocument(), first);
+    expect(first._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+
+    queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const second = makeRes();
+    await handler(postDocument(), second);
+    expect(second._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+  });
+
+  it('K/L: mídia já persistida resolve o lead e não consulta credencial nem baixa de novo', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain({ id: FAKE_MSG_ID, conversation_id: FAKE_CONV_ID }));
+    mockSvc.rpc.mockResolvedValueOnce({ data: 'linked_existing', error: null });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_messages',
+    ]);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledWith('resolve_meta_conversation_lead', expect.objectContaining({
+      p_company_id: FAKE_COMPANY_ID,
+      p_instance_id: FAKE_INSTANCE_ID,
+      p_conversation_id: FAKE_CONV_ID,
+    }));
+  });
+
+  it('M/N: credencial fica na instância resolvida e HMAC inválido não processa', async () => {
+    const credential = queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const ok = makeRes();
+    await handler(postDocument(), ok);
+    expect(credential.eq.mock.calls).toEqual([['instance_id', FAKE_INSTANCE_ID]]);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].companyId).toBe(FAKE_COMPANY_ID);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].token).toBe(FAKE_PLAIN_TOKEN);
+
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const denied = makeRes();
+    await handler(postDocument(), denied);
+    expect(denied._status).toBe(401);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+  });
+
+  it('O: compare-and-swap de status continua exigindo o status lido', async () => {
+    const payload = makePayload({
+      statuses: [{ id: FAKE_WAMID, status: 'delivered', timestamp: FAKE_TIMESTAMP }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({
+        id: FAKE_MSG_ID,
+        company_id: FAKE_COMPANY_ID,
+        instance_id: FAKE_INSTANCE_ID,
+        status: 'sent',
+      }))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(Object.fromEntries(update.eq.mock.calls)).toEqual({
+      id: FAKE_MSG_ID,
+      company_id: FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status: 'sent',
+    });
+    expect(update.update.mock.calls[0][0].status).toBe('delivered');
   });
 });
