@@ -120,6 +120,7 @@ vi.mock('../../../../lib/meta-whatsapp/updateConversationPreview.js', () => ({
 }));
 
 import handler from '../send.js';
+import * as outboundStatusTracking from '../../../../lib/meta-whatsapp/outboundStatusTracking.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -2194,12 +2195,16 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(makeInsertChain())
         .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeReconcilePendingChain())
+        .mockReturnValueOnce(makeReconcileMarkerChain())
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
         .mockReturnValueOnce(openWindowChain())
         .mockReturnValueOnce(makeCredChain(FAKE_CRED))
         .mockReturnValueOnce(makeInsertChain())
-        .mockReturnValueOnce(makeInsertChain());
+        .mockReturnValueOnce(makeInsertChain())
+        .mockReturnValueOnce(makeReconcilePendingChain())
+        .mockReturnValueOnce(makeReconcileMarkerChain());
       mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
       mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
       const res1 = makeRes();
@@ -2211,7 +2216,7 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
       const tables = mockSvc.from.mock.calls.map(([t]) => t);
       expect(tables.filter((t) => t === 'meta_messages')).toHaveLength(4);
       expect(tables[2]).toBe('meta_messages');
-      expect(tables[8]).toBe('meta_messages');
+      expect(tables[10]).toBe('meta_messages');
       expect(mockSendTextMessage).toHaveBeenCalledTimes(2);
     });
 
@@ -2321,5 +2326,124 @@ describe('POST /api/whatsapp/meta/messages/send', () => {
         loaderSpy.mockRestore();
       }
     });
+  });
+});
+
+function makeReconcilePendingChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+  };
+}
+
+function makeReconcileMarkerChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
+}
+
+describe('POST /api/whatsapp/meta/messages/send — reconciliação posterior', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('consulta o wamid persistido e preserva o 200', async () => {
+    setupHappyPath();
+    const pending = makeReconcilePendingChain();
+    mockSvc.from
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(makeReconcileMarkerChain());
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    expect(pending.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(pending.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(pending.eq).toHaveBeenCalledWith('meta_message_id', FAKE_WAMID);
+    expect(pending.order).toHaveBeenCalledWith('received_at', { ascending: true });
+    expect(pending.order).toHaveBeenCalledWith('id', { ascending: true });
+    expect(pending.limit).toHaveBeenCalledWith(4);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('falha exclusiva da reconciliação preserva message_id', async () => {
+    const spy = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockResolvedValue({ ok: false, reason: 'db_error' });
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('exceção da reconciliação não vira erro de envio', async () => {
+    vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockRejectedValue(new Error('reconcile exploded'));
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    expect(JSON.stringify(res._body)).not.toContain('reconcile exploded');
+    expect(mockSendTextMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('falha de tracking ou chat não reconcilia', async () => {
+    const spy = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus');
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(openWindowChain())
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain(new Error('db error')));
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+    const tracking = makeRes();
+    await handler(makeReq(), tracking);
+    expect(tracking._status).toBe(500);
+    expect(tracking._body).toEqual({ error: 'send_persistence_failed' });
+
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(openWindowChain())
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(makeInsertChain(new Error('db error')));
+    const chat = makeRes();
+    await handler(makeReq(), chat);
+    expect(chat._status).toBe(500);
+    expect(chat._body).toEqual({ error: 'send_persistence_failed' });
+    expect(spy).not.toHaveBeenCalled();
+    expect(mockSendTextMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('aguarda a reconciliação antes da resposta', async () => {
+    let entered;
+    const enteredGate = new Promise((resolve) => { entered = resolve; });
+    let release;
+    const block = new Promise((resolve) => { release = resolve; });
+    vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockImplementation(() => {
+        entered();
+        return block.then(() => ({ ok: true, notified: false }));
+      });
+    setupHappyPath();
+    const res = makeRes();
+    const pending = handler(makeReq(), res);
+    await enteredGate;
+    expect(res._status).toBeNull();
+    release();
+    await pending;
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
   });
 });

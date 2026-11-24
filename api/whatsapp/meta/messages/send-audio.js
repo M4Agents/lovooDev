@@ -70,6 +70,7 @@ import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/
 import { decryptMetaToken } from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendAudioMessage, uploadMedia } from '../../../lib/meta-whatsapp/graphClient.js';
 import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServiceWindow.js';
+import { reconcilePersistedOutboundStatus } from '../../../lib/meta-whatsapp/outboundStatusTracking.js';
 import {
   validateMetaOutboundAudioBytes,
   META_OUTBOUND_AUDIO_MAX_BYTES,
@@ -420,8 +421,36 @@ function persistFailed(res) {
   return res.status(500).json({ error: 'send_persistence_failed' });
 }
 
-function mapPersistOutcome(res, result) {
+async function settleOutboundAudioReconcile(svc, companyId, instanceId, wamid) {
+  if (typeof companyId !== 'string' || companyId.length === 0) return;
+  if (typeof instanceId !== 'string' || instanceId.length === 0) return;
+  if (typeof wamid !== 'string' || wamid.length === 0) return;
+  try {
+    const outcome = await reconcilePersistedOutboundStatus(svc, {
+      company_id: companyId,
+      id: instanceId,
+    }, wamid);
+    if (outcome?.ok !== true) {
+      console.error('[meta/messages/send-audio] outbound_reconcile_failed db_error=true');
+    }
+  } catch {
+    console.error('[meta/messages/send-audio] outbound_reconcile_failed db_error=true');
+  }
+}
+
+async function mapPersistOutcome(res, result, scope) {
   if (result?.ok === true) {
+    const persistedWamid = typeof scope?.wamid === 'string' && scope.wamid.length > 0
+      ? scope.wamid
+      : result.wamid;
+    if (scope?.svc) {
+      await settleOutboundAudioReconcile(
+        scope.svc,
+        scope.companyId,
+        scope.instanceId,
+        persistedWamid,
+      );
+    }
     return res.status(200).json({ ok: true });
   }
   if (result?.error === 'operation_identity_conflict' || result?.error === 'completion_conflict') {
@@ -557,7 +586,12 @@ async function resumeGraphAcceptedPersistence({
         () => resolveOutboundAwsClient(svc, auth.companyId),
       ),
     });
-    return mapPersistOutcome(res, result);
+    return await mapPersistOutcome(res, result, {
+      svc,
+      companyId: auth.companyId,
+      instanceId: stored.instance_id,
+      wamid: stored.wamid,
+    });
   } catch {
     return persistFailed(res);
   }
@@ -780,6 +814,19 @@ export default async function handler(req, res) {
         });
       }
       if (!mapped.mayClaim) {
+        if (
+          mapped.httpStatus === 200
+          && mapped.body?.ok === true
+          && existing.row?.company_id === auth.companyId
+          && existing.row?.instance_id === instance.id
+        ) {
+          await settleOutboundAudioReconcile(
+            svc,
+            auth.companyId,
+            instance.id,
+            existing.row.wamid,
+          );
+        }
         return res.status(mapped.httpStatus).json(mapped.body);
       }
       const windowOpen = await gateCustomerServiceWindow(svc, windowIds, res);
@@ -845,6 +892,19 @@ export default async function handler(req, res) {
       });
     }
     if (!mapped.mayClaim) {
+      if (
+        mapped.httpStatus === 200
+        && mapped.body?.ok === true
+        && raced.row?.company_id === auth.companyId
+        && raced.row?.instance_id === instance.id
+      ) {
+        await settleOutboundAudioReconcile(
+          svc,
+          auth.companyId,
+          instance.id,
+          raced.row.wamid,
+        );
+      }
       return res.status(mapped.httpStatus).json(mapped.body);
     }
     return respondCreatedGraphSend(

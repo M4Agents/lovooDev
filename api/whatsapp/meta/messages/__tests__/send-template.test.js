@@ -173,7 +173,7 @@
 //     SEC-09  Graph WRITE não chamado em falha de validação
 // =============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // =============================================================================
 // Mocks (antes dos imports do handler)
@@ -230,6 +230,7 @@ vi.mock('../../../../lib/meta-whatsapp/updateConversationPreview.js', () => ({
 }));
 
 import handler from '../send-template.js';
+import * as outboundStatusTracking from '../../../../lib/meta-whatsapp/outboundStatusTracking.js';
 
 // =============================================================================
 // Fixtures — todos fictícios, nunca reais
@@ -485,7 +486,9 @@ function setupHappyPath() {
     .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))   // meta_conversations
     .mockReturnValueOnce(makeCredChain(FAKE_CRED))           // meta_whatsapp_credentials
     .mockReturnValueOnce(makeInsertChain())                  // meta_whatsapp_messages INSERT
-    .mockReturnValueOnce(makeInsertChain());                 // meta_messages INSERT
+    .mockReturnValueOnce(makeInsertChain())                  // meta_messages INSERT
+    .mockReturnValueOnce(makeReconcilePendingChain())
+    .mockReturnValueOnce(makeReconcileMarkerChain());
 
   mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
   mockListMessageTemplates.mockResolvedValue(makeListResult([FAKE_RAW_TEMPLATE]));
@@ -3573,7 +3576,7 @@ describe('4C6B1-SEND | QR + URL estática válido aceita', () => {
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('suffix-runtime');
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -3772,7 +3775,7 @@ describe('4C6D2-SEND | QR + PHONE_NUMBER válido aceita', () => {
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('+5511888888888');
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 });
 
@@ -3956,7 +3959,7 @@ describe('4C7A2-SEND | URL estática + PHONE_NUMBER válido aceita', () => {
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('+5511888888888');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('https://evil.example/forged');
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 
   it('PHONE, URL → snapshot na ordem original; Graph sem components', async () => {
@@ -4228,7 +4231,7 @@ describe('4C8A2-SEND | URL dinâmica + PHONE_NUMBER válido aceita', () => {
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('+5511888888888');
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 
   it('PHONE, URL → Graph URL no índice 1; snapshot na ordem original', async () => {
@@ -4439,7 +4442,7 @@ describe('4C9A2-SEND | snapshot null com botões bloqueia Graph e persistência'
         },
       ],
     });
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 
   it('F1: URL estática + PHONE → 200; snapshot v1 preservado', async () => {
@@ -4501,7 +4504,7 @@ describe('4C9A2-SEND | snapshot null com botões bloqueia Graph e persistência'
     expect(mockUploadMedia).not.toHaveBeenCalled();
     const chatInsert = mockSvc.from.mock.results[4].value;
     expect(chatInsert.insert.mock.calls[0][0].template_buttons).toBeNull();
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 
   it('H: template de mídia sem botões → 200; template_buttons null', async () => {
@@ -4743,7 +4746,7 @@ describe('4C11A3-SEND | QR + URL dinâmica válido aceita', () => {
     });
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('payload');
     expect(JSON.stringify(insertArg.template_buttons)).not.toContain('lovoo:qr:v1');
-    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
   });
 
   it('URL@0 + QR@1 → 200; Graph índices originais; href no índice 0', async () => {
@@ -5157,5 +5160,80 @@ describe('SB-TPL-08: timestamp idêntico ao persistido em meta_messages', () => 
     expect(res._status).toBe(200);
     const args = mockUpdateConversationPreview.mock.calls[0][0];
     expect(args.providerTimestamp).toBe(capturedChatArg.provider_timestamp);
+  });
+});
+
+function makeReconcilePendingChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+  };
+}
+
+function makeReconcileMarkerChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
+}
+
+describe('POST /api/whatsapp/meta/messages/send-template — reconciliação posterior', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('preserva 200 e message_id sem gate de janela', async () => {
+    setupHappyPath();
+    const res = makeRes();
+    await handler(makeReq(), res);
+    const pending = mockSvc.from.mock.results
+      .find((result, index) => mockSvc.from.mock.calls[index][0] === 'meta_early_status_pendings')
+      .value;
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(pending.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(pending.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(pending.eq).toHaveBeenCalledWith('meta_message_id', FAKE_WAMID);
+    expect(pending.limit).toHaveBeenCalledWith(4);
+    const tables = mockSvc.from.mock.calls.map(([table]) => table);
+    expect(tables.indexOf('meta_messages')).toBeGreaterThan(tables.indexOf('meta_whatsapp_messages'));
+    expect(tables.filter((table) => table === 'meta_messages')).toEqual(['meta_messages']);
+  });
+
+  it('falha ou exceção da reconciliação preserva o 200', async () => {
+    const failed = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockResolvedValue({ ok: false, reason: 'db_error' });
+    setupHappyPath();
+    const failure = makeRes();
+    await handler(makeReq(), failure);
+    expect(failure._status).toBe(200);
+    expect(failure._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    failed.mockRejectedValue(new Error('reconcile exploded'));
+    setupHappyPath();
+    const exploded = makeRes();
+    await handler(makeReq(), exploded);
+    expect(exploded._status).toBe(200);
+    expect(exploded._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+    expect(JSON.stringify(exploded._body)).not.toContain('reconcile exploded');
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('falha obrigatória não reconcilia', async () => {
+    const spy = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus');
+    setupForPersistTest({ code: 'XYZZY', message: 'db error' });
+    const tracking = makeRes();
+    await handler(makeReq(), tracking);
+    setupForPersistTest(null, { code: 'PGSQL', message: 'constraint' });
+    const chat = makeRes();
+    await handler(makeReq(), chat);
+    expect(tracking._status).toBe(500);
+    expect(chat._status).toBe(500);
+    expect(tracking._body.error).toBe('send_persistence_failed');
+    expect(chat._body.error).toBe('send_persistence_failed');
+    expect(spy).not.toHaveBeenCalled();
   });
 });

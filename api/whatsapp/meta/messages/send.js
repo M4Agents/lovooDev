@@ -67,11 +67,26 @@ import { validateMetaCaller, META_SEND_ROLES }  from '../../../lib/meta-whatsapp
 import { decryptMetaToken }                     from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendTextMessage }                      from '../../../lib/meta-whatsapp/graphClient.js';
 import { updateConversationPreview }            from '../../../lib/meta-whatsapp/updateConversationPreview.js';
+import { reconcilePersistedOutboundStatus }     from '../../../lib/meta-whatsapp/outboundStatusTracking.js';
 import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServiceWindow.js';
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function settleOutboundReconcile(svc, companyId, instanceId, wamid) {
+  try {
+    const outcome = await reconcilePersistedOutboundStatus(svc, {
+      company_id: companyId,
+      id: instanceId,
+    }, wamid);
+    if (outcome?.ok !== true) {
+      console.error('[meta/messages/send] outbound_reconcile_failed db_error=true');
+    }
+  } catch {
+    console.error('[meta/messages/send] outbound_reconcile_failed db_error=true');
+  }
+}
 
 export default async function handler(req, res) {
   // ── 1. Method guard ────────────────────────────────────────────────────────
@@ -393,6 +408,11 @@ export default async function handler(req, res) {
   } catch {
     console.error('[meta/messages/send] conversation_preview_failed');
   }
+
+  // ── 14.5 Reconciliação posterior (não altera o HTTP do envio) ─────────────
+  // Só depois do tracking e do chat. Falha aqui não reenvia o Graph
+  // e não converte o 200 em erro de envio.
+  await settleOutboundReconcile(svc, auth.companyId, instance.id, result.messageId);
 
   // ── 15. Resposta sanitizada ───────────────────────────────────────────────
   // Somente message_id (wamid) retornado — nunca token, credencial ou payload Graph.

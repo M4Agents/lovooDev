@@ -9,6 +9,7 @@ import {
   loadCurrentOutboundPendings,
   persistEarlyOutboundStatus,
   reconcileOutboundPendings,
+  reconcilePersistedOutboundStatus,
   recoverOutboundStatusBacklog,
 } from '../outboundStatusTracking.js';
 
@@ -31,6 +32,7 @@ function createDb(seed = {}) {
   const touches = [];
   const calls = [];
   const upserts = [];
+  const limits = [];
   if (seed.tracking) tracking.set(seed.tracking.meta_message_id, { ...seed.tracking });
   for (const row of seed.pendings ?? []) {
     pendings.push({ id: nextPendingId++, received_at: '2026-01-01T00:00:00.000Z', ...row });
@@ -52,7 +54,7 @@ function createDb(seed = {}) {
       eq: (key, value) => { filters[key] = value; return api; },
       in: (key, value) => { filters[key] = value; return api; },
       order: () => api,
-      limit: () => execute(false),
+      limit: (count) => { limits.push(count); return execute(false); },
       maybeSingle: () => execute(true),
       insert: (payload) => { state.op = 'insert'; state.payload = payload; return api; },
       upsert: (payload, options) => {
@@ -94,6 +96,17 @@ function createDb(seed = {}) {
         if (seed.clearError && state.payload?.realtime_notify_pending === false) {
           return Promise.resolve({ data: null, error: { code: 'XX000' } });
         }
+        if (seed.clearEmpty && state.payload?.realtime_notify_pending === false) {
+          return Promise.resolve({ data: [], error: null });
+        }
+        if (seed.injectPending && state.payload?.status) {
+          pendings.push({
+            id: nextPendingId++,
+            received_at: '2026-01-04T00:00:00.000Z',
+            ...seed.injectPending,
+          });
+          seed.injectPending = null;
+        }
         if (seed.failStatus && state.payload?.status === seed.failStatus) {
           return Promise.resolve({ data: null, error: { code: 'XX000' } });
         }
@@ -101,6 +114,9 @@ function createDb(seed = {}) {
         const rows = [...tracking.values()].filter((row) => matches(row, filters));
         if (seed.casMisses > 0 && state.payload.status) {
           seed.casMisses -= 1;
+          if (seed.casTerminal) {
+            for (const row of rows) row.status = seed.casTerminal;
+          }
           return Promise.resolve({ data: [], error: null });
         }
         for (const row of rows) Object.assign(row, state.payload);
@@ -181,6 +197,7 @@ function createDb(seed = {}) {
     pendings,
     touches,
     calls,
+    limits,
   };
 }
 
@@ -783,5 +800,230 @@ describe('recuperação oportunista', () => {
     expect(db.tracking.get('wamid.other').status).toBe('read');
     expect(db.pendings.map((row) => row.status)).toEqual(['failed']);
     expect(db.touches.map((touch) => touch.filters.meta_message_id).sort()).toEqual(['wamid.m1', 'wamid.m2', 'wamid.other']);
+  });
+});
+
+function storedTracking(status = 'accepted', extras = {}) {
+  return {
+    id: TRACKING_ID,
+    company_id: COMPANY,
+    instance_id: INSTANCE,
+    meta_message_id: WAMID,
+    status,
+    realtime_notify_pending: false,
+    ...extras,
+  };
+}
+
+function storedPending(status, receivedAt, extras = {}) {
+  return {
+    company_id: COMPANY,
+    instance_id: INSTANCE,
+    meta_message_id: WAMID,
+    status,
+    received_at: receivedAt,
+    provider_timestamp: receivedAt,
+    error_code: null,
+    ...extras,
+  };
+}
+
+describe('reconciliação de envio persistido', () => {
+  it('aplica o status gravado antes do tracking e limita a leitura a quatro', async () => {
+    const db = createDb({
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+    });
+    const early = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(early).toEqual({ ok: false, reason: 'db_error' });
+    expect(db.tracking.has(WAMID)).toBe(false);
+    expect(db.pendings).toHaveLength(1);
+    expect(db.limits).toContain(4);
+
+    db.tracking.set(WAMID, storedTracking());
+    const applied = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(applied).toEqual({ ok: true, notified: true });
+    expect(db.tracking.get(WAMID).status).toBe('sent');
+    expect(db.pendings).toHaveLength(0);
+    expect(db.calls).not.toContain('list_meta_early_status_pendings');
+    expect(db.calls).not.toContain('delete_expired_meta_early_status_pendings');
+  });
+
+  it('não encontra pendência enquanto o tracking existe sozinho', async () => {
+    const db = createDb({ tracking: storedTracking() });
+    const first = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(first).toEqual({ ok: true, notified: false });
+    expect(db.touches).toHaveLength(0);
+    db.pendings.push({
+      id: 1,
+      ...storedPending('delivered', '2026-01-02T00:00:00.000Z'),
+    });
+    const second = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(second).toEqual({ ok: true, notified: true });
+    expect(db.tracking.get(WAMID).status).toBe('delivered');
+  });
+
+  it('segunda passagem encontra o status terminal no fake', async () => {
+    const db = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+    });
+    const [first, second] = await Promise.all([
+      reconcilePersistedOutboundStatus(db.svc, instance(), WAMID),
+      reconcilePersistedOutboundStatus(db.svc, instance(), WAMID),
+    ]);
+    expect([first.ok, second.ok]).toEqual([true, true]);
+    expect(db.tracking.get(WAMID).status).toBe('sent');
+    expect(db.pendings).toHaveLength(0);
+  });
+
+  it('status injetado durante o CAS permanece para a passagem seguinte', async () => {
+    const db = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+      injectPending: storedPending('delivered', '2026-01-02T00:00:00.000Z'),
+    });
+    const first = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(first.ok).toBe(true);
+    expect(db.tracking.get(WAMID).status).toBe('sent');
+    expect(db.pendings.map((row) => row.status)).toEqual(['delivered']);
+    const second = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(second).toEqual({ ok: true, notified: true });
+    expect(db.tracking.get(WAMID).status).toBe('delivered');
+    expect(db.pendings).toHaveLength(0);
+  });
+
+  it('CAS que perde para status terminal não reaplica o evento antigo', async () => {
+    const db = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('delivered', '2026-01-02T00:00:00.000Z')],
+      casMisses: 1,
+      casTerminal: 'read',
+    });
+    const result = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(result.ok).toBe(true);
+    expect(db.tracking.get(WAMID).status).toBe('read');
+    expect(db.pendings).toHaveLength(0);
+    expect(db.touches).toHaveLength(0);
+  });
+
+  it('ordena por received_at e id e interrompe o wamid na falha anterior', async () => {
+    const ordered = createDb({
+      tracking: storedTracking(),
+      pendings: [
+        storedPending('read', '2026-01-03T00:00:00.000Z'),
+        storedPending('sent', '2026-01-01T00:00:00.000Z'),
+        storedPending('delivered', '2026-01-02T00:00:00.000Z'),
+      ],
+    });
+    const applied = await reconcilePersistedOutboundStatus(ordered.svc, instance(), WAMID);
+    expect(applied).toEqual({ ok: true, notified: true });
+    expect(ordered.tracking.get(WAMID).status).toBe('read');
+
+    const halted = createDb({
+      tracking: storedTracking(),
+      pendings: [
+        storedPending('sent', '2026-01-01T00:00:00.000Z'),
+        storedPending('delivered', '2026-01-02T00:00:00.000Z'),
+      ],
+      failStatus: 'sent',
+    });
+    const failed = await reconcilePersistedOutboundStatus(halted.svc, instance(), WAMID);
+    expect(failed).toEqual({ ok: false, reason: 'db_error' });
+    expect(halted.tracking.get(WAMID).status).toBe('accepted');
+    expect(halted.pendings.map((row) => row.status)).toEqual(['sent', 'delivered']);
+  });
+
+  it('preserva pendência em falha de toque, limpeza ou remoção', async () => {
+    const touch = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+      touchError: true,
+    });
+    expect(await reconcilePersistedOutboundStatus(touch.svc, instance(), WAMID))
+      .toEqual({ ok: false, reason: 'db_error' });
+    expect(touch.tracking.get(WAMID).status).toBe('sent');
+    expect(touch.tracking.get(WAMID).realtime_notify_pending).toBe(true);
+    expect(touch.pendings).toHaveLength(1);
+
+    const clear = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+      clearError: true,
+    });
+    expect(await reconcilePersistedOutboundStatus(clear.svc, instance(), WAMID))
+      .toEqual({ ok: false, reason: 'db_error' });
+    expect(clear.pendings).toHaveLength(1);
+    expect(clear.tracking.get(WAMID).realtime_notify_pending).toBe(true);
+
+    const empty = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+      clearEmpty: true,
+    });
+    expect((await reconcilePersistedOutboundStatus(empty.svc, instance(), WAMID)).ok).toBe(true);
+    expect(empty.tracking.get(WAMID).realtime_notify_pending).toBe(true);
+    expect(empty.pendings).toHaveLength(0);
+
+    const removed = createDb({
+      tracking: storedTracking(),
+      pendings: [storedPending('sent', '2026-01-01T00:00:00.000Z')],
+      deleteError: true,
+    });
+    expect(await reconcilePersistedOutboundStatus(removed.svc, instance(), WAMID))
+      .toEqual({ ok: true, notified: true });
+    expect(removed.pendings).toHaveLength(1);
+    expect(removed.tracking.get(WAMID).realtime_notify_pending).toBe(false);
+  });
+
+  it('erro de leitura não apaga tracking nem consulta outros wamids', async () => {
+    const db = createDb({
+      tracking: storedTracking(),
+      pendings: [
+        storedPending('sent', '2026-01-01T00:00:00.000Z'),
+        storedPending('delivered', '2026-01-02T00:00:00.000Z', { meta_message_id: 'wamid.other' }),
+      ],
+      pendingReadError: true,
+    });
+    const result = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(result).toEqual({ ok: false, reason: 'db_error' });
+    expect(db.tracking.get(WAMID).status).toBe('accepted');
+    expect(db.touches).toHaveLength(0);
+    expect(db.calls).not.toContain('list_meta_early_status_pendings');
+  });
+
+  it('recupera marcador isolado e ignora envio sem pendência nem marcador', async () => {
+    const marked = createDb({
+      tracking: storedTracking('delivered', { realtime_notify_pending: true }),
+    });
+    expect(await reconcilePersistedOutboundStatus(marked.svc, instance(), WAMID))
+      .toEqual({ ok: true, notified: true });
+    expect(marked.touches).toHaveLength(1);
+    expect(marked.tracking.get(WAMID).realtime_notify_pending).toBe(false);
+    expect(marked.calls).not.toContain('delete_expired_meta_early_status_pendings');
+
+    const quiet = createDb({ tracking: storedTracking('delivered') });
+    expect(await reconcilePersistedOutboundStatus(quiet.svc, instance(), WAMID))
+      .toEqual({ ok: true, notified: false });
+    expect(quiet.touches).toHaveLength(0);
+  });
+
+  it('ignora pendências de outra empresa, instância ou wamid', async () => {
+    const db = createDb({
+      tracking: storedTracking(),
+      pendings: [
+        storedPending('sent', '2026-01-01T00:00:00.000Z'),
+        storedPending('delivered', '2026-01-01T00:00:00.000Z', { company_id: OTHER_COMPANY }),
+        storedPending('read', '2026-01-01T00:00:00.000Z', { instance_id: OTHER_INSTANCE }),
+        storedPending('failed', '2026-01-01T00:00:00.000Z', {
+          meta_message_id: 'wamid.other',
+          error_code: 1,
+        }),
+      ],
+    });
+    const result = await reconcilePersistedOutboundStatus(db.svc, instance(), WAMID);
+    expect(result).toEqual({ ok: true, notified: true });
+    expect(db.tracking.get(WAMID).status).toBe('sent');
+    expect(db.pendings.map((row) => row.meta_message_id).sort()).toEqual([WAMID, WAMID, 'wamid.other']);
+    expect(db.pendings.every((row) => row.status !== 'sent' || row.meta_message_id !== WAMID)).toBe(true);
   });
 });

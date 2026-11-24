@@ -90,6 +90,7 @@ import { analyzeTemplate,
 import { buildTemplateButtonsSnapshot }        from '../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
 import { validateMediaAsset }                  from '../../../lib/meta-whatsapp/mediaAsset.js';
 import { updateConversationPreview }           from '../../../lib/meta-whatsapp/updateConversationPreview.js';
+import { reconcilePersistedOutboundStatus }    from '../../../lib/meta-whatsapp/outboundStatusTracking.js';
 
 const MEDIA_PREVIEW_FALLBACK = {
   IMAGE:    'Imagem',
@@ -106,6 +107,20 @@ function buildTemplateSidebarPreview(renderedBody, headerMediaFormat) {
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function settleOutboundReconcile(svc, companyId, instanceId, wamid) {
+  try {
+    const outcome = await reconcilePersistedOutboundStatus(svc, {
+      company_id: companyId,
+      id: instanceId,
+    }, wamid);
+    if (outcome?.ok !== true) {
+      console.error('[meta/messages/send-template] outbound_reconcile_failed db_error=true');
+    }
+  } catch {
+    console.error('[meta/messages/send-template] outbound_reconcile_failed db_error=true');
+  }
+}
 
 // Limites de tamanho para campos de template.
 const TEMPLATE_NAME_MAX_LEN     = 512;
@@ -575,6 +590,10 @@ export default async function handler(req, res) {
   } catch {
     console.error('[meta/messages/send-template] conversation_preview_failed');
   }
+
+  // Reconciliação posterior ao tracking e ao chat. Não cria gate de janela
+  // e não altera o 200 quando falha.
+  await settleOutboundReconcile(svc, auth.companyId, instance.id, result.messageId);
 
   // ── 22. Resposta sanitizada ────────────────────────────────────────────────
   // Somente message_id (wamid) retornado — nunca token, credential, recipient,

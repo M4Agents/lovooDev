@@ -888,6 +888,115 @@ export async function recoverOutboundStatusBacklog(svc, instance, handledWamids)
 }
 
 /**
+ * Lê o marcador somente do wamid já persistido.
+ * Não varre os demais wamids da instância.
+ *
+ * @returns {Promise<{ error: true, row: null }|{ error: false, row: { id: string, companyId: string, instanceId: string, status: string }|null }>}
+ */
+async function loadPersistedNotifyMarker(svc, instance, wamid) {
+  const { data, error } = await svc
+    .from('meta_whatsapp_messages')
+    .select('id, company_id, instance_id, status, realtime_notify_pending')
+    .eq('company_id', instance.company_id)
+    .eq('instance_id', instance.id)
+    .eq('meta_message_id', wamid)
+    .eq('realtime_notify_pending', true)
+    .maybeSingle();
+
+  if (error) return { error: true, row: null };
+  if (!data || data.realtime_notify_pending !== true) return { error: false, row: null };
+  const classified = classifyTrackingRow(data, instance);
+  if (classified.kind !== 'ok') return { error: true, row: null };
+  return { error: false, row: classified.row };
+}
+
+/**
+ * Recupera o marcador do wamid quando não há pendência a aplicar.
+ * Zero linhas na limpeza não é erro. Erro de toque ou de limpeza é.
+ *
+ * @returns {Promise<{ ok: true, notified: boolean }|{ ok: false, reason: 'db_error' }>}
+ */
+async function recoverPersistedNotifyMarker(svc, instance, wamid) {
+  const marker = await loadPersistedNotifyMarker(svc, instance, wamid);
+  if (marker.error) {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+  if (!marker.row) return { ok: true, notified: false };
+
+  const touch = await touchOutboundChatMessage(svc, instance, wamid);
+  if (touch === 'error') {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+
+  const cleared = await clearOutboundNotifyMarker(svc, instance, marker.row.id, marker.row.status);
+  if (cleared === 'error') {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+  return { ok: true, notified: touch === 'ok' };
+}
+
+async function reconcilePersistedOutboundStatusInner(svc, instance, wamid) {
+  if (!hasScope(instance) || typeof wamid !== 'string' || wamid.length === 0) {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+
+  const loaded = await loadCurrentOutboundPendings(svc, instance, wamid);
+  if (loaded.error) {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+
+  let notified = false;
+  if (loaded.rows.length > 0) {
+    const reconciled = await reconcileOutboundPendings(svc, instance, loaded.rows);
+    if (reconciled.shouldNotify) {
+      const notify = await notifyRetained(
+        svc,
+        instance,
+        wamid,
+        reconciled.retainedIds,
+        reconciled.trackingId,
+        reconciled.statusForNotify,
+      );
+      if (notify.transient) {
+        console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+        return { ok: false, reason: 'db_error' };
+      }
+      notified = true;
+    }
+    if (reconciled.transient || reconciled.halted) {
+      console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+      return { ok: false, reason: 'db_error' };
+    }
+  }
+
+  const marker = await recoverPersistedNotifyMarker(svc, instance, wamid);
+  if (!marker.ok) return marker;
+  return { ok: true, notified: notified || marker.notified };
+}
+
+/**
+ * Reconcilia um único envio depois que o tracking e o chat já foram gravados.
+ * Reusa a matriz, o CAS, o marcador e a limpeza condicional.
+ * Não lista outros wamids, não remove expirados e não envia à Graph API.
+ * Falha operacional interrompe só este wamid e conserva o que ainda não foi decidido.
+ *
+ * @returns {Promise<{ ok: true, notified: boolean }|{ ok: false, reason: 'db_error' }>}
+ */
+export async function reconcilePersistedOutboundStatus(svc, instance, wamid) {
+  try {
+    return await reconcilePersistedOutboundStatusInner(svc, instance, wamid);
+  } catch {
+    console.error('[meta/messages] outbound_reconcile_failed db_error=true');
+    return { ok: false, reason: 'db_error' };
+  }
+}
+
+/**
  * MVP5.B1.2 — toca meta_messages.updated_at para emitir UPDATE no Realtime.
  *
  * Filtros: company_id da instância resolvida no banco, instance_id validado,

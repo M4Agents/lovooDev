@@ -149,6 +149,7 @@ vi.mock('../../../../lib/meta-whatsapp/outboundAudioOperationStore.js', async (i
   };
 });
 
+import * as outboundStatusTracking from '../../../../lib/meta-whatsapp/outboundStatusTracking.js';
 import handler, {
   META_AUDIO_FUNCTION_BUDGET_MS,
   META_AUDIO_PLATFORM_MARGIN_MS,
@@ -302,6 +303,29 @@ function makeWindowChain({ data = { provider_timestamp: OPEN_INBOUND_ISO }, erro
     limit: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
   };
+}
+
+function makeReconcilePendingChain(data = [], error = null) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data, error }),
+  };
+}
+
+function makeReconcileMarkerChain(data = null, error = null) {
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+  chain.then = (resolve, reject) => Promise.resolve({ data: [], error: null }).then(resolve, reject);
+  return chain;
 }
 
 function makeOpSelectChain(data, error = null) {
@@ -1999,6 +2023,9 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
   it('graph_accepted com janela 24h fechada retorna 200 sem consultar meta_messages', async () => {
     setupGraphAcceptedLookups();
     setupAwsRpcOk();
+    mockSvc.from
+      .mockReturnValueOnce(makeReconcilePendingChain())
+      .mockReturnValueOnce(makeReconcileMarkerChain());
     const res = await runGraphAccepted();
     expectPersistSuccessHttp(res);
     const tables = mockSvc.from.mock.calls.map(([table]) => table);
@@ -2006,6 +2033,8 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.3-D.3-E.2-B.7-B
       'meta_whatsapp_instances',
       'meta_conversations',
       'meta_outbound_audio_operations',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
     ]);
     expect(tables).not.toContain('meta_messages');
     expectNoGraphOrClaim();
@@ -2917,5 +2946,149 @@ describe('POST /api/whatsapp/meta/messages/send-audio — Graph após validaçõ
 
   it('regressão Uazapi inexistente', () => {
     expect(HANDLER_SRC.toLowerCase()).not.toContain('uazapi');
+  });
+});
+
+describe('POST /api/whatsapp/meta/messages/send-audio — reconciliação posterior', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('graph_accepted concluído reconcilia o wamid gravado sem novo Graph', async () => {
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const pending = makeReconcilePendingChain();
+    mockSvc.from
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(makeReconcileMarkerChain());
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expectPersistSuccessHttp(res);
+    expectNoGraphOrClaim();
+    expect(pending.eq).toHaveBeenCalledWith('meta_message_id', FAKE_WAMID);
+    expect(pending.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(pending.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    const rpcNames = mockSvc.rpc.mock.calls.map(([name]) => name);
+    expect(rpcNames).not.toContain('list_meta_early_status_pendings');
+    expect(rpcNames).not.toContain('delete_expired_meta_early_status_pendings');
+  });
+
+  it('operação completed reconcilia pendência e marcador sem reabrir a cadeia', async () => {
+    setupGuardOk();
+    const pending = makeReconcilePendingChain();
+    const marker = makeReconcileMarkerChain({
+      id: FAKE_INSTANCE_ID,
+      company_id: FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status: 'delivered',
+      realtime_notify_pending: true,
+    });
+    const touch = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockResolvedValue({ data: [{ id: 'chat-1' }], error: null }),
+    };
+    const clear = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockResolvedValue({ data: [{ id: FAKE_INSTANCE_ID }], error: null }),
+    };
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({
+        status: 'completed',
+        wamid: FAKE_WAMID,
+        s3_key: EXPECTED_S3_KEY,
+        completed_at: GRAPH_STARTED_AT,
+      })))
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(marker)
+      .mockReturnValueOnce(touch)
+      .mockReturnValueOnce(clear);
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true });
+    expect(persistState.mock).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(touch.update).toHaveBeenCalled();
+    expect(clear.update).toHaveBeenCalledWith({ realtime_notify_pending: false });
+    expect(pending.eq).toHaveBeenCalledWith('meta_message_id', FAKE_WAMID);
+  });
+
+  it('falha ou exceção da reconciliação preserva 200 sem novo Graph', async () => {
+    const spy = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockResolvedValue({ ok: false, reason: 'db_error' });
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const failure = makeRes();
+    await handler(makeMultipartReq(), failure);
+    expect(failure._status).toBe(200);
+    expect(failure._body).toEqual({ ok: true });
+    spy.mockRejectedValue(new Error('reconcile exploded'));
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    const exploded = makeRes();
+    await handler(makeMultipartReq(), exploded);
+    expect(exploded._status).toBe(200);
+    expect(exploded._body).toEqual({ ok: true });
+    expect(JSON.stringify(exploded._body)).not.toContain('reconcile exploded');
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('falha obrigatória e estados não concluídos não reconciliam', async () => {
+    const spy = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus');
+    setupGraphAcceptedLookups();
+    setupAwsRpcOk();
+    persistState.mock.mockResolvedValue({ ok: false, error: 'chat_persistence_failed' });
+    const failed = makeRes();
+    await handler(makeMultipartReq(), failed);
+    expect(failed._status).toBe(500);
+    expect(failed._body).toEqual({ error: 'send_persistence_failed' });
+
+    for (const status of ['graph_in_flight', 'failed', 'unknown']) {
+      setupGuardOk();
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+        .mockReturnValueOnce(makeOpSelectChain(operationRow({ status })));
+      const res = makeRes();
+      await handler(makeMultipartReq(), res);
+      expect(res._status).toBe(409);
+    }
+    expect(spy).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+  });
+
+  it('aguarda a reconciliação antes do 200 de completed', async () => {
+    let entered;
+    const enteredGate = new Promise((resolve) => { entered = resolve; });
+    let release;
+    const block = new Promise((resolve) => { release = resolve; });
+    vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockImplementation(() => {
+        entered();
+        return block.then(() => ({ ok: true, notified: false }));
+      });
+    setupGuardOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(FAKE_CONVERSATION))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({
+        status: 'completed',
+        wamid: FAKE_WAMID,
+      })));
+    const res = makeRes();
+    const pending = handler(makeMultipartReq(), res);
+    await enteredGate;
+    expect(res._status).toBeNull();
+    release();
+    await pending;
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true });
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
   });
 });
