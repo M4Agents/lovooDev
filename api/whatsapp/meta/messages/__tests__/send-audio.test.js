@@ -2757,6 +2757,26 @@ describe('POST /api/whatsapp/meta/messages/send-audio — Graph após validaçõ
     expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
   });
 
+  it('Graph 131047 após claim → 409 janela fechada, unknown persistido, sem retry', async () => {
+    mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
+    mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });
+    mockSendAudioMessage.mockRejectedValue(Object.assign(new Error('reengagement'), {
+      code: 'send_audio_failed',
+      graphStatus: 400,
+      metaErrorCode: 131047,
+    }));
+    setupNewSendLookups({
+      extraChains: [makeCredChain({ access_token_enc: 'v1:enc-fixture' })],
+    });
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+    expect(mockSendAudioMessage).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markUnknown).toHaveBeenCalledTimes(1);
+    expect(persistStoreState.markGraphAccepted).not.toHaveBeenCalled();
+  });
+
   it('send timeout → unknown sem retry', async () => {
     mockDecryptMetaToken.mockReturnValue('plain-token-fixture');
     mockUploadMedia.mockResolvedValue({ mediaId: '123456789' });

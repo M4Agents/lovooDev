@@ -94,6 +94,19 @@ export function classifyMetaOutboundAudioSend(status: number, code: string): Met
       allowNewOperation: false,
     }
   }
+  if (
+    code === 'customer_service_window_closed'
+    || code === 'customer_service_window_unproven'
+    || code === '131047'
+  ) {
+    return {
+      kind: 'error',
+      code,
+      keepDraft: false,
+      allowRecover: false,
+      allowNewOperation: false,
+    }
+  }
   if (BLOCKED_CODES.has(code)) {
     return {
       kind: 'blocked',
@@ -136,6 +149,12 @@ export function messageForMetaAudioSend(kind: MetaAudioSendUiKind, code: string)
       }
       return 'Este envio ainda está em andamento. Verifique a conversa. Não envie de novo.'
     case 'error':
+      if (code === 'customer_service_window_closed' || code === '131047') {
+        return 'A janela de 24 horas encerrou. Envie um template aprovado para retomar a conversa.'
+      }
+      if (code === 'customer_service_window_unproven') {
+        return 'Não há uma mensagem recente do cliente para liberar texto ou áudio. Use um template aprovado.'
+      }
       if (code === 'audio_too_large') return 'O áudio excede o limite de 4 MiB.'
       if (code === 'invalid_audio') return 'Este áudio não é MP4 AAC-LC e não pode ser enviado.'
       if (code === 'audio_remux_failed') {

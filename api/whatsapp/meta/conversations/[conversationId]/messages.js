@@ -55,6 +55,10 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSupabaseAdmin }                   from '../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  loadLastInboundTimestamp,
+  resolveCustomerServiceWindow,
+} from '../../../../lib/meta-whatsapp/customerServiceWindow.js';
 import { sanitizeTemplateButtonsSnapshot }    from '../../../../lib/meta-whatsapp/templateButtonsSnapshot.js';
 import {
   SIGNED_URL_TTL_SECONDS,
@@ -256,6 +260,23 @@ async function signMetaOutboundAudioGetUrl({ svc, companyId, objectKey }) {
     throw makeAwsError(AWS_SIGN_ERR, 'AWS request failed');
   }
   return { url, expiresIn: SIGNED_URL_TTL_SECONDS };
+}
+
+const UNKNOWN_WINDOW = Object.freeze({ state: 'unknown', expiresAt: null });
+
+async function readCustomerServiceWindow(svc, ids) {
+  try {
+    const loaded = await loadLastInboundTimestamp(svc, ids);
+    if (!loaded.ok) return UNKNOWN_WINDOW;
+    const window = resolveCustomerServiceWindow({ lastInboundAt: loaded.lastInboundAt });
+    if (window.state === 'open' && typeof window.expiresAt === 'string') {
+      return { state: 'open', expiresAt: window.expiresAt };
+    }
+    if (window.state === 'closed') return { state: 'closed', expiresAt: null };
+    return UNKNOWN_WINDOW;
+  } catch {
+    return UNKNOWN_WINDOW;
+  }
 }
 
 export default async function handler(req, res) {
@@ -515,7 +536,15 @@ export default async function handler(req, res) {
     };
   });
 
-  return res.status(200).json({ messages });
+  // Janela calculada por consulta própria do último inbound.
+  // Falha dessa consulta não esconde o histórico: o estado fica unknown.
+  const customerServiceWindow = await readCustomerServiceWindow(svc, {
+    companyId: auth.companyId,
+    instanceId: conversation.instance_id,
+    conversationId: conversation.id,
+  });
+
+  return res.status(200).json({ messages, customerServiceWindow });
 
   } catch {
     // Catch defensivo externo — throws inesperados não cobertos acima.

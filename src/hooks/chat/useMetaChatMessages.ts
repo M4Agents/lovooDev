@@ -38,17 +38,29 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { metaWhatsAppApi }       from '../../services/metaWhatsAppApi'
+import { metaWhatsAppApi } from '../../services/metaWhatsAppApi'
+import { readCustomerServiceWindow } from '../../utils/customerServiceWindow'
 import { supabase }              from '../../lib/supabase'
-import type { MetaChatMessage }  from '../../types/meta-whatsapp'
+import type { CustomerServiceWindow, MetaChatMessage } from '../../types/meta-whatsapp'
+
+const UNKNOWN_WINDOW: CustomerServiceWindow = { state: 'unknown', expiresAt: null }
 
 // ── Contrato público do hook ──────────────────────────────────────────────────
 
 export interface UseMetaChatMessagesResult {
   messages: MetaChatMessage[]
+  customerServiceWindow: CustomerServiceWindow
+  /** False até a resposta da conversa atual ser aplicada. Não faz parte do contrato HTTP. */
+  windowConfirmed: boolean
   loading:  boolean
   error:    string | null
   refresh:  () => void
+}
+
+interface ConfirmedWindow {
+  companyId: string
+  conversationId: string
+  window: CustomerServiceWindow
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -58,6 +70,7 @@ export function useMetaChatMessages(
   conversationId: string | null | undefined
 ): UseMetaChatMessagesResult {
   const [messages, setMessages] = useState<MetaChatMessage[]>([])
+  const [confirmedWindow, setConfirmedWindow] = useState<ConfirmedWindow | null>(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
@@ -130,13 +143,27 @@ export function useMetaChatMessages(
     // Silent recebe -1 — nunca bate com um valor real do normalFetchCountRef.
     const currentNormalFetch = silent ? -1 : ++normalFetchCountRef.current
 
-    metaWhatsAppApi
-      .getMessages(companyId, conversationId)
+    const threadRequest = typeof metaWhatsAppApi.getConversationThread === 'function'
+      ? metaWhatsAppApi.getConversationThread(companyId, conversationId)
+      : metaWhatsAppApi.getMessages(companyId, conversationId)
+
+    threadRequest
       .then((result) => {
         if (!mountedRef.current)                    return  // desmontado
         if (currentFetch !== fetchCountRef.current) return  // stale — fetch mais recente ganhou
-        instanceIdRef.current = result[0]?.instance_id ?? null
-        setMessages(result)
+        const thread = Array.isArray(result)
+          ? { messages: result, customerServiceWindow: UNKNOWN_WINDOW }
+          : {
+            messages: result.messages,
+            customerServiceWindow: readCustomerServiceWindow(result.customerServiceWindow),
+          }
+        instanceIdRef.current = thread.messages[0]?.instance_id ?? null
+        setMessages(thread.messages)
+        setConfirmedWindow({
+          companyId,
+          conversationId,
+          window: thread.customerServiceWindow,
+        })
       })
       .catch((err: unknown) => {
         if (!mountedRef.current)                    return
@@ -290,8 +317,20 @@ export function useMetaChatMessages(
 
   // ── Retorno ───────────────────────────────────────────────────────────────
 
+  const windowConfirmed = Boolean(
+    companyId
+    && conversationId
+    && confirmedWindow
+    && confirmedWindow.companyId === companyId
+    && confirmedWindow.conversationId === conversationId
+  )
+
   return {
     messages,
+    customerServiceWindow: windowConfirmed && confirmedWindow
+      ? confirmedWindow.window
+      : UNKNOWN_WINDOW,
+    windowConfirmed,
     loading,
     error,
     refresh: load,

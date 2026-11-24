@@ -1382,3 +1382,140 @@ it('RT-UPD-10: nenhum polling — setInterval não é usado', async () => {
   expect(spy).not.toHaveBeenCalled()
   spy.mockRestore()
 })
+
+describe('janela de atendimento no hook', () => {
+  const thread = vi.fn()
+
+  beforeEach(() => {
+    delete (metaWhatsAppApi as { getConversationThread?: unknown }).getConversationThread
+  })
+
+  function useThread() {
+    ;(metaWhatsAppApi as { getConversationThread?: typeof thread }).getConversationThread = thread
+  }
+
+  it('guarda a janela retornada e não a calcula pelo lote', async () => {
+    useThread()
+    thread.mockResolvedValue({
+      messages: [MSG_A1],
+      customerServiceWindow: { state: 'closed', expiresAt: null },
+    })
+    const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow).toEqual({ state: 'closed', expiresAt: null })
+    expect(mockGetMessages).not.toHaveBeenCalled()
+  })
+
+  it('novo inbound recalcula pela releitura canônica', async () => {
+    useThread()
+    thread
+      .mockResolvedValueOnce({
+        messages: [],
+        customerServiceWindow: { state: 'closed', expiresAt: null },
+      })
+      .mockResolvedValueOnce({
+        messages: [MSG_A1],
+        customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+      })
+    const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow.state).toBe('closed')
+    await act(async () => { mockRt.last()?.simulateInsert({}) })
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow.state).toBe('open')
+  })
+
+  it('troca de conversa não reaproveita a janela anterior', async () => {
+    useThread()
+    thread
+      .mockResolvedValueOnce({
+        messages: [MSG_A1],
+        customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+      })
+      .mockResolvedValueOnce({
+        messages: [],
+        customerServiceWindow: { state: 'unknown', expiresAt: null },
+      })
+    const { result, rerender } = renderHook(
+      ({ conversationId }) => useMetaChatMessages(COMPANY_A, conversationId),
+      { initialProps: { conversationId: CONV_A } },
+    )
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow.state).toBe('open')
+    rerender({ conversationId: CONV_B })
+    expect(result.current.customerServiceWindow.state).toBe('unknown')
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow.state).toBe('unknown')
+  })
+
+  it('troca rápida não confirma a janela antes da resposta da conversa nova', async () => {
+    useThread()
+    let resolveA: (value: unknown) => void = () => {}
+    let resolveB: (value: unknown) => void = () => {}
+    thread
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveA = resolve }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveB = resolve }))
+    const { result, rerender } = renderHook(
+      ({ conversationId }) => useMetaChatMessages(COMPANY_A, conversationId),
+      { initialProps: { conversationId: CONV_A } },
+    )
+    expect(result.current.windowConfirmed).toBe(false)
+    rerender({ conversationId: CONV_B })
+    expect(result.current.windowConfirmed).toBe(false)
+    expect(result.current.customerServiceWindow.state).toBe('unknown')
+    await act(async () => {
+      resolveA({
+        messages: [MSG_A1],
+        customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+      })
+      await Promise.resolve()
+    })
+    expect(result.current.windowConfirmed).toBe(false)
+    await act(async () => {
+      resolveB({
+        messages: [],
+        customerServiceWindow: { state: 'closed', expiresAt: null },
+      })
+      await Promise.resolve()
+    })
+    expect(result.current.windowConfirmed).toBe(true)
+    expect(result.current.customerServiceWindow.state).toBe('closed')
+  })
+
+  it('refresh da mesma conversa preserva a janela confirmada', async () => {
+    useThread()
+    thread.mockResolvedValueOnce({
+      messages: [MSG_A1],
+      customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+    })
+    const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.windowConfirmed).toBe(true)
+    let resolveRefresh: (value: unknown) => void = () => {}
+    thread.mockImplementationOnce(() => new Promise((resolve) => { resolveRefresh = resolve }))
+    act(() => { result.current.refresh() })
+    expect(result.current.windowConfirmed).toBe(true)
+    expect(result.current.customerServiceWindow.state).toBe('open')
+    await act(async () => {
+      resolveRefresh({
+        messages: [MSG_A1],
+        customerServiceWindow: { state: 'closed', expiresAt: null },
+      })
+      await Promise.resolve()
+    })
+    expect(result.current.customerServiceWindow.state).toBe('closed')
+  })
+
+  it('mensagem da empresa não reabre a janela quando o backend continua fechado', async () => {
+    useThread()
+    thread.mockResolvedValue({
+      messages: [makeMsg('out', 'outbound')],
+      customerServiceWindow: { state: 'closed', expiresAt: null },
+    })
+    const { result } = renderHook(() => useMetaChatMessages(COMPANY_A, CONV_A))
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { mockRt.last()?.simulateInsert({}) })
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.customerServiceWindow.state).toBe('closed')
+  })
+})

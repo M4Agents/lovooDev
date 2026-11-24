@@ -548,6 +548,37 @@ describe('metaWhatsAppApi.getMessages', () => {
   })
 })
 
+describe('metaWhatsAppApi.getConversationThread', () => {
+  it('propaga janela aberta sem derivar das mensagens', async () => {
+    mockFetch({
+      messages: [FAKE_MESSAGE],
+      customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+    })
+    const result = await metaWhatsAppApi.getConversationThread(COMPANY_ID, CONV_ID)
+    expect(result.messages).toHaveLength(1)
+    expect(result.customerServiceWindow).toEqual({
+      state: 'open',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    })
+  })
+
+  it('janela ausente ou inválida vira unknown e não abre a sessão', async () => {
+    mockFetch({ messages: [], customerServiceWindow: { state: 'open', expiresAt: null } })
+    const invalid = await metaWhatsAppApi.getConversationThread(COMPANY_ID, CONV_ID)
+    expect(invalid.customerServiceWindow).toEqual({ state: 'unknown', expiresAt: null })
+
+    mockFetch({ messages: [] })
+    const missing = await metaWhatsAppApi.getConversationThread(COMPANY_ID, CONV_ID)
+    expect(missing.customerServiceWindow).toEqual({ state: 'unknown', expiresAt: null })
+  })
+
+  it('preserva closed e unknown', async () => {
+    mockFetch({ messages: [], customerServiceWindow: { state: 'closed', expiresAt: '2099-01-01T00:00:00.000Z' } })
+    const closed = await metaWhatsAppApi.getConversationThread(COMPANY_ID, CONV_ID)
+    expect(closed.customerServiceWindow).toEqual({ state: 'closed', expiresAt: null })
+  })
+})
+
 // =============================================================================
 // sendMessage — MVP3D
 // =============================================================================

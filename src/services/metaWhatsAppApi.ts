@@ -37,6 +37,7 @@ import {
   isOutboundAudioOperationId,
 } from '../utils/metaOutboundAudioSend'
 import { META_OUTBOUND_AUDIO_MAX_BYTES } from '../../api/lib/meta-whatsapp/audioBytes.js'
+import { readCustomerServiceWindow } from '../utils/customerServiceWindow'
 import type {
   CompleteResult,
   GetMetaConversationsResponse,
@@ -45,6 +46,7 @@ import type {
   GetMetaAdminTemplatesResponse,
   GetMetaTemplatesResponse,
   GetMetaMediaPickerResponse,
+  CustomerServiceWindow,
   MetaChatConversation,
   MetaChatMessage,
   MetaMediaType,
@@ -455,6 +457,21 @@ export const metaWhatsAppApi = {
       limit?: number
     }
   ): Promise<MetaChatMessage[]> {
+    const thread = await this.getConversationThread(companyId, conversationId, options)
+    return thread.messages
+  },
+
+  /**
+   * Lê mensagens e a janela de atendimento calculada no backend.
+   * A janela não é derivada do lote paginado.
+   */
+  async getConversationThread(
+    companyId:      string,
+    conversationId: string,
+    options?: {
+      limit?: number
+    }
+  ): Promise<{ messages: MetaChatMessage[], customerServiceWindow: CustomerServiceWindow }> {
     const headers = await getAuthHeaders()
 
     const params = new URLSearchParams({ company_id: companyId })
@@ -475,12 +492,17 @@ export const metaWhatsAppApi = {
       throw new Error(data.error ?? 'Erro ao carregar mensagens Meta WhatsApp')
     }
 
-    if (!Array.isArray(data.messages)) return []
+    const messages = Array.isArray(data.messages)
+      ? data.messages.map((message) => ({
+        ...message,
+        template_buttons: sanitizeHistoricalTemplateButtons(message.template_buttons),
+      }))
+      : []
 
-    return data.messages.map((message) => ({
-      ...message,
-      template_buttons: sanitizeHistoricalTemplateButtons(message.template_buttons),
-    }))
+    return {
+      messages,
+      customerServiceWindow: readCustomerServiceWindow(data.customerServiceWindow),
+    }
   },
 
   /**

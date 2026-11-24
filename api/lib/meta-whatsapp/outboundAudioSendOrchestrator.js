@@ -374,6 +374,16 @@ export async function orchestrateOutboundAudioSend(input = {}) {
     });
 
   if (!sendDecision.mayPersistWamid || !sendDecision.wamid) {
+    if (sendDecision.metaErrorCode === 131047) {
+      const persisted = await persistUnknown(deps, context);
+      if (persisted.error === 'persist_unknown_failed') return persisted;
+      return locked({
+        claimed: true,
+        persistedStatus: persisted.persistedStatus,
+        error: 'customer_service_window_closed',
+        metaErrorCode: 131047,
+      });
+    }
     return persistUnknown(deps, context);
   }
 

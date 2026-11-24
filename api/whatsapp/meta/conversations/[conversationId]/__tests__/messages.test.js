@@ -297,7 +297,10 @@ describe('GET messages — happy path', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(res._body).toEqual({ messages: [] });
+    expect(res._body).toEqual({
+      messages: [],
+      customerServiceWindow: { state: 'unknown', expiresAt: null },
+    });
   });
 });
 
@@ -894,9 +897,9 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    // Apenas 2 chamadas: meta_conversations + meta_messages
+    // meta_conversations + meta_messages + janela
     // Nenhuma chamada para company_media_library
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
     for (const msg of res._body.messages) {
       expect(msg.media).toBeNull();
     }
@@ -982,7 +985,7 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 
     expect(res._status).toBe(200);
     // Apenas 1 chamada para company_media_library (deduplicado)
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     expect(assetChain.in).toHaveBeenCalledTimes(1);
 
     const ids = assetChain.in.mock.calls[0][1];
@@ -1015,7 +1018,7 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 
     expect(res._status).toBe(200);
     // UMA única chamada para company_media_library — não N+1
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     expect(assetChain.in).toHaveBeenCalledTimes(1);
 
     const ids = assetChain.in.mock.calls[0][1];
@@ -1547,9 +1550,10 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
     expect(mockSvc.from.mock.calls.map((c) => c[0])).toEqual([
       'meta_conversations',
+      'meta_messages',
       'meta_messages',
     ]);
     expect(res._body.messages[0].delivery_status).toBeNull();
@@ -1580,7 +1584,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
     expect(res._body.messages[0].delivery_status).toBeNull();
     assertPublicDto(res._body.messages[0]);
   });
@@ -1641,7 +1645,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     expect(trackingChain.in).toHaveBeenCalledTimes(1);
     const ids = trackingChain.in.mock.calls[0][1];
     expect(ids).toHaveLength(2);
@@ -1744,7 +1748,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
 
     expect(res._status).toBe(200);
     expect(res._body.messages).toEqual(FAKE_MSGS_ASC_DTO);
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -2321,5 +2325,84 @@ describe('GET messages — AWS outbound AUDIO signed URL (E.2-C.1)', () => {
 
   it('gate Graph permanece fora deste GET', () => {
     expect(handler.toString()).not.toContain('META_OUTBOUND_AUDIO_GRAPH_ENABLED');
+  });
+});
+
+function makeWindowChain(row, error = null) {
+  const chain = {};
+  const self = () => chain;
+  for (const method of ['select', 'eq', 'not', 'order', 'limit']) {
+    chain[method] = vi.fn(self);
+  }
+  chain.maybeSingle = vi.fn(async () => ({ data: row, error }));
+  return chain;
+}
+
+describe('GET messages — janela de 24 horas', () => {
+  const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+
+  it('janela aberta usa o último inbound, não o lote paginado', async () => {
+    const windowChain = makeWindowChain({ provider_timestamp: recent });
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([]))
+      .mockReturnValueOnce(windowChain);
+
+    const res = makeRes();
+    await handler(makeReq({ company_id: 'outra-empresa' }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.customerServiceWindow.state).toBe('open');
+    expect(typeof res._body.customerServiceWindow.expiresAt).toBe('string');
+    expect(windowChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(windowChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(windowChain.eq).toHaveBeenCalledWith('conversation_id', FAKE_CONV_ID);
+    expect(windowChain.eq).toHaveBeenCalledWith('direction', 'inbound');
+    expect(windowChain.eq).not.toHaveBeenCalledWith('company_id', 'outra-empresa');
+  });
+
+  it('janela fechada quando o inbound passou de 24 horas', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([]))
+      .mockReturnValueOnce(makeWindowChain({ provider_timestamp: old }));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.customerServiceWindow).toEqual({ state: 'closed', expiresAt: null });
+    expect(res._body.messages).toEqual([]);
+  });
+
+  it('estado desconhecido quando não há inbound comprovado', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([]))
+      .mockReturnValueOnce(makeWindowChain(null));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._body.customerServiceWindow).toEqual({ state: 'unknown', expiresAt: null });
+  });
+
+  it('falha da consulta da janela preserva o histórico', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(FAKE_CONV_DB))
+      .mockReturnValueOnce(makeMsgChain([FAKE_MSG_OLDEST]))
+      .mockReturnValueOnce(makeWindowChain(null, { message: 'db down' }));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toHaveLength(1);
+    expect(res._body.customerServiceWindow).toEqual({ state: 'unknown', expiresAt: null });
+  });
+
+  it('conversa de outra empresa não consulta a janela', async () => {
+    mockSvc.from.mockReturnValueOnce(makeConvChain(null));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(404);
+    expect(mockSvc.from).toHaveBeenCalledTimes(1);
   });
 });

@@ -300,6 +300,9 @@ function mapGraphOrchestratorHttp(res, orchestrated, resumeParams) {
   if (error === 'claim_not_claimed') {
     return res.status(409).json({ ok: false, error: 'operation_in_progress' });
   }
+  if (error === 'customer_service_window_closed') {
+    return res.status(409).json({ error: 'customer_service_window_closed' });
+  }
   if (error === 'operation_unknown' || error === 'deadline_insufficient_after_claim') {
     return res.status(409).json({ ok: false, error: 'operation_unknown' });
   }

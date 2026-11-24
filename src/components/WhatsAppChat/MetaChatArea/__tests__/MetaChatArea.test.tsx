@@ -221,6 +221,8 @@ function makeMsg(
 /** Estado padrão do hook mockado — sem mensagens, sem erros */
 function mockIdle(overrides: Partial<{
   messages: MetaChatMessage[]
+  customerServiceWindow: { state: 'open' | 'closed' | 'unknown', expiresAt: string | null }
+  windowConfirmed: boolean
   loading:  boolean
   error:    string | null
   refresh:  ReturnType<typeof vi.fn>
@@ -228,6 +230,8 @@ function mockIdle(overrides: Partial<{
   const refresh = vi.fn()
   mockUseMetaChatMessages.mockReturnValue({
     messages: [],
+    customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+    windowConfirmed: true,
     loading:  false,
     error:    null,
     refresh,
@@ -2460,5 +2464,125 @@ describe('MetaChatArea — INBOUND AUDIO render', () => {
     render(<MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />)
     expect(screen.getByTestId('msg-media-image')).toBeTruthy()
     expect(screen.queryByTestId('msg-media-audio')).toBeNull()
+  })
+})
+
+describe('MetaChatArea — janela de 24 horas', () => {
+  function renderChat() {
+    return render(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID} conversation={CONV_FULL} />,
+    )
+  }
+
+  function isDisabled(label: string) {
+    return (screen.getByLabelText(label) as HTMLTextAreaElement | HTMLButtonElement).disabled
+  }
+
+  it('janela aberta habilita texto e áudio e mostra o indicador', () => {
+    mockIdle()
+    renderChat()
+    expect(screen.getByTestId('meta-window-open').textContent).toMatch(/aberta/)
+    expect(isDisabled('Mensagem')).toBe(false)
+    expect(screen.getByTestId('meta-outbound-audio-mic').getAttribute('data-session-allowed')).toBe('true')
+    expect(isDisabled('Template')).toBe(false)
+  })
+
+  it('janela fechada bloqueia texto e áudio e mantém o template', () => {
+    mockIdle({ customerServiceWindow: { state: 'closed', expiresAt: null } })
+    renderChat()
+    expect(screen.getByTestId('meta-window-closed').textContent).toMatch(/encerrou/)
+    expect(isDisabled('Mensagem')).toBe(true)
+    expect(isDisabled('Enviar')).toBe(true)
+    expect((screen.getByTestId('meta-outbound-audio-mic') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByTestId('meta-outbound-audio-mic').getAttribute('data-session-allowed')).toBe('false')
+    expect(isDisabled('Template')).toBe(false)
+    expect(screen.getByText('Nenhuma mensagem nesta conversa')).toBeTruthy()
+  })
+
+  it('estado desconhecido bloqueia texto e áudio e mantém o template', () => {
+    mockIdle({ customerServiceWindow: { state: 'unknown', expiresAt: null } })
+    renderChat()
+    expect(screen.getByTestId('meta-window-unknown').textContent).toMatch(/comprovada/)
+    expect(isDisabled('Mensagem')).toBe(true)
+    expect((screen.getByTestId('meta-outbound-audio-mic') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByTestId('meta-outbound-audio-mic').getAttribute('data-session-allowed')).toBe('false')
+    expect(isDisabled('Template')).toBe(false)
+  })
+
+  it('expira a janela aberta quando o prazo do backend chega', () => {
+    vi.useFakeTimers()
+    try {
+      const expiresAt = new Date(Date.now() + 1000).toISOString()
+      mockIdle({ customerServiceWindow: { state: 'open', expiresAt } })
+      renderChat()
+      expect(screen.getByTestId('meta-window-open')).toBeTruthy()
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(screen.getByTestId('meta-window-closed')).toBeTruthy()
+      expect(isDisabled('Mensagem')).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('troca de conversa substitui a janela anterior', () => {
+    mockIdle()
+    const view = renderChat()
+    expect(screen.getByTestId('meta-window-open')).toBeTruthy()
+    mockIdle({ customerServiceWindow: { state: 'closed', expiresAt: null } })
+    view.rerender(
+      <MetaChatArea companyId={COMPANY_ID} conversationId={CONV_ID_B} conversation={CONV_FULL_B} />,
+    )
+    expect(screen.queryByTestId('meta-window-open')).toBeNull()
+    expect(screen.getByTestId('meta-window-closed')).toBeTruthy()
+  })
+
+  it('409 da janela fechada explica o bloqueio sem esconder o histórico', async () => {
+    mockIdle({ messages: [makeMsg('msg-hist')] })
+    mockSendMessage.mockRejectedValue(new Error('customer_service_window_closed'))
+    renderChat()
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'oi' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/janela de 24 horas encerrou/)
+    expect(screen.getByText('corpo msg-hist')).toBeTruthy()
+  })
+
+  it('janela ainda não confirmada bloqueia texto e áudio e mantém o template', () => {
+    mockIdle({
+      windowConfirmed: false,
+      customerServiceWindow: { state: 'open', expiresAt: '2099-01-01T00:00:00.000Z' },
+    })
+    renderChat()
+    expect(screen.getByTestId('meta-window-checking').textContent).toMatch(/Verificando/)
+    expect(screen.queryByTestId('meta-window-open')).toBeNull()
+    expect(screen.queryByTestId('meta-window-unknown')).toBeNull()
+    expect(isDisabled('Mensagem')).toBe(true)
+    expect(screen.getByTestId('meta-outbound-audio-mic').getAttribute('data-session-allowed')).toBe('false')
+    expect(isDisabled('Template')).toBe(false)
+  })
+
+  it('expiração impede o envio do texto já digitado', () => {
+    vi.useFakeTimers()
+    try {
+      const expiresAt = new Date(Date.now() + 1000).toISOString()
+      mockIdle({ customerServiceWindow: { state: 'open', expiresAt } })
+      renderChat()
+      fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'oi' } })
+      act(() => { vi.advanceTimersByTime(1000) })
+      fireEvent.click(screen.getByLabelText('Enviar'))
+      expect(mockSendMessage).not.toHaveBeenCalled()
+      expect(isDisabled('Mensagem')).toBe(true)
+      expect(isDisabled('Template')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('409 sem janela comprovada explica o uso de template', async () => {
+    mockIdle()
+    mockSendMessage.mockRejectedValue(new Error('customer_service_window_unproven'))
+    renderChat()
+    fireEvent.change(screen.getByLabelText('Mensagem'), { target: { value: 'oi' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/template aprovado/)
   })
 })

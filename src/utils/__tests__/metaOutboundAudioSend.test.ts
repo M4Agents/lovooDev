@@ -60,6 +60,13 @@ describe('metaOutboundAudioSend', () => {
     expect(classifyMetaOutboundAudioSend(409, 'operation_in_progress').kind).toBe('blocked')
     expect(classifyMetaOutboundAudioSend(409, 'graph_in_flight').kind).toBe('blocked')
     expect(classifyMetaOutboundAudioSend(200, 'ok').kind).toBe('success')
+    expect(classifyMetaOutboundAudioSend(409, 'customer_service_window_closed')).toMatchObject({
+      kind: 'error',
+      allowRecover: false,
+      allowNewOperation: false,
+    })
+    expect(classifyMetaOutboundAudioSend(409, 'customer_service_window_unproven').kind).toBe('error')
+    expect(classifyMetaOutboundAudioSend(409, '131047').code).toBe('131047')
   })
 
   it('501 não afirma sucesso', () => {
@@ -77,6 +84,9 @@ describe('metaOutboundAudioSend', () => {
     expect(messageForMetaAudioSend('blocked', 'graph_in_flight')).toMatch(/Não envie de novo/)
     expect(messageForMetaAudioSend('blocked', 'operation_in_progress')).not.toMatch(/Enviar novamente/)
     expect(messageForMetaAudioSend('error', 'audio_remux_failed')).toMatch(/Grave novamente/)
+    expect(messageForMetaAudioSend('error', 'customer_service_window_closed')).toMatch(/template aprovado/)
+    expect(messageForMetaAudioSend('error', '131047')).toMatch(/janela de 24 horas/)
+    expect(messageForMetaAudioSend('error', 'customer_service_window_unproven')).toMatch(/template aprovado/)
   })
 
   it('não usa crypto.randomUUID duas vezes no helper de mint por chamada', () => {
