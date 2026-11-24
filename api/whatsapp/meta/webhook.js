@@ -311,22 +311,24 @@ async function handlePost(req, res) {
           continue;
         }
 
-        if (outcome !== 'applied') {
-          // NOOP: duplicata, regressão ou CAS que perdeu para um estado mais novo
+        if (outcome !== 'applied' && outcome !== 'duplicate') {
+          // Regressão, transição inválida ou status persistido inválido.
+          // Duplicata exata não entra aqui: ela repete só o toque.
           console.log('[meta/webhook] event_type=status transition_blocked=true status=%s', newStatus);
           continue;
         }
 
-        console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
+        if (outcome === 'applied') {
+          console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
+        }
 
-        // MVP5.B1.2 — sinal Realtime para ticks: UPDATE pontual de updated_at
-        // em meta_messages. Só após o CAS confirmar uma linha alterada.
-        // NOOP / duplicata / regressão / wamid desconhecido / tentativa perdida
-        // não chegam aqui. Uma transição não dispara um toque por tentativa.
-        // Zero linhas: mensagem ainda não persistida no chat — no-op, sem INSERT.
-        // Falha de DB: log sanitizado; tracking NÃO é revertido.
-        // HTTP: 200 (retry Meta seria NOOP no tracking e não reaplicaria o sinal).
-        await touchOutboundChatMessage(svc, instance, wamid);
+        // Sinal Realtime: updated_at em meta_messages.
+        // Ocorre depois de applied e também na duplicata exata, uma vez por evento.
+        // Regressão, unknown, mismatch, db_error e exhausted não chegam aqui.
+        // missing: chat ainda sem a linha — sem indicador de falha (etapa 4.5).
+        // error: o tracking não é revertido; o lote segue e responde 500 no fim.
+        const touchResult = await touchOutboundChatMessage(svc, instance, wamid);
+        if (touchResult === 'error') hasTransientFailure = true;
       }
 
       // ── 13. Ramo B — messages[] inbound TEXT (MVP3A) ──────────────────────
@@ -822,7 +824,7 @@ async function casUpdateOutboundStatus(svc, tracked, payload) {
 /**
  * Aplica uma transição de status com compare-and-swap.
  *
- * @returns {'applied'|'noop'|'unknown'|'mismatch'|'db_error'|'exhausted'}
+ * @returns {'applied'|'duplicate'|'noop'|'unknown'|'mismatch'|'db_error'|'exhausted'}
  */
 async function applyOutboundStatus(svc, instance, wamid, newStatus, statusItem) {
   const effectiveTimestamp = parseMetaTimestamp(statusItem.timestamp);
@@ -834,6 +836,7 @@ async function applyOutboundStatus(svc, instance, wamid, newStatus, statusItem) 
 
   let tracked = loaded.row;
   for (let attempt = 1; attempt <= STATUS_CAS_ATTEMPT_LIMIT; attempt += 1) {
+    if (tracked.status === newStatus) return 'duplicate';
     if (!shouldApply(tracked.status, newStatus)) return 'noop';
 
     const written = await casUpdateOutboundStatus(
@@ -852,6 +855,7 @@ async function applyOutboundStatus(svc, instance, wamid, newStatus, statusItem) 
     tracked = loaded.row;
   }
 
+  if (tracked.status === newStatus) return 'duplicate';
   return shouldApply(tracked.status, newStatus) ? 'exhausted' : 'noop';
 }
 

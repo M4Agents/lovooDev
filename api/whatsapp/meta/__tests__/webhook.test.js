@@ -709,12 +709,17 @@ describe('POST /api/whatsapp/meta/webhook — state machine', () => {
 
       const row         = { id: FAKE_MSG_ID, status: currentStatus };
       const updateChain = makeUpdateChain();
+      const exactDuplicate = !apply && currentStatus === newStatus;
+      const touch = makeChatTouchChain();
 
-      mockSvc.from
-        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-        .mockReturnValueOnce(makeMsgSelectChain(row))
-        .mockReturnValueOnce(updateChain) // só chamado se apply=true
-        .mockReturnValueOnce(makeChatTouchChain()); // só chamado se apply=true
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.from.mockReturnValueOnce(makeMsgSelectChain(row));
+      if (apply) {
+        mockSvc.from.mockReturnValueOnce(updateChain);
+        mockSvc.from.mockReturnValueOnce(touch);
+      } else if (exactDuplicate) {
+        mockSvc.from.mockReturnValueOnce(touch);
+      }
 
       const req = makePostReq();
       const res = makeRes();
@@ -723,10 +728,20 @@ describe('POST /api/whatsapp/meta/webhook — state machine', () => {
       expect(res._status).toBe(200);
       if (apply) {
         expect(updateChain.update).toHaveBeenCalled();
+        expect(touch.update).toHaveBeenCalledTimes(1);
         expect(mockSvc.from).toHaveBeenCalledTimes(4);
         expect(mockSvc.from.mock.calls[3][0]).toBe('meta_messages');
+      } else if (exactDuplicate) {
+        expect(updateChain.update).not.toHaveBeenCalled();
+        expect(touch.update).toHaveBeenCalledTimes(1);
+        expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+          'meta_whatsapp_instances',
+          'meta_whatsapp_messages',
+          'meta_messages',
+        ]);
       } else {
         expect(updateChain.update).not.toHaveBeenCalled();
+        expect(touch.update).not.toHaveBeenCalled();
         expect(mockSvc.from).toHaveBeenCalledTimes(2);
       }
     }
@@ -963,16 +978,17 @@ describe('POST /api/whatsapp/meta/webhook — batch e idempotência', () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     const updateChain = makeUpdateChain();
+    const touch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' })) // já em sent
-      .mockReturnValueOnce(updateChain);
+      .mockReturnValueOnce(touch);
     const req = makePostReq();
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
-    // NOOP → update não chamado
     expect(updateChain.update).not.toHaveBeenCalled();
+    expect(touch.update).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -3198,22 +3214,29 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(mockSvc.from.mock.calls[3][0]).toBe('meta_messages');
   });
 
-  it('RT-WH-02: duplicata (sent→sent) → sem touch', async () => {
+  it('RT-WH-02: duplicata exata (sent→sent) toca sem alterar o tracking', async () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
-    const tracking = makeUpdateChain();
-    const touch    = makeChatTouchChain();
+    const touch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' }))
-      .mockReturnValueOnce(tracking)
       .mockReturnValueOnce(touch);
     const res = makeRes();
     await handler(makePostReq(), res);
     expect(res._status).toBe(200);
-    expect(tracking.update).not.toHaveBeenCalled();
-    expect(touch.update).not.toHaveBeenCalled();
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(res._body).toEqual({ received: true });
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(touch.update.mock.calls[0][0]).toEqual({ updated_at: expect.any(String) });
+    expect(touch.eq).toHaveBeenNthCalledWith(1, 'company_id', FAKE_COMPANY_ID);
+    expect(touch.eq).toHaveBeenNthCalledWith(2, 'instance_id', FAKE_INSTANCE_ID);
+    expect(touch.eq).toHaveBeenNthCalledWith(3, 'meta_message_id', FAKE_WAMID);
+    expect(touch.eq).toHaveBeenNthCalledWith(4, 'direction', 'outbound');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+      'meta_messages',
+    ]);
   });
 
   it('RT-WH-03: fora de ordem (delivered→sent) → sem regressão e sem touch', async () => {
@@ -3264,13 +3287,13 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(touch.eq).toHaveBeenNthCalledWith(4, 'direction', 'outbound');
   });
 
-  it('RT-WH-07: falha no UPDATE de meta_messages → 200, tracking preservado, log sanitizado', async () => {
+  it('RT-WH-07: falha no UPDATE de meta_messages → 500, tracking preservado, log sanitizado', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { res, tracking, touch } = await runApplied({
       touchErr: { message: 'query timeout' },
     });
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ received: true });
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
     expect(tracking.update).toHaveBeenCalled();
     expect(touch.update).toHaveBeenCalled();
     expect(JSON.stringify(res._body)).not.toContain('query timeout');
@@ -3421,14 +3444,20 @@ describe('POST /api/whatsapp/meta/webhook — status compare-and-swap', () => {
     expect(mockSvc.from).toHaveBeenCalledTimes(2);
     expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
 
+    const dupTouch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')));
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(dupTouch);
     const dupRes = makeRes();
     await handler(postStatus('sent'), dupRes);
     expect(dupRes._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(4);
-    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+    expect(dupTouch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.slice(2).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+      'meta_messages',
+    ]);
   });
 
   it('E–H: duas leituras de sent; read vence e delivered atrasado vira NOOP', async () => {
@@ -3574,18 +3603,25 @@ describe('POST /api/whatsapp/meta/webhook — status compare-and-swap', () => {
     expect(touch.update).toHaveBeenCalledTimes(1);
 
     const callsAfterApplied = mockSvc.from.mock.calls.length;
+    const failedTouch = makeChatTouchChain();
     for (const current of ['delivered', 'read', 'failed']) {
       mockSvc.from
         .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
         .mockReturnValueOnce(makeMsgSelectChain(trackingRow(current)));
+      if (current === 'failed') mockSvc.from.mockReturnValueOnce(failedTouch);
       const res = makeRes();
       await handler(postStatus('failed', { errors: [{ code: 1 }] }), res);
       expect(res._status).toBe(200);
     }
-    expect(mockSvc.from).toHaveBeenCalledTimes(callsAfterApplied + 6);
-    expect(mockSvc.from.mock.calls.slice(callsAfterApplied).map((call) => call[0])).not.toContain(
+    expect(mockSvc.from).toHaveBeenCalledTimes(callsAfterApplied + 7);
+    const tail = mockSvc.from.mock.calls.slice(callsAfterApplied).map((call) => call[0]);
+    expect(tail.slice(0, 4)).not.toContain('meta_messages');
+    expect(tail.slice(4)).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
       'meta_messages',
-    );
+    ]);
+    expect(failedTouch.update).toHaveBeenCalledTimes(1);
   });
 
   it('O: leitura e CAS ficam na empresa e instância resolvidas', async () => {
@@ -4752,17 +4788,23 @@ describe('POST /api/whatsapp/meta/webhook — continuidade do lote de status', (
     expect(lost.update).toHaveBeenCalledTimes(1);
 
     const callsAfterFirst = mockSvc.from.mock.calls.length;
+    const touch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')));
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
     const second = makeRes();
     await handler(post([{
       changes: [change([status('wamid.same', 'delivered')])],
     }]), second);
 
     expect(second._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(callsAfterFirst + 2);
-    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).not.toContain('meta_messages');
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+      'meta_messages',
+    ]);
   });
 
   it('Z: a resposta espera o status seguinte ainda pendente', async () => {
@@ -4789,5 +4831,313 @@ describe('POST /api/whatsapp/meta/webhook — continuidade do lote de status', (
     await done;
     expect(res._status).toBe(500);
     expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =============================================================================
+// Toque Realtime — duplicata exata recupera a notificação.
+// Mocks. Não publica Realtime nem exercita concorrência no PostgreSQL.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — recuperação do toque Realtime', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+  const OTHER_PHONE_ID    = '199988877766';
+
+  function row(status, companyId = FAKE_COMPANY_ID, instanceId = FAKE_INSTANCE_ID) {
+    return { id: FAKE_MSG_ID, company_id: companyId, instance_id: instanceId, status };
+  }
+
+  function status(id, name) {
+    return { id, status: name, timestamp: FAKE_TIMESTAMP };
+  }
+
+  function change(statuses, messages, phoneId = FAKE_PHONE_NUM_ID) {
+    const value = {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      statuses,
+    };
+    if (messages) value.messages = messages;
+    return { field: 'messages', value };
+  }
+
+  function post(entries) {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: entries,
+    })));
+    return makePostReq();
+  }
+
+  it('falha do toque não impede o status seguinte e o 500 permanece', async () => {
+    const failedTouch = makeChatTouchChain([], { message: 'query timeout' });
+    const okTouch = makeChatTouchChain();
+    const firstUpdate = makeUpdateChain();
+    const secondUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(firstUpdate)
+      .mockReturnValueOnce(failedTouch)
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', FAKE_COMPANY_ID, FAKE_INSTANCE_ID)))
+      .mockReturnValueOnce(secondUpdate)
+      .mockReturnValueOnce(okTouch);
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.a', 'delivered'), status('wamid.b', 'sent')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(firstUpdate.update.mock.calls[0][0].status).toBe('delivered');
+    expect(secondUpdate.update.mock.calls[0][0].status).toBe('sent');
+    expect(failedTouch.update).toHaveBeenCalledTimes(1);
+    expect(okTouch.eq).toHaveBeenCalledWith('meta_message_id', 'wamid.b');
+  });
+
+  it('falha do toque não impede o texto inbound seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }));
+    mockSvc.rpc.mockResolvedValueOnce(makeRpcResult());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change(
+        [status('wamid.status', 'delivered')],
+        [makeInboundMessage({ id: 'wamid.text' })],
+      )],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.text');
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('falha do toque em um change não impede o change seguinte', async () => {
+    const nextUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [
+        change([status('wamid.a', 'delivered')]),
+        change([status('wamid.b', 'sent')]),
+      ],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_instances')).toHaveLength(2);
+  });
+
+  it('falha do toque em um entry não impede o entry seguinte', async () => {
+    const nextTouch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(nextTouch);
+
+    const res = makeRes();
+    await handler(post([
+      { changes: [change([status('wamid.a', 'delivered')])] },
+      { changes: [change([status('wamid.b', 'sent')])] },
+    ]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextTouch.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(nextTouch.eq).toHaveBeenCalledWith('direction', 'outbound');
+  });
+
+  it('duplicata exata com erro de toque responde 500 sem novo tracking e sem dado sensível', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const touch = makeChatTouchChain([], { message: `${FAKE_BODY} ${FAKE_WA_ID}` });
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+        .mockReturnValueOnce(touch);
+      const res = makeRes();
+      await handler(post([{
+        changes: [change([status('wamid.same', 'delivered')])],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(touch.update).toHaveBeenCalledTimes(1);
+      expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(1);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('chat_touch_failed');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+      expect(logged).not.toContain('wamid.same');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('duplicata exata com mensagem de chat ausente permanece HTTP 200', async () => {
+    const touch = makeChatTouchChain([]);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('read')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status(FAKE_WAMID, 'read')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(touch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('duplicata de outra instância toca somente o contexto resolvido', async () => {
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain({ id: OTHER_INSTANCE_ID, company_id: OTHER_COMPANY_ID }))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent', OTHER_COMPANY_ID, OTHER_INSTANCE_ID)))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.other', 'sent')], undefined, OTHER_PHONE_ID)],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(touch.eq).toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
+    expect(touch.eq).toHaveBeenCalledWith('instance_id', OTHER_INSTANCE_ID);
+    expect(touch.eq).toHaveBeenCalledWith('direction', 'outbound');
+    expect(touch.eq).not.toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+  });
+
+  it('releitura com o mesmo status recupera o toque sem novo update', async () => {
+    const lost = makeUpdateChain(null, []);
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost)
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(lost.update).toHaveBeenCalledTimes(1);
+    expect(lost.update.mock.calls[0][0].status).toBe('delivered');
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(3);
+  });
+
+  it('última releitura com o status recebido recupera o toque sem quarta gravação', async () => {
+    const lost = [makeUpdateChain(null, []), makeUpdateChain(null, []), makeUpdateChain(null, [])];
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[0])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[1])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[2])
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(lost.every((chain) => chain.update.mock.calls.length === 1)).toBe(true);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from).toHaveBeenCalledTimes(9);
+  });
+
+  it('erro de update seguido de retry no mesmo status toca sem regravar', async () => {
+    const lost = makeUpdateChain({ message: 'update timeout' });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost);
+    const first = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), first);
+    expect(first._status).toBe(500);
+    expect(lost.update).toHaveBeenCalledTimes(1);
+    expect(lost.update.mock.calls[0][0]).not.toHaveProperty('read_at');
+    expect(lost.update.mock.calls[0][0]).not.toHaveProperty('error_code');
+
+    const callsAfterFirst = mockSvc.from.mock.calls.length;
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const second = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), second);
+    expect(second._status).toBe(200);
+    expect(touch.update.mock.calls[0][0]).toEqual({ updated_at: expect.any(String) });
+    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_whatsapp_messages',
+      'meta_messages',
+    ]);
+  });
+
+  it('a resposta espera o toque ainda pendente', async () => {
+    const touch = makeChatTouchChain();
+    let release;
+    touch.select.mockReturnValue(new Promise((resolve) => {
+      release = () => resolve({ data: [{ id: 'chat-touch-row' }], error: null });
+    }));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    const done = handler(post([{
+      changes: [change([status('wamid.a', 'delivered')])],
+    }]), res);
+    await vi.waitFor(() => expect(touch.select).toHaveBeenCalledTimes(1));
+    expect(res._status).toBeNull();
+    release();
+    await done;
+    expect(res._status).toBe(200);
+  });
+
+  it('falha persistente do toque tenta uma vez por reenvio', async () => {
+    async function once() {
+      const touch = makeChatTouchChain([], { message: 'query timeout' });
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+        .mockReturnValueOnce(touch);
+      const res = makeRes();
+      await handler(post([{
+        changes: [change([status('wamid.same', 'delivered')])],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(touch.update).toHaveBeenCalledTimes(1);
+    }
+    await once();
+    await once();
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(2);
   });
 });
