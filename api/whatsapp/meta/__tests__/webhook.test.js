@@ -3924,3 +3924,437 @@ describe('POST /api/whatsapp/meta/webhook — credencial de mídia', () => {
     expect(update.update.mock.calls[0][0].status).toBe('delivered');
   });
 });
+
+// =============================================================================
+// Lote inbound — falha de texto não interrompe os eventos seguintes.
+// Mocks. A unicidade real do PostgreSQL não é exercitada aqui.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — continuidade do lote inbound', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+  const OTHER_PHONE_ID    = '199988877766';
+  const OLD_TIMESTAMP     = '1739320000';
+
+  function rpcOk(created = true) {
+    return { data: { created, conversation_id: FAKE_CONV_ID, message_id: FAKE_MSG_ID }, error: null };
+  }
+
+  function rpcFail(error = { code: 'XX000' }) {
+    return { data: null, error };
+  }
+
+  function valueWith(messages, phoneId = FAKE_PHONE_NUM_ID) {
+    return {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      messages,
+    };
+  }
+
+  function postEntries(entries) {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: entries,
+    })));
+    return makePostReq();
+  }
+
+  function text(id, timestamp = FAKE_TIMESTAMP, body = FAKE_BODY) {
+    return makeInboundMessage({ id, timestamp, body });
+  }
+
+  function wamids() {
+    return mockSvc.rpc.mock.calls.map((call) => call[1].p_meta_message_id);
+  }
+
+  it('A: lote válido permanece HTTP 200 na ordem original', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('B/N: a primeira falha não impede a segunda e o sucesso não apaga o 500', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(mockSvc.rpc.mock.calls[1][1].p_company_id).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('C: falha intermediária ainda processa a mensagem seguinte', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b'), text('wamid.c')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b', 'wamid.c']);
+  });
+
+  it('D: falha na última mensagem responde 500 depois de persistir as anteriores', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcFail());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('E: todas as mensagens com falha respondem 500 e todas são tentadas', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcFail());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('F/H: erro retornado e timeout não interrompem a mensagem seguinte', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc
+      .mockResolvedValueOnce(rpcFail({ code: '57014', message: 'statement timeout' }))
+      .mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(JSON.stringify(res._body)).not.toContain('timeout');
+  });
+
+  it('G/X: exceção da RPC não vaza corpo nem telefone e o lote continua', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc
+        .mockRejectedValueOnce(new Error(`${FAKE_BODY} ${FAKE_WA_ID}`))
+        .mockResolvedValueOnce(rpcOk());
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.a', FAKE_TIMESTAMP, FAKE_BODY), text('wamid.b')]) }],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('rpc_error=true');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+      expect(JSON.stringify(res._body)).not.toContain(FAKE_BODY);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('I: texto com falha não impede a mídia seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        text('wamid.text'),
+        makeDocumentMessage({ id: 'wamid.doc' }),
+      ]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[1][1].p_meta_message_id).toBe('wamid.doc');
+  });
+
+  it('J: mídia com falha de credencial não impede o texto seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null, { message: 'unavailable' }));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeDocumentMessage({ id: 'wamid.doc' }),
+        text('wamid.text'),
+      ]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.text');
+  });
+
+  it('K: falha em um change não impede o change seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [
+        { field: 'messages', value: valueWith([text('wamid.a')]) },
+        { field: 'messages', value: valueWith([text('wamid.b')]) },
+      ],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+  });
+
+  it('L: falha em um entry não impede o entry seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.a')]) }] },
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.b')]) }] },
+    ]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('M: entries de instâncias diferentes mantêm company_id e instance_id próprios', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain({ id: OTHER_INSTANCE_ID, company_id: OTHER_COMPANY_ID }));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.a')], FAKE_PHONE_NUM_ID) }] },
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.b')], OTHER_PHONE_ID) }] },
+    ]), res);
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1]).toMatchObject({
+      p_company_id: FAKE_COMPANY_ID,
+      p_instance_id: FAKE_INSTANCE_ID,
+      p_meta_message_id: 'wamid.a',
+    });
+    expect(mockSvc.rpc.mock.calls[1][1]).toMatchObject({
+      p_company_id: OTHER_COMPANY_ID,
+      p_instance_id: OTHER_INSTANCE_ID,
+      p_meta_message_id: 'wamid.b',
+    });
+  });
+
+  it('O/P/R: retry reenvia os timestamps originais e a mensagem antiga recuperada não troca de empresa', async () => {
+    const messages = [
+      text('wamid.old', OLD_TIMESTAMP),
+      text('wamid.new', FAKE_TIMESTAMP),
+    ];
+    const entries = [{ changes: [{ field: 'messages', value: valueWith(messages) }] }];
+    const oldIso = new Date(Number(OLD_TIMESTAMP) * 1000).toISOString();
+    const newIso = new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString();
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const first = makeRes();
+    await handler(postEntries(entries), first);
+    expect(first._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_provider_timestamp).toBe(oldIso);
+    expect(mockSvc.rpc.mock.calls[1][1].p_provider_timestamp).toBe(newIso);
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk(false)).mockResolvedValueOnce(rpcOk());
+    const second = makeRes();
+    await handler(postEntries(entries), second);
+    expect(second._status).toBe(200);
+    expect(mockSvc.rpc.mock.calls.slice(2).map((call) => call[1].p_meta_message_id)).toEqual([
+      'wamid.old',
+      'wamid.new',
+    ]);
+    expect(mockSvc.rpc.mock.calls[2][1].p_provider_timestamp).toBe(oldIso);
+    expect(mockSvc.rpc.mock.calls[2][1].p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[3][1].p_provider_timestamp).toBe(newIso);
+  });
+
+  it('Q: botão e interativo com falha de RPC deixam a mensagem seguinte seguir', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const buttonRes = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeButtonMessage({ id: 'wamid.button' }),
+        text('wamid.after-button'),
+      ]) }],
+    }]), buttonRes);
+    expect(buttonRes._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe(FAKE_BUTTON_TEXT);
+    expect(mockSvc.rpc.mock.calls[1][1].p_meta_message_id).toBe('wamid.after-button');
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const interactiveRes = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeInteractiveMessage({ id: 'wamid.interactive' }),
+        text('wamid.after-interactive'),
+      ]) }],
+    }]), interactiveRes);
+    expect(interactiveRes._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[2][1].p_body).toBe(FAKE_INTERACTIVE_BUTTON_TITLE);
+    expect(mockSvc.rpc.mock.calls[3][1].p_meta_message_id).toBe('wamid.after-interactive');
+  });
+
+  it('S/T: assinatura inválida e JSON inválido continuam antes de qualquer lote', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValueOnce(false);
+    const denied = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a')]) }],
+    }]), denied);
+    expect(denied._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    mockReadRawBody.mockResolvedValue(Buffer.from('{'));
+    const invalid = makeRes();
+    await handler(makePostReq(), invalid);
+    expect(invalid._status).toBe(400);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('U: compare-and-swap de status permanece condicional', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makePayload({
+      statuses: [{ id: FAKE_WAMID, status: 'read', timestamp: FAKE_TIMESTAMP }],
+    }))));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({
+        id: FAKE_MSG_ID,
+        company_id: FAKE_COMPANY_ID,
+        instance_id: FAKE_INSTANCE_ID,
+        status: 'delivered',
+      }))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(Object.fromEntries(update.eq.mock.calls).status).toBe('delivered');
+    expect(update.update.mock.calls[0][0].status).toBe('read');
+  });
+
+  it('V: credencial ausente de mídia continua pedindo retry sem download', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+  });
+
+  it('W: a resposta espera a RPC ainda pendente do evento seguinte', async () => {
+    let release;
+    const pending = new Promise((resolve) => {
+      release = () => resolve(rpcOk());
+    });
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockImplementationOnce(() => pending);
+    const res = makeRes();
+    const done = handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    await vi.waitFor(() => expect(mockSvc.rpc).toHaveBeenCalledTimes(2));
+    expect(res._status).toBeNull();
+    release();
+    await done;
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('retorno null da RPC é falha recuperável e a mensagem seguinte segue', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce(null).mockResolvedValueOnce(rpcOk());
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.null'), text('wamid.next')]) }],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'Internal error' });
+      expect(wamids()).toEqual(['wamid.null', 'wamid.next']);
+      expect(mockSvc.rpc.mock.calls[1][1]).toMatchObject({
+        p_company_id: FAKE_COMPANY_ID,
+        p_instance_id: FAKE_INSTANCE_ID,
+        p_meta_message_id: 'wamid.next',
+      });
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('rpc_error=true');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('retorno undefined da RPC é falha recuperável e a mensagem seguinte segue', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(undefined).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.undefined'), text('wamid.next')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.undefined', 'wamid.next']);
+  });
+
+  it('created false permanece HTTP 200', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce(rpcOk(false));
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.dup')]) }],
+      }]), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ received: true });
+      expect(wamids()).toEqual(['wamid.dup']);
+      expect(logSpy.mock.calls.some((call) => call[0].includes('created=%s') && call[1] === false)).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('data null e error null permanece sucesso', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce({ data: null, error: null });
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.empty')]) }],
+      }]), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ received: true });
+      expect(wamids()).toEqual(['wamid.empty']);
+      expect(logSpy.mock.calls.some((call) => call[0].includes('created=%s') && call[1] === false)).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});

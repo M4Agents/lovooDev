@@ -229,12 +229,12 @@ async function handlePost(req, res) {
   // ── 7. Iterar defensivamente sobre entries e changes ─────────────────────
   const entries = Array.isArray(payload.entry) ? payload.entry : [];
 
-  // Marcador de falha transiente para batch safety (INBOUND-DOC-C2).
-  // Erros transientes de DOCUMENT/IMAGE/VIDEO marcam este flag e continuam processando
-  // demais eventos do payload, em vez de retornar 500 imediatamente.
-  // Meta reenvia o payload inteiro em caso de 500 — por isso todos os ramos
-  // são idempotentes (TEXT via RPC, DOCUMENT/IMAGE/VIDEO via source_ref + ON CONFLICT,
-  // statuses via TRANSITION_MATRIX).
+  // Marcador de falha transiente para o lote.
+  // Erro recuperável de texto, botão, interativo ou mídia marca este flag
+  // e o processamento dos eventos seguintes continua. O flag não volta a false.
+  // HTTP 500 sai só depois dos entries e changes.
+  // Meta reenvia o payload inteiro — a idempotência fica na RPC, no wamid
+  // e no compare-and-swap de status.
   let hasTransientFailure = false;
 
   for (const entry of entries) {
@@ -379,29 +379,12 @@ async function handlePost(req, res) {
             continue;
           }
 
-          // RPC de persistência atômica — idempotente por (instance_id, wamid)
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          // RPC idempotente por (instance_id, wamid). Erro ou exceção
+          // desta mensagem não encerra o lote.
+          const textTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            // Erro real de DB/RPC — retornar 500 para retry Meta
-            // Duplicata (created=false) NÃO é erro — tratada abaixo
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (textTransient) hasTransientFailure = true;
 
         } else if (message.type === 'button') {
           // ── B.5.1b BUTTON / QUICK_REPLY inbound (MVP4C.12) ───────────────
@@ -413,26 +396,10 @@ async function handlePost(req, res) {
             continue;
           }
 
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          const buttonTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (buttonTransient) hasTransientFailure = true;
 
         } else if (message.type === 'interactive') {
           // ── B.5.1c INTERACTIVE inbound (MVP5.B3.1) ───────────────────────
@@ -444,26 +411,10 @@ async function handlePost(req, res) {
             continue;
           }
 
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          const interactiveTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (interactiveTransient) hasTransientFailure = true;
 
         } else if (message.type === 'document') {
           // ── B.5.2 DOCUMENT inbound (INBOUND-DOC-C2) ──────────────────────
@@ -583,6 +534,47 @@ async function handlePost(req, res) {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Persiste texto, botão ou resposta interativa pela mesma RPC.
+ * error do cliente, timeout, exceção e retorno null ou undefined são
+ * falha recuperável desta mensagem. { data: null, error: null } permanece
+ * sucesso. O objeto de erro não é logado.
+ *
+ * @returns {Promise<boolean>} true quando o lote deve responder 500
+ */
+async function persistInboundTextLikeMessage(svc, instance, message, body, contactName, providerTimestamp) {
+  let rpcData;
+  let rpcErr;
+  try {
+    const result = await svc.rpc('process_meta_inbound_message', {
+      p_company_id:         instance.company_id,
+      p_instance_id:        instance.id,
+      p_wa_id:              message.from,
+      p_meta_message_id:    message.id,
+      p_body:               body,
+      p_contact_name:       contactName,
+      p_provider_timestamp: providerTimestamp,
+    });
+    if (result == null) {
+      console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+      return true;
+    }
+    rpcData = result.data;
+    rpcErr  = result.error;
+  } catch {
+    console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+    return true;
+  }
+
+  if (rpcErr) {
+    console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+    return true;
+  }
+
+  console.log('[meta/webhook] event_type=inbound_message created=%s', rpcData?.created === true);
+  return false;
+}
 
 /**
  * Lê o ciphertext da instância resolvida.
