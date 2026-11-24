@@ -276,7 +276,7 @@ async function handlePost(req, res) {
         continue;
       }
 
-      // ── 9. Ramo A — statuses[] outbound (MVP2 — comportamento intacto) ────
+      // ── 9. Ramo A — statuses[] outbound ───────────────────────────────────
       for (const statusItem of statuses) {
         const wamid     = statusItem.id;
         const newStatus = statusItem.status;
@@ -292,7 +292,8 @@ async function handlePost(req, res) {
 
         if (outcome === 'db_error' || outcome === 'exhausted') {
           console.error('[meta/webhook] event_type=status status_persist_failed db_error=true');
-          return res.status(500).json({ error: 'Internal error' });
+          hasTransientFailure = true;
+          continue;
         }
 
         if (outcome === 'unknown') {
