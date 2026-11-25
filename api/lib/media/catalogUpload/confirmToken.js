@@ -107,8 +107,8 @@ export function issueConfirmToken(secret, claims) {
   return token
 }
 
-function reject() {
-  return { ok: false }
+function reject(reason = 'invalid') {
+  return { ok: false, reason }
 }
 
 function claimsAreStrict(value) {
@@ -184,7 +184,7 @@ export function verifyConfirmToken(secret, token, nowSeconds) {
     return reject()
   }
   if (!claimsAreStrict(parsed)) return reject()
-  if (nowSeconds < parsed.issuedAt || nowSeconds >= parsed.expiresAt) return reject()
+  if (nowSeconds < parsed.issuedAt || nowSeconds >= parsed.expiresAt) return reject('expired')
 
   return { ok: true, claims: canonicalClaims(parsed) }
 }
