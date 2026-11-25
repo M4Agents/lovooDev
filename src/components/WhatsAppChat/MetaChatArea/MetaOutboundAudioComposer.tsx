@@ -39,6 +39,7 @@ export interface MetaOutboundAudioComposerProps {
   companyId: string
   instanceId: string | undefined
   conversationId: string
+  sessionAllowed?: boolean
   onSent: () => void
 }
 
@@ -64,6 +65,7 @@ export function MetaOutboundAudioComposer({
   companyId,
   instanceId,
   conversationId,
+  sessionAllowed = true,
   onSent,
 }: MetaOutboundAudioComposerProps) {
   const {
@@ -85,7 +87,12 @@ export function MetaOutboundAudioComposer({
   const [statusCode, setStatusCode] = useState<string | null>(null)
   const [eligible, setEligible] = useState(false)
   const mp4Mime = selectSupportedMp4MimeType()
-  const canUseMic = Boolean(mp4Mime) && Boolean(instanceId)
+  const canUseMic = Boolean(mp4Mime) && Boolean(instanceId) && sessionAllowed
+
+  useEffect(() => {
+    if (sessionAllowed || !isRecording) return
+    stopRecording()
+  }, [isRecording, sessionAllowed, stopRecording])
 
   const sendingRef = useRef(false)
   const mountedRef = useRef(true)
@@ -188,7 +195,7 @@ export function MetaOutboundAudioComposer({
   }, [audioBlobPreview])
 
   const submit = useCallback(async () => {
-    if (sendingRef.current || !instanceId) return
+    if (!sessionAllowed || sendingRef.current || !instanceId) return
     const operationId = operationIdRef.current
     const audio = frozenFileRef.current
     if (!operationId || !audio || !eligible) return
@@ -223,7 +230,7 @@ export function MetaOutboundAudioComposer({
     } finally {
       sendingRef.current = false
     }
-  }, [companyId, conversationId, eligible, instanceId, onSent, resetDraft])
+  }, [companyId, conversationId, eligible, instanceId, onSent, resetDraft, sessionAllowed])
 
   const handleMic = useCallback(async () => {
     if (!canUseMic || sendingRef.current) return
@@ -312,13 +319,14 @@ export function MetaOutboundAudioComposer({
             showSendButton={showSend}
             allowCancel={!lockCancel}
             onCancel={handleCancelPreview}
-            onSend={showSend ? () => void submit() : undefined}
+            onSend={showSend && sessionAllowed ? () => void submit() : undefined}
           />
           {showRecover && (
             <button
               type="button"
               data-testid="meta-outbound-audio-recover"
-              onClick={() => void submit()}
+              disabled={!sessionAllowed}
+              onClick={() => { if (sessionAllowed) void submit() }}
               className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Recuperar envio
@@ -332,6 +340,7 @@ export function MetaOutboundAudioComposer({
         onClick={() => void handleMic()}
         disabled={!canUseMic || !!audioBlobPreview || phase === 'sending' || phase === 'recoverable' || phase === 'blocked' || phase === 'not_enabled'}
         data-testid="meta-outbound-audio-mic"
+        data-session-allowed={sessionAllowed ? 'true' : 'false'}
         aria-label={isRecording ? 'Encerrar gravação' : 'Gravar áudio'}
         className={`flex-shrink-0 rounded-xl border px-3 py-2 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           isRecording

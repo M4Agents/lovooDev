@@ -150,11 +150,17 @@ function makeMsgSelectChain(data, error = null) {
   };
 }
 
-/** Chain para meta_whatsapp_messages UPDATE: update().eq() → Promise */
-function makeUpdateChain(error = null) {
+/**
+ * Chain para meta_whatsapp_messages UPDATE condicional:
+ * update().eq().eq().eq().eq().select('id')
+ * data vazio significa que o predicado de status não encontrou linha.
+ * Erro do cliente não é tratado como atualização.
+ */
+function makeUpdateChain(error = null, data = [{ id: FAKE_MSG_ID }]) {
   return {
     update: vi.fn().mockReturnThis(),
-    eq:     vi.fn().mockResolvedValue({ data: null, error }),
+    eq:     vi.fn().mockReturnThis(),
+    select: vi.fn().mockResolvedValue({ data: error ? null : data, error }),
   };
 }
 
@@ -271,6 +277,15 @@ function makePostReq({ headers = {} } = {}) {
 }
 
 /** Res mock com captura de status e body. */
+function expectOnlyMaintenanceRpc() {
+  const names = mockSvc.rpc.mock.calls.map((call) => call[0]);
+  expect(names.length).toBeGreaterThan(0);
+  expect(names.every((name) =>
+    name === 'list_meta_early_status_pendings'
+    || name === 'delete_expired_meta_early_status_pendings'
+  )).toBe(true);
+}
+
 function makeRes() {
   const res = {
     _status: null,
@@ -286,10 +301,146 @@ function makeRes() {
 // Setup padrão
 // =============================================================================
 
+const legacyFromQueue = [];
+const createdPendingChains = [];
+let pendingQueryResult = null;
+let markerScanRows = null;
+let notifyClearResult = null;
+
+function makeFlexiblePending(result = pendingQueryResult ?? {}) {
+  let operation = 'select';
+  const chain = {
+    insertPayload: null,
+    updatePayload: null,
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    limit: vi.fn(() => Promise.resolve(result.list ?? { data: [], error: null })),
+    insert: vi.fn((payload) => {
+      operation = 'insert';
+      chain.insertPayload = payload;
+      return chain;
+    }),
+    upsert: vi.fn((payload, options) => {
+      operation = 'upsert';
+      chain.insertPayload = payload;
+      chain.upsertOptions = options;
+      return chain;
+    }),
+    update: vi.fn((payload) => {
+      operation = 'update';
+      chain.updatePayload = payload;
+      return chain;
+    }),
+    delete: vi.fn(() => {
+      operation = 'delete';
+      return chain;
+    }),
+    then(resolve, reject) {
+      const resolved = operation === 'insert' || operation === 'upsert'
+        ? (result.upsert ?? result.insert ?? { data: [{ id: 1 }], error: null })
+        : operation === 'update'
+          ? (result.update ?? { error: null })
+          : operation === 'delete'
+            ? (result.delete ?? { data: [{ id: 1 }], error: null })
+            : (result.list ?? { data: [], error: null });
+      return Promise.resolve(resolved).then(resolve, reject);
+    },
+  };
+  createdPendingChains.push(chain);
+  return chain;
+}
+
+function makeFallbackMessages() {
+  const chain = {
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    is: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    limit: vi.fn(() => Promise.resolve(
+      markerScanRows ? { data: markerScanRows, error: null } : { data: [], error: null },
+    )),
+    maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    update: vi.fn((payload) => {
+      chain.updatePayload = payload;
+      return chain;
+    }),
+    insert: vi.fn(() => chain),
+    delete: vi.fn(() => chain),
+    then(resolve, reject) {
+      if (notifyClearResult && chain.updatePayload?.realtime_notify_pending === false) {
+        return Promise.resolve(notifyClearResult).then(resolve, reject);
+      }
+      return Promise.resolve({ data: [{ id: FAKE_MSG_ID }], error: null }).then(resolve, reject);
+    },
+  };
+  return chain;
+}
+
+function routeTrackedMessages() {
+  let bound = null;
+  const bind = (mode) => {
+    if (!bound) {
+      bound = mode === 'fallback'
+        ? makeFallbackMessages()
+        : (legacyFromQueue.shift() ?? makeFallbackMessages());
+    }
+    return bound;
+  };
+  return {
+    select: (cols) => (
+      cols === 'id, meta_message_id, status'
+        ? bind('fallback').select(cols)
+        : bind('queue').select(cols)
+    ),
+    update: (payload) => (
+      payload
+      && payload.realtime_notify_pending === false
+      && !Object.prototype.hasOwnProperty.call(payload, 'status')
+        ? bind('fallback').update(payload)
+        : bind('queue').update(payload)
+    ),
+    eq: (...args) => bind('queue').eq(...args),
+    is: (...args) => bind('queue').is(...args),
+    order: (...args) => bind('queue').order(...args),
+    in: (...args) => bind('queue').in(...args),
+    limit: (...args) => bind('queue').limit(...args),
+    maybeSingle: (...args) => bind('queue').maybeSingle(...args),
+    insert: (...args) => bind('queue').insert(...args),
+    delete: (...args) => bind('queue').delete(...args),
+    then(resolve, reject) {
+      return Promise.resolve(bind('queue')).then(resolve, reject);
+    },
+  };
+}
+
+function installSmartFrom() {
+  legacyFromQueue.length = 0;
+  createdPendingChains.length = 0;
+  pendingQueryResult = null;
+  markerScanRows = null;
+  notifyClearResult = null;
+  const from = vi.fn((table) => {
+    if (table === 'meta_early_status_pendings') return makeFlexiblePending();
+    if (table === 'meta_whatsapp_messages') return routeTrackedMessages();
+    if (legacyFromQueue.length > 0) return legacyFromQueue.shift();
+    if (table === 'meta_messages') return makeFallbackMessages();
+    throw new Error(`from(${table}) sem chain programada`);
+  });
+  from.mockReturnValueOnce = (value) => {
+    legacyFromQueue.push(value);
+    return from;
+  };
+  mockSvc.from = from;
+}
+
 beforeEach(() => {
   // resetAllMocks: limpa calls + zera implementações (incluindo fila de mockReturnValueOnce)
   // Necessário para evitar contaminação de queue entre testes MATRIX e demais
   vi.resetAllMocks();
+  installSmartFrom();
 
   // Re-configurar defaults após reset
   mockGetMetaServerConfig.mockReturnValue({ appSecret: FAKE_APP_SECRET });
@@ -539,8 +690,8 @@ describe('POST /api/whatsapp/meta/webhook — iteração', () => {
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
-    // 1 instância + 2*(select+update+touch) = 7 from calls
-    expect(mockSvc.from).toHaveBeenCalledTimes(7);
+    // 1 instância + 2 pendências + 2*(select+update+touch) + 2 limpezas + varredura
+    expect(mockSvc.from).toHaveBeenCalledTimes(12);
   });
 
   it('ITER-04: change.field !== messages → ignorado (nenhum DB access para esse change)', async () => {
@@ -703,12 +854,17 @@ describe('POST /api/whatsapp/meta/webhook — state machine', () => {
 
       const row         = { id: FAKE_MSG_ID, status: currentStatus };
       const updateChain = makeUpdateChain();
+      const exactDuplicate = !apply && currentStatus === newStatus;
+      const touch = makeChatTouchChain();
 
-      mockSvc.from
-        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
-        .mockReturnValueOnce(makeMsgSelectChain(row))
-        .mockReturnValueOnce(updateChain) // só chamado se apply=true
-        .mockReturnValueOnce(makeChatTouchChain()); // só chamado se apply=true
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.from.mockReturnValueOnce(makeMsgSelectChain(row));
+      if (apply) {
+        mockSvc.from.mockReturnValueOnce(updateChain);
+        mockSvc.from.mockReturnValueOnce(touch);
+      } else if (exactDuplicate) {
+        mockSvc.from.mockReturnValueOnce(touch);
+      }
 
       const req = makePostReq();
       const res = makeRes();
@@ -717,11 +873,24 @@ describe('POST /api/whatsapp/meta/webhook — state machine', () => {
       expect(res._status).toBe(200);
       if (apply) {
         expect(updateChain.update).toHaveBeenCalled();
-        expect(mockSvc.from).toHaveBeenCalledTimes(4);
-        expect(mockSvc.from.mock.calls[3][0]).toBe('meta_messages');
+        expect(touch.update).toHaveBeenCalledTimes(1);
+        expect(mockSvc.from).toHaveBeenCalledTimes(7);
+        expect(mockSvc.from.mock.calls[4][0]).toBe('meta_messages');
+      } else if (exactDuplicate) {
+        expect(updateChain.update).not.toHaveBeenCalled();
+        expect(touch.update).toHaveBeenCalledTimes(1);
+        expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+          'meta_whatsapp_instances',
+          'meta_early_status_pendings',
+          'meta_whatsapp_messages',
+          'meta_messages',
+          'meta_whatsapp_messages',
+          'meta_whatsapp_messages',
+        ]);
       } else {
         expect(updateChain.update).not.toHaveBeenCalled();
-        expect(mockSvc.from).toHaveBeenCalledTimes(2);
+        expect(touch.update).not.toHaveBeenCalled();
+        expect(mockSvc.from).toHaveBeenCalledTimes(4);
       }
     }
   );
@@ -732,7 +901,7 @@ describe('POST /api/whatsapp/meta/webhook — state machine', () => {
 // =============================================================================
 
 describe('POST /api/whatsapp/meta/webhook — unknown wamid', () => {
-  it('WAMID-01: instance conhecida + wamid desconhecido → 200, sem INSERT, sem UPDATE', async () => {
+  it('WAMID-01: wamid desconhecido persiste a pendência, sem update de tracking e sem toque', async () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -747,8 +916,20 @@ describe('POST /api/whatsapp/meta/webhook — unknown wamid', () => {
       await handler(req, res);
 
       expect(res._status).toBe(200);
-      // Apenas 2 DB calls (instance + select), sem update
-      expect(mockSvc.from).toHaveBeenCalledTimes(2);
+      expect(mockSvc.from).toHaveBeenCalledTimes(6);
+      expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+      const inserted = createdPendingChains.filter((chain) => chain.upsert.mock.calls.length > 0);
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0].insertPayload).toEqual({
+        company_id:         FAKE_COMPANY_ID,
+        instance_id:        FAKE_INSTANCE_ID,
+        meta_message_id:    FAKE_WAMID,
+        status:             'sent',
+        provider_timestamp: new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString(),
+        error_code:         null,
+      });
+      expect(inserted[0].insertPayload).not.toHaveProperty('received_at');
+      expect(inserted[0].insertPayload).not.toHaveProperty('last_claim_failed_at');
       // Resposta não expõe wamid nem phone_number_id
       expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
       expect(JSON.stringify(res._body)).not.toContain(FAKE_PHONE_NUM_ID);
@@ -763,7 +944,7 @@ describe('POST /api/whatsapp/meta/webhook — unknown wamid', () => {
     }
   });
 
-  it('WAMID-01b: wamid desconhecido com failed loga status sem persistir', async () => {
+  it('WAMID-01b: failed desconhecido persiste a pendência sem error_code artificial', async () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'failed', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -777,7 +958,11 @@ describe('POST /api/whatsapp/meta/webhook — unknown wamid', () => {
       await handler(req, res);
 
       expect(res._status).toBe(200);
-      expect(mockSvc.from).toHaveBeenCalledTimes(2);
+      expect(mockSvc.from).toHaveBeenCalledTimes(6);
+      const inserted = createdPendingChains.filter((chain) => chain.upsert.mock.calls.length > 0);
+      expect(inserted).toHaveLength(1);
+      expect(inserted[0].insertPayload.status).toBe('failed');
+      expect(inserted[0].insertPayload.error_code).toBeNull();
       expect(log).toHaveBeenCalledWith(
         '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
         'failed',
@@ -957,16 +1142,17 @@ describe('POST /api/whatsapp/meta/webhook — batch e idempotência', () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
     const updateChain = makeUpdateChain();
+    const touch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' })) // já em sent
-      .mockReturnValueOnce(updateChain);
+      .mockReturnValueOnce(touch);
     const req = makePostReq();
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
-    // NOOP → update não chamado
     expect(updateChain.update).not.toHaveBeenCalled();
+    expect(touch.update).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1154,7 +1340,7 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
   });
 
   // ---------------------------------------------------------------------------
@@ -1303,10 +1489,13 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    // RPC de inbound NÃO deve ser chamada
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
-    // Update MVP2 + touch do chat (B1.2)
-    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    // Não chama a RPC de inbound. A recuperação usa as duas funções novas.
+    expect(mockSvc.rpc.mock.calls.map((call) => call[0])).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
+    // Update MVP2 + leitura de pendência + toque + limpeza + varredura
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
     // STATUS: credential lookup NÃO deve ocorrer — decrypt é lazy (somente DOCUMENT)
     const fromTableNames = mockSvc.from.mock.calls.map(([t]) => t);
     expect(fromTableNames).not.toContain('meta_whatsapp_credentials');
@@ -1325,7 +1514,7 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
   });
 
   // ---------------------------------------------------------------------------
@@ -1350,10 +1539,11 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    // Ramo A: tracking update + chat touch
-    expect(mockSvc.from).toHaveBeenCalledTimes(4); // instance + select + update + touch
-    // Ramo B: RPC chamada
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    // Ramo A: instância, pendência, tracking, toque, limpeza e varredura
+    expect(mockSvc.from).toHaveBeenCalledTimes(7);
+    // Ramo B permanece a primeira RPC. As duas seguintes são a recuperação.
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
   });
 
   // ---------------------------------------------------------------------------
@@ -1379,7 +1569,7 @@ describe('POST /api/whatsapp/meta/webhook — inbound messages (MVP3A)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(4);
     // Primeira mensagem usa contato correto por wa_id
     expect(mockSvc.rpc.mock.calls[0][1].p_contact_name).toBe('Usuario Um');
     expect(mockSvc.rpc.mock.calls[1][1].p_contact_name).toBe('Usuario Dois');
@@ -1536,7 +1726,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);             // token plain
 
     // RPC chamado com message_type='document' e asset correto
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const rpcArgs = mockSvc.rpc.mock.calls[0];
     expect(rpcArgs[0]).toBe('process_meta_inbound_media_message');
     expect(rpcArgs[1]).toMatchObject({
@@ -1589,7 +1779,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(res._status).toBe(200);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   // W-DOC-04 — Arquivo grande demais (definitivo) ——————————————————————————————
@@ -1610,7 +1800,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);                                  // definitivo → skip
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   // W-DOC-05 — Tipo MIME incompatível (definitivo) ———————————————————————————
@@ -1631,7 +1821,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   // W-DOC-06 — Falha de metadata Graph (transiente) ——————————————————————————
@@ -1675,9 +1865,9 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
   });
 
   // W-DOC-08 / CRED-02 — Credential row ausente em meta_whatsapp_credentials ——
-  // A instância existe mas não possui credencial (row null no lookup).
-  // Resultado: skip 200, zero download/RPC, nenhum segredo em resposta.
-  it('W-DOC-08 | credential row ausente → skip 200; zero download/RPC; nenhum segredo em res', async () => {
+  // A consulta não prova que a ausência é permanente. HTTP 500 pede retry
+  // e não inicia download. Nenhum segredo entra na resposta.
+  it('W-DOC-08 | credential row ausente → HTTP 500; zero download/RPC; nenhum segredo em res', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1692,10 +1882,10 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    expect(res._status).toBe(200);                                  // skip, não retry storm
+    expect(res._status).toBe(500);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
 
     // Resposta não deve conter nenhum token ou ciphertext
     const body = JSON.stringify(res._body ?? {});
@@ -1768,7 +1958,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
   });
 
@@ -1797,7 +1987,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(4);
     expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
     expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
   });
@@ -1830,7 +2020,7 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     await handler(req, res);
 
     // 2º documento ainda foi processado (batch safety)
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();                     // apenas doc2
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);                     // apenas doc2, mais a manutenção
     expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
 
     // hasTransientFailure=true → 500 para retry do payload inteiro
@@ -1883,8 +2073,8 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     expect(selectArg).not.toContain('access_token_enc');
   });
 
-  // CRED-03 — Credential lookup DB error → HTTP 200 skip (não retry storm) ——————
-  it('CRED-03 | credential lookup DB error → HTTP 200; zero decrypt/download/RPC', async () => {
+  // CRED-03 — Erro de consulta da credencial é falha recuperável ————————————
+  it('CRED-03 | credential lookup DB error → HTTP 500; zero decrypt/download/RPC', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1897,19 +2087,18 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    // credErr → skip 200 (não retry storm — retry não resolve erro de configuração)
-    expect(res._status).toBe(200);
+    expect(res._status).toBe(500);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
     // Nenhum detalhe do erro de DB na resposta
     const body = JSON.stringify(res._body ?? {});
     expect(body).not.toContain('connection');
     expect(body).not.toContain('timeout');
   });
 
-  // CRED-04 — decryptMetaToken lança → HTTP 200 skip; segredo não vaza ————————
-  it('CRED-04 | decryptMetaToken lança → HTTP 200; zero download/RPC; nenhum segredo em res', async () => {
+  // CRED-04 — decrypt sem classificação permanente pede retry e não vaza segredo
+  it('CRED-04 | decryptMetaToken lança → HTTP 500; zero download/RPC; nenhum segredo em res', async () => {
     const payload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
 
@@ -1926,10 +2115,9 @@ describe('POST — inbound DOCUMENT (INBOUND-DOC-C2)', () => {
     const res = makeRes();
     await handler(req, res);
 
-    // decrypt failure → skip 200 (não retry storm)
-    expect(res._status).toBe(200);
+    expect(res._status).toBe(500);
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
     // Mensagem de erro interno NÃO deve vazar na resposta
     const body = JSON.stringify(res._body ?? {});
     expect(body).not.toContain('decryption');
@@ -2017,7 +2205,7 @@ describe('POST — inbound IMAGE', () => {
     expect(processorArgs.hintFilename).toBeUndefined();
     expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
 
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs).toMatchObject({
@@ -2068,7 +2256,7 @@ describe('POST — inbound IMAGE', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(4);
     expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
     expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
     expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('image');
@@ -2142,7 +2330,7 @@ describe('POST — inbound VIDEO', () => {
     expect(processorArgs.hintFilename).toBeUndefined();
     expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
 
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs).toMatchObject({
@@ -2193,7 +2381,7 @@ describe('POST — inbound VIDEO', () => {
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(4);
     expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
     expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
     expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('video');
@@ -2222,7 +2410,8 @@ describe('POST — inbound VIDEO', () => {
 
     expect(imgRes._status).toBe(200);
     expect(mockDownloadAndStoreInboundMedia.mock.calls[1][0].expectedMediaType).toBe('IMAGE');
-    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('image');
+    const imageCall = mockSvc.rpc.mock.calls.find((call) => call[1]?.p_message_type === 'image');
+    expect(imageCall[1].p_message_type).toBe('image');
   });
 });
 
@@ -2278,7 +2467,7 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     expect(processorArgs.token).toBe(FAKE_PLAIN_TOKEN);
     expect(processorArgs).not.toHaveProperty('voice');
 
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs).toMatchObject({
@@ -2305,13 +2494,14 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     setupDocumentDb();
     await handler(makePostReq(), makeRes());
 
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
-    expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('audio');
-    expect(mockSvc.rpc.mock.calls[1][1].p_message_type).toBe('audio');
-    expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_voice');
-    expect(mockSvc.rpc.mock.calls[1][1]).not.toHaveProperty('p_voice');
-    expect(JSON.stringify(mockSvc.rpc.mock.calls[0][1])).not.toContain('"voice"');
-    expect(JSON.stringify(mockSvc.rpc.mock.calls[1][1])).not.toContain('"voice"');
+    const audioCalls = mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_media_message');
+    expect(audioCalls).toHaveLength(2);
+    expect(audioCalls[0][1].p_message_type).toBe('audio');
+    expect(audioCalls[1][1].p_message_type).toBe('audio');
+    expect(audioCalls[0][1]).not.toHaveProperty('p_voice');
+    expect(audioCalls[1][1]).not.toHaveProperty('p_voice');
+    expect(JSON.stringify(audioCalls[0][1])).not.toContain('"voice"');
+    expect(JSON.stringify(audioCalls[1][1])).not.toContain('"voice"');
   });
 
   it.each([
@@ -2352,7 +2542,7 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   it('W-AUD-G: inbound_media_too_large → 200; zero RPC', async () => {
@@ -2370,7 +2560,7 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   it('W-AUD-H: falha transitória de download → HTTP 500', async () => {
@@ -2388,7 +2578,7 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(500);
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   it('W-AUD-J: wamid já persistido → 200; zero decrypt/download/RPC', async () => {
@@ -2404,7 +2594,7 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     expect(res._status).toBe(200);
     expect(mockDecryptMetaToken).not.toHaveBeenCalled();
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
   });
 
   it('W-AUD-K: HMAC inválido → 401; zero DB; zero RPC', async () => {
@@ -2473,7 +2663,8 @@ describe('POST — inbound AUDIO (MVP5.B3.2.B)', () => {
     const btnRes = makeRes();
     await handler(makePostReq(), btnRes);
     expect(btnRes._status).toBe(200);
-    expect(mockSvc.rpc.mock.calls[1][1].p_body).toBe(FAKE_BUTTON_TEXT);
+    const buttonCall = mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_message')[1];
+    expect(buttonCall[1].p_body).toBe(FAKE_BUTTON_TEXT);
 
     const docPayload = makeDocumentPayload();
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(docPayload)));
@@ -2582,7 +2773,7 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
 
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ received: true });
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc).toHaveBeenCalledWith(
       'process_meta_inbound_message',
       expectedTextRpcArgs(),
@@ -2607,8 +2798,9 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(noPayload)));
     setupInboundDb();
     await handler(makePostReq(), makeRes());
-    expect(mockSvc.rpc.mock.calls[1][1].p_body).toBe('Confirmar');
-    expect(JSON.stringify(mockSvc.rpc.mock.calls[1][1])).not.toContain('payload');
+    const secondButton = mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_message')[1];
+    expect(secondButton[1].p_body).toBe('Confirmar');
+    expect(JSON.stringify(secondButton[1])).not.toContain('payload');
   });
 
   it('BTN-03: payload não aparece em logs nem na resposta HTTP', async () => {
@@ -2730,7 +2922,7 @@ describe('POST — inbound BUTTON / QUICK_REPLY (MVP4C.12)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(2);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(4);
     expect(mockSvc.rpc.mock.calls[0]).toEqual([
       'process_meta_inbound_message',
       expectedTextRpcArgs({ body: FAKE_BUTTON_TEXT, wamid: 'wamid.INBOUND_FAKE_BTN_MIX' }),
@@ -2821,7 +3013,7 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
 
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ received: true });
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc).toHaveBeenCalledWith(
       'process_meta_inbound_message',
       expectedTextRpcArgs({ body: FAKE_INTERACTIVE_BUTTON_TITLE }),
@@ -2844,7 +3036,7 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc).toHaveBeenCalledWith(
       'process_meta_inbound_message',
       expectedTextRpcArgs({ body: FAKE_INTERACTIVE_LIST_TITLE }),
@@ -2864,7 +3056,7 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
     await handler(makePostReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe('Confirmar pedido');
   });
 
@@ -2931,7 +3123,7 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
     await handler(makePostReq(), exactRes);
 
     expect(exactRes._status).toBe(200);
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe(exact);
     expect(mockSvc.rpc.mock.calls[0][1].p_body).toHaveLength(MAX_INBOUND_TEXT_BODY_LENGTH);
   });
@@ -3014,7 +3206,7 @@ describe('POST — inbound INTERACTIVE (MVP5.B3.1)', () => {
 
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ received: true });
-    expect(mockSvc.rpc).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe(FAKE_INBOUND_WAMID);
   });
 
@@ -3191,25 +3383,35 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(touch.update).toHaveBeenCalledTimes(1);
     expect(touch.update.mock.calls[0][0]).toEqual({ updated_at: expect.any(String) });
     expect(Object.keys(touch.update.mock.calls[0][0])).toEqual(['updated_at']);
-    expect(mockSvc.from.mock.calls[3][0]).toBe('meta_messages');
+    expect(mockSvc.from.mock.calls[4][0]).toBe('meta_messages');
   });
 
-  it('RT-WH-02: duplicata (sent→sent) → sem touch', async () => {
+  it('RT-WH-02: duplicata exata (sent→sent) toca sem alterar o tracking', async () => {
     const payload = makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] });
     mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
-    const tracking = makeUpdateChain();
-    const touch    = makeChatTouchChain();
+    const touch = makeChatTouchChain();
     mockSvc.from
       .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
       .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' }))
-      .mockReturnValueOnce(tracking)
       .mockReturnValueOnce(touch);
     const res = makeRes();
     await handler(makePostReq(), res);
     expect(res._status).toBe(200);
-    expect(tracking.update).not.toHaveBeenCalled();
-    expect(touch.update).not.toHaveBeenCalled();
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(res._body).toEqual({ received: true });
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(touch.update.mock.calls[0][0]).toEqual({ updated_at: expect.any(String) });
+    expect(touch.eq).toHaveBeenNthCalledWith(1, 'company_id', FAKE_COMPANY_ID);
+    expect(touch.eq).toHaveBeenNthCalledWith(2, 'instance_id', FAKE_INSTANCE_ID);
+    expect(touch.eq).toHaveBeenNthCalledWith(3, 'meta_message_id', FAKE_WAMID);
+    expect(touch.eq).toHaveBeenNthCalledWith(4, 'direction', 'outbound');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_messages',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
   });
 
   it('RT-WH-03: fora de ordem (delivered→sent) → sem regressão e sem touch', async () => {
@@ -3224,7 +3426,7 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     await handler(makePostReq(), res);
     expect(res._status).toBe(200);
     expect(tracking.update).not.toHaveBeenCalled();
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
   });
 
   it('RT-WH-04: wamid desconhecido → sem touch', async () => {
@@ -3236,8 +3438,9 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     const res = makeRes();
     await handler(makePostReq(), res);
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(2);
+    expect(mockSvc.from).toHaveBeenCalledTimes(6);
     expect(mockSvc.from.mock.calls.map((c) => c[0])).not.toContain('meta_messages');
+    expect(createdPendingChains.some((chain) => chain.upsert.mock.calls.length > 0)).toBe(true);
   });
 
   it('RT-WH-05: mensagem ainda ausente no chat → zero linhas, sem INSERT', async () => {
@@ -3260,13 +3463,13 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(touch.eq).toHaveBeenNthCalledWith(4, 'direction', 'outbound');
   });
 
-  it('RT-WH-07: falha no UPDATE de meta_messages → 200, tracking preservado, log sanitizado', async () => {
+  it('RT-WH-07: falha no UPDATE de meta_messages → 500, tracking preservado, log sanitizado', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { res, tracking, touch } = await runApplied({
       touchErr: { message: 'query timeout' },
     });
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ received: true });
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
     expect(tracking.update).toHaveBeenCalled();
     expect(touch.update).toHaveBeenCalled();
     expect(JSON.stringify(res._body)).not.toContain('query timeout');
@@ -3294,5 +3497,2099 @@ describe('POST /api/whatsapp/meta/webhook — chat touch (MVP5.B1.2)', () => {
     expect(res._body).toEqual({ received: true });
     expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
     expect(JSON.stringify(res._body)).not.toContain('updated_at');
+  });
+});
+
+// =============================================================================
+// Compare-and-swap do status outbound
+// Simulação determinística com mocks. Não exercita duas transações
+// PostgreSQL concorrentes.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — status compare-and-swap', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+
+  function trackingRow(status, extra = {}) {
+    return {
+      id:          FAKE_MSG_ID,
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status,
+      ...extra,
+    };
+  }
+
+  function postStatus(status, extra = {}) {
+    const payload = makePayload({
+      statuses: [{
+        id: FAKE_WAMID,
+        status,
+        timestamp: FAKE_TIMESTAMP,
+        ...extra,
+      }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    return makePostReq();
+  }
+
+  function casFilters(chain) {
+    return Object.fromEntries(chain.eq.mock.calls);
+  }
+
+  function expectScopedRead(selectChain) {
+    expect(selectChain.select).toHaveBeenCalledWith('id, company_id, instance_id, status');
+    expect(casFilters(selectChain)).toEqual({
+      company_id:      FAKE_COMPANY_ID,
+      instance_id:     FAKE_INSTANCE_ID,
+      meta_message_id: FAKE_WAMID,
+    });
+  }
+
+  function expectCas(chain, previousStatus, payloadFields) {
+    expect(chain.select).toHaveBeenCalledWith('id');
+    expect(casFilters(chain)).toEqual({
+      id:          FAKE_MSG_ID,
+      company_id:  FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status:      previousStatus,
+    });
+    const payload = chain.update.mock.calls[0][0];
+    expect(Object.keys(payload).sort()).toEqual(payloadFields.sort());
+    expect(payload.status).toBe(payloadFields.includes('status') ? payload.status : undefined);
+    return payload;
+  }
+
+  it('A/B: sent→delivered e delivered→read gravam só o timestamp da transição', async () => {
+    const deliveredSelect = makeMsgSelectChain(trackingRow('sent'));
+    const deliveredUpdate = makeUpdateChain();
+    const deliveredTouch  = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(deliveredSelect)
+      .mockReturnValueOnce(deliveredUpdate)
+      .mockReturnValueOnce(deliveredTouch);
+
+    const deliveredRes = makeRes();
+    await handler(postStatus('delivered'), deliveredRes);
+
+    expect(deliveredRes._status).toBe(200);
+    expectScopedRead(deliveredSelect);
+    const deliveredPayload = expectCas(
+      deliveredUpdate,
+      'sent',
+      ['status', 'delivered_at', 'updated_at', 'realtime_notify_pending'],
+    );
+    expect(deliveredPayload.status).toBe('delivered');
+    expect(deliveredPayload.delivered_at).toBe(new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString());
+    expect(deliveredPayload).not.toHaveProperty('read_at');
+    expect(deliveredPayload).not.toHaveProperty('error_code');
+    expect(deliveredTouch.update).toHaveBeenCalledTimes(1);
+
+    vi.resetAllMocks();
+    installSmartFrom();
+    mockGetMetaServerConfig.mockReturnValue({ appSecret: FAKE_APP_SECRET });
+    mockGetMetaWebhookConfig.mockReturnValue({ verifyToken: FAKE_VERIFY_TOKEN });
+    mockVerifyMetaWebhookSignature.mockReturnValue(true);
+    mockReadRawBody.mockResolvedValue(FAKE_RAW_BODY);
+    mockSvc.rpc.mockResolvedValue(makeRpcResult());
+
+    const readSelect = makeMsgSelectChain(trackingRow('delivered'));
+    const readUpdate = makeUpdateChain();
+    const readTouch  = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(readSelect)
+      .mockReturnValueOnce(readUpdate)
+      .mockReturnValueOnce(readTouch);
+
+    const readRes = makeRes();
+    await handler(postStatus('read'), readRes);
+
+    expect(readRes._status).toBe(200);
+    const readPayload = expectCas(readUpdate, 'delivered', ['status', 'read_at', 'updated_at', 'realtime_notify_pending']);
+    expect(readPayload.status).toBe('read');
+    expect(readPayload).not.toHaveProperty('delivered_at');
+    expect(readTouch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('C/D: read não aceita delivered atrasado e sent duplicado não grava', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+    const lateRes = makeRes();
+    await handler(postStatus('delivered'), lateRes);
+    expect(lateRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+
+    const dupTouch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(dupTouch);
+    const dupRes = makeRes();
+    await handler(postStatus('sent'), dupRes);
+    expect(dupRes._status).toBe(200);
+    expect(dupTouch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.slice(4).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_messages',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('E–H: duas leituras de sent; read vence e delivered atrasado vira NOOP', async () => {
+    const firstRead  = makeMsgSelectChain(trackingRow('sent'));
+    const lostUpdate = makeUpdateChain(null, []);
+    const reread     = makeMsgSelectChain(trackingRow('read'));
+    const touch      = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(firstRead)
+      .mockReturnValueOnce(lostUpdate)
+      .mockReturnValueOnce(reread)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(200);
+    expect(lostUpdate.update).toHaveBeenCalledTimes(1);
+    expectCas(lostUpdate, 'sent', ['status', 'delivered_at', 'updated_at', 'realtime_notify_pending']);
+    expect(reread.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(reread.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(touch.update).not.toHaveBeenCalled();
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('I: releitura ainda permite a transição e a segunda tentativa grava uma vez', async () => {
+    const firstUpdate = makeUpdateChain(null, []);
+    const secondUpdate = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(firstUpdate)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(secondUpdate)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(postStatus('read'), res);
+
+    expect(res._status).toBe(200);
+    expectCas(firstUpdate, 'sent', ['status', 'read_at', 'updated_at', 'realtime_notify_pending']);
+    expectCas(secondUpdate, 'sent', ['status', 'read_at', 'updated_at', 'realtime_notify_pending']);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(firstUpdate.select).toHaveBeenCalledTimes(1);
+    expect(secondUpdate.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('J: três CAS sem linha e a transição ainda válida → 500, sem touch', async () => {
+    const updates = [makeUpdateChain(null, []), makeUpdateChain(null, []), makeUpdateChain(null, [])];
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[0])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[1])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(updates[2])
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')));
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'Internal error' });
+    expect(updates.every((chain) => chain.update.mock.calls.length === 1)).toBe(true);
+    expect(updates.map((chain) => casFilters(chain).status)).toEqual(['sent', 'sent', 'sent']);
+    expect(mockSvc.from).toHaveBeenCalledTimes(10);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('K: erro de banco no UPDATE → 500 sem releitura e sem touch', async () => {
+    const update = makeUpdateChain({ message: 'update timeout' });
+    const reread = makeMsgSelectChain(trackingRow('sent'));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('accepted')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(reread);
+
+    const res = makeRes();
+    await handler(postStatus('sent'), res);
+
+    expect(res._status).toBe(500);
+    expect(update.update).toHaveBeenCalledTimes(1);
+    expect(reread.maybeSingle).not.toHaveBeenCalled();
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
+  });
+
+  it('L: erro de banco na releitura → 500 sem touch', async () => {
+    const update = makeUpdateChain(null, []);
+    const reread = makeMsgSelectChain(null, { message: 'select timeout' });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(reread);
+
+    const res = makeRes();
+    await handler(postStatus('delivered'), res);
+
+    expect(res._status).toBe(500);
+    expect(update.select).toHaveBeenCalledWith('id');
+    expect(reread.maybeSingle).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('M: CAS rejeitado não aplica timestamp nem erro do evento perdedor', async () => {
+    const update = makeUpdateChain(null, []);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+
+    const res = makeRes();
+    await handler(postStatus('failed', { errors: [{ code: 131047, title: 'SHOULD_NOT_PERSIST' }] }), res);
+
+    expect(res._status).toBe(200);
+    const payload = expectCas(update, 'sent', ['status', 'failed_at', 'error_code', 'error_subcode', 'updated_at', 'realtime_notify_pending']);
+    expect(payload.status).toBe('failed');
+    expect(payload.error_code).toBe(131047);
+    expect(JSON.stringify(payload)).not.toContain('SHOULD_NOT_PERSIST');
+    expect(payload).not.toHaveProperty('read_at');
+    expect(payload).not.toHaveProperty('sent_at');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('N: failed permanece terminal e delivered não regride para failed', async () => {
+    const fromSent = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(fromSent)
+      .mockReturnValueOnce(touch);
+    const applied = makeRes();
+    await handler(postStatus('failed', { errors: [{ code: 131026 }] }), applied);
+    expect(applied._status).toBe(200);
+    const payload = expectCas(fromSent, 'sent', ['status', 'failed_at', 'error_code', 'error_subcode', 'updated_at', 'realtime_notify_pending']);
+    expect(payload.error_code).toBe(131026);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+
+    const callsAfterApplied = mockSvc.from.mock.calls.length;
+    const failedTouch = makeChatTouchChain();
+    for (const current of ['delivered', 'read', 'failed']) {
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(trackingRow(current)));
+      if (current === 'failed') mockSvc.from.mockReturnValueOnce(failedTouch);
+      const res = makeRes();
+      await handler(postStatus('failed', { errors: [{ code: 1 }] }), res);
+      expect(res._status).toBe(200);
+    }
+    expect(mockSvc.from).toHaveBeenCalledTimes(callsAfterApplied + 14);
+    const tail = mockSvc.from.mock.calls.slice(callsAfterApplied).map((call) => call[0]);
+    expect(tail.slice(0, 8)).not.toContain('meta_messages');
+    expect(tail.slice(8)).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_messages',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+    expect(failedTouch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('O: leitura e CAS ficam na empresa e instância resolvidas', async () => {
+    const selectChain = makeMsgSelectChain(trackingRow('sent'));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+    const ok = makeRes();
+    await handler(postStatus('delivered'), ok);
+    expect(ok._status).toBe(200);
+    expectScopedRead(selectChain);
+    expectCas(update, 'sent', ['status', 'delivered_at', 'updated_at', 'realtime_notify_pending']);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent', { company_id: OTHER_COMPANY_ID })));
+    const companyRes = makeRes();
+    await handler(postStatus('delivered'), companyRes);
+    expect(companyRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(11);
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent', { instance_id: OTHER_INSTANCE_ID })));
+    const instanceRes = makeRes();
+    await handler(postStatus('read'), instanceRes);
+    expect(instanceRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(15);
+    expect(mockSvc.from.mock.calls.slice(-4).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('P: tentativa rejeitada e status nulo não tocam o chat', async () => {
+    const rejected = makeUpdateChain(null, []);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('sent')))
+      .mockReturnValueOnce(rejected)
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow('read')));
+    const rejectedRes = makeRes();
+    await handler(postStatus('delivered'), rejectedRes);
+    expect(rejectedRes._status).toBe(200);
+    expect(rejected.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(trackingRow(null)));
+    const nullRes = makeRes();
+    await handler(postStatus('delivered'), nullRes);
+    expect(nullRes._status).toBe(200);
+    expect(mockSvc.from).toHaveBeenCalledTimes(10);
+    expect(mockSvc.from.mock.calls.slice(-4).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('Q: wamid desconhecido continua 200, persiste pendência e não atualiza tracking', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null));
+    const res = makeRes();
+    await handler(postStatus('read'), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(mockSvc.from).toHaveBeenCalledTimes(6);
+    expect(createdPendingChains.some((chain) => chain.upsert.mock.calls.length > 0)).toBe(true);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+    expect(JSON.stringify(res._body)).not.toContain(FAKE_WAMID);
+  });
+});
+
+// =============================================================================
+// Credencial de mídia inbound — falha recuperável
+// Mocks. Não acessa banco, Meta nem storage.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — credencial de mídia', () => {
+  function postDocument() {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    return makePostReq();
+  }
+
+  function queueCredential(data, error = null) {
+    const credential = makeCredentialChain(data, error);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(credential);
+    return credential;
+  }
+
+  it('A: credencial válida mantém download e RPC', async () => {
+    const credential = queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const res = makeRes();
+    await handler(postDocument(), res);
+
+    expect(res._status).toBe(200);
+    expect(credential.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(credential.select).toHaveBeenCalledWith('access_token_enc');
+    expect(mockDecryptMetaToken).toHaveBeenCalledWith(FAKE_ACCESS_TOKEN_ENC);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].companyId).toBe(FAKE_COMPANY_ID);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+  });
+
+  it('B/C: erro de banco e timeout pedem retry sem download', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(null, { message: 'connection reset' });
+      const dbRes = makeRes();
+      await handler(postDocument(), dbRes);
+      expect(dbRes._status).toBe(500);
+      expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+
+      queueCredential(null, { code: '57014', message: 'statement timeout' });
+      const timeoutRes = makeRes();
+      await handler(postDocument(), timeoutRes);
+      expect(timeoutRes._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_lookup_failed',
+      );
+      expect(JSON.stringify(errSpy.mock.calls)).not.toContain('statement timeout');
+      expect(JSON.stringify(errSpy.mock.calls)).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('D/E: credencial ausente e token vazio pedem retry sem descarte silencioso', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(null);
+      const missing = makeRes();
+      await handler(postDocument(), missing);
+      expect(missing._status).toBe(500);
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_missing',
+      );
+
+      for (const accessTokenEnc of ['', '   ', null]) {
+        queueCredential({ access_token_enc: accessTokenEnc });
+        const absent = makeRes();
+        await handler(postDocument(), absent);
+        expect(absent._status).toBe(500);
+      }
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_token_absent',
+      );
+      expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expectOnlyMaintenanceRpc();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('F/G/P: descriptografia e erro inesperado não confirmam sucesso nem vazam segredo', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      queueCredential(FAKE_CREDENTIAL);
+      mockDecryptMetaToken.mockImplementationOnce(() => {
+        throw new Error(FAKE_PLAIN_TOKEN);
+      });
+      const decryptRes = makeRes();
+      await handler(postDocument(), decryptRes);
+      expect(decryptRes._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalledWith(
+        '[meta/webhook] event_type=%s outcome=%s',
+        'inbound_document',
+        'credential_decrypt_failed',
+      );
+
+      const throwing = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockRejectedValue(new Error(FAKE_ACCESS_TOKEN_ENC)),
+      };
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeDedupeChain(null))
+        .mockReturnValueOnce(throwing);
+      const unexpected = makeRes();
+      await handler(postDocument(), unexpected);
+      expect(unexpected._status).toBe(500);
+      expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(logged).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+      expect(JSON.stringify(decryptRes._body)).not.toContain(FAKE_PLAIN_TOKEN);
+      expect(JSON.stringify(unexpected._body)).not.toContain(FAKE_ACCESS_TOKEN_ENC);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['document', () => makeDocumentPayload(), 'inbound_document'],
+    ['image', () => makeImagePayload(), 'inbound_image'],
+    ['video', () => makeVideoPayload(), 'inbound_video'],
+    ['audio', () => makeAudioPayload(), 'inbound_audio'],
+  ])('H: %s com falha de credencial não baixa nem envia', async (_type, buildPayload, logEvent) => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(buildPayload())));
+    queueCredential(null, { message: 'unavailable' });
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expectOnlyMaintenanceRpc();
+    expect(logEvent.startsWith('inbound_')).toBe(true);
+  });
+
+  it('I: falha de credencial não impede a mídia seguinte do lote', async () => {
+    const first = makeDocumentMessage({ id: 'wamid_cred_fail', documentId: FAKE_MEDIA_ID });
+    const second = makeDocumentMessage({ id: 'wamid_cred_ok', documentId: '999888777666' });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(
+      makeDocumentPayload({ messages: [first, second] }),
+    )));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null, { message: 'unavailable' }))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].wamid).toBe('wamid_cred_ok');
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid_cred_ok');
+  });
+
+  it('J: retry após a credencial voltar persiste a mídia uma vez', async () => {
+    queueCredential(null, { message: 'unavailable' });
+    const first = makeRes();
+    await handler(postDocument(), first);
+    expect(first._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+
+    queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const second = makeRes();
+    await handler(postDocument(), second);
+    expect(second._status).toBe(200);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_media_message')).toHaveLength(1);
+  });
+
+  it('K/L: mídia já persistida resolve o lead e não consulta credencial nem baixa de novo', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain({ id: FAKE_MSG_ID, conversation_id: FAKE_CONV_ID }));
+    mockSvc.rpc.mockResolvedValueOnce({ data: 'linked_existing', error: null });
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_messages',
+      'meta_whatsapp_messages',
+    ]);
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledWith('resolve_meta_conversation_lead', expect.objectContaining({
+      p_company_id: FAKE_COMPANY_ID,
+      p_instance_id: FAKE_INSTANCE_ID,
+      p_conversation_id: FAKE_CONV_ID,
+    }));
+  });
+
+  it('M/N: credencial fica na instância resolvida e HMAC inválido não processa', async () => {
+    const credential = queueCredential(FAKE_CREDENTIAL);
+    mockSvc.rpc.mockResolvedValueOnce({ data: { created: true }, error: null });
+    const ok = makeRes();
+    await handler(postDocument(), ok);
+    expect(credential.eq.mock.calls).toEqual([['instance_id', FAKE_INSTANCE_ID]]);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].companyId).toBe(FAKE_COMPANY_ID);
+    expect(mockDownloadAndStoreInboundMedia.mock.calls[0][0].token).toBe(FAKE_PLAIN_TOKEN);
+
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const denied = makeRes();
+    await handler(postDocument(), denied);
+    expect(denied._status).toBe(401);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+  });
+
+  it('O: compare-and-swap de status continua exigindo o status lido', async () => {
+    const payload = makePayload({
+      statuses: [{ id: FAKE_WAMID, status: 'delivered', timestamp: FAKE_TIMESTAMP }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({
+        id: FAKE_MSG_ID,
+        company_id: FAKE_COMPANY_ID,
+        instance_id: FAKE_INSTANCE_ID,
+        status: 'sent',
+      }))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(makePostReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(Object.fromEntries(update.eq.mock.calls)).toEqual({
+      id: FAKE_MSG_ID,
+      company_id: FAKE_COMPANY_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      status: 'sent',
+    });
+    expect(update.update.mock.calls[0][0].status).toBe('delivered');
+  });
+});
+
+// =============================================================================
+// Lote inbound — falha de texto não interrompe os eventos seguintes.
+// Mocks. A unicidade real do PostgreSQL não é exercitada aqui.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — continuidade do lote inbound', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+  const OTHER_PHONE_ID    = '199988877766';
+  const OLD_TIMESTAMP     = '1739320000';
+
+  function rpcOk(created = true) {
+    return { data: { created, conversation_id: FAKE_CONV_ID, message_id: FAKE_MSG_ID }, error: null };
+  }
+
+  function rpcFail(error = { code: 'XX000' }) {
+    return { data: null, error };
+  }
+
+  function valueWith(messages, phoneId = FAKE_PHONE_NUM_ID) {
+    return {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      messages,
+    };
+  }
+
+  function postEntries(entries) {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: entries,
+    })));
+    return makePostReq();
+  }
+
+  function text(id, timestamp = FAKE_TIMESTAMP, body = FAKE_BODY) {
+    return makeInboundMessage({ id, timestamp, body });
+  }
+
+  function wamids() {
+    return mockSvc.rpc.mock.calls
+      .filter((call) => call[0] === 'process_meta_inbound_message')
+      .map((call) => call[1].p_meta_message_id);
+  }
+
+  it('A: lote válido permanece HTTP 200 na ordem original', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('B/N: a primeira falha não impede a segunda e o sucesso não apaga o 500', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(mockSvc.rpc.mock.calls[1][1].p_company_id).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('C: falha intermediária ainda processa a mensagem seguinte', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b'), text('wamid.c')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b', 'wamid.c']);
+  });
+
+  it('D: falha na última mensagem responde 500 depois de persistir as anteriores', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk()).mockResolvedValueOnce(rpcFail());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('E: todas as mensagens com falha respondem 500 e todas são tentadas', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcFail());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('F/H: erro retornado e timeout não interrompem a mensagem seguinte', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc
+      .mockResolvedValueOnce(rpcFail({ code: '57014', message: 'statement timeout' }))
+      .mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(JSON.stringify(res._body)).not.toContain('timeout');
+  });
+
+  it('G/X: exceção da RPC não vaza corpo nem telefone e o lote continua', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc
+        .mockRejectedValueOnce(new Error(`${FAKE_BODY} ${FAKE_WA_ID}`))
+        .mockResolvedValueOnce(rpcOk());
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.a', FAKE_TIMESTAMP, FAKE_BODY), text('wamid.b')]) }],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('rpc_error=true');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+      expect(JSON.stringify(res._body)).not.toContain(FAKE_BODY);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('I: texto com falha não impede a mídia seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        text('wamid.text'),
+        makeDocumentMessage({ id: 'wamid.doc' }),
+      ]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[1][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[1][1].p_meta_message_id).toBe('wamid.doc');
+  });
+
+  it('J: mídia com falha de credencial não impede o texto seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null, { message: 'unavailable' }));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeDocumentMessage({ id: 'wamid.doc' }),
+        text('wamid.text'),
+      ]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.text');
+  });
+
+  it('K: falha em um change não impede o change seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [
+        { field: 'messages', value: valueWith([text('wamid.a')]) },
+        { field: 'messages', value: valueWith([text('wamid.b')]) },
+      ],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+  });
+
+  it('L: falha em um entry não impede o entry seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.a')]) }] },
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.b')]) }] },
+    ]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('M: entries de instâncias diferentes mantêm company_id e instance_id próprios', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain({ id: OTHER_INSTANCE_ID, company_id: OTHER_COMPANY_ID }));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.a')], FAKE_PHONE_NUM_ID) }] },
+      { changes: [{ field: 'messages', value: valueWith([text('wamid.b')], OTHER_PHONE_ID) }] },
+    ]), res);
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1]).toMatchObject({
+      p_company_id: FAKE_COMPANY_ID,
+      p_instance_id: FAKE_INSTANCE_ID,
+      p_meta_message_id: 'wamid.a',
+    });
+    expect(mockSvc.rpc.mock.calls[1][1]).toMatchObject({
+      p_company_id: OTHER_COMPANY_ID,
+      p_instance_id: OTHER_INSTANCE_ID,
+      p_meta_message_id: 'wamid.b',
+    });
+  });
+
+  it('O/P/R: retry reenvia os timestamps originais e a mensagem antiga recuperada não troca de empresa', async () => {
+    const messages = [
+      text('wamid.old', OLD_TIMESTAMP),
+      text('wamid.new', FAKE_TIMESTAMP),
+    ];
+    const entries = [{ changes: [{ field: 'messages', value: valueWith(messages) }] }];
+    const oldIso = new Date(Number(OLD_TIMESTAMP) * 1000).toISOString();
+    const newIso = new Date(Number(FAKE_TIMESTAMP) * 1000).toISOString();
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const first = makeRes();
+    await handler(postEntries(entries), first);
+    expect(first._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_provider_timestamp).toBe(oldIso);
+    expect(mockSvc.rpc.mock.calls[1][1].p_provider_timestamp).toBe(newIso);
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcOk(false)).mockResolvedValueOnce(rpcOk());
+    const second = makeRes();
+    await handler(postEntries(entries), second);
+    expect(second._status).toBe(200);
+    const inboundCalls = mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_message');
+    expect(inboundCalls.slice(2).map((call) => call[1].p_meta_message_id)).toEqual([
+      'wamid.old',
+      'wamid.new',
+    ]);
+    expect(inboundCalls[2][1].p_provider_timestamp).toBe(oldIso);
+    expect(inboundCalls[2][1].p_company_id).toBe(FAKE_COMPANY_ID);
+    expect(inboundCalls[3][1].p_provider_timestamp).toBe(newIso);
+  });
+
+  it('Q: botão e interativo com falha de RPC deixam a mensagem seguinte seguir', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const buttonRes = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeButtonMessage({ id: 'wamid.button' }),
+        text('wamid.after-button'),
+      ]) }],
+    }]), buttonRes);
+    expect(buttonRes._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_body).toBe(FAKE_BUTTON_TEXT);
+    expect(mockSvc.rpc.mock.calls[1][1].p_meta_message_id).toBe('wamid.after-button');
+
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockResolvedValueOnce(rpcOk());
+    const interactiveRes = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([
+        makeInteractiveMessage({ id: 'wamid.interactive' }),
+        text('wamid.after-interactive'),
+      ]) }],
+    }]), interactiveRes);
+    expect(interactiveRes._status).toBe(500);
+    const textCalls = mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_message');
+    expect(textCalls[2][1].p_body).toBe(FAKE_INTERACTIVE_BUTTON_TITLE);
+    expect(textCalls[3][1].p_meta_message_id).toBe('wamid.after-interactive');
+  });
+
+  it('S/T: assinatura inválida e JSON inválido continuam antes de qualquer lote', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValueOnce(false);
+    const denied = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a')]) }],
+    }]), denied);
+    expect(denied._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+
+    mockReadRawBody.mockResolvedValue(Buffer.from('{'));
+    const invalid = makeRes();
+    await handler(makePostReq(), invalid);
+    expect(invalid._status).toBe(400);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('U: compare-and-swap de status permanece condicional', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makePayload({
+      statuses: [{ id: FAKE_WAMID, status: 'read', timestamp: FAKE_TIMESTAMP }],
+    }))));
+    const update = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({
+        id: FAKE_MSG_ID,
+        company_id: FAKE_COMPANY_ID,
+        instance_id: FAKE_INSTANCE_ID,
+        status: 'delivered',
+      }))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(makeChatTouchChain());
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(Object.fromEntries(update.eq.mock.calls).status).toBe('delivered');
+    expect(update.update.mock.calls[0][0].status).toBe('read');
+  });
+
+  it('V: credencial ausente de mídia continua pedindo retry sem download', async () => {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(makeDocumentPayload())));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(null));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+  });
+
+  it('W: a resposta espera a RPC ainda pendente do evento seguinte', async () => {
+    let release;
+    const pending = new Promise((resolve) => {
+      release = () => resolve(rpcOk());
+    });
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(rpcFail()).mockImplementationOnce(() => pending);
+    const res = makeRes();
+    const done = handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.a'), text('wamid.b')]) }],
+    }]), res);
+    await vi.waitFor(() => expect(mockSvc.rpc).toHaveBeenCalledTimes(2));
+    expect(res._status).toBeNull();
+    release();
+    await done;
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.a', 'wamid.b']);
+  });
+
+  it('retorno null da RPC é falha recuperável e a mensagem seguinte segue', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce(null).mockResolvedValueOnce(rpcOk());
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.null'), text('wamid.next')]) }],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'Internal error' });
+      expect(wamids()).toEqual(['wamid.null', 'wamid.next']);
+      expect(mockSvc.rpc.mock.calls[1][1]).toMatchObject({
+        p_company_id: FAKE_COMPANY_ID,
+        p_instance_id: FAKE_INSTANCE_ID,
+        p_meta_message_id: 'wamid.next',
+      });
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('rpc_error=true');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('retorno undefined da RPC é falha recuperável e a mensagem seguinte segue', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    mockSvc.rpc.mockResolvedValueOnce(undefined).mockResolvedValueOnce(rpcOk());
+    const res = makeRes();
+    await handler(postEntries([{
+      changes: [{ field: 'messages', value: valueWith([text('wamid.undefined'), text('wamid.next')]) }],
+    }]), res);
+    expect(res._status).toBe(500);
+    expect(wamids()).toEqual(['wamid.undefined', 'wamid.next']);
+  });
+
+  it('created false permanece HTTP 200', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce(rpcOk(false));
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.dup')]) }],
+      }]), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ received: true });
+      expect(wamids()).toEqual(['wamid.dup']);
+      expect(logSpy.mock.calls.some((call) => call[0].includes('created=%s') && call[1] === false)).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('data null e error null permanece sucesso', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+      mockSvc.rpc.mockResolvedValueOnce({ data: null, error: null });
+      const res = makeRes();
+      await handler(postEntries([{
+        changes: [{ field: 'messages', value: valueWith([text('wamid.empty')]) }],
+      }]), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ received: true });
+      expect(wamids()).toEqual(['wamid.empty']);
+      expect(logSpy.mock.calls.some((call) => call[0].includes('created=%s') && call[1] === false)).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
+// Lote de status — falha recuperável não interrompe os eventos seguintes.
+// Mocks. O compare-and-swap real do PostgreSQL não é exercitado aqui.
+// A, R, S, T, U, V, W, X e Y permanecem nos testes já existentes.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — continuidade do lote de status', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+  const OTHER_PHONE_ID    = '199988877766';
+
+  function row(status, id = FAKE_MSG_ID, companyId = FAKE_COMPANY_ID, instanceId = FAKE_INSTANCE_ID) {
+    return { id, company_id: companyId, instance_id: instanceId, status };
+  }
+
+  function status(id, name) {
+    return { id, status: name, timestamp: FAKE_TIMESTAMP };
+  }
+
+  function change(statuses, messages, phoneId = FAKE_PHONE_NUM_ID) {
+    const value = {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      statuses,
+    };
+    if (messages) value.messages = messages;
+    return { field: 'messages', value };
+  }
+
+  function post(entries) {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: entries,
+    })));
+    return makePostReq();
+  }
+
+  it('B/G/N: erro de atualização não impede o status seguinte nem apaga o 500', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const failedUpdate = makeUpdateChain({ message: 'update timeout' });
+      const nextUpdate = makeUpdateChain();
+      const touch = makeChatTouchChain();
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+        .mockReturnValueOnce(failedUpdate)
+        .mockReturnValueOnce(makeMsgSelectChain(row('accepted', 'cccc0000-0000-0000-0000-000000000013')))
+        .mockReturnValueOnce(nextUpdate)
+        .mockReturnValueOnce(touch);
+
+      const res = makeRes();
+      await handler(post([{
+        changes: [change([status('wamid.fail', 'sent'), status('wamid.next', 'sent')])],
+      }]), res);
+
+      expect(res._status).toBe(500);
+      expect(res._body).toEqual({ error: 'Internal error' });
+      expect(failedUpdate.update).toHaveBeenCalledTimes(1);
+      expect(nextUpdate.update.mock.calls[0][0].status).toBe('sent');
+      expect(touch.eq).toHaveBeenCalledWith('meta_message_id', 'wamid.next');
+      expect(touch.update).toHaveBeenCalledTimes(1);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('status_persist_failed');
+      expect(logged).not.toContain('wamid.fail');
+      expect(logged).not.toContain(FAKE_PHONE_NUM_ID);
+      expect(logged).not.toContain(FAKE_BODY);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('C: falha intermediária ainda processa o status seguinte', async () => {
+    const first = makeUpdateChain();
+    const middle = makeUpdateChain({ message: 'update timeout' });
+    const last = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', 'cccc0000-0000-0000-0000-000000000011')))
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(makeChatTouchChain())
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', 'cccc0000-0000-0000-0000-000000000012')))
+      .mockReturnValueOnce(middle)
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', 'cccc0000-0000-0000-0000-000000000013')))
+      .mockReturnValueOnce(last)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([
+        status('wamid.a', 'sent'),
+        status('wamid.b', 'sent'),
+        status('wamid.c', 'sent'),
+      ])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(first.update).toHaveBeenCalledTimes(1);
+    expect(middle.update).toHaveBeenCalledTimes(1);
+    expect(last.update.mock.calls[0][0].status).toBe('sent');
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_messages')).toHaveLength(2);
+  });
+
+  it('D: falha no último status responde 500 depois de aplicar o anterior', async () => {
+    const applied = makeUpdateChain();
+    const failed = makeUpdateChain({ message: 'update timeout' });
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(applied)
+      .mockReturnValueOnce(touch)
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent', 'cccc0000-0000-0000-0000-000000000013')))
+      .mockReturnValueOnce(failed);
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.a', 'sent'), status('wamid.b', 'delivered')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(applied.update.mock.calls[0][0].status).toBe('sent');
+    expect(failed.update.mock.calls[0][0].status).toBe('delivered');
+    expect(touch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('E: todos os status com falha são tentados e o lote responde 500', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }));
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.a', 'sent'), status('wamid.b', 'delivered')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(mockSvc.from).toHaveBeenCalledTimes(6);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('F: erro de leitura não impede o status seguinte', async () => {
+    const nextUpdate = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.fail', 'sent'), status('wamid.next', 'sent')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+    expect(touch.eq).toHaveBeenCalledWith('meta_message_id', 'wamid.next');
+  });
+
+  it('H: esgotamento do compare-and-swap não impede o status seguinte nem toca o perdedor', async () => {
+    const lost = [makeUpdateChain(null, []), makeUpdateChain(null, []), makeUpdateChain(null, [])];
+    const nextUpdate = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[0])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[1])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[2])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', 'cccc0000-0000-0000-0000-000000000013')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(touch);
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.lost', 'delivered'), status('wamid.next', 'sent')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(lost.every((chain) => chain.update.mock.calls.length === 1)).toBe(true);
+    expect(nextUpdate.update.mock.calls[0][0].status).toBe('sent');
+    expect(touch.eq).toHaveBeenCalledWith('meta_message_id', 'wamid.next');
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_messages')).toHaveLength(1);
+  });
+
+  it('I: falha de status não impede o texto inbound seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }));
+    mockSvc.rpc.mockResolvedValueOnce(makeRpcResult());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change(
+        [status('wamid.status', 'sent')],
+        [makeInboundMessage({ id: 'wamid.text' })],
+      )],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.text');
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('J: falha de status não impede a mídia seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(makeDedupeChain(null))
+      .mockReturnValueOnce(makeCredentialChain(FAKE_CREDENTIAL));
+    mockSvc.rpc.mockResolvedValueOnce(makeRpcResult());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change(
+        [status('wamid.status', 'sent')],
+        [makeDocumentMessage({ id: 'wamid.doc' })],
+      )],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message');
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.doc');
+  });
+
+  it('K: falha em um change não impede o change seguinte', async () => {
+    const nextUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [
+        change([status('wamid.a', 'sent')]),
+        change([status('wamid.b', 'sent')]),
+      ],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_instances')).toHaveLength(2);
+  });
+
+  it('L: falha em um entry não impede o entry seguinte', async () => {
+    const nextUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([
+      { changes: [change([status('wamid.a', 'sent')])] },
+      { changes: [change([status('wamid.b', 'sent')])] },
+    ]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextUpdate.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(nextUpdate.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+  });
+
+  it('M: falha de uma instância não reutiliza o contexto da outra', async () => {
+    const otherUpdate = makeUpdateChain();
+    const firstInst = makeInstChain(FAKE_INSTANCE);
+    const otherInst = makeInstChain({ id: OTHER_INSTANCE_ID, company_id: OTHER_COMPANY_ID });
+    mockSvc.from
+      .mockReturnValueOnce(firstInst)
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(otherInst)
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', FAKE_MSG_ID, OTHER_COMPANY_ID, OTHER_INSTANCE_ID)))
+      .mockReturnValueOnce(otherUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([
+      { changes: [change([status('wamid.a', 'sent')], undefined, FAKE_PHONE_NUM_ID)] },
+      { changes: [change([status('wamid.b', 'sent')], undefined, OTHER_PHONE_ID)] },
+    ]), res);
+
+    expect(res._status).toBe(500);
+    expect(firstInst.eq).toHaveBeenCalledWith('phone_number_id', FAKE_PHONE_NUM_ID);
+    expect(otherInst.eq).toHaveBeenCalledWith('phone_number_id', OTHER_PHONE_ID);
+    expect(otherUpdate.eq).toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
+    expect(otherUpdate.eq).toHaveBeenCalledWith('instance_id', OTHER_INSTANCE_ID);
+    expect(otherUpdate.eq).not.toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+  });
+
+  it('O: delivered com falha e read seguinte não regridem no retry', async () => {
+    const deliveredUpdate = makeUpdateChain({ message: 'update timeout' });
+    const readUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(deliveredUpdate)
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(readUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const first = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered'), status('wamid.same', 'read')])],
+    }]), first);
+
+    expect(first._status).toBe(500);
+    expect(deliveredUpdate.update.mock.calls[0][0].status).toBe('delivered');
+    expect(readUpdate.update.mock.calls[0][0].status).toBe('read');
+    expect(readUpdate.eq).toHaveBeenCalledWith('status', 'sent');
+
+    const callsAfterFirst = mockSvc.from.mock.calls.length;
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('read')));
+    const second = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), second);
+
+    expect(second._status).toBe(200);
+    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('P: read com falha deixa delivered seguir e o retry aplica read', async () => {
+    const lostRead = makeUpdateChain({ message: 'update timeout' });
+    const deliveredUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lostRead)
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(deliveredUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const first = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'read'), status('wamid.same', 'delivered')])],
+    }]), first);
+    expect(first._status).toBe(500);
+    expect(deliveredUpdate.update.mock.calls[0][0].status).toBe('delivered');
+    expect(deliveredUpdate.eq).toHaveBeenCalledWith('status', 'sent');
+
+    const retryRead = makeUpdateChain();
+    const retryTouch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(retryRead)
+      .mockReturnValueOnce(retryTouch);
+    const second = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'read')])],
+    }]), second);
+
+    expect(second._status).toBe(200);
+    expect(retryRead.update.mock.calls[0][0].status).toBe('read');
+    expect(retryRead.eq).toHaveBeenCalledWith('status', 'delivered');
+    expect(retryTouch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('Q: retry depois de erro de atualização respeita o status já gravado', async () => {
+    const lost = makeUpdateChain({ message: 'update timeout' });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost);
+    const first = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), first);
+    expect(first._status).toBe(500);
+    expect(lost.update).toHaveBeenCalledTimes(1);
+
+    const callsAfterFirst = mockSvc.from.mock.calls.length;
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const second = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), second);
+
+    expect(second._status).toBe(200);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_messages',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('Z: a resposta espera o status seguinte ainda pendente', async () => {
+    const pending = makeMsgSelectChain(row('accepted'));
+    let release;
+    pending.maybeSingle.mockReturnValue(new Promise((resolve) => {
+      release = () => resolve({ data: row('accepted'), error: null });
+    }));
+    const nextUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(null, { message: 'select error' }))
+      .mockReturnValueOnce(pending)
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    const done = handler(post([{
+      changes: [change([status('wamid.a', 'sent'), status('wamid.b', 'sent')])],
+    }]), res);
+    await vi.waitFor(() => expect(pending.maybeSingle).toHaveBeenCalledTimes(1));
+    expect(res._status).toBeNull();
+    release();
+    await done;
+    expect(res._status).toBe(500);
+    expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =============================================================================
+// Toque Realtime — duplicata exata recupera a notificação.
+// Mocks. Não publica Realtime nem exercita concorrência no PostgreSQL.
+// =============================================================================
+
+describe('POST /api/whatsapp/meta/webhook — recuperação do toque Realtime', () => {
+  const OTHER_COMPANY_ID  = 'ffff0000-0000-0000-0000-000000000099';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000098';
+  const OTHER_PHONE_ID    = '199988877766';
+
+  function row(status, companyId = FAKE_COMPANY_ID, instanceId = FAKE_INSTANCE_ID) {
+    return { id: FAKE_MSG_ID, company_id: companyId, instance_id: instanceId, status };
+  }
+
+  function status(id, name) {
+    return { id, status: name, timestamp: FAKE_TIMESTAMP };
+  }
+
+  function change(statuses, messages, phoneId = FAKE_PHONE_NUM_ID) {
+    const value = {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      statuses,
+    };
+    if (messages) value.messages = messages;
+    return { field: 'messages', value };
+  }
+
+  function post(entries) {
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: entries,
+    })));
+    return makePostReq();
+  }
+
+  it('falha do toque não impede o status seguinte e o 500 permanece', async () => {
+    const failedTouch = makeChatTouchChain([], { message: 'query timeout' });
+    const okTouch = makeChatTouchChain();
+    const firstUpdate = makeUpdateChain();
+    const secondUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(firstUpdate)
+      .mockReturnValueOnce(failedTouch)
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted', FAKE_COMPANY_ID, FAKE_INSTANCE_ID)))
+      .mockReturnValueOnce(secondUpdate)
+      .mockReturnValueOnce(okTouch);
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.a', 'delivered'), status('wamid.b', 'sent')])],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(firstUpdate.update.mock.calls[0][0].status).toBe('delivered');
+    expect(secondUpdate.update.mock.calls[0][0].status).toBe('sent');
+    expect(failedTouch.update).toHaveBeenCalledTimes(1);
+    expect(okTouch.eq).toHaveBeenCalledWith('meta_message_id', 'wamid.b');
+  });
+
+  it('falha do toque não impede o texto inbound seguinte', async () => {
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }));
+    mockSvc.rpc.mockResolvedValueOnce(makeRpcResult());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [change(
+        [status('wamid.status', 'delivered')],
+        [makeInboundMessage({ id: 'wamid.text' })],
+      )],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(mockSvc.rpc.mock.calls[0][1].p_meta_message_id).toBe('wamid.text');
+    expect(mockSvc.rpc.mock.calls[0][1].p_company_id).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('falha do toque em um change não impede o change seguinte', async () => {
+    const nextUpdate = makeUpdateChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(nextUpdate)
+      .mockReturnValueOnce(makeChatTouchChain());
+
+    const res = makeRes();
+    await handler(post([{
+      changes: [
+        change([status('wamid.a', 'delivered')]),
+        change([status('wamid.b', 'sent')]),
+      ],
+    }]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextUpdate.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_instances')).toHaveLength(2);
+  });
+
+  it('falha do toque em um entry não impede o entry seguinte', async () => {
+    const nextTouch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain([], { message: 'query timeout' }))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('accepted')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(nextTouch);
+
+    const res = makeRes();
+    await handler(post([
+      { changes: [change([status('wamid.a', 'delivered')])] },
+      { changes: [change([status('wamid.b', 'sent')])] },
+    ]), res);
+
+    expect(res._status).toBe(500);
+    expect(nextTouch.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(nextTouch.eq).toHaveBeenCalledWith('direction', 'outbound');
+  });
+
+  it('duplicata exata com erro de toque responde 500 sem novo tracking e sem dado sensível', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const touch = makeChatTouchChain([], { message: `${FAKE_BODY} ${FAKE_WA_ID}` });
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+        .mockReturnValueOnce(touch);
+      const res = makeRes();
+      await handler(post([{
+        changes: [change([status('wamid.same', 'delivered')])],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(touch.update).toHaveBeenCalledTimes(1);
+      expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(2);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).toContain('chat_touch_failed');
+      expect(logged).not.toContain(FAKE_BODY);
+      expect(logged).not.toContain(FAKE_WA_ID);
+      expect(logged).not.toContain('wamid.same');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('duplicata exata com mensagem de chat ausente permanece HTTP 200', async () => {
+    const touch = makeChatTouchChain([]);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('read')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status(FAKE_WAMID, 'read')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ received: true });
+    expect(touch.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('duplicata de outra instância toca somente o contexto resolvido', async () => {
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain({ id: OTHER_INSTANCE_ID, company_id: OTHER_COMPANY_ID }))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent', OTHER_COMPANY_ID, OTHER_INSTANCE_ID)))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.other', 'sent')], undefined, OTHER_PHONE_ID)],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(touch.eq).toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
+    expect(touch.eq).toHaveBeenCalledWith('instance_id', OTHER_INSTANCE_ID);
+    expect(touch.eq).toHaveBeenCalledWith('direction', 'outbound');
+    expect(touch.eq).not.toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+  });
+
+  it('releitura com o mesmo status recupera o toque sem novo update', async () => {
+    const lost = makeUpdateChain(null, []);
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost)
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(lost.update).toHaveBeenCalledTimes(1);
+    expect(lost.update.mock.calls[0][0].status).toBe('delivered');
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(5);
+  });
+
+  it('última releitura com o status recebido recupera o toque sem quarta gravação', async () => {
+    const lost = [makeUpdateChain(null, []), makeUpdateChain(null, []), makeUpdateChain(null, [])];
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[0])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[1])
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost[2])
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), res);
+    expect(res._status).toBe(200);
+    expect(lost.every((chain) => chain.update.mock.calls.length === 1)).toBe(true);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from).toHaveBeenCalledTimes(12);
+  });
+
+  it('erro de update seguido de retry no mesmo status toca sem regravar', async () => {
+    const lost = makeUpdateChain({ message: 'update timeout' });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(lost);
+    const first = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), first);
+    expect(first._status).toBe(500);
+    expect(lost.update).toHaveBeenCalledTimes(1);
+    expect(lost.update.mock.calls[0][0]).not.toHaveProperty('read_at');
+    expect(lost.update.mock.calls[0][0]).not.toHaveProperty('error_code');
+
+    const callsAfterFirst = mockSvc.from.mock.calls.length;
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+      .mockReturnValueOnce(touch);
+    const second = makeRes();
+    await handler(post([{
+      changes: [change([status('wamid.same', 'delivered')])],
+    }]), second);
+    expect(second._status).toBe(200);
+    expect(touch.update.mock.calls[0][0]).toEqual({ updated_at: expect.any(String) });
+    expect(mockSvc.from.mock.calls.slice(callsAfterFirst).map((call) => call[0])).toEqual([
+      'meta_whatsapp_instances',
+      'meta_early_status_pendings',
+      'meta_whatsapp_messages',
+      'meta_messages',
+      'meta_whatsapp_messages',
+      'meta_whatsapp_messages',
+    ]);
+  });
+
+  it('a resposta espera o toque ainda pendente', async () => {
+    const touch = makeChatTouchChain();
+    let release;
+    touch.select.mockReturnValue(new Promise((resolve) => {
+      release = () => resolve({ data: [{ id: 'chat-touch-row' }], error: null });
+    }));
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain(row('sent')))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(touch);
+    const res = makeRes();
+    const done = handler(post([{
+      changes: [change([status('wamid.a', 'delivered')])],
+    }]), res);
+    await vi.waitFor(() => expect(touch.select).toHaveBeenCalledTimes(1));
+    expect(res._status).toBeNull();
+    release();
+    await done;
+    expect(res._status).toBe(200);
+  });
+
+  it('falha persistente do toque tenta uma vez por reenvio', async () => {
+    async function once() {
+      const touch = makeChatTouchChain([], { message: 'query timeout' });
+      mockSvc.from
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(makeMsgSelectChain(row('delivered')))
+        .mockReturnValueOnce(touch);
+      const res = makeRes();
+      await handler(post([{
+        changes: [change([status('wamid.same', 'delivered')])],
+      }]), res);
+      expect(res._status).toBe(500);
+      expect(touch.update).toHaveBeenCalledTimes(1);
+    }
+    await once();
+    await once();
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_whatsapp_messages')).toHaveLength(4);
+  });
+});
+
+describe('POST /api/whatsapp/meta/webhook — recuperação com inbound', () => {
+  const OTHER_PHONE = '106540352242923';
+  const OTHER_INSTANCE = {
+    id: 'aaaa0000-0000-0000-0000-000000000091',
+    company_id: 'bbbb0000-0000-0000-0000-000000000092',
+  };
+
+  function textValue(phoneId, wamid) {
+    return {
+      metadata: { phone_number_id: phoneId },
+      contacts: [{ wa_id: FAKE_WA_ID, profile: { name: FAKE_CONTACT_NAME } }],
+      messages: [{
+        id: wamid,
+        from: FAKE_WA_ID,
+        type: 'text',
+        timestamp: FAKE_TIMESTAMP,
+        text: { body: FAKE_BODY },
+      }],
+    };
+  }
+
+  function maintenanceNames() {
+    return mockSvc.rpc.mock.calls.map((call) => call[0]).filter((name) =>
+      name === 'list_meta_early_status_pendings'
+      || name === 'delete_expired_meta_early_status_pendings');
+  }
+
+  it('inbound isolado recupera pendência da mesma instância', async () => {
+    pendingQueryResult = {
+      list: {
+        data: [{
+          id: 7,
+          company_id: FAKE_COMPANY_ID,
+          instance_id: FAKE_INSTANCE_ID,
+          meta_message_id: 'wamid.early',
+          status: 'sent',
+          provider_timestamp: '2026-01-01T00:00:00.000Z',
+          received_at: '2026-01-01T00:00:00.000Z',
+          error_code: null,
+        }],
+        error: null,
+      },
+    };
+    mockSvc.rpc.mockImplementation((name) => {
+      if (name === 'list_meta_early_status_pendings') {
+        return Promise.resolve({
+          data: [{ meta_message_id: 'wamid.early', company_id: FAKE_COMPANY_ID, instance_id: FAKE_INSTANCE_ID }],
+          error: null,
+        });
+      }
+      if (name === 'delete_expired_meta_early_status_pendings') {
+        return Promise.resolve({ data: 0, error: null });
+      }
+      return Promise.resolve(makeRpcResult());
+    });
+    const update = makeUpdateChain();
+    const touch = makeChatTouchChain();
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, company_id: FAKE_COMPANY_ID, instance_id: FAKE_INSTANCE_ID, status: 'accepted' }))
+      .mockReturnValueOnce(update)
+      .mockReturnValueOnce(touch);
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, FAKE_INBOUND_WAMID) }] }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+    expect(update.update.mock.calls[0][0].status).toBe('sent');
+    expect(update.update.mock.calls[0][0].realtime_notify_pending).toBe(true);
+    expect(touch.update).toHaveBeenCalledTimes(1);
+    expect(mockSvc.rpc.mock.calls.at(-1)[1]).toEqual({
+      p_company_id: FAKE_COMPANY_ID,
+      p_instance_id: FAKE_INSTANCE_ID,
+    });
+  });
+
+  it('inbound isolado recupera marcador sem pendência', async () => {
+    markerScanRows = [{ id: FAKE_MSG_ID, meta_message_id: 'wamid.marker', status: 'delivered' }];
+    mockSvc.rpc.mockImplementation((name) => {
+      if (name === 'list_meta_early_status_pendings') return Promise.resolve({ data: [], error: null });
+      if (name === 'delete_expired_meta_early_status_pendings') return Promise.resolve({ data: 0, error: null });
+      return Promise.resolve(makeRpcResult());
+    });
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, FAKE_INBOUND_WAMID) }] }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toContain('meta_messages');
+    expect(maintenanceNames()).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
+  });
+
+  it('inbound isolado sem backlog só faz a manutenção limitada', async () => {
+    mockSvc.rpc.mockImplementation((name) => {
+      if (name === 'list_meta_early_status_pendings') return Promise.resolve({ data: [], error: null });
+      if (name === 'delete_expired_meta_early_status_pendings') return Promise.resolve({ data: 0, error: null });
+      return Promise.resolve(makeRpcResult());
+    });
+    mockSvc.from.mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, FAKE_INBOUND_WAMID) }] }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+    expect(maintenanceNames()).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
+  });
+
+  it('inbound e status da mesma instância disparam uma recuperação', async () => {
+    mockSvc.rpc.mockImplementation((name) => {
+      if (name === 'list_meta_early_status_pendings') return Promise.resolve({ data: [], error: null });
+      if (name === 'delete_expired_meta_early_status_pendings') return Promise.resolve({ data: 0, error: null });
+      return Promise.resolve(makeRpcResult());
+    });
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'accepted' }))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain());
+    const payload = makeInboundPayload({
+      statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }],
+    });
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(maintenanceNames()).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
+    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_message');
+  });
+
+  it('vários changes da mesma instância recuperam uma vez', async () => {
+    mockSvc.rpc.mockResolvedValue(makeRpcResult());
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE));
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        changes: [
+          { field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, 'wamid.in.1') },
+          { field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, 'wamid.in.2') },
+        ],
+      }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc.mock.calls.filter((call) => call[0] === 'process_meta_inbound_message')).toHaveLength(2);
+    expect(maintenanceNames()).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
+  });
+
+  it('instâncias diferentes recuperam em escopos separados', async () => {
+    mockSvc.rpc.mockResolvedValue(makeRpcResult());
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeInstChain(OTHER_INSTANCE));
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        changes: [
+          { field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, 'wamid.in.1') },
+          { field: 'messages', value: textValue(OTHER_PHONE, 'wamid.in.2') },
+        ],
+      }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    const scopes = mockSvc.rpc.mock.calls
+      .filter((call) => call[0] === 'list_meta_early_status_pendings')
+      .map((call) => call[1].p_instance_id);
+    expect(scopes).toEqual([FAKE_INSTANCE_ID, OTHER_INSTANCE.id]);
+  });
+
+  it('HMAC inválido não acessa o banco', async () => {
+    mockVerifyMetaWebhookSignature.mockReturnValue(false);
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(401);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+  });
+
+  it('instância desconhecida não recupera', async () => {
+    mockSvc.from.mockReturnValueOnce(makeInstChain(null));
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'messages', value: textValue(FAKE_PHONE_NUM_ID, FAKE_INBOUND_WAMID) }] }],
+    };
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(payload)));
+    const res = makeRes();
+    await handler(makePostReq(), res);
+    expect(res._status).toBe(200);
+    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    expect(maintenanceNames()).toEqual([]);
+  });
+
+  it('erro ao limpar o marcador devolve 500 e zero linhas não devolve', async () => {
+    notifyClearResult = { data: null, error: { code: 'XX000' } };
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'accepted' }))
+      .mockReturnValueOnce(makeUpdateChain())
+      .mockReturnValueOnce(makeChatTouchChain());
+    mockReadRawBody.mockResolvedValue(Buffer.from(JSON.stringify(
+      makePayload({ statuses: [{ id: FAKE_WAMID, status: 'sent', timestamp: FAKE_TIMESTAMP }] }),
+    )));
+    const failed = makeRes();
+    await handler(makePostReq(), failed);
+    expect(failed._status).toBe(500);
+    expect(createdPendingChains.some((chain) => chain.delete.mock.calls.length > 0)).toBe(false);
+
+    notifyClearResult = { data: [], error: null };
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeMsgSelectChain({ id: FAKE_MSG_ID, status: 'sent' }))
+      .mockReturnValueOnce(makeChatTouchChain());
+    const second = makeRes();
+    await handler(makePostReq(), second);
+    expect(second._status).toBe(200);
   });
 });

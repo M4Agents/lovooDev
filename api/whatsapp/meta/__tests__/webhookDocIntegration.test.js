@@ -367,6 +367,17 @@ function setupIntegrationMocks({ cmlPrecheckData = null, storageUploadError = nu
         // (dedupe HIT já coberto em W-DOC-03; aqui precisamos que o processor execute)
         return makeDedupeChain(null);
 
+      case 'meta_whatsapp_messages':
+      case 'meta_early_status_pendings':
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+          update: vi.fn().mockReturnThis(),
+          then: (resolve, reject) => Promise.resolve({ data: [], error: null }).then(resolve, reject),
+        };
+
       case 'company_media_library':
         cmlCallIdx++;
         if (cmlCallIdx === 1) {
@@ -481,7 +492,7 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     expect(insertedDoc.file_size).toBe(PDF_BLOB.size);                        // tamanho real do Blob
 
     // (5) RPC recebe parâmetros corretos — tenant sempre do banco
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs.p_company_id).toBe(FAKE_COMPANY_ID);                      // do banco, não do payload
@@ -533,7 +544,7 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     expect(mockCmlInsert).not.toHaveBeenCalled();
 
     // (6) RPC É chamado — meta_message ainda precisa ser criada
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
 
@@ -574,8 +585,12 @@ describe('INBOUND-DOC-D — integração webhook + inboundMediaProcessor', () =>
     // (5) CML insert NÃO ocorreu — upload falhou antes do insert
     expect(mockCmlInsert).not.toHaveBeenCalled();
 
-    // (6) RPC NÃO foi chamado — processamento abortado
-    expect(mockSvc.rpc).not.toHaveBeenCalled();
+    // (6) A RPC de mídia não foi chamada — processamento abortado.
+    // A manutenção oportunista da instância já elegível permanece.
+    expect(mockSvc.rpc.mock.calls.map((call) => call[0])).toEqual([
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ]);
 
     // (7) Response sanitizada — sem token, URL CDN, ciphertext ou stack trace
     const resBody = JSON.stringify(res._body);
@@ -639,7 +654,7 @@ describe('INBOUND-IMG-D — integração webhook + inboundMediaProcessor (IMAGE)
     expect(inserted.created_by).toBeNull();
     expect(inserted.original_filename).toBe('inbound.jpg');
 
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs.p_message_type).toBe('image');
@@ -672,7 +687,7 @@ describe('INBOUND-IMG-D — integração webhook + inboundMediaProcessor (IMAGE)
     expect(mockDownloadMediaBytes).not.toHaveBeenCalled();
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockCmlInsert).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('image');
     expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
     expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_body');
@@ -725,7 +740,7 @@ describe('INBOUND-VID-D — integração webhook + inboundMediaProcessor (VIDEO)
     expect(inserted.created_by).toBeNull();
     expect(inserted.original_filename).toBe('inbound.mp4');
 
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     const [rpcName, rpcArgs] = mockSvc.rpc.mock.calls[0];
     expect(rpcName).toBe('process_meta_inbound_media_message');
     expect(rpcArgs.p_message_type).toBe('video');
@@ -758,7 +773,7 @@ describe('INBOUND-VID-D — integração webhook + inboundMediaProcessor (VIDEO)
     expect(mockDownloadMediaBytes).not.toHaveBeenCalled();
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockCmlInsert).not.toHaveBeenCalled();
-    expect(mockSvc.rpc).toHaveBeenCalledOnce();
+    expect(mockSvc.rpc).toHaveBeenCalledTimes(3);
     expect(mockSvc.rpc.mock.calls[0][1].p_message_type).toBe('video');
     expect(mockSvc.rpc.mock.calls[0][1].p_media_asset_id).toBe(FAKE_ASSET_ID);
     expect(mockSvc.rpc.mock.calls[0][1]).not.toHaveProperty('p_body');

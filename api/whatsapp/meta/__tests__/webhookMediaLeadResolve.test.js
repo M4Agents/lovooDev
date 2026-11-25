@@ -47,6 +47,33 @@ function chain(data, error = null) {
   }
 }
 
+function maintenanceChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    update: vi.fn().mockReturnThis(),
+    then: (resolve, reject) => Promise.resolve({ data: [], error: null }).then(resolve, reject),
+  }
+}
+
+function installFrom() {
+  const queued = []
+  const from = vi.fn((table) => {
+    if (table === 'meta_whatsapp_messages' || table === 'meta_early_status_pendings') {
+      return maintenanceChain()
+    }
+    if (queued.length > 0) return queued.shift()
+    throw new Error(`from(${table}) sem chain programada`)
+  })
+  from.mockReturnValueOnce = (value) => {
+    queued.push(value)
+    return from
+  }
+  mockSvc.from = from
+}
+
 function payload() {
   return {
     object: 'whatsapp_business_account',
@@ -86,6 +113,7 @@ beforeEach(() => {
   mockVerifyMetaWebhookSignature.mockReturnValue(true)
   mockDecryptMetaToken.mockReturnValue('plain_token_fake')
   mockDownloadAndStoreInboundMedia.mockResolvedValue({ assetId: 'eeee0000-0000-0000-0000-000000000005' })
+  installFrom()
 })
 
 describe('retry de mídia já persistida', () => {
@@ -102,7 +130,11 @@ describe('retry de mídia já persistida', () => {
     expect(res._status).toBe(200)
     expect(mockDownloadAndStoreInboundMedia).not.toHaveBeenCalled()
     expect(mockDecryptMetaToken).not.toHaveBeenCalled()
-    expect(mockSvc.rpc).toHaveBeenCalledOnce()
+    expect(mockSvc.rpc.mock.calls.map((call) => call[0])).toEqual([
+      'resolve_meta_conversation_lead',
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ])
     expect(mockSvc.rpc).toHaveBeenCalledWith('resolve_meta_conversation_lead', {
       p_company_id: COMPANY_ID,
       p_instance_id: INSTANCE_ID,
@@ -143,7 +175,10 @@ describe('retry de mídia já persistida', () => {
 
     expect(res._status).toBe(200)
     expect(mockDownloadAndStoreInboundMedia).toHaveBeenCalledOnce()
-    expect(mockSvc.rpc).toHaveBeenCalledOnce()
-    expect(mockSvc.rpc.mock.calls[0][0]).toBe('process_meta_inbound_media_message')
+    expect(mockSvc.rpc.mock.calls.map((call) => call[0])).toEqual([
+      'process_meta_inbound_media_message',
+      'list_meta_early_status_pendings',
+      'delete_expired_meta_early_status_pendings',
+    ])
   })
 })

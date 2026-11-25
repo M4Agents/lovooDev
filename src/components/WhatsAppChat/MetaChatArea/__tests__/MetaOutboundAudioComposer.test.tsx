@@ -526,6 +526,115 @@ describe('MetaOutboundAudioComposer', () => {
   })
 })
 
+describe('prévia e janela de atendimento', () => {
+  function renderSession(sessionAllowed: boolean, conversationId = CONV_A) {
+    return render(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={conversationId}
+        sessionAllowed={sessionAllowed}
+        onSent={vi.fn()}
+      />,
+    )
+  }
+
+  async function showPreview(view: ReturnType<typeof renderSession>, sessionAllowed: boolean, conversationId = CONV_A) {
+    await readyPreview()
+    view.rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={conversationId}
+        sessionAllowed={sessionAllowed}
+        onSent={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(screen.getByTestId('meta-outbound-audio-preview')).toBeTruthy())
+  }
+
+  it('prévia gravada com janela aberta pode ser enviada', async () => {
+    const view = renderSession(true)
+    await showPreview(view, true)
+    const send = screen.getByRole('button', { name: 'Enviar áudio' }) as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+    await act(async () => { fireEvent.click(send) })
+    expect(sendAudio).toHaveBeenCalledTimes(1)
+  })
+
+  it('expiração desabilita o envio da prévia e permite descartá-la', async () => {
+    const view = renderSession(true)
+    await showPreview(view, true)
+    view.rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={CONV_A}
+        sessionAllowed={false}
+        onSent={vi.fn()}
+      />,
+    )
+    const send = screen.getByRole('button', { name: 'Enviar áudio' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    expect(screen.getByTestId('meta-outbound-audio-preview')).toBeTruthy()
+    fireEvent.click(send)
+    expect(sendAudio).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar áudio' }))
+    expect(recorder.cancelRecording).toHaveBeenCalled()
+  })
+
+  it('reabrir a janela não envia a prévia automaticamente', async () => {
+    const view = renderSession(true)
+    await showPreview(view, false)
+    view.rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={CONV_A}
+        sessionAllowed={true}
+        onSent={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('meta-outbound-audio-preview')).toBeTruthy()
+    expect(sendAudio).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: 'Enviar áudio' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('expiração durante a gravação interrompe sem enviar', () => {
+    recorder.isRecording = true
+    const view = renderSession(true)
+    view.rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={CONV_A}
+        sessionAllowed={false}
+        onSent={vi.fn()}
+      />,
+    )
+    expect(recorder.stopRecording).toHaveBeenCalled()
+    expect(sendAudio).not.toHaveBeenCalled()
+  })
+
+  it('troca de conversa descarta a prévia e não envia', async () => {
+    const view = renderSession(true)
+    await showPreview(view, true)
+    view.rerender(
+      <MetaOutboundAudioComposer
+        companyId={COMPANY_ID}
+        instanceId={INSTANCE_ID}
+        conversationId={CONV_B}
+        sessionAllowed={true}
+        onSent={vi.fn()}
+      />,
+    )
+    expect(recorder.cancelRecording).toHaveBeenCalled()
+    expect(recorder.clearPreview).toHaveBeenCalled()
+    expect(sendAudio).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Enviar áudio' })).toBeNull()
+  })
+})
+
 describe('navegador sem AAC-LC MP4', () => {
   it('mostra indisponibilidade quando o MIME MP4 não é suportado', () => {
     mp4MimeState.mime = null

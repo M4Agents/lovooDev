@@ -37,6 +37,10 @@ import { metaWhatsAppApi }      from '../../../services/metaWhatsAppApi'
 import { MetaTemplatePicker }   from './MetaTemplatePicker'
 import { MetaOutboundAudioComposer } from './MetaOutboundAudioComposer'
 import {
+  displayedCustomerServiceWindow,
+  UNKNOWN_CUSTOMER_SERVICE_WINDOW,
+} from '../../../utils/customerServiceWindow'
+import {
   buildHistoricalTelHref,
   isSafeHistoricalHref,
 } from '../../../utils/historicalTemplateButtons'
@@ -173,6 +177,11 @@ function getSendErrorMessage(error: unknown): string {
       return 'Serviço temporariamente indisponível. Tente novamente.'
     case 'provider_error':
       return 'Não foi possível enviar a mensagem. Se a conversa estiver fora do prazo de 24h, é necessário usar um template aprovado.'
+    case 'customer_service_window_closed':
+    case '131047':
+      return 'A janela de 24 horas encerrou. Envie um template aprovado para retomar a conversa.'
+    case 'customer_service_window_unproven':
+      return 'Não há uma mensagem recente do cliente para liberar texto ou áudio. Use um template aprovado.'
     default:
       return 'Não foi possível enviar a mensagem.'
   }
@@ -544,7 +553,22 @@ function MetaMessageBubble({ message }: MetaMessageBubbleProps) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function MetaChatArea({ companyId, conversationId, conversation }: MetaChatAreaProps) {
-  const { messages, loading, error, refresh } = useMetaChatMessages(companyId, conversationId)
+  const {
+    messages,
+    loading,
+    error,
+    refresh,
+    customerServiceWindow: serverWindow = UNKNOWN_CUSTOMER_SERVICE_WINDOW,
+    windowConfirmed = false,
+  } = useMetaChatMessages(companyId, conversationId)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const identityMatches = !conversation || conversation.id === conversationId
+  const windowReady = windowConfirmed && identityMatches
+  const serviceWindow = displayedCustomerServiceWindow(
+    windowReady ? serverWindow : UNKNOWN_CUSTOMER_SERVICE_WINDOW,
+    nowMs,
+  )
+  const sessionOpen = windowReady && serviceWindow.state === 'open'
 
   // ── Composer state ──────────────────────────────────────────────────────────
   const [text, setText]               = useState('')
@@ -580,12 +604,21 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     setText('')
     setSendError(null)
     setIsPickerOpen(false)
+    setNowMs(Date.now())
     sendGenRef.current += 1
   }, [conversationId])
 
+  useEffect(() => {
+    if (serviceWindow.state !== 'open' || !serviceWindow.expiresAt) return
+    const delay = Date.parse(serviceWindow.expiresAt) - Date.now()
+    if (!Number.isFinite(delay) || delay > 2_147_483_647) return
+    const timer = window.setTimeout(() => setNowMs(Date.now()), Math.max(delay, 0))
+    return () => window.clearTimeout(timer)
+  }, [conversationId, serviceWindow.expiresAt, serviceWindow.state])
+
   // ── handleSend (texto) ──────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
-    if (sendingRef.current || !conversation?.instance_id || !text.trim()) return
+    if (sendingRef.current || !sessionOpen || !conversation?.instance_id || !text.trim()) return
 
     const textToSend = text
     const genAtSend  = sendGenRef.current
@@ -622,7 +655,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     } else {
       setSendError(getSendErrorMessage(caughtError))
     }
-  }, [companyId, conversation, conversationId, text, refresh])
+  }, [companyId, conversation, conversationId, refresh, sessionOpen, text])
 
   // ── handleSendTemplate (MVP4A + MVP4B + MVP4B.4D.2C) ─────────────────────
   // Reutiliza os mesmos guards anti-stale do handleSend (sendingRef, sendGenRef, mountedRef).
@@ -717,7 +750,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
     [handleSend],
   )
 
-  const canSend        = !isSending && !!conversation?.instance_id && !!text.trim()
+  const canSend        = sessionOpen && !isSending && !!conversation?.instance_id && !!text.trim()
   const canOpenPicker  = !isSending && !!conversation?.instance_id
 
   return (
@@ -758,6 +791,26 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
 
       {/* Composer — MVP3D + MVP4A */}
       <div className="flex-shrink-0 border-t border-slate-200/60 bg-white px-4 py-3">
+        {!windowReady && (
+          <p data-testid="meta-window-checking" className="mb-2 text-xs text-slate-500">
+            Verificando a janela de atendimento...
+          </p>
+        )}
+        {windowReady && serviceWindow.state === 'open' && (
+          <p data-testid="meta-window-open" className="mb-2 text-xs text-slate-500">
+            Janela de atendimento aberta
+          </p>
+        )}
+        {windowReady && serviceWindow.state === 'closed' && (
+          <p data-testid="meta-window-closed" role="status" className="mb-2 text-xs leading-relaxed text-amber-800">
+            A janela de 24 horas encerrou. Texto e áudio estão bloqueados. Envie um template aprovado para retomar a conversa.
+          </p>
+        )}
+        {windowReady && serviceWindow.state === 'unknown' && (
+          <p data-testid="meta-window-unknown" role="status" className="mb-2 text-xs leading-relaxed text-amber-800">
+            Não há uma janela de atendimento comprovada. Texto e áudio ficam bloqueados até chegar uma mensagem recente do cliente. Você pode enviar um template aprovado.
+          </p>
+        )}
         {sendError && (
           <p role="alert" className="text-xs text-red-600 mb-2 leading-relaxed">
             {sendError}
@@ -768,6 +821,7 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
           companyId={companyId}
           instanceId={conversation?.instance_id}
           conversationId={conversationId}
+          sessionAllowed={sessionOpen}
           onSent={refresh}
         />
         <div className="flex items-end gap-2">
@@ -786,8 +840,14 @@ export function MetaChatArea({ companyId, conversationId, conversation }: MetaCh
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={!conversation?.instance_id || isSending}
-            placeholder="Digite uma mensagem..."
+            disabled={!sessionOpen || !conversation?.instance_id || isSending}
+            placeholder={
+              sessionOpen
+                ? 'Digite uma mensagem...'
+                : windowReady
+                  ? 'Texto indisponível fora da janela de atendimento'
+                  : 'Verificando a janela de atendimento...'
+            }
             rows={1}
             aria-label="Mensagem"
             className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"

@@ -16,6 +16,7 @@
 //
 // Idempotência:
 //   - statuses[]: state machine explícita (TRANSITION_MATRIX) com NOOP
+//   - a transição só grava se o status lido ainda for o mesmo (compare-and-swap)
 //   - messages[]: RPC process_meta_inbound_message — UNIQUE (instance_id, wamid)
 //   - Retry Meta em 5xx é seguro: ambos os ramos são idempotentes
 //
@@ -40,10 +41,10 @@
 //   - type='audio' persistido via process_meta_inbound_media_message (MVP5.B3.2.B)
 //   - location, sticker, interactive de outro subtipo e unknown: type_skipped
 //
-// Decisão UNKNOWN_WAMID (B1):
-//   - Meta retenta não-200 por até 7 dias (documentado oficialmente)
-//   - Wamids não encontrados são mais provavelmente de mensagens externas ao Lovoo
-//   - Retornar 200 + log seguro evita retry storm de 7 dias
+// Status sem tracking:
+//   - O primeiro evento é inserido em meta_early_status_pendings.
+//   - Sem tracking depois da releitura, a pendência fica e o chat não é tocado.
+//   - HTTP 200 se essa persistência for a única ocorrência, sem falha transitória.
 // =============================================================================
 
 import { timingSafeEqual } from 'crypto';
@@ -59,14 +60,16 @@ import {
 import { decryptMetaToken }            from '../../lib/meta-whatsapp/tokenCrypto.js';
 import { downloadAndStoreInboundMedia } from '../../lib/meta-whatsapp/inboundMediaProcessor.js';
 import { MEDIA_SIZE_LIMITS }           from '../../lib/meta-whatsapp/mediaConstants.js';
+import {
+  SUPPORTED_STATUSES,
+  handleLiveOutboundStatus,
+  parseMetaTimestamp,
+  recoverOutboundStatusBacklog,
+}                                      from '../../lib/meta-whatsapp/outboundStatusTracking.js';
 
 // CRÍTICO: desabilitar body parser do Vercel — obrigatório para HMAC validation.
 // Qualquer re-serialização do body invalida a assinatura.
 export const config = { api: { bodyParser: false } };
-
-// Statuses outbound suportados nesta fase (MVP2 2C.4).
-// 'played' não está incluído — ignorado silenciosamente.
-const SUPPORTED_STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
 
 // Limite MVP conservador para documentos inbound (INBOUND-DOC-C2).
 // INTENCIONALMENTE 5 MB — não altera MEDIA_SIZE_LIMITS global (infra suporta 30 MB).
@@ -80,32 +83,6 @@ const MAX_INBOUND_DOCUMENT_BYTES = 5 * 1024 * 1024; // 5 MB
 // Teto do body de texto inbound (Cloud API / Graph). Interactive title usa o mesmo
 // contrato: string após trim, não vazia, no máximo este comprimento. Acima → skip.
 const MAX_INBOUND_TEXT_BODY_LENGTH = 4096;
-
-// =============================================================================
-// State machine — matriz de transições explícita
-//
-// Linha  = status ATUAL  na tabela meta_whatsapp_messages
-// Coluna = status NOVO   recebido do webhook
-//
-// true  → APPLY: executar UPDATE no banco
-// false → NOOP:  ignorar (duplicata ou regressão não permitida)
-//
-// Regras aplicadas:
-//   accepted → qualquer → APPLY (primeira notificação)
-//   sent     → delivered/read/failed → APPLY (progressão)
-//   sent     → sent → NOOP (duplicata)
-//   delivered → read → APPLY (única progressão possível)
-//   delivered → failed → NOOP (S7 Meta: delivered = entregue em pelo menos 1 device)
-//   read     → qualquer → NOOP (estado máximo de progressão)
-//   failed   → qualquer → NOOP (terminal)
-// =============================================================================
-const TRANSITION_MATRIX = {
-  accepted:  { sent: true,  delivered: true,  read: true,  failed: true  },
-  sent:      { sent: false, delivered: true,  read: true,  failed: true  },
-  delivered: { sent: false, delivered: false, read: true,  failed: false },
-  read:      { sent: false, delivered: false, read: false, failed: false },
-  failed:    { sent: false, delivered: false, read: false, failed: false },
-};
 
 // =============================================================================
 // Handler principal
@@ -223,13 +200,23 @@ async function handlePost(req, res) {
   // ── 7. Iterar defensivamente sobre entries e changes ─────────────────────
   const entries = Array.isArray(payload.entry) ? payload.entry : [];
 
-  // Marcador de falha transiente para batch safety (INBOUND-DOC-C2).
-  // Erros transientes de DOCUMENT/IMAGE/VIDEO marcam este flag e continuam processando
-  // demais eventos do payload, em vez de retornar 500 imediatamente.
-  // Meta reenvia o payload inteiro em caso de 500 — por isso todos os ramos
-  // são idempotentes (TEXT via RPC, DOCUMENT/IMAGE/VIDEO via source_ref + ON CONFLICT,
-  // statuses via TRANSITION_MATRIX).
+  // Marcador de falha transiente para o lote.
+  // Erro recuperável de texto, botão, interativo ou mídia marca este flag
+  // e o processamento dos eventos seguintes continua. O flag não volta a false.
+  // HTTP 500 sai só depois dos entries e changes.
+  // Meta reenvia o payload inteiro — a idempotência fica na RPC, no wamid
+  // e no compare-and-swap de status.
   let hasTransientFailure = false;
+  const recoveryScopes = new Map();
+  const rememberInstance = (resolved) => {
+    const scopeKey = `${resolved.company_id}:${resolved.id}`;
+    let scope = recoveryScopes.get(scopeKey);
+    if (!scope) {
+      scope = { instance: resolved, wamids: new Set() };
+      recoveryScopes.set(scopeKey, scope);
+    }
+    return scope;
+  };
 
   for (const entry of entries) {
     const changes = Array.isArray(entry.changes) ? entry.changes : [];
@@ -270,7 +257,7 @@ async function handlePost(req, res) {
         continue;
       }
 
-      // ── 9. Ramo A — statuses[] outbound (MVP2 — comportamento intacto) ────
+      // ── 9. Ramo A — statuses[] outbound ───────────────────────────────────
       for (const statusItem of statuses) {
         const wamid     = statusItem.id;
         const newStatus = statusItem.status;
@@ -281,61 +268,17 @@ async function handlePost(req, res) {
         // Ignorar statuses fora do escopo (played, outros)
         if (!SUPPORTED_STATUSES.has(newStatus)) continue;
 
-        const effectiveTimestamp = parseMetaTimestamp(statusItem.timestamp);
+        // ── 10–12. Pendências do wamid, depois o evento ao vivo, um toque ──
+        rememberInstance(instance).wamids.add(wamid);
 
-        // ── 10. SELECT row atual (read-before-update) ──────────────────────
-        // Correlação: (instance_id, meta_message_id) — nunca apenas por wamid
-        const { data: row, error: selectErr } = await svc
-          .from('meta_whatsapp_messages')
-          .select('id, status')
-          .eq('instance_id', instance.id)
-          .eq('meta_message_id', wamid)
-          .maybeSingle();
-
-        if (selectErr) {
-          console.error('[meta/webhook] select_failed db_error=true');
-          return res.status(500).json({ error: 'Internal error' });
-        }
-
-        if (!row) {
-          // Unknown wamid — decisão B1: 200 + log seguro, continuar batch
-          // Não logar wamid completo nem phone_number_id
-          console.log(
-            '[meta/webhook] event_type=status instance_resolved=true wamid_found=false correlated=false status=%s',
-            newStatus,
-          );
-          continue;
-        }
-
-        // ── 11. Consultar state machine ────────────────────────────────────
-        if (!shouldApply(row.status, newStatus)) {
-          // NOOP: duplicata ou regressão não permitida
-          console.log('[meta/webhook] event_type=status transition_blocked=true status=%s', newStatus);
-          continue;
-        }
-
-        // ── 12. Executar UPDATE ────────────────────────────────────────────
-        const updatePayload = buildUpdatePayload(newStatus, effectiveTimestamp, statusItem);
-
-        const { error: updateErr } = await svc
-          .from('meta_whatsapp_messages')
-          .update(updatePayload)
-          .eq('id', row.id);
-
-        if (updateErr) {
-          console.error('[meta/webhook] update_failed db_error=true');
-          return res.status(500).json({ error: 'Internal error' });
-        }
-
-        console.log('[meta/webhook] event_type=status status=%s transition_applied=true', newStatus);
-
-        // MVP5.B1.2 — sinal Realtime para ticks: UPDATE pontual de updated_at
-        // em meta_messages. Só após transição efetivamente aplicada no tracking.
-        // NOOP / duplicata / regressão / wamid desconhecido não chegam aqui.
-        // Zero linhas: mensagem ainda não persistida no chat — no-op, sem INSERT.
-        // Falha de DB: log sanitizado; tracking NÃO é revertido.
-        // HTTP: 200 (retry Meta seria NOOP no tracking e não reaplicaria o sinal).
-        await touchOutboundChatMessage(svc, instance, wamid);
+        const decision = await handleLiveOutboundStatus(
+          svc,
+          instance,
+          wamid,
+          newStatus,
+          statusItem,
+        );
+        if (decision.transient) hasTransientFailure = true;
       }
 
       // ── 13. Ramo B — messages[] inbound TEXT (MVP3A) ──────────────────────
@@ -389,29 +332,13 @@ async function handlePost(req, res) {
             continue;
           }
 
-          // RPC de persistência atômica — idempotente por (instance_id, wamid)
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          // RPC idempotente por (instance_id, wamid). Erro ou exceção
+          // desta mensagem não encerra o lote.
+          rememberInstance(instance);
+          const textTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            // Erro real de DB/RPC — retornar 500 para retry Meta
-            // Duplicata (created=false) NÃO é erro — tratada abaixo
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (textTransient) hasTransientFailure = true;
 
         } else if (message.type === 'button') {
           // ── B.5.1b BUTTON / QUICK_REPLY inbound (MVP4C.12) ───────────────
@@ -423,26 +350,11 @@ async function handlePost(req, res) {
             continue;
           }
 
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          rememberInstance(instance);
+          const buttonTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (buttonTransient) hasTransientFailure = true;
 
         } else if (message.type === 'interactive') {
           // ── B.5.1c INTERACTIVE inbound (MVP5.B3.1) ───────────────────────
@@ -454,26 +366,11 @@ async function handlePost(req, res) {
             continue;
           }
 
-          const { data: rpcData, error: rpcErr } = await svc.rpc(
-            'process_meta_inbound_message',
-            {
-              p_company_id:         instance.company_id,
-              p_instance_id:        instance.id,
-              p_wa_id:              message.from,
-              p_meta_message_id:    message.id,
-              p_body:               body,
-              p_contact_name:       contactName,
-              p_provider_timestamp: providerTimestamp,
-            },
+          rememberInstance(instance);
+          const interactiveTransient = await persistInboundTextLikeMessage(
+            svc, instance, message, body, contactName, providerTimestamp,
           );
-
-          if (rpcErr) {
-            console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
-            return res.status(500).json({ error: 'Internal error' });
-          }
-
-          const created = rpcData?.created === true;
-          console.log('[meta/webhook] event_type=inbound_message created=%s', created);
+          if (interactiveTransient) hasTransientFailure = true;
 
         } else if (message.type === 'document') {
           // ── B.5.2 DOCUMENT inbound (INBOUND-DOC-C2) ──────────────────────
@@ -483,6 +380,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_document outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const docTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -508,6 +406,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_image outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const imgTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -533,6 +432,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_video outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const vidTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -557,6 +457,7 @@ async function handlePost(req, res) {
             console.log('[meta/webhook] event_type=inbound_audio outcome=invalid_media_id');
             continue;
           }
+          rememberInstance(instance);
           const audTransient = await processInboundMediaMessage({
             svc,
             instance,
@@ -581,6 +482,13 @@ async function handlePost(req, res) {
     }
   }
 
+  // Uma vez por instância com status suportado ou inbound elegível.
+  // O wamid corrente já foi decidido e fica fora deste orçamento.
+  for (const scope of recoveryScopes.values()) {
+    const recovery = await recoverOutboundStatusBacklog(svc, scope.instance, scope.wamids);
+    if (recovery.transient) hasTransientFailure = true;
+  }
+
   // Retornar 500 se houve falha transiente em algum DOCUMENT/IMAGE/VIDEO/AUDIO do payload.
   // Meta reenviará o payload inteiro — idempotência garante segurança do retry.
   if (hasTransientFailure) {
@@ -593,6 +501,77 @@ async function handlePost(req, res) {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Persiste texto, botão ou resposta interativa pela mesma RPC.
+ * error do cliente, timeout, exceção e retorno null ou undefined são
+ * falha recuperável desta mensagem. { data: null, error: null } permanece
+ * sucesso. O objeto de erro não é logado.
+ *
+ * @returns {Promise<boolean>} true quando o lote deve responder 500
+ */
+async function persistInboundTextLikeMessage(svc, instance, message, body, contactName, providerTimestamp) {
+  let rpcData;
+  let rpcErr;
+  try {
+    const result = await svc.rpc('process_meta_inbound_message', {
+      p_company_id:         instance.company_id,
+      p_instance_id:        instance.id,
+      p_wa_id:              message.from,
+      p_meta_message_id:    message.id,
+      p_body:               body,
+      p_contact_name:       contactName,
+      p_provider_timestamp: providerTimestamp,
+    });
+    if (result == null) {
+      console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+      return true;
+    }
+    rpcData = result.data;
+    rpcErr  = result.error;
+  } catch {
+    console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+    return true;
+  }
+
+  if (rpcErr) {
+    console.error('[meta/webhook] event_type=inbound_message rpc_error=true');
+    return true;
+  }
+
+  console.log('[meta/webhook] event_type=inbound_message created=%s', rpcData?.created === true);
+  return false;
+}
+
+/**
+ * Lê o ciphertext da instância resolvida.
+ * transient=true pede retry do lote e não inicia download.
+ *
+ * @returns {Promise<{ transient: true, outcome: string }|{ transient: false, accessTokenEnc: string }>}
+ */
+async function readInboundMediaCredential(svc, instanceId) {
+  let lookup;
+  try {
+    lookup = await svc
+      .from('meta_whatsapp_credentials')
+      .select('access_token_enc')
+      .eq('instance_id', instanceId)
+      .maybeSingle();
+  } catch {
+    return { transient: true, outcome: 'credential_lookup_failed' };
+  }
+
+  const credential = lookup?.data;
+  if (lookup?.error) return { transient: true, outcome: 'credential_lookup_failed' };
+  if (!credential) return { transient: true, outcome: 'credential_missing' };
+
+  const accessTokenEnc = credential.access_token_enc;
+  if (typeof accessTokenEnc !== 'string' || accessTokenEnc.trim().length === 0) {
+    return { transient: true, outcome: 'credential_token_absent' };
+  }
+
+  return { transient: false, accessTokenEnc };
+}
 
 /**
  * Pipeline compartilhado DOCUMENT + IMAGE + VIDEO + AUDIO inbound.
@@ -656,25 +635,28 @@ async function processInboundMediaMessage({
     return false;
   }
 
-  // Credencial lazy — fonte canônica: meta_whatsapp_credentials.
-  // instance.id: sempre do banco — nunca do payload.
-  const { data: credential, error: credErr } = await svc
-    .from('meta_whatsapp_credentials')
-    .select('access_token_enc')
-    .eq('instance_id', instance.id)
-    .maybeSingle();
-
-  if (credErr || !credential?.access_token_enc) {
-    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
-    return false;
+  // Credencial lazy — depois do dedupe, para mídia já persistida
+  // recuperar o lead sem Graph nem Storage.
+  // A tabela não tem company_id: o escopo é instance_id da instância
+  // resolvida no banco. Não há token global nem credencial de outra instância.
+  //
+  // Erro de consulta, linha ausente, token vazio e falha de descriptografia
+  // não provam configuração permanente. Confirmar 200 perderia a mídia.
+  // Todos esses casos são falha recuperável do lote. O módulo de criptografia
+  // não distingue chave ausente de ciphertext inválido; a falha de decrypt
+  // segue o mesmo caminho para não descartar a mensagem.
+  const credentialOutcome = await readInboundMediaCredential(svc, instance.id);
+  if (credentialOutcome.transient) {
+    console.error('[meta/webhook] event_type=%s outcome=%s', logEvent, credentialOutcome.outcome);
+    return true;
   }
 
   let plainToken;
   try {
-    plainToken = decryptMetaToken(credential.access_token_enc);
+    plainToken = decryptMetaToken(credentialOutcome.accessTokenEnc);
   } catch {
-    console.error('[meta/webhook] event_type=%s outcome=credential_unavailable', logEvent);
-    return false;
+    console.error('[meta/webhook] event_type=%s outcome=%s', logEvent, 'credential_decrypt_failed');
+    return true;
   }
 
   let mediaResult;
@@ -736,38 +718,6 @@ async function processInboundMediaMessage({
 }
 
 /**
- * Consulta a matriz de transições explícita.
- * Não usa ranking numérico — cada célula é declarada explicitamente.
- *
- * @param {string} currentStatus — status atual no banco
- * @param {string} newStatus     — status recebido do webhook
- * @returns {boolean} true = APPLY, false = NOOP
- */
-function shouldApply(currentStatus, newStatus) {
-  return TRANSITION_MATRIX[currentStatus]?.[newStatus] === true;
-}
-
-/**
- * Parseia o timestamp Meta (string Unix epoch em segundos).
- *
- * Aceita somente string composta exclusivamente de dígitos decimais,
- * representando um inteiro seguro e positivo.
- * Sem janela arbitrária de validade (Meta não documenta restrição de validade).
- *
- * @param {unknown} raw — valor bruto de statuses[].timestamp
- * @returns {string|null} ISO 8601 string ou null se inválido
- */
-function parseMetaTimestamp(raw) {
-  if (typeof raw !== 'string') return null;
-  if (!/^[0-9]+$/.test(raw))  return null;
-  const n = Number(raw);
-  if (!Number.isSafeInteger(n) || n <= 0) return null;
-  const d = new Date(n * 1000);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-/**
  * Extrai o title de interactive.button_reply ou interactive.list_reply.
  * Retorna a string após trim, ou null para skip (subtipo desconhecido,
  * estrutura incompleta, title não-string, vazio ou acima do teto inbound).
@@ -796,88 +746,4 @@ function extractInteractiveReplyTitle(interactive) {
   if (trimmed.length === 0) return null;
   if (trimmed.length > MAX_INBOUND_TEXT_BODY_LENGTH) return null;
   return trimmed;
-}
-
-/**
- * Extrai error_code numérico de statuses[].errors[].
- * Aceita somente inteiros — nunca string ou float.
- * Nunca persiste title, message, details, href.
- * error_subcode: sempre null (campo deprecated/inexistente em webhooks v16.0+).
- *
- * @param {object} statusItem — item de statuses[]
- * @returns {number|null}
- */
-function extractErrorCode(statusItem) {
-  const errors = Array.isArray(statusItem.errors) ? statusItem.errors : [];
-  const first  = errors[0] ?? {};
-  const code   = first.code;
-  if (typeof code === 'number' && Number.isInteger(code)) return code;
-  return null;
-}
-
-/**
- * Constrói o payload de UPDATE para meta_whatsapp_messages.
- * Persiste somente campos seguros — sem texto livre, sem dados de usuário.
- *
- * @param {string}      newStatus        — status de destino
- * @param {string|null} timestamp        — ISO 8601 ou null (usa now())
- * @param {object}      statusItem       — item completo de statuses[]
- * @returns {object} objeto de update compatível com Supabase
- */
-function buildUpdatePayload(newStatus, timestamp, statusItem) {
-  const now = new Date().toISOString();
-  const ts  = timestamp ?? now;
-
-  switch (newStatus) {
-    case 'sent':
-      return { status: 'sent',      sent_at:      ts, updated_at: now };
-    case 'delivered':
-      return { status: 'delivered', delivered_at: ts, updated_at: now };
-    case 'read':
-      return { status: 'read',      read_at:      ts, updated_at: now };
-    case 'failed':
-      return {
-        status:        'failed',
-        failed_at:     ts,
-        error_code:    extractErrorCode(statusItem),
-        error_subcode: null,   // deprecated/inexistente em webhooks v16.0+
-        updated_at:    now,
-      };
-    default:
-      // Nunca atingido com SUPPORTED_STATUSES guard antes desta função
-      return { updated_at: now };
-  }
-}
-
-/**
- * MVP5.B1.2 — toca meta_messages.updated_at para emitir UPDATE no Realtime.
- *
- * Filtros: company_id da instância resolvida no banco, instance_id validado,
- * meta_message_id do evento, direction outbound.
- * Não altera body, direção, timestamp original nem mídia.
- * Não cria linha se a mensagem ainda não existir.
- *
- * @returns {Promise<'ok'|'missing'|'error'>}
- */
-async function touchOutboundChatMessage(svc, instance, wamid) {
-  const { data, error } = await svc
-    .from('meta_messages')
-    .update({ updated_at: new Date().toISOString() })
-    .eq('company_id', instance.company_id)
-    .eq('instance_id', instance.id)
-    .eq('meta_message_id', wamid)
-    .eq('direction', 'outbound')
-    .select('id');
-
-  if (error) {
-    console.error('[meta/webhook] event_type=status chat_touch_failed db_error=true');
-    return 'error';
-  }
-
-  if (!Array.isArray(data) || data.length === 0) {
-    console.log('[meta/webhook] event_type=status chat_touch_skipped rows=0');
-    return 'missing';
-  }
-
-  return 'ok';
 }

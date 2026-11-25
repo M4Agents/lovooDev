@@ -265,8 +265,14 @@ export interface GetMetaConversationsResponse {
   conversations: MetaChatConversation[]
 }
 
+export interface CustomerServiceWindow {
+  state: 'open' | 'closed' | 'unknown'
+  expiresAt: string | null
+}
+
 export interface GetMetaMessagesResponse {
   messages: MetaChatMessage[]
+  customerServiceWindow?: CustomerServiceWindow
 }
 
 // ── POST /api/whatsapp/meta/messages/send ─────────────────────────────────────
