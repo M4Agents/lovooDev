@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 import { ChevronDown, Image as ImageIcon, Plus, Upload, Video } from 'lucide-react'
 import {
   catalogMediaApi,
@@ -13,11 +14,13 @@ import {
   type CompanyLibraryAssetPicker,
 } from '../../services/catalogMediaApi'
 import {
+  CATALOG_MEDIA_ACCEPT,
   CATALOG_MEDIA_MAX_FILES_PER_BATCH,
   uploadCatalogMediaToLibrary,
   validateCatalogMediaFile,
 } from '../../services/catalogLibraryUpload'
 import { CatalogMediaCard, usageRoleLabel } from './CatalogMediaCard'
+import { useCatalogUploadGuard } from './useCatalogUploadGuard'
 
 type SourceKind = 'product' | 'service'
 
@@ -34,6 +37,9 @@ type PendingLinkRetry = {
   libraryAssetId: string
   fileName: string
   mediaType: 'image' | 'video'
+  companyId: string
+  sourceId: string
+  userId: string
 }
 
 type Props = {
@@ -168,6 +174,10 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
   const [lastResults, setLastResults] = useState<BatchLineResult[] | null>(null)
   const [batchSummary, setBatchSummary] = useState<{ ok: number; fail: number } | null>(null)
   const [pendingRetries, setPendingRetries] = useState<PendingLinkRetry[]>([])
+  const uploadGuard = useCatalogUploadGuard({ companyId, sourceId }, () => {
+    setBatchProcessing(false)
+    setPendingRetries([])
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -275,6 +285,14 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
       setError(`Selecione no máximo ${CATALOG_MEDIA_MAX_FILES_PER_BATCH} arquivos por vez.`)
       return
     }
+    const session = await supabase.auth.getSession()
+    const userId = session.data.session?.user?.id
+    if (!userId) {
+      setError('Sessão inválida ou expirada.')
+      return
+    }
+    const attempt = uploadGuard.begin(userId)
+    const attemptUserId = userId
 
     setError(null)
     setLastResults(null)
@@ -286,8 +304,13 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
     let orderCursor = nextSortOrder(rows)
     const retries: PendingLinkRetry[] = []
     const comboSeen = new Set(existingCombos)
+    let stopped = false
 
     for (let i = 0; i < files.length; i++) {
+      if (!uploadGuard.matches(attempt)) {
+        stopped = true
+        break
+      }
       const file = files[i]
       const pre = validateCatalogMediaFile(file)
       if (!pre.ok) {
@@ -296,15 +319,27 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
         continue
       }
 
-      const up = await uploadCatalogMediaToLibrary(file, companyId, sourceType)
+      const up = await uploadCatalogMediaToLibrary(file, attempt.companyId, sourceType, attempt.signal)
+      if (!uploadGuard.matches(attempt)) {
+        stopped = true
+        break
+      }
       if (!up.ok) {
+        if (up.cancelled) {
+          stopped = true
+          break
+        }
         results.push({ fileName: file.name, status: 'upload_fail', detail: up.error })
         fail++
         continue
       }
 
-      const ft = file.type.startsWith('video/') ? 'video' : 'image'
+      const ft = up.data.file_type === 'video' ? 'video' : 'image'
       const assetId = String(up.data.id)
+      if (!uploadGuard.matches(attempt)) {
+        stopped = true
+        break
+      }
 
       if (comboSeen.has(comboKey(assetId, defaultUsageRole))) {
         results.push({
@@ -317,10 +352,11 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
       }
 
       try {
+        const itemId = attempt.sourceId ?? sourceId
         await catalogMediaApi.addLink({
-          companyId,
-          productId: sourceType === 'product' ? sourceId : null,
-          serviceId: sourceType === 'service' ? sourceId : null,
+          companyId: attempt.companyId,
+          productId: sourceType === 'product' ? itemId : null,
+          serviceId: sourceType === 'service' ? itemId : null,
           libraryAssetId: assetId,
           mediaType: ft,
           usageRole: defaultUsageRole,
@@ -328,11 +364,19 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
           isActive: defaultIsActive,
           useInAi: defaultUseInAi,
         })
+        if (!uploadGuard.matches(attempt)) {
+          stopped = true
+          break
+        }
         orderCursor++
         comboSeen.add(comboKey(assetId, defaultUsageRole))
         results.push({ fileName: file.name, status: 'ok', libraryAssetId: assetId })
         ok++
       } catch (e) {
+        if (!uploadGuard.matches(attempt)) {
+          stopped = true
+          break
+        }
         const msg = e instanceof Error ? e.message : 'Falha ao vincular'
         results.push({
           fileName: file.name,
@@ -346,25 +390,36 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
           libraryAssetId: assetId,
           fileName: file.name,
           mediaType: ft,
+          companyId: attempt.companyId,
+          sourceId: attempt.sourceId ?? sourceId,
+          userId: attemptUserId,
         })
         fail++
       }
     }
 
-    setLastResults(results)
-    setBatchSummary({ ok, fail })
-    setPendingRetries(retries)
-    setBatchProcessing(false)
-    await load()
+    if (!stopped && uploadGuard.matches(attempt)) {
+      setLastResults(results)
+      setBatchSummary({ ok, fail })
+      setPendingRetries(retries)
+      await load()
+    }
+    if (uploadGuard.ownsLoading(attempt.op)) setBatchProcessing(false)
   }
 
   const retryPendingLink = async (p: PendingLinkRetry) => {
+    const session = await supabase.auth.getSession()
+    const currentUserId = session.data.session?.user?.id ?? null
+    if (p.companyId !== companyId || p.sourceId !== sourceId || p.userId !== currentUserId) {
+      setError('O contexto mudou. O arquivo permanece na biblioteca e não foi vinculado novamente.')
+      return
+    }
     setError(null)
     try {
       await catalogMediaApi.addLink({
-        companyId,
-        productId: sourceType === 'product' ? sourceId : null,
-        serviceId: sourceType === 'service' ? sourceId : null,
+        companyId: p.companyId,
+        productId: sourceType === 'product' ? p.sourceId : null,
+        serviceId: sourceType === 'service' ? p.sourceId : null,
         libraryAssetId: p.libraryAssetId,
         mediaType: p.mediaType,
         usageRole: defaultUsageRole,
@@ -393,7 +448,7 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
         </Link>
       </div>
       <p className="text-[11px] text-slate-500">
-        Imagens e vídeos apenas. Limites no catálogo: imagem até 5 MB, vídeo até 30 MB. Até{' '}
+        JPEG, PNG, GIF, WebP, MP4, WebM ou MOV. Limites: imagem até 5 MB, vídeo até 30 MB. Até{' '}
         {CATALOG_MEDIA_MAX_FILES_PER_BATCH} arquivos por envio em lote.
       </p>
       {error && <div className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">{error}</div>}
@@ -474,7 +529,7 @@ export const CatalogItemMediaEditor: React.FC<Props> = ({
                 <input
                   type="file"
                   className="hidden"
-                  accept="image/*,video/*"
+                  accept={CATALOG_MEDIA_ACCEPT}
                   multiple
                   disabled={batchProcessing}
                   onChange={(e) => {

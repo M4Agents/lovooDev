@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
 import {
   Package, Plus, Pencil, RefreshCw, Tag, Trash2,
   ChevronDown, Search, SlidersHorizontal, X as XIcon,
@@ -24,7 +25,12 @@ import { SuppliersSettings } from './SuppliersSettings'
 import { exportCatalogToCsv } from '../../utils/catalogCsvExport'
 import { useDebounce } from '../../hooks/useDebounce'
 import { formatMoney } from '../../lib/formatMoney'
-import { uploadCatalogMediaToLibrary } from '../../services/catalogLibraryUpload'
+import {
+  CATALOG_IMAGE_ACCEPT,
+  uploadCatalogMediaToLibrary,
+  validateCatalogMediaFile,
+} from '../../services/catalogLibraryUpload'
+import { useCatalogUploadGuard } from './useCatalogUploadGuard'
 
 type Props = {
   companyId: string
@@ -598,6 +604,7 @@ const ProductForm: React.FC<{
   const [primaryImageUrl, setPrimaryImageUrl] = useState(initial?.primary_image_url ?? '')
   const [imageUploading, setImageUploading] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
+  const uploadGuard = useCatalogUploadGuard({ companyId }, () => setImageUploading(false))
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [linkedInactiveSupplier, setLinkedInactiveSupplier] = useState<Supplier | null>(null)
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
@@ -637,22 +644,35 @@ const ProductForm: React.FC<{
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    const pre = validateCatalogMediaFile(file, { imagesOnly: true })
+    if (!pre.ok) {
+      setImageError(pre.message)
+      return
+    }
+    const session = await supabase.auth.getSession()
+    const userId = session.data.session?.user?.id
+    if (!userId) {
+      setImageError('Sessão inválida ou expirada.')
+      return
+    }
+    const attempt = uploadGuard.begin(userId)
     setImageError(null)
     setImageUploading(true)
     try {
-      const result = await uploadCatalogMediaToLibrary(file, companyId, 'product')
+      const result = await uploadCatalogMediaToLibrary(file, attempt.companyId, 'product', attempt.signal)
+      if (!uploadGuard.matches(attempt)) return
       if (!result.ok) {
-        setImageError(result.error)
+        if (!result.cancelled) setImageError(result.error)
         return
       }
-      const previewUrl = (result.data as Record<string, unknown>).preview_url as string | null
-      if (previewUrl) setPrimaryImageUrl(previewUrl)
+      const previewUrl = result.data.preview_url
+      if (typeof previewUrl === 'string' && previewUrl) setPrimaryImageUrl(previewUrl)
     } catch {
-      setImageError('Erro ao fazer upload da imagem.')
+      if (uploadGuard.matches(attempt)) setImageError('Erro ao fazer upload da imagem.')
     } finally {
-      setImageUploading(false)
-      e.target.value = ''
+      if (uploadGuard.ownsLoading(attempt.op)) setImageUploading(false)
     }
   }
 
@@ -882,7 +902,7 @@ const ProductForm: React.FC<{
               {imageUploading ? 'Enviando…' : 'Selecionar imagem'}
               <input
                 type="file"
-                accept="image/*"
+                accept={CATALOG_IMAGE_ACCEPT}
                 className="sr-only"
                 disabled={imageUploading}
                 onChange={handleImageUpload}
@@ -1443,6 +1463,7 @@ const ServiceForm: React.FC<{
   const [primaryImageUrl, setPrimaryImageUrl] = useState(initial?.primary_image_url ?? '')
   const [imageUploading, setImageUploading] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
+  const uploadGuard = useCatalogUploadGuard({ companyId }, () => setImageUploading(false))
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [linkedInactiveSupplier, setLinkedInactiveSupplier] = useState<Supplier | null>(null)
   const [isActive, setIsActive] = useState(initial?.is_active ?? true)
@@ -1480,22 +1501,35 @@ const ServiceForm: React.FC<{
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    const pre = validateCatalogMediaFile(file, { imagesOnly: true })
+    if (!pre.ok) {
+      setImageError(pre.message)
+      return
+    }
+    const session = await supabase.auth.getSession()
+    const userId = session.data.session?.user?.id
+    if (!userId) {
+      setImageError('Sessão inválida ou expirada.')
+      return
+    }
+    const attempt = uploadGuard.begin(userId)
     setImageError(null)
     setImageUploading(true)
     try {
-      const result = await uploadCatalogMediaToLibrary(file, companyId, 'service')
+      const result = await uploadCatalogMediaToLibrary(file, attempt.companyId, 'service', attempt.signal)
+      if (!uploadGuard.matches(attempt)) return
       if (!result.ok) {
-        setImageError(result.error)
+        if (!result.cancelled) setImageError(result.error)
         return
       }
-      const previewUrl = (result.data as Record<string, unknown>).preview_url as string | null
-      if (previewUrl) setPrimaryImageUrl(previewUrl)
+      const previewUrl = result.data.preview_url
+      if (typeof previewUrl === 'string' && previewUrl) setPrimaryImageUrl(previewUrl)
     } catch {
-      setImageError('Erro ao fazer upload da imagem.')
+      if (uploadGuard.matches(attempt)) setImageError('Erro ao fazer upload da imagem.')
     } finally {
-      setImageUploading(false)
-      e.target.value = ''
+      if (uploadGuard.ownsLoading(attempt.op)) setImageUploading(false)
     }
   }
 
@@ -1707,7 +1741,7 @@ const ServiceForm: React.FC<{
               {imageUploading ? 'Enviando…' : 'Selecionar imagem'}
               <input
                 type="file"
-                accept="image/*"
+                accept={CATALOG_IMAGE_ACCEPT}
                 className="sr-only"
                 disabled={imageUploading}
                 onChange={handleImageUpload}
