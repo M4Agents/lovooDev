@@ -13,6 +13,7 @@ import { generateTemplateMediaUrl } from '../../../services/messageTemplatesApi'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
+import { applyChatManualSend, buildAudioMessage, buildAudioPreviewFile, buildCaptionMessage, useChatManualUpload } from './chatManualMediaSend'
 import { ChatEventBus, useChatEvent } from '../../../services/chat/chatEventBus'
 import { ChatFeatureManager } from '../../../config/chatFeatures'
 import { useConversationRealtime } from '../../../hooks/chat/useChatRealtime'
@@ -100,6 +101,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   } | null>(null)
   const [captionMessage, setCaptionMessage] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const manualUpload = useChatManualUpload(
+    { companyId, conversationId, userId },
+    () => {
+      setIsUploading(false)
+      setShowPreviewModal(false)
+      setCaptionMessage('')
+      setPreviewFile((current) => {
+        if (current?.url) URL.revokeObjectURL(current.url)
+        return null
+      })
+    }
+  )
+  const uploadScopeKey = `${companyId}\0${conversationId}\0${userId}`
+  const [trackedUploadScope, setTrackedUploadScope] = useState(uploadScopeKey)
+  if (trackedUploadScope !== uploadScopeKey) {
+    setTrackedUploadScope(uploadScopeKey)
+    setIsUploading(false)
+    setShowPreviewModal(false)
+    setCaptionMessage('')
+    setPreviewFile((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url)
+      return null
+    })
+  }
   const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
   const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set())
 
@@ -1004,32 +1029,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   
   // Enviar arquivo com legenda
   const handleSendWithCaption = async () => {
-    if (!previewFile || isUploading) return // Prevenir múltiplos cliques
-    
-    setIsUploading(true) // Ativar loading
-    
-    try {
-      // Upload do arquivo usando a API existente
-      const mediaUrl = await chatApi.uploadMedia(previewFile.file, companyId, conversationId)
-      
-      const mimeType = previewFile.type || ''
-      const isImage = mimeType.startsWith('image/')
-      const isVideo = mimeType.startsWith('video/')
-      
-      handleSendMessage({
-        content: captionMessage.trim() || previewFile.name,
-        message_type: isVideo ? 'video' : (isImage ? 'image' : 'document'),
-        media_url: mediaUrl
-      })
-      
-      // Fechar modal após sucesso
-      closePreviewModal()
-    } catch (error) {
-      console.error('Erro ao enviar arquivo com legenda:', error)
-      alert('Erro ao enviar arquivo. Tente novamente.')
-    } finally {
-      setIsUploading(false) // Desativar loading
-    }
+    if (!previewFile || isUploading) return
+
+    const file = previewFile.file
+    const caption = captionMessage
+    const previewType = previewFile.type
+    const previewName = previewFile.name
+    setIsUploading(true)
+    const outcome = await manualUpload.run(file)
+    applyChatManualSend(outcome, {
+      owns: manualUpload.ownsLoading,
+      send: (mediaUrl) => {
+        handleSendMessage(buildCaptionMessage({
+          mimeType: previewType,
+          fileName: previewName,
+          caption,
+          mediaUrl,
+        }))
+        closePreviewModal()
+      },
+      fail: () => {
+        console.error('Erro ao enviar arquivo com legenda')
+        alert('Erro ao enviar arquivo. Tente novamente.')
+      },
+      release: () => setIsUploading(false),
+    })
   }
   
   // Modificar processDroppedFile para abrir modal ao invés de enviar diretamente
@@ -1635,6 +1659,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           placeholder={t('input.placeholder')}
           companyId={companyId}
           conversationId={conversationId}
+          userId={userId}
           prefillValue={pendingSuggestion ?? undefined}
           onPrefillConsumed={() => setPendingSuggestion(null)}
           onToggleSuggestion={() => setShowSuggestionPanel(p => !p)}
@@ -2432,6 +2457,7 @@ interface MessageInputProps {
   placeholder?: string
   companyId: string
   conversationId: string
+  userId: string
   /** Texto a ser inserido no textarea via sugestão de IA. */
   prefillValue?: string
   /** Chamado após o prefillValue ser aplicado, para que o pai resete o estado. */
@@ -2463,6 +2489,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   placeholder,
   companyId,
   conversationId,
+  userId,
   prefillValue,
   onPrefillConsumed,
   onToggleSuggestion,
@@ -2504,6 +2531,20 @@ const MessageInput: React.FC<MessageInputProps> = ({
     clearPreview,
   } = useAudioRecorder()
   const [isSendingAudioPreview, setIsSendingAudioPreview] = useState(false)
+  const audioUpload = useChatManualUpload(
+    { companyId, conversationId, userId },
+    () => {
+      setIsSendingAudioPreview(false)
+      clearPreview()
+    }
+  )
+  const audioScopeKey = `${companyId}\0${conversationId}\0${userId}`
+  const audioScopeRef = useRef(audioScopeKey)
+  if (audioScopeRef.current !== audioScopeKey) {
+    audioScopeRef.current = audioScopeKey
+    setIsSendingAudioPreview(false)
+    clearPreview()
+  }
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
   const emojiPickerRef = useRef<HTMLDivElement | null>(null)
   const [isSecondaryMenuOpen, setIsSecondaryMenuOpen] = useState(false)
@@ -2631,35 +2672,23 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   // Enviar áudio após confirmação na prévia
   const handleSendAudioPreview = async () => {
-    if (!audioBlobPreview) return
+    if (!audioBlobPreview || isSendingAudioPreview) return
 
-    const extension =
-      audioMimeType?.includes('webm') ? 'webm' :
-      audioMimeType?.includes('ogg')  ? 'ogg'  : 'webm'
-
-    const file = new File(
-      [audioBlobPreview],
-      `gravacao-${Date.now()}.${extension}`,
-      { type: audioMimeType || audioBlobPreview.type || 'audio/webm' }
-    )
-
+    const file = buildAudioPreviewFile(audioBlobPreview, audioMimeType)
     setIsSendingAudioPreview(true)
-    try {
-      const mediaUrl = await chatApi.uploadMedia(file, companyId, conversationId)
-      onSendMessage({
-        content: '[áudio]',
-        message_type: 'audio',
-        media_url: mediaUrl,
-      })
-      // Limpa a prévia apenas após sucesso — preserva em caso de erro
-      clearPreview()
-    } catch (error) {
-      console.error('[chat] Erro ao enviar áudio:', error)
-      toast.error('Erro ao enviar áudio. Tente novamente.')
-      // Prévia permanece disponível para nova tentativa
-    } finally {
-      setIsSendingAudioPreview(false)
-    }
+    const outcome = await audioUpload.run(file)
+    applyChatManualSend(outcome, {
+      owns: audioUpload.ownsLoading,
+      send: (mediaUrl) => {
+        onSendMessage(buildAudioMessage(mediaUrl))
+        clearPreview()
+      },
+      fail: () => {
+        console.error('[chat] Erro ao enviar áudio')
+        toast.error('Erro ao enviar áudio. Tente novamente.')
+      },
+      release: () => setIsSendingAudioPreview(false),
+    })
   }
 
   // Função para auto-resize do textarea
