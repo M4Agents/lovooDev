@@ -83,7 +83,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderIcon, setNewFolderIcon] = useState('📁')
   const [newFolderDescription, setNewFolderDescription] = useState('')
-  const [uploading, setUploading] = useState(false)
   const [previewFile, setPreviewFile] = useState<MediaFile | null>(null)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
@@ -459,47 +458,6 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     } catch (error) {
       console.error('❌ Erro ao criar pasta:', error)
       alert('Erro ao criar pasta')
-    }
-  }
-  
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files || files.length === 0) return
-    
-    if (!currentFolderId) {
-      alert('Selecione uma pasta primeiro')
-      return
-    }
-    
-    try {
-      setUploading(true)
-      const file = files[0]
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('company_id', companyId)
-      formData.append('folder_id', currentFolderId)
-      formData.append('organize_to_folder', 'true')
-      
-      const response = await fetch('/api/media-management/files/upload', {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      
-      const data = await response.json()
-      const uploadResult = data.data
-      
-      alert(t('biblioteca.uploadSuccess'))
-      // Recarregar arquivos da pasta
-      await fetchData()
-    } catch (error) {
-      console.error('❌ Erro no upload:', error)
-      alert(t('biblioteca.uploadError'))
-    } finally {
-      setUploading(false)
     }
   }
   
