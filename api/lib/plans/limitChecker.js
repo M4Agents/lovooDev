@@ -63,8 +63,8 @@
  * @param {string} companyId - UUID da empresa
  * @returns {Promise<PlanLimits>}
  */
-export async function getPlanLimits(svc, companyId) {
-  const { data, error } = await svc
+function queryCompanyPlan(svc, companyId) {
+  return svc
     .from('companies')
     .select(`
       plan_id,
@@ -93,6 +93,10 @@ export async function getPlanLimits(svc, companyId) {
     `)
     .eq('id', companyId)
     .maybeSingle()
+}
+
+export async function getPlanLimits(svc, companyId) {
+  const { data, error } = await queryCompanyPlan(svc, companyId)
 
   if (error || !data) {
     return buildEmptyLimits()
@@ -321,6 +325,109 @@ export async function assertStorageLimit(svc, companyId, fileSizeBytes) {
       incoming_mb:     Math.round(incomingMb * 100) / 100,
     })
   }
+}
+
+const SAFE_ERROR_CODE = /^[A-Za-z0-9_]{1,32}$/
+const COMPLETE_DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/
+
+function safeErrorCode(error) {
+  const code = error && typeof error === 'object' ? error.code : null
+  return typeof code === 'string' && SAFE_ERROR_CODE.test(code) ? code : 'unavailable'
+}
+
+function logStrictFailure(code) {
+  console.error('[assertStorageLimitStrict] plan_validation_failed', code)
+}
+
+function failStorageValidation(code) {
+  logStrictFailure(code)
+  throw new PlanEnforcementError({
+    error: 'plan_validation_failed',
+    message: 'Não foi possível validar o armazenamento do seu plano. Tente novamente em instantes.',
+  })
+}
+
+function readStorageLimit(plan) {
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan) || !Object.hasOwn(plan, 'storage_mb')) {
+    return null
+  }
+  if (plan.storage_mb === null) return { unlimited: true }
+  if (typeof plan.storage_mb !== 'number' || !Number.isFinite(plan.storage_mb) || plan.storage_mb < 0) {
+    return null
+  }
+  return { unlimited: false, maxMb: plan.storage_mb }
+}
+
+function readUsageMb(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null
+  }
+  if (typeof value === 'string' && COMPLETE_DECIMAL.test(value)) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+  }
+  return null
+}
+
+function storageExceeded(maxMb, usedMb, fileSizeBytes) {
+  const incomingMb = fileSizeBytes / 1048576
+  if (usedMb + incomingMb > maxMb) {
+    throw new PlanEnforcementError({
+      error: 'plan_storage_limit_exceeded',
+      max_allowed_mb: maxMb,
+      current_used_mb: Math.round(usedMb * 100) / 100,
+      incoming_mb: Math.round(incomingMb * 100) / 100,
+    })
+  }
+}
+
+/**
+ * Enforcement de storage para upload deliberado da biblioteca.
+ * Plano confirmado com storage_mb NULL continua ilimitado.
+ * Falha de leitura, plano ausente, uso inválido e timeout bloqueiam.
+ */
+export async function assertStorageLimitStrict(svc, companyId, fileSizeBytes) {
+  if (typeof fileSizeBytes !== 'number' || !Number.isFinite(fileSizeBytes) || fileSizeBytes < 0) {
+    failStorageValidation('invalid_size')
+  }
+
+  let result
+  try {
+    result = await queryCompanyPlan(svc, companyId)
+  } catch (error) {
+    failStorageValidation(safeErrorCode(error))
+  }
+
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    failStorageValidation('invalid_response')
+  }
+  if (result.error) failStorageValidation(safeErrorCode(result.error))
+  if (!result.data || typeof result.data !== 'object' || Array.isArray(result.data)) {
+    failStorageValidation('missing_company')
+  }
+
+  const plan = result.data.plans
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    failStorageValidation('missing_plan')
+  }
+  const limit = readStorageLimit(plan)
+  if (!limit) failStorageValidation('invalid_plan')
+  if (limit.unlimited) return
+
+  let usage
+  try {
+    usage = await svc.rpc('get_company_storage_used_mb', { p_company_id: companyId })
+  } catch (error) {
+    failStorageValidation(safeErrorCode(error))
+  }
+
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage) || usage.error) {
+    failStorageValidation(safeErrorCode(usage?.error))
+  }
+
+  const usedMb = readUsageMb(usage.data)
+  if (usedMb === null) failStorageValidation('invalid_usage')
+  storageExceeded(limit.maxMb, usedMb, fileSizeBytes)
 }
 
 // ── Helpers internos ──────────────────────────────────────────────────────────

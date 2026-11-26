@@ -62,3 +62,9 @@ export declare function assertStorageLimit(
   companyId: string,
   fileSizeBytes: number
 ): Promise<void>
+
+export declare function assertStorageLimitStrict(
+  svc: SupabaseClient,
+  companyId: string,
+  fileSizeBytes: number
+): Promise<void>
