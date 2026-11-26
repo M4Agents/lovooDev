@@ -1127,64 +1127,6 @@ export class ChatApi {
   }
 
   // =====================================================
-  // UTILITÁRIOS PARA UPLOAD DE MÍDIA
-  // =====================================================
-
-  static async uploadMedia(
-    file: File,
-    companyId: string,
-    conversationId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<string> {
-    try {
-      // Convert File to ArrayBuffer then to Buffer
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
-
-      // Import S3Storage statically - dynamic imports don't work well with classes in Vite
-      const { S3Storage } = await import('../../services/aws/s3Storage');
-
-      // Detect content type
-      const contentType = S3Storage.detectContentType(buffer, file.name);
-
-      // Generate message ID
-      const messageId = `frontend-${conversationId}-${Date.now()}`;
-
-      const uploadResult = await S3Storage.uploadToS3({
-        companyId: companyId,
-        messageId: messageId,
-        originalFileName: file.name,
-        buffer: buffer,
-        contentType: contentType,
-        source: 'frontend',
-        onProgress: onProgress
-      });
-
-      if (!uploadResult.success || !uploadResult.data) {
-        console.error('❌ S3 upload failed:', uploadResult.error);
-        throw new Error(uploadResult.error || 'S3 upload failed');
-      }
-
-      const signedUrlResult = await S3Storage.generateSignedUrl(
-        companyId,
-        uploadResult.data.s3Key,
-        { expiresIn: 7200 } // 2 hours
-      );
-
-      if (!signedUrlResult.success || !signedUrlResult.data) {
-        console.error('❌ Failed to generate signed URL:', signedUrlResult.error);
-        throw new Error(signedUrlResult.error || 'Failed to generate signed URL');
-      }
-
-      return signedUrlResult.data;
-      
-    } catch (error) {
-      console.error('❌ S3 upload failed:', error);
-      throw new Error(`S3 upload failed: ${error.message}`);
-    }
-  }
-
-  // =====================================================
   // UTILITÁRIOS PARA NOTIFICAÇÕES EM TEMPO REAL
   // =====================================================
 
