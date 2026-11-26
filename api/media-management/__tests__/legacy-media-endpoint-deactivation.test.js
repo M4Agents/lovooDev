@@ -27,6 +27,11 @@ const HANDLERS = [
   'pages/api/media-library/upload-to-folder.js',
   'src/pages/api/media-library/upload-to-folder.js',
   'api/media-library/save-catalog-metadata.js',
+  'api/media-management/files/upload.js',
+  'pages/api/media-management/files/upload.js',
+  'src/pages/api/media-management/files/upload.js',
+  'api/media-management/files/upload-cache-bypass-final.js',
+  'src/pages/api/media-management/files/upload-cache-bypass-final.js',
 ]
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
@@ -66,7 +71,7 @@ function createReq(method) {
 }
 
 describe('desativacao das rotas legadas de midia', () => {
-  it('os doze handlers tem o mesmo conteudo inerte', () => {
+  it('os dezessete handlers tem o mesmo conteudo inerte', () => {
     const contents = HANDLERS.map((rel) => readFileSync(path.join(ROOT, rel), 'utf8'))
     expect(new Set(contents).size).toBe(1)
     expect(contents[0]).toBe(STUB)
