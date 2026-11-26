@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { chatApi } from '../../../services/chat/chatApi'
+import { applyScheduleResult, scheduleProgressPercent, useChatScheduleUpload } from './scheduleMediaUpload'
 import { LeadModal } from '../../LeadModal'
 import { BibliotecaV2 } from './BibliotecaV2'
 import { OpportunitiesSection } from './OpportunitiesSection'
@@ -423,6 +424,7 @@ export const LeadPanel: React.FC<LeadPanelProps> = ({
             <ScheduleMessages
               conversationId={conversationId}
               companyId={companyId}
+              userId={userId}
               instanceId={conversation.instance_id}
               scheduledMessages={scheduledMessages}
               onUpdate={fetchData}
@@ -1205,6 +1207,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({
 interface ScheduleMessagesProps {
   conversationId: string
   companyId: string
+  userId: string
   instanceId?: string
   scheduledMessages: ChatScheduledMessage[]
   onUpdate: () => void
@@ -1217,6 +1220,7 @@ interface ScheduleMessagesProps {
 const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   conversationId,
   companyId,
+  userId,
   instanceId,
   scheduledMessages,
   onUpdate,
@@ -1257,6 +1261,16 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   const [availableInstances, setAvailableInstances] = useState<any[]>([])
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>(instanceId || '')
   const [loadingInstances, setLoadingInstances] = useState(false)
+  const scheduleUpload = useChatScheduleUpload(
+    { companyId, conversationId, instanceId: selectedInstanceId, userId },
+    {
+      active: showForm,
+      onInvalidate: () => {
+        setIsScheduling(false)
+        setUploadProgress(0)
+      },
+    }
+  )
   
   // Estados para seletor de emojis
   const [isEmojiOpen, setIsEmojiOpen] = useState(false)
@@ -1349,59 +1363,61 @@ const ScheduleMessages: React.FC<ScheduleMessagesProps> = ({
   }, [isEmojiOpen])
 
   const handleSchedule = async () => {
-    if (!schedulingEnabled) return
-    const hasContent = formData.content.trim()
-    const hasMedia = selectedFile || formData.media_url
-    
-    if (!selectedInstanceId || (!hasContent && !hasMedia) || !formData.scheduled_date || !formData.scheduled_time) {
+    if (!schedulingEnabled || isScheduling) return
+    const draft = formData
+    const file = selectedFile
+    const hasContent = draft.content.trim()
+    const hasMedia = file || draft.media_url
+
+    if (!selectedInstanceId || (!hasContent && !hasMedia) || !draft.scheduled_date || !draft.scheduled_time) {
       alert(t('leadPanel.schedule.errors.requiredFields'))
       return
     }
 
-    try {
-      setIsScheduling(true)
-      setUploadProgress(0)
-      
-      let mediaUrl = formData.media_url
-      
-      // Upload de arquivo se selecionado com callback de progresso
-      if (selectedFile) {
-        mediaUrl = await chatApi.uploadMedia(
-          selectedFile, 
-          companyId, 
-          conversationId,
-          (progress) => setUploadProgress(progress)
+    setIsScheduling(true)
+    setUploadProgress(0)
+    const outcome = await scheduleUpload.run({
+      file,
+      onProgress: (loaded, total) => {
+        const percent = scheduleProgressPercent(loaded, total)
+        if (percent !== null) setUploadProgress(percent)
+      },
+      persist: async (mediaUrl, attempt) => {
+        await chatApi.scheduleMessage(
+          attempt.conversationId,
+          attempt.companyId,
+          attempt.instanceId,
+          null as any,
+          { ...draft, media_url: mediaUrl ?? draft.media_url }
         )
-      }
-      
-      await chatApi.scheduleMessage(
-        conversationId,
-        companyId,
-        selectedInstanceId, // Usar instância selecionada pelo usuário
-        null as any, // userId será obtido automaticamente via auth.uid()
-        { ...formData, media_url: mediaUrl }
-      )
-      
-      setShowForm(false)
-      setFormData({
-        content: '',
-        message_type: 'text',
-        scheduled_date: '',
-        scheduled_time: '',
-        timezone: 'America/Sao_Paulo',
-        recurring_type: 'none'
-      })
-      setMediaSource('none')
-      setSelectedFile(null)
-      setUploadProgress(0)
-      onUpdate()
-    } catch (error) {
-      console.error('Error scheduling message:', error)
-      alert(t('leadPanel.schedule.errors.scheduleFailed'))
-    } finally {
-      setIsScheduling(false)
-      setUploadProgress(0)
-    }
+      },
+    })
+    applyScheduleResult(outcome, {
+      owns: scheduleUpload.ownsLoading,
+      complete: () => {
+        setShowForm(false)
+        setFormData({
+          content: '',
+          message_type: 'text',
+          scheduled_date: '',
+          scheduled_time: '',
+          timezone: 'America/Sao_Paulo',
+          recurring_type: 'none'
+        })
+        setMediaSource('none')
+        setSelectedFile(null)
+        setUploadProgress(0)
+        onUpdate()
+      },
+      fail: () => {
+        console.error('Error scheduling message')
+        alert(t('leadPanel.schedule.errors.scheduleFailed'))
+      },
+      release: () => {
+        setIsScheduling(false)
+        setUploadProgress(0)
+      },
+    })
   }
 
   const handleCancelClick = (message: ChatScheduledMessage) => {

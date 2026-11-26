@@ -52,7 +52,10 @@ vi.mock('../../../../lib/supabase', () => ({
       return chain
     }),
     rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
-    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) },
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+    },
   },
 }))
 

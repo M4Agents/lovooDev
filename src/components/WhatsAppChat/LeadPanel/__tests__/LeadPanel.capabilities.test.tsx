@@ -24,7 +24,10 @@ const chatApiMock = vi.hoisted(() => ({
 const supabaseMock = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
-  auth: { getSession: vi.fn() },
+  auth: {
+    getSession: vi.fn(),
+    onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+  },
 }))
 
 const apiMock = vi.hoisted(() => ({
@@ -33,6 +36,7 @@ const apiMock = vi.hoisted(() => ({
 }))
 
 const fetchMock = vi.hoisted(() => vi.fn())
+const uploadChatMedia = vi.hoisted(() => vi.fn())
 const createUazapiChannelAdapterMock = vi.hoisted(() => vi.fn())
 
 vi.mock('react-i18next', () => ({
@@ -54,6 +58,9 @@ vi.mock('../../../../hooks/useLeadPermissions', () => ({
 }))
 
 vi.mock('../../../../services/chat/chatApi', () => ({ chatApi: chatApiMock }))
+vi.mock('../../../../services/chatMediaUpload', () => ({
+  uploadChatMedia: (...args: unknown[]) => uploadChatMedia(...args),
+}))
 vi.mock('../../../../lib/supabase', () => ({ supabase: supabaseMock }))
 vi.mock('../../../../services/api', () => ({ api: apiMock }))
 vi.mock('@emoji-mart/data', () => ({ default: {} }))
@@ -215,6 +222,7 @@ beforeEach(() => {
   ])
   chatApiMock.updateContactInfo.mockResolvedValue(undefined)
   chatApiMock.uploadMedia.mockResolvedValue('https://files.example.test/nota.txt')
+  uploadChatMedia.mockResolvedValue({ ok: true, media_url: 'https://files.example.test/nota.txt' })
   chatApiMock.scheduleMessage.mockResolvedValue(undefined)
   chatApiMock.cancelScheduledMessage.mockResolvedValue(undefined)
   chatApiMock.supabase.rpc.mockResolvedValue({ data: { success: true }, error: null })
@@ -228,7 +236,10 @@ beforeEach(() => {
     return chain
   })
   supabaseMock.rpc.mockResolvedValue({ data: [{ id: 'user-2', email: 'user-2@example.test' }], error: null })
-  supabaseMock.auth.getSession.mockResolvedValue({ data: { session: { access_token: 'session-token' } } })
+  supabaseMock.auth.getSession.mockResolvedValue({
+    data: { session: { access_token: 'session-token', user: { id: 'user-1' } } },
+    error: null,
+  })
   apiMock.createLead.mockResolvedValue({ id: 77 })
   apiMock.updateLead.mockResolvedValue({})
   fetchMock.mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
@@ -302,6 +313,7 @@ describe('LeadPanel — capabilities', () => {
     expect(screen.getByTestId('activity-modal')).toBeTruthy()
     expect(chatApiMock.scheduleMessage).not.toHaveBeenCalled()
     expect(chatApiMock.uploadMedia).not.toHaveBeenCalled()
+    expect(uploadChatMedia).not.toHaveBeenCalled()
     expect(chatApiMock.cancelScheduledMessage).not.toHaveBeenCalled()
     expect(chatApiMock.supabase.rpc).not.toHaveBeenCalled()
 
@@ -399,7 +411,14 @@ describe('LeadPanel — capabilities', () => {
       target: { files: [file] },
     })
     fireEvent.click(screen.getByText('leadPanel.schedule.confirmSchedule'))
-    await waitFor(() => expect(chatApiMock.uploadMedia).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(uploadChatMedia).toHaveBeenCalledTimes(1))
+    expect(uploadChatMedia.mock.calls[0][1]).toMatchObject({
+      purpose: 'chat_schedule',
+      companyId: COMPANY_ID,
+      conversationId: CONV_A,
+      instanceId: 'instance-1',
+    })
+    expect(chatApiMock.uploadMedia).not.toHaveBeenCalled()
     await waitFor(() => expect(chatApiMock.scheduleMessage).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByRole('button', { name: /cancelShort/ }))
