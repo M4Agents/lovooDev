@@ -22,10 +22,11 @@ interface MessageConfigModalProps {
   config: any
   onSave: (config: any) => void
   activeTriggerType?: string
+  flowId: string
 }
 
-export default function MessageConfigModal({ isOpen, onClose, config, onSave, activeTriggerType }: MessageConfigModalProps) {
-  const { company } = useAuth()
+export default function MessageConfigModal({ isOpen, onClose, config, onSave, activeTriggerType, flowId }: MessageConfigModalProps) {
+  const { company, user } = useAuth()
   const { instances, loading: loadingInstances } = useWhatsAppInstances(company?.id)
   const [selectedType, setSelectedType] = useState<MessageType['id'] | null>(config.messageType || null)
   const [currentConfig, setCurrentConfig] = useState(config)
@@ -112,7 +113,15 @@ export default function MessageConfigModal({ isOpen, onClose, config, onSave, ac
       case 'delay':
         return <DelayForm config={currentConfig} onChange={handleConfigChange} />
       case 'audio':
-        return <AudioMessageForm config={currentConfig} onChange={handleConfigChange} companyId={company?.id || ''} />
+        return (
+          <AudioMessageForm
+            config={currentConfig}
+            onChange={handleConfigChange}
+            companyId={company?.id || ''}
+            flowId={flowId}
+            userId={user?.id || ''}
+          />
+        )
       case 'file':
         return <FileAttachmentForm config={currentConfig} onChange={handleConfigChange} companyId={company?.id || ''} />
       case 'dynamic_url':

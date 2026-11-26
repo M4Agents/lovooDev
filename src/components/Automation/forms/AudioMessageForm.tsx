@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import AudioRecorder from '../AudioRecorder'
-import { ChatApi } from '../../../services/chat/chatApi'
+import { applyAutomationAudioResult, useAutomationAudioUpload } from './automationAudioUpload'
 
 interface AudioMessageFormProps {
   config: {
@@ -16,14 +16,23 @@ interface AudioMessageFormProps {
   }
   onChange: (config: any) => void
   companyId: string
+  flowId: string
+  userId: string
 }
 
-export default function AudioMessageForm({ config, onChange, companyId }: AudioMessageFormProps) {
+export default function AudioMessageForm({ config, onChange, companyId, flowId, userId }: AudioMessageFormProps) {
   const [audioUrl, setAudioUrl] = useState(config.audioUrl || '')
   const [fileName, setFileName] = useState('')
   const [recordedFile, setRecordedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const audioUpload = useAutomationAudioUpload(
+    { companyId, flowId, userId },
+    () => {
+      setIsUploading(false)
+      setUploadError(null)
+    }
+  )
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -39,42 +48,29 @@ export default function AudioMessageForm({ config, onChange, companyId }: AudioM
   }
 
   const handleRecordingComplete = async (file: File) => {
-    try {
-      setIsUploading(true)
-      setUploadError(null)
-      
-      if (!companyId) {
-        throw new Error('Company ID não encontrado')
-      }
-      
-      console.log('🎙️ Áudio gravado, iniciando upload:', file.name)
-      
-      // Upload direto para S3 (igual ao chat)
-      const mediaUrl = await ChatApi.uploadMedia(
-        file,
-        companyId,
-        `automation-audio-${Date.now()}`
-      )
-      
-      console.log('✅ Upload concluído:', mediaUrl)
-      
-      // Salvar no config
-      setRecordedFile(file)
-      setFileName(file.name)
-      setAudioUrl('')  // Limpar URL manual
-      
-      onChange({ 
-        ...config, 
-        audioFile: file,
-        audioUrl: mediaUrl
-      })
-      
-    } catch (error) {
-      console.error('❌ Erro ao salvar áudio:', error)
-      setUploadError(error instanceof Error ? error.message : 'Erro ao salvar áudio')
-    } finally {
-      setIsUploading(false)
-    }
+    if (isUploading) return
+    const draft = config
+    setIsUploading(true)
+    setUploadError(null)
+    const outcome = await audioUpload.run(file)
+    applyAutomationAudioResult(outcome, {
+      owns: audioUpload.ownsLoading,
+      apply: (mediaUrl) => {
+        setRecordedFile(file)
+        setFileName(file.name)
+        setAudioUrl('')
+        onChange({
+          ...draft,
+          audioFile: file,
+          audioUrl: mediaUrl,
+        })
+      },
+      fail: (error) => {
+        console.error('Erro ao salvar áudio')
+        setUploadError(error)
+      },
+      release: () => setIsUploading(false),
+    })
   }
 
   return (

@@ -772,6 +772,7 @@ function FlowCanvasInner({
         config={editingMessageNode?.data?.config || {}}
         onSave={handleMessageConfigSave}
         activeTriggerType={flowTriggers[0]?.type}
+        flowId={flowId}
       />
 
       {/* Modal Seletor de Gatilho */}
