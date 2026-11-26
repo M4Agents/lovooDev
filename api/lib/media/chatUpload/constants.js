@@ -13,6 +13,24 @@ export const CHAT_MESSAGE_TYPES = Object.freeze([
   'document',
 ])
 
+/** Chat manual e agendamento. Partner continua dependente de assignment. */
+export const CHAT_CONVERSATION_ROLES = Object.freeze([
+  'super_admin',
+  'system_admin',
+  'admin',
+  'manager',
+  'seller',
+  'partner',
+])
+
+/** Mesma escrita de automation_flows: manager/admin e trilha 2. Sem seller nem partner. */
+export const CHAT_AUTOMATION_ROLES = Object.freeze([
+  'super_admin',
+  'system_admin',
+  'admin',
+  'manager',
+])
+
 /** Mesma unidade do chat atual: bytes, com teto inclusivo de 10 MiB e 25 MiB. */
 export const CHAT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 export const CHAT_OTHER_MAX_BYTES = 25 * 1024 * 1024
