@@ -14,10 +14,11 @@
 //   2. Validar formato da entrada — sem DB
 //   3. getSupabaseAdmin()
 //   4. validateMetaCaller(META_VIEW_ROLES)
-//   5. Lookup de meta_conversations com auth.companyId + status=active
-//   6. Carregar companies.id e restrict_leads_to_owner
-//   7. assertMetaLeadAccess(operation='search')
-//   8. [somente após helper ok + scope válido] consultar leads
+//   5. Visibilidade da conversa (chat_visibility_by_assigned_to)
+//   6. Lookup de meta_conversations com auth.companyId, atribuição e status=active
+//   7. Carregar companies.id e restrict_leads_to_owner
+//   8. assertMetaLeadAccess(operation='search')
+//   9. [somente após helper ok + scope válido] consultar leads
 //
 // Segurança:
 //   - company_id da query identifica o tenant — nunca autoriza acesso
@@ -38,6 +39,10 @@
 import { getSupabaseAdmin } from '../../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../../lib/meta-whatsapp/validateMetaCaller.js';
 import { assertMetaLeadAccess } from '../../../../../lib/meta-whatsapp/assertMetaLeadAccess.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../../../lib/meta-whatsapp/metaConversationAccess.js';
 import { brMobilePhoneLookupValues } from '../../../../../lib/phone/canonicalizeBrMobile.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +52,7 @@ const LIMIT_MAX = 20;
 const Q_MIN = 2;
 const Q_MAX = 80;
 
-const CONV_FIELDS = 'id, company_id';
+const CONV_FIELDS = 'id, company_id, assigned_to';
 const COMPANY_FIELDS = 'id, restrict_leads_to_owner';
 const LEAD_FIELDS = 'id, name, phone, email, responsible_user_id';
 
@@ -83,6 +88,34 @@ function phoneLookupValues(term) {
   const digits = term.replace(/\D/g, '');
   if (digits.length < 10) return [];
   return brMobilePhoneLookupValues(term).filter((value) => /^\d{10,}$/.test(value));
+}
+
+function visibilityFailure(scope) {
+  if (scope.status === 503) return { status: 503, error: 'internal_error' };
+  return { status: scope.status, error: scope.error };
+}
+
+async function loadAuthorizedConversation(svc, auth, conversationId) {
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) return { ok: false, ...visibilityFailure(scope) };
+
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONV_FIELDS),
+    scope,
+    { conversationId },
+  );
+  if (!filtered.ok) return { ok: false, status: 403, error: 'Acesso negado' };
+
+  const { data, error } = await filtered.query.eq('status', 'active').maybeSingle();
+  if (error) return { ok: false, status: 500, error: 'internal_error' };
+
+  const assignedOk = scope.visibility !== 'assigned' || data?.assigned_to === auth.userId;
+  const allowed = Boolean(data)
+    && data.id === conversationId
+    && data.company_id === auth.companyId
+    && assignedOk;
+  if (!allowed) return { ok: false, status: 404, error: OPAQUE_CONV_404.error };
+  return { ok: true, conversation: data };
 }
 
 function startLeadQuery(svc, auth, scope) {
@@ -191,20 +224,11 @@ export default async function handler(req, res) {
       return res.status(auth.status).json({ error: auth.error });
     }
 
-    const { data: conversation, error: convErr } = await svc
-      .from('meta_conversations')
-      .select(CONV_FIELDS)
-      .eq('id', conversationId)
-      .eq('company_id', auth.companyId)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (convErr) {
-      return res.status(500).json(INTERNAL_ERROR);
+    const loaded = await loadAuthorizedConversation(svc, auth, conversationId);
+    if (!loaded.ok) {
+      return res.status(loaded.status).json({ error: loaded.error });
     }
-    if (!conversation) {
-      return res.status(404).json(OPAQUE_CONV_404);
-    }
+    const conversation = loaded.conversation;
 
     const { data: company, error: companyErr } = await svc
       .from('companies')

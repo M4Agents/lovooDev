@@ -36,6 +36,77 @@ vi.mock('../../../../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
 }));
 
+const visibilityProbe = {
+  flag: false,
+  flagError: null,
+  flagChains: [],
+  conversationPasses: 0,
+  lastConversationChain: null,
+};
+
+function makeVisibilityFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityProbe.flagError
+        ? null
+        : { chat_visibility_by_assigned_to: visibilityProbe.flag },
+      error: visibilityProbe.flagError,
+    }),
+  };
+}
+
+let innerFrom = vi.fn();
+let companyPasses = 0;
+
+function hideTrackedCall() {
+  trackedFrom.mock.calls.pop();
+  trackedFrom.mock.results.pop();
+  trackedFrom.mock.invocationCallOrder.pop();
+}
+
+function routeFrom(table) {
+  if (typeof innerFrom !== 'function') return undefined;
+  if (table === 'companies') {
+    companyPasses += 1;
+    if (companyPasses % 2 === 1) {
+      const chain = makeVisibilityFlagChain();
+      visibilityProbe.flagChains.push(chain);
+      hideTrackedCall();
+      return chain;
+    }
+  }
+  if (table === 'meta_conversations') {
+    visibilityProbe.conversationPasses += 1;
+    if (visibilityProbe.conversationPasses > 1) {
+      hideTrackedCall();
+      return visibilityProbe.lastConversationChain;
+    }
+    const chain = innerFrom(table);
+    visibilityProbe.lastConversationChain = chain;
+    return chain;
+  }
+  return innerFrom(table);
+}
+
+const trackedFrom = vi.fn(routeFrom);
+trackedFrom.mockReturnValueOnce = (value) => {
+  innerFrom.mockReturnValueOnce(value);
+  return trackedFrom;
+};
+trackedFrom.mockReturnValue = (value) => {
+  innerFrom.mockReturnValue(value);
+  return trackedFrom;
+};
+
+Object.defineProperty(mockSvc, 'from', {
+  configurable: true,
+  enumerable: true,
+  get() { return typeof innerFrom === 'function' ? trackedFrom : innerFrom; },
+  set(fn) { innerFrom = fn; },
+});
+
 import handler from '../search.js';
 import { META_VIEW_ROLES } from '../../../../../../lib/meta-whatsapp/validateMetaCaller.js';
 
@@ -170,6 +241,14 @@ function eqCalls(chain, column) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  innerFrom = vi.fn();
+  companyPasses = 0;
+  visibilityProbe.flag = false;
+  visibilityProbe.flagError = null;
+  visibilityProbe.flagChains = [];
+  visibilityProbe.conversationPasses = 0;
+  visibilityProbe.lastConversationChain = null;
+  trackedFrom.mockImplementation(routeFrom);
   mockValidateMetaCaller.mockResolvedValue(FAKE_AUTH_OK);
   mockAssertMetaLeadAccess.mockReturnValue({ ok: true, scope: 'all' });
 });
@@ -765,5 +844,249 @@ describe('GET leads/search — invariantes de código', () => {
     expect(HANDLER_SOURCE).toMatch(/operation: 'search'/);
     expect(HANDLER_SOURCE).toMatch(/brMobilePhoneLookupValues/);
     expect(HANDLER_SOURCE).toMatch(/\.in\('phone_normalized'/);
+  });
+});
+
+describe('GET leads/search — visibilidade da conversa', () => {
+  const OTHER_USER_ID = 'eeee0000-0000-0000-0000-000000000005';
+  const OTHER_INSTANCE_ID = 'ffff0000-0000-0000-0000-000000000006';
+
+  function asSeller() {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      companyId: FAKE_COMPANY_ID,
+      userId: FAKE_USER_ID,
+      role: 'seller',
+      accessPath: 'direct',
+    });
+  }
+
+  function ownConversation() {
+    return { ...FAKE_CONV_DB, assigned_to: FAKE_USER_ID };
+  }
+
+  it('A/S/T: flag desligada busca sem assigned_to e pagina o conjunto da empresa', async () => {
+    asSeller();
+    visibilityProbe.flag = false;
+    const { convChain, textChain } = setupReadyForLeads({ textLeads: [] });
+    const res = makeRes();
+    await handler(makeReq({
+      q: 'Ana',
+      limit: '5',
+      extraQuery: { company_id: OTHER_COMPANY, instance_id: OTHER_INSTANCE_ID },
+    }), res);
+
+    expect(res._status).toBe(200);
+    expect(eqCalls(convChain, 'assigned_to')).toHaveLength(0);
+    expect(eqCalls(convChain, 'instance_id')).toHaveLength(0);
+    expect(eqCalls(convChain, 'company_id')[0][1]).toBe(FAKE_COMPANY_ID);
+    expect(eqCalls(textChain, 'company_id')[0][1]).toBe(FAKE_COMPANY_ID);
+    expect(textChain.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(textChain.limit).toHaveBeenCalledWith(5);
+    expect(textChain.or.mock.calls[0][0]).not.toContain(OTHER_COMPANY);
+    expect(visibilityProbe.flagChains[0].eq).toHaveBeenCalledWith('id', FAKE_COMPANY_ID);
+  });
+
+  it('B: seller restrito pesquisa somente a conversa atribuída a ele', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const { convChain, textChain } = setupReadyForLeads({
+      conv: ownConversation(),
+      textLeads: [],
+    });
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(eqCalls(convChain, 'assigned_to')[0][1]).toBe(FAKE_USER_ID);
+    expect(eqCalls(convChain, 'status')[0][1]).toBe('active');
+    expect(eqCalls(textChain, 'company_id')[0][1]).toBe(FAKE_COMPANY_ID);
+  });
+
+  it('C/D/E/M: atribuição alheia, nula ou ausente não consulta leads', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    for (const conv of [
+      { ...ownConversation(), assigned_to: OTHER_USER_ID },
+      { ...ownConversation(), assigned_to: null },
+      null,
+    ]) {
+      companyPasses = 0;
+      visibilityProbe.conversationPasses = 0;
+      const convChain = makeConvChain(conv);
+      const textChain = makeLeadChain([FAKE_LEAD]);
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(convChain)
+        .mockReturnValueOnce(makeCompanyChain(FAKE_COMPANY_DB))
+        .mockReturnValueOnce(textChain);
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(404);
+      expect(res._body).toEqual({ error: 'Conversa não encontrada' });
+      expect(eqCalls(convChain, 'assigned_to')[0][1]).toBe(FAKE_USER_ID);
+      expect(textChain.limit).not.toHaveBeenCalled();
+    }
+    expect(mockAssertMetaLeadAccess).not.toHaveBeenCalled();
+  });
+
+  it('F/G: outra empresa e instance_id do cliente não ampliam a conversa', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      companyId: OTHER_COMPANY,
+      userId: FAKE_USER_ID,
+      role: 'seller',
+      accessPath: 'direct',
+    });
+    const convChain = makeConvChain(null);
+    mockSvc.from = vi.fn().mockReturnValueOnce(convChain);
+    const res = makeRes();
+    await handler(makeReq({
+      company_id: FAKE_COMPANY_ID,
+      extraQuery: { instance_id: OTHER_INSTANCE_ID },
+    }), res);
+
+    expect(res._status).toBe(404);
+    expect(eqCalls(convChain, 'company_id')[0][1]).toBe(OTHER_COMPANY);
+    expect(eqCalls(convChain, 'instance_id')).toHaveLength(0);
+    expect(visibilityProbe.flagChains.at(-1).eq).toHaveBeenCalledWith('id', OTHER_COMPANY);
+    expect(leadTableCalls()).toHaveLength(0);
+  });
+
+  it('H/I: partner sem atribuição e membership inativa não consultam conversa', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado a esta empresa' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(leadTableCalls()).toHaveLength(0);
+  });
+
+  it('J: role desconhecido é negado antes da conversa', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      companyId: FAKE_COMPANY_ID,
+      userId: FAKE_USER_ID,
+      role: 'auditor',
+      accessPath: 'direct',
+    });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('K: falha de leitura da flag não abre a busca', async () => {
+    asSeller();
+    visibilityProbe.flagError = { message: 'flag down' };
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(503);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('flag down');
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockAssertMetaLeadAccess).not.toHaveBeenCalled();
+  });
+
+  it('L: falha da conversa permanece 500', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockSvc.from = vi.fn().mockReturnValueOnce(
+      makeConvChain(null, { message: 'connection lost' }),
+    );
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('connection lost');
+    expect(leadTableCalls()).toHaveLength(0);
+  });
+
+  it('O/P/Q: empresa, exclusão e propriedade do lead continuam no SQL', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockAssertMetaLeadAccess.mockReturnValue({ ok: true, scope: 'own' });
+    const { textChain } = setupReadyForLeads({
+      conv: ownConversation(),
+      textLeads: [],
+    });
+    const res = makeRes();
+    await handler(makeReq({ q: 'Ana' }), res);
+    expect(res._status).toBe(200);
+    expect(eqCalls(textChain, 'company_id')[0][1]).toBe(FAKE_COMPANY_ID);
+    expect(textChain.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(eqCalls(textChain, 'responsible_user_id')[0][1]).toBe(FAKE_USER_ID);
+    expect(textChain.or.mock.calls[0][0]).not.toContain(`company_id.eq.${OTHER_COMPANY}`);
+  });
+
+  it('R: as duas flags permanecem independentes', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockAssertMetaLeadAccess.mockReturnValue({ ok: true, scope: 'all' });
+    const restrictedConversation = setupReadyForLeads({
+      conv: ownConversation(),
+      textLeads: [],
+    });
+    const broadLeads = makeRes();
+    await handler(makeReq(), broadLeads);
+    expect(broadLeads._status).toBe(200);
+    expect(eqCalls(restrictedConversation.convChain, 'assigned_to')).toHaveLength(1);
+    expect(eqCalls(restrictedConversation.textChain, 'responsible_user_id')).toHaveLength(0);
+
+    visibilityProbe.flag = false;
+    companyPasses = 0;
+    visibilityProbe.conversationPasses = 0;
+    mockAssertMetaLeadAccess.mockReturnValue({ ok: true, scope: 'own' });
+    const ownedLeads = setupReadyForLeads({ textLeads: [] });
+    const narrow = makeRes();
+    await handler(makeReq(), narrow);
+    expect(narrow._status).toBe(200);
+    expect(eqCalls(ownedLeads.convChain, 'assigned_to')).toHaveLength(0);
+    expect(eqCalls(ownedLeads.textChain, 'responsible_user_id')[0][1]).toBe(FAKE_USER_ID);
+  });
+
+  it('Z/W: transferência e desativação valem na requisição seguinte', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    setupReadyForLeads({ conv: ownConversation(), textLeads: [] });
+    const opened = makeRes();
+    await handler(makeReq(), opened);
+    expect(opened._status).toBe(200);
+
+    companyPasses = 0;
+    visibilityProbe.conversationPasses = 0;
+    const transferred = makeConvChain({ ...ownConversation(), assigned_to: OTHER_USER_ID });
+    mockSvc.from = vi.fn().mockReturnValueOnce(transferred);
+    const moved = makeRes();
+    await handler(makeReq(), moved);
+    expect(moved._status).toBe(404);
+    expect(eqCalls(transferred, 'assigned_to')[0][1]).toBe(FAKE_USER_ID);
+
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const callsBefore = mockSvc.from.mock.calls.length;
+    const disabled = makeRes();
+    await handler(makeReq(), disabled);
+    expect(disabled._status).toBe(403);
+    expect(mockSvc.from.mock.calls).toHaveLength(callsBefore);
+
+    asSeller();
+    visibilityProbe.flag = true;
+    companyPasses = 0;
+    visibilityProbe.conversationPasses = 0;
+    setupReadyForLeads({ conv: ownConversation(), textLeads: [] });
+    const restored = makeRes();
+    await handler(makeReq(), restored);
+    expect(restored._status).toBe(200);
   });
 });

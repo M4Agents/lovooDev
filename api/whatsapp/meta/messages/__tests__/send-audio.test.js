@@ -38,7 +38,76 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-const mockSvc = { from: vi.fn(), rpc: vi.fn(), auth: { getUser: vi.fn() } };
+const visibilityProbe = {
+  flag: false,
+  flagError: null,
+  conversationPasses: 0,
+  lastConversationChain: null,
+  flagChains: [],
+  revalidateChain: null,
+};
+
+function makeVisibilityFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityProbe.flagError
+        ? null
+        : { chat_visibility_by_assigned_to: visibilityProbe.flag },
+      error: visibilityProbe.flagError,
+    }),
+  };
+}
+
+let innerFrom = vi.fn();
+
+function hideTrackedCall() {
+  trackedFrom.mock.calls.pop();
+  trackedFrom.mock.results.pop();
+  trackedFrom.mock.invocationCallOrder.pop();
+}
+
+const trackedFrom = vi.fn((table) => {
+  if (typeof innerFrom !== 'function') return undefined;
+  if (table === 'meta_whatsapp_instances') {
+    visibilityProbe.conversationPasses = 0;
+    visibilityProbe.lastConversationChain = null;
+  }
+  if (table === 'companies') {
+    const chain = makeVisibilityFlagChain();
+    visibilityProbe.flagChains.push(chain);
+    hideTrackedCall();
+    return chain;
+  }
+  if (table === 'meta_conversations') {
+    visibilityProbe.conversationPasses += 1;
+    if (visibilityProbe.conversationPasses > 1) {
+      hideTrackedCall();
+      return visibilityProbe.revalidateChain || visibilityProbe.lastConversationChain;
+    }
+    const chain = innerFrom(table);
+    visibilityProbe.lastConversationChain = chain;
+    return chain;
+  }
+  return innerFrom(table);
+});
+trackedFrom.mockReturnValueOnce = (value) => {
+  innerFrom.mockReturnValueOnce(value);
+  return trackedFrom;
+};
+trackedFrom.mockReturnValue = (value) => {
+  innerFrom.mockReturnValue(value);
+  return trackedFrom;
+};
+
+const mockSvc = { rpc: vi.fn(), auth: { getUser: vi.fn() } };
+Object.defineProperty(mockSvc, 'from', {
+  configurable: true,
+  enumerable: true,
+  get() { return typeof innerFrom === 'function' ? trackedFrom : innerFrom; },
+  set(fn) { innerFrom = fn; },
+});
 
 vi.mock('../../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
@@ -633,6 +702,12 @@ function makeCredChain(data, error = null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  visibilityProbe.flag = false;
+  visibilityProbe.flagError = null;
+  visibilityProbe.conversationPasses = 0;
+  visibilityProbe.lastConversationChain = null;
+  visibilityProbe.flagChains = [];
+  visibilityProbe.revalidateChain = null;
   delete process.env.META_OUTBOUND_AUDIO_GRAPH_ENABLED;
   delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   fsState.failRead = false;
@@ -975,7 +1050,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     }), res);
     expectCreatedGraphSuccess(res);
     expect(mockSvc.auth.getUser).toHaveBeenCalledTimes(1);
-    expect(mockValidateMetaCaller).toHaveBeenCalledTimes(1);
+    expect(mockValidateMetaCaller).toHaveBeenCalledTimes(4);
     expect(mockSvc.auth.getUser.mock.invocationCallOrder[0])
       .toBeLessThan(mockValidateMetaCaller.mock.invocationCallOrder[0]);
     expect(res._body).not.toHaveProperty('message_id');
@@ -1138,7 +1213,7 @@ describe('POST /api/whatsapp/meta/messages/send-audio — B3.2-C.1', () => {
     const res = makeRes();
     await handler(makeMultipartReq(), res);
     expectCreatedGraphSuccess(res);
-    expect(mockValidateMetaCaller).toHaveBeenCalledTimes(1);
+    expect(mockValidateMetaCaller).toHaveBeenCalledTimes(4);
     expect(insertChain.insert).toHaveBeenCalledTimes(1);
     expect(persistStoreState.claim).toHaveBeenCalledTimes(1);
     expect(mockUploadMedia).toHaveBeenCalledTimes(1);
@@ -3089,6 +3164,158 @@ describe('POST /api/whatsapp/meta/messages/send-audio — reconciliação poster
     await pending;
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ ok: true });
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/whatsapp/meta/messages/send-audio — visibilidade por atribuição', () => {
+  const OTHER_USER_ID = 'abab0000-0000-0000-0000-000000000099';
+
+  function asSeller() {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      userId: FAKE_USER_ID,
+      companyId: FAKE_COMPANY_ID,
+      role: 'seller',
+      accessPath: 'direct',
+    });
+  }
+
+  function ownConversation() {
+    return { ...FAKE_CONVERSATION, assigned_to: FAKE_USER_ID };
+  }
+
+  it('C/D/E/N/O/X: operation_id não autoriza conversa nem inicia claim ou upload', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    for (const conversation of [
+      { ...ownConversation(), assigned_to: OTHER_USER_ID },
+      { ...ownConversation(), assigned_to: null },
+      null,
+    ]) {
+      const convChain = makeConvChain(conversation);
+      const selectChain = makeOpSelectChain(operationRow());
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(convChain)
+        .mockReturnValueOnce(selectChain);
+      const res = makeRes();
+      await handler(makeMultipartReq(), res);
+      expect(res._status).toBe(404);
+      expect(res._body).toEqual({ error: 'conversation_not_found' });
+      expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+      expect(selectChain.maybeSingle).not.toHaveBeenCalled();
+    }
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+  });
+
+  it('S: áudio da própria conversa dentro da janela segue o envio', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    setupGraphCreatedLookups();
+    asSeller();
+    const convChain = makeConvChain(ownConversation());
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeOpSelectChain(null))
+      .mockReturnValueOnce(makeWindowChain())
+      .mockReturnValueOnce(makeOpInsertChain(operationRow()))
+      .mockReturnValueOnce(makeCredChain({ access_token_enc: 'v1:enc-fixture' }))
+      .mockReturnValueOnce(makeOpSelectChain(graphAcceptedRow()));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    expect(mockSendAudioMessage).toHaveBeenCalled();
+  });
+
+  it('T: áudio fora da janela não faz upload nem Graph', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const convChain = makeConvChain(ownConversation());
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeOpSelectChain(null))
+      .mockReturnValueOnce(makeWindowChain({
+        data: { provider_timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
+      }));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+  });
+
+  it('Y: graph_accepted autorizado recupera sem novo Graph', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    setupAwsRpcOk();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(makeOpSelectChain(graphAcceptedRow()));
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ ok: true });
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+    expect(persistState.mock).toHaveBeenCalled();
+  });
+
+  it('Z/AA: completed não expõe wamid e graph_in_flight não reenvia', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({
+        status: 'completed',
+        wamid: FAKE_WAMID,
+      })));
+    const completed = makeRes();
+    await handler(makeMultipartReq(), completed);
+    expect(completed._status).toBe(200);
+    expect(completed._body).toEqual({ ok: true });
+    expect(JSON.stringify(completed._body)).not.toContain(FAKE_WAMID);
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(makeOpSelectChain(operationRow({
+        status: 'graph_in_flight',
+        graph_started_at: GRAPH_STARTED_AT,
+      })));
+    const inflight = makeRes();
+    await handler(makeMultipartReq(), inflight);
+    expect(inflight._status).toBe(409);
+    expect(inflight._body).toEqual({ ok: false, error: 'operation_in_progress' });
+    expect(mockSendAudioMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('AD: revogação depois do arquivo impede claim e Graph', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const selectChain = makeOpSelectChain(operationRow());
+    visibilityProbe.revalidateChain = makeConvChain(null);
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(selectChain);
+    const res = makeRes();
+    await handler(makeMultipartReq(), res);
+    expect(res._status).toBe(404);
+    expect(selectChain.maybeSingle).not.toHaveBeenCalled();
+    expect(persistStoreState.claim).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
     expect(mockSendAudioMessage).not.toHaveBeenCalled();
   });
 });

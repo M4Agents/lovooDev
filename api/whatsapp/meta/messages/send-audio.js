@@ -67,6 +67,10 @@ import { persistOutboundAudioMediaLibrary } from '../../../lib/meta-whatsapp/out
 import { persistOutboundAudioTracking } from '../../../lib/meta-whatsapp/outboundAudioTrackingStore.js';
 import { persistOutboundAudioChat } from '../../../lib/meta-whatsapp/outboundAudioChatStore.js';
 import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../lib/meta-whatsapp/metaConversationAccess.js';
 import { decryptMetaToken } from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendAudioMessage, uploadMedia } from '../../../lib/meta-whatsapp/graphClient.js';
 import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServiceWindow.js';
@@ -77,6 +81,68 @@ import {
 } from '../../../lib/meta-whatsapp/audioBytes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const CONVERSATION_FIELDS = 'id, wa_id, company_id, instance_id, assigned_to';
+
+function visibilityFailure(scope) {
+  const status = scope.status === 503 ? 503 : scope.status;
+  return {
+    ok: false,
+    status,
+    error: status === 503 ? 'internal_error' : scope.error,
+  };
+}
+
+function normalizeWaId(waId) {
+  const raw = waId ?? '';
+  const normalized = raw.startsWith('+') ? raw.slice(1) : raw;
+  if (!/^[0-9]+$/.test(normalized) || normalized.length === 0) return null;
+  return normalized;
+}
+
+async function resolveSendScope(svc, auth) {
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) return visibilityFailure(scope);
+  return { ok: true, scope };
+}
+
+async function loadAuthorizedConversation(svc, auth, scope, conversationId, instanceId) {
+  const instanceFilter = UUID_RE.test(instanceId) ? instanceId : null;
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONVERSATION_FIELDS),
+    scope,
+    { conversationId, instanceId: instanceFilter },
+  );
+  if (!filtered.ok) return { ok: false, status: 403, error: 'Acesso negado' };
+
+  const { data, error } = await filtered.query.maybeSingle();
+  if (error) return { ok: false, status: 500, error: 'internal_error' };
+
+  const instanceMatches = !data || instanceFilter == null || data.instance_id === instanceFilter;
+  const allowed = data
+    && data.id === conversationId
+    && data.company_id === auth.companyId
+    && instanceMatches
+    && (scope.visibility !== 'assigned' || data.assigned_to === auth.userId);
+  if (!allowed) return { ok: false, status: 404, error: 'conversation_not_found' };
+  return { ok: true, conversation: data };
+}
+
+async function revalidateAuthorizedConversation(req, svc, companyId, conversationId, instanceId) {
+  const auth = await validateMetaCaller(req, svc, companyId, { roles: META_SEND_ROLES });
+  if (!auth.ok) return { ok: false, status: auth.status, error: auth.error };
+  const scope = await resolveSendScope(svc, auth);
+  if (!scope.ok) return scope;
+  const loaded = await loadAuthorizedConversation(
+    svc,
+    auth,
+    scope.scope,
+    conversationId,
+    instanceId,
+  );
+  if (!loaded.ok) return loaded;
+  return { ok: true, auth, conversation: loaded.conversation };
+}
 
 export const config = { api: { bodyParser: false } };
 
@@ -320,6 +386,16 @@ async function respondCreatedGraphSend(res, sendContext, extras = {}) {
   }
   if (!PHONE_NUMBER_ID_RE.test(instance.phone_number_id ?? '')) {
     return res.status(500).json({ error: 'internal_error' });
+  }
+  const stillAuthorized = await revalidateAuthorizedConversation(
+    extras.req,
+    svc,
+    auth.companyId,
+    sendContext.conversationId,
+    instance.id,
+  );
+  if (!stillAuthorized.ok) {
+    return res.status(stillAuthorized.status).json({ error: stillAuthorized.error });
   }
   if (remainingUntilDeadline(deadlineAtMs) < GRAPH_NEED_BEFORE_CLAIM_MS) {
     return res.status(503).json({ error: 'graph_deadline_insufficient' });
@@ -718,6 +794,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_request' });
     }
 
+    const scope = await resolveSendScope(svc, auth);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ error: scope.error });
+    }
+
     const { data: instance, error: instErr } = await svc
       .from('meta_whatsapp_instances')
       .select('id, company_id, phone_number_id, status')
@@ -736,24 +817,19 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: 'instance_not_connected' });
     }
 
-    const { data: conversation, error: convErr } = await svc
-      .from('meta_conversations')
-      .select('id, wa_id, company_id, instance_id')
-      .eq('id', conversationId)
-      .eq('company_id', auth.companyId)
-      .eq('instance_id', instance.id)
-      .maybeSingle();
-
-    if (convErr) {
-      return res.status(500).json({ error: 'internal_error' });
+    const loaded = await loadAuthorizedConversation(
+      svc,
+      auth,
+      scope.scope,
+      conversationId,
+      instance.id,
+    );
+    if (!loaded.ok) {
+      return res.status(loaded.status).json({ error: loaded.error });
     }
-    if (!conversation) {
-      return res.status(404).json({ error: 'conversation_not_found' });
-    }
-
-    const waIdRaw = conversation.wa_id ?? '';
-    const toNormalized = waIdRaw.startsWith('+') ? waIdRaw.slice(1) : waIdRaw;
-    if (!/^[0-9]+$/.test(toNormalized) || toNormalized.length === 0) {
+    let conversation = loaded.conversation;
+    let toNormalized = normalizeWaId(conversation.wa_id);
+    if (!toNormalized) {
       return res.status(500).json({ error: 'internal_error' });
     }
 
@@ -791,6 +867,26 @@ export default async function handler(req, res) {
       conversationId: conversation.id,
     };
 
+    // A leitura do arquivo é intermediária. Membership, flag e atribuição
+    // são relidas antes de consultar ou alterar a operação.
+    const refreshed = await revalidateAuthorizedConversation(
+      req,
+      svc,
+      auth.companyId,
+      conversation.id,
+      instance.id,
+    );
+    if (!refreshed.ok) {
+      return res.status(refreshed.status).json({ error: refreshed.error });
+    }
+    conversation = refreshed.conversation;
+    toNormalized = normalizeWaId(conversation.wa_id);
+    if (!toNormalized) {
+      return res.status(500).json({ error: 'internal_error' });
+    }
+    incomingIdentity.conversation_id = conversation.id;
+    windowIds.conversationId = conversation.id;
+
     const existing = await selectByCompanyOperation(svc, {
       companyId: auth.companyId,
       operationId,
@@ -802,6 +898,16 @@ export default async function handler(req, res) {
     if (existing.ok) {
       const mapped = mapExistingOperation(existing.row, incomingIdentity);
       if (mapped.mayResumeLocal) {
+        const resumeAuth = await revalidateAuthorizedConversation(
+          req,
+          svc,
+          auth.companyId,
+          conversation.id,
+          instance.id,
+        );
+        if (!resumeAuth.ok) {
+          return res.status(resumeAuth.status).json({ error: resumeAuth.error });
+        }
         return resumeGraphAcceptedPersistence({
           res,
           svc,
@@ -843,12 +949,23 @@ export default async function handler(req, res) {
           recipientWaId: toNormalized,
           deadlineAtMs,
         }),
-        { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+        { req, svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
       );
     }
 
     const windowOpen = await gateCustomerServiceWindow(svc, windowIds, res);
     if (!windowOpen) return;
+
+    const beforeInsert = await revalidateAuthorizedConversation(
+      req,
+      svc,
+      auth.companyId,
+      conversation.id,
+      instance.id,
+    );
+    if (!beforeInsert.ok) {
+      return res.status(beforeInsert.status).json({ error: beforeInsert.error });
+    }
 
     const inserted = await insertCreated(svc, incomingIdentity);
     if (inserted.ok) {
@@ -864,7 +981,7 @@ export default async function handler(req, res) {
           recipientWaId: toNormalized,
           deadlineAtMs,
         }),
-        { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+        { req, svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
       );
     }
     if (inserted.reason !== 'unique_violation') {
@@ -880,6 +997,16 @@ export default async function handler(req, res) {
     }
     const mapped = mapExistingOperation(raced.row, incomingIdentity);
     if (mapped.mayResumeLocal) {
+      const resumeAuth = await revalidateAuthorizedConversation(
+        req,
+        svc,
+        auth.companyId,
+        conversation.id,
+        instance.id,
+      );
+      if (!resumeAuth.ok) {
+        return res.status(resumeAuth.status).json({ error: resumeAuth.error });
+      }
       return resumeGraphAcceptedPersistence({
         res,
         svc,
@@ -919,7 +1046,7 @@ export default async function handler(req, res) {
         recipientWaId: toNormalized,
         deadlineAtMs,
       }),
-      { svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
+      { req, svc, instance, auth, deadlineAtMs, audioSha256, audioBytes: bytes },
     );
   } catch {
     return res.status(500).json({ error: 'internal_error' });

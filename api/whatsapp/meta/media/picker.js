@@ -9,16 +9,18 @@
 //   1. Method guard (GET only)
 //   2. Auth + RBAC + feature flag via validateMetaCaller (META_SEND_ROLES)
 //   3. Validação de media_type (IMAGE | VIDEO | DOCUMENT)
-//   4. Fetch CML bounded (100 rows) — filtra em DB por file_type
-//   5. Fetch LMU bounded (100 rows) — filtra em DB por file_type
-//   6. Filtro em memória:
+//   4. Visibilidade da conversa. Seller restrito separa biblioteca e mídia Meta
+//      antes do limite, e só então recebe preview_url
+//   5. Fetch CML bounded (100 rows) — filtra em DB por file_type
+//   6. Fetch LMU bounded (100 rows) — filtra em DB por file_type
+//   7. Filtro em memória:
 //      - MIME whitelist compartilhada com mediaConstants.js
 //      - file_size <= limite por media_type
 //      - s3_key com prefixo correto (LMU apenas — defense-in-depth)
-//   7. Dedupe: LMU com source_ref importado em CML é ocultado
-//   8. Merge + sort por data desc
-//   9. Bounded 100 items finais; truncated=true se exceder
-//  10. Retorna items sem s3_key, source_ref ou internals
+//   8. Dedupe: LMU com source_ref importado em CML é ocultado
+//   9. Merge + sort por data desc
+//  10. Bounded 100 items finais; truncated=true se exceder
+//  11. Retorna items sem s3_key, source_ref ou internals
 //
 // SEGURANÇA:
 //   - auth.companyId é o tenant authority (nunca query.company_id diretamente)
@@ -29,6 +31,12 @@
 
 import { getSupabaseAdmin }              from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import { resolveMetaConversationVisibility } from '../../../lib/meta-whatsapp/metaConversationAccess.js';
+import {
+  COMMERCIAL_SOURCE_OR,
+  META_CONVERSATION_SOURCE_OR,
+  filterAssignedCompanyMedia,
+} from '../../../lib/meta-whatsapp/metaMediaAccess.js';
 import {
   MEDIA_SIZE_LIMITS,
   MIME_TO_MEDIA_TYPE,
@@ -50,6 +58,54 @@ const MEDIA_TYPE_TO_FILE_TYPE = {
 // Quantidade máxima de rows buscadas por tabela e de items no resultado final
 const FETCH_LIMIT  = 100;
 const OUTPUT_LIMIT = 100;
+const CML_FIELDS = 'id, company_id, original_filename, file_type, mime_type, file_size, preview_url, created_at, source_ref, s3_key';
+
+function visibilityFailure(scope) {
+  if (scope.status === 503) return { status: 503, error: 'internal_error' };
+  return { status: scope.status, error: scope.error };
+}
+
+function cmlQuery(svc, companyId, fileType) {
+  return svc
+    .from('company_media_library')
+    .select(CML_FIELDS)
+    .eq('company_id', companyId)
+    .eq('file_type', fileType);
+}
+
+async function loadCompanyMedia(svc, auth, fileType, scope) {
+  if (scope.visibility !== 'assigned') {
+    return cmlQuery(svc, auth.companyId, fileType)
+      .order('created_at', { ascending: false })
+      .limit(FETCH_LIMIT);
+  }
+
+  const commercial = await cmlQuery(svc, auth.companyId, fileType)
+    .or(COMMERCIAL_SOURCE_OR)
+    .order('created_at', { ascending: false })
+    .limit(FETCH_LIMIT);
+  if (commercial.error) return commercial;
+
+  const meta = await cmlQuery(svc, auth.companyId, fileType)
+    .or(META_CONVERSATION_SOURCE_OR)
+    .order('created_at', { ascending: false })
+    .limit(FETCH_LIMIT);
+  if (meta.error) return meta;
+
+  const visible = await filterAssignedCompanyMedia(svc, scope, [
+    ...(commercial.data ?? []),
+    ...(meta.data ?? []),
+  ]);
+  if (!visible.ok) return { data: null, error: visible };
+  const seen = new Set();
+  const rows = [];
+  for (const row of visible.rows) {
+    if (!row?.id || seen.has(row.id)) continue;
+    seen.add(row.id);
+    rows.push(row);
+  }
+  return { data: rows, error: null };
+}
 
 // =============================================================================
 // Handler principal
@@ -90,6 +146,12 @@ export default async function handler(req, res) {
     const fileType  = MEDIA_TYPE_TO_FILE_TYPE[mediaType];
     const sizeLimit = MEDIA_SIZE_LIMITS[mediaType];
 
+    const scope = await resolveMetaConversationVisibility(svc, auth);
+    if (!scope.ok) {
+      const failure = visibilityFailure(scope);
+      return res.status(failure.status).json({ error: failure.error });
+    }
+
     // MIMEs válidos para este media_type
     const validMimes = new Set(
       [...MIME_TO_MEDIA_TYPE.entries()]
@@ -98,16 +160,20 @@ export default async function handler(req, res) {
     );
 
     // ── 5. Fetch CML (bounded) ────────────────────────────────────────────────────
-    // SELECT inclui source_ref para dedupe — nunca retornado ao frontend
-    const { data: cmlRows, error: cmlErr } = await svc
-      .from('company_media_library')
-      .select('id, original_filename, file_type, mime_type, file_size, preview_url, created_at, source_ref')
-      .eq('company_id', auth.companyId)
-      .eq('file_type', fileType)
-      .order('created_at', { ascending: false })
-      .limit(FETCH_LIMIT);
+    // Seller restrito: biblioteca comercial e mídia de conversa em consultas
+    // separadas, cada uma limitada antes do merge. source_ref e s3_key não saem.
+    const { data: cmlRows, error: cmlErr } = await loadCompanyMedia(
+      svc,
+      auth,
+      fileType,
+      scope,
+    );
 
     if (cmlErr) {
+      if (typeof cmlErr.status === 'number') {
+        const error = cmlErr.status === 403 ? 'Acesso negado' : 'internal_error';
+        return res.status(cmlErr.status).json({ error });
+      }
       console.error('[meta/media/picker] cml-query-error', { message: cmlErr.message });
       return res.status(500).json({ error: 'internal_error' });
     }

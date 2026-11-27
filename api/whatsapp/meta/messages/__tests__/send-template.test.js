@@ -179,7 +179,76 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mocks (antes dos imports do handler)
 // =============================================================================
 
-const mockSvc = { from: vi.fn() };
+const visibilityProbe = {
+  flag: false,
+  flagError: null,
+  conversationPasses: 0,
+  lastConversationChain: null,
+  flagChains: [],
+  revalidateChain: null,
+};
+
+function makeVisibilityFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityProbe.flagError
+        ? null
+        : { chat_visibility_by_assigned_to: visibilityProbe.flag },
+      error: visibilityProbe.flagError,
+    }),
+  };
+}
+
+let innerFrom = vi.fn();
+
+function hideTrackedCall() {
+  trackedFrom.mock.calls.pop();
+  trackedFrom.mock.results.pop();
+  trackedFrom.mock.invocationCallOrder.pop();
+}
+
+const trackedFrom = vi.fn((table) => {
+  if (typeof innerFrom !== 'function') return undefined;
+  if (table === 'meta_whatsapp_instances') {
+    visibilityProbe.conversationPasses = 0;
+    visibilityProbe.lastConversationChain = null;
+  }
+  if (table === 'companies') {
+    const chain = makeVisibilityFlagChain();
+    visibilityProbe.flagChains.push(chain);
+    hideTrackedCall();
+    return chain;
+  }
+  if (table === 'meta_conversations') {
+    visibilityProbe.conversationPasses += 1;
+    if (visibilityProbe.conversationPasses > 1) {
+      hideTrackedCall();
+      return visibilityProbe.revalidateChain || visibilityProbe.lastConversationChain;
+    }
+    const chain = innerFrom(table);
+    visibilityProbe.lastConversationChain = chain;
+    return chain;
+  }
+  return innerFrom(table);
+});
+trackedFrom.mockReturnValueOnce = (value) => {
+  innerFrom.mockReturnValueOnce(value);
+  return trackedFrom;
+};
+trackedFrom.mockReturnValue = (value) => {
+  innerFrom.mockReturnValue(value);
+  return trackedFrom;
+};
+
+const mockSvc = {};
+Object.defineProperty(mockSvc, 'from', {
+  configurable: true,
+  enumerable: true,
+  get() { return typeof innerFrom === 'function' ? trackedFrom : innerFrom; },
+  set(fn) { innerFrom = fn; },
+});
 
 vi.mock('../../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
@@ -534,6 +603,12 @@ function setupHappyMediaPath({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  visibilityProbe.flag = false;
+  visibilityProbe.flagError = null;
+  visibilityProbe.conversationPasses = 0;
+  visibilityProbe.lastConversationChain = null;
+  visibilityProbe.flagChains = [];
+  visibilityProbe.revalidateChain = null;
   mockUpdateConversationPreview.mockResolvedValue({ outcome: 'applied' });
 });
 
@@ -2257,6 +2332,12 @@ describe('MAST-08 companyId para validateMediaAsset = auth.companyId (não body)
     mockValidateMetaCaller.mockResolvedValue({
       ok: true, userId: FAKE_USER_ID, companyId: AUTH_COMPANY, role: 'admin', accessPath: 'direct',
     });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain({ ...FAKE_CONVERSATION, company_id: AUTH_COMPANY }))
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(makeInsertChain());
 
     const res = makeRes();
     await handler(makeReq({ body: { ...HAPPY_BODY_IMAGE, company_id: BODY_COMPANY } }), res);
@@ -5235,5 +5316,125 @@ describe('POST /api/whatsapp/meta/messages/send-template — reconciliação pos
     expect(tracking._body.error).toBe('send_persistence_failed');
     expect(chat._body.error).toBe('send_persistence_failed');
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/whatsapp/meta/messages/send-template — visibilidade por atribuição', () => {
+  const OTHER_USER_ID = 'abab0000-0000-0000-0000-000000000099';
+
+  function asSeller() {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      userId: FAKE_USER_ID,
+      companyId: FAKE_COMPANY_ID,
+      role: 'seller',
+      accessPath: 'direct',
+    });
+  }
+
+  function queueTemplate(conversation) {
+    const convChain = makeConvChain(conversation);
+    setupHappyPath();
+    asSeller();
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(makeReconcilePendingChain())
+      .mockReturnValueOnce(makeReconcileMarkerChain());
+    return convChain;
+  }
+
+  it('A/U: seller com flag desligada envia template aprovado sem consulta de janela', async () => {
+    visibilityProbe.flag = false;
+    const convChain = queueTemplate(FAKE_CONVERSATION);
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', expect.anything());
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map(([table]) => table)).not.toContain('customer_service_windows');
+  });
+
+  it('B: seller restrito envia template da própria conversa', async () => {
+    visibilityProbe.flag = true;
+    const convChain = queueTemplate({ ...FAKE_CONVERSATION, assigned_to: FAKE_USER_ID });
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(mockSendTemplateMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('C/D/E/M/N/P: conversa fora do escopo não lista template nem envia', async () => {
+    visibilityProbe.flag = true;
+    asSeller();
+    for (const conversation of [
+      { ...FAKE_CONVERSATION, assigned_to: OTHER_USER_ID },
+      { ...FAKE_CONVERSATION, assigned_to: null },
+      null,
+    ]) {
+      const convChain = makeConvChain(conversation);
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(convChain);
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(404);
+      expect(res._body).toEqual({ error: 'conversation_not_found' });
+      expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    }
+    expect(mockListMessageTemplates).not.toHaveBeenCalled();
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
+  });
+
+  it('H/I/J/K: guard, role desconhecido e falha da flag bloqueiam antes do envio', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const denied = makeRes();
+    await handler(makeReq(), denied);
+    expect(denied._status).toBe(403);
+    expect(mockSvc.from).not.toHaveBeenCalled();
+
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      userId: FAKE_USER_ID,
+      companyId: FAKE_COMPANY_ID,
+      role: 'auditor',
+      accessPath: 'direct',
+    });
+    const unknown = makeRes();
+    await handler(makeReq(), unknown);
+    expect(unknown._status).toBe(403);
+
+    asSeller();
+    visibilityProbe.flagError = { message: 'flag down' };
+    const failed = makeRes();
+    await handler(makeReq(), failed);
+    expect(failed._status).toBe(503);
+    expect(failed._body).toEqual({ error: 'internal_error' });
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+  });
+
+  it('AD: revogação depois da leitura do template impede o envio', async () => {
+    visibilityProbe.flag = true;
+    const convChain = queueTemplate({ ...FAKE_CONVERSATION, assigned_to: FAKE_USER_ID });
+    visibilityProbe.revalidateChain = makeConvChain(null);
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(404);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    expect(mockSendTemplateMessage).not.toHaveBeenCalled();
+    expect(mockUploadMedia).not.toHaveBeenCalled();
   });
 });

@@ -64,6 +64,10 @@
 
 import { getSupabaseAdmin }                     from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_SEND_ROLES }  from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../lib/meta-whatsapp/metaConversationAccess.js';
 import { decryptMetaToken }                     from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { sendTextMessage }                      from '../../../lib/meta-whatsapp/graphClient.js';
 import { updateConversationPreview }            from '../../../lib/meta-whatsapp/updateConversationPreview.js';
@@ -73,6 +77,68 @@ import * as customerServiceWindow from '../../../lib/meta-whatsapp/customerServi
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 // Rejeita inputs obviamente inválidos antes de qualquer query no banco.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const CONVERSATION_FIELDS = 'id, wa_id, company_id, instance_id, assigned_to';
+
+function visibilityFailure(scope) {
+  const status = scope.status === 503 ? 503 : scope.status;
+  return {
+    ok: false,
+    status,
+    error: status === 503 ? 'internal_error' : scope.error,
+  };
+}
+
+function normalizeWaId(waId) {
+  const raw = waId ?? '';
+  const normalized = raw.startsWith('+') ? raw.slice(1) : raw;
+  if (!/^[0-9]+$/.test(normalized) || normalized.length === 0) return null;
+  return normalized;
+}
+
+async function resolveSendScope(svc, auth) {
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) return visibilityFailure(scope);
+  return { ok: true, scope };
+}
+
+async function loadAuthorizedConversation(svc, auth, scope, conversationId, instanceId) {
+  const instanceFilter = UUID_RE.test(instanceId) ? instanceId : null;
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONVERSATION_FIELDS),
+    scope,
+    { conversationId, instanceId: instanceFilter },
+  );
+  if (!filtered.ok) return { ok: false, status: 403, error: 'Acesso negado' };
+
+  const { data, error } = await filtered.query.maybeSingle();
+  if (error) return { ok: false, status: 500, error: 'internal_error' };
+
+  const instanceMatches = !data || instanceFilter == null || data.instance_id === instanceFilter;
+  const allowed = data
+    && data.id === conversationId
+    && data.company_id === auth.companyId
+    && instanceMatches
+    && (scope.visibility !== 'assigned' || data.assigned_to === auth.userId);
+  if (!allowed) return { ok: false, status: 404, error: 'conversation_not_found' };
+  return { ok: true, conversation: data };
+}
+
+async function revalidateAuthorizedConversation(req, svc, companyId, conversationId, instanceId) {
+  const auth = await validateMetaCaller(req, svc, companyId, { roles: META_SEND_ROLES });
+  if (!auth.ok) return { ok: false, status: auth.status, error: auth.error };
+  const scope = await resolveSendScope(svc, auth);
+  if (!scope.ok) return scope;
+  const loaded = await loadAuthorizedConversation(
+    svc,
+    auth,
+    scope.scope,
+    conversationId,
+    instanceId,
+  );
+  if (!loaded.ok) return loaded;
+  return { ok: true, auth, conversation: loaded.conversation };
+}
 
 async function settleOutboundReconcile(svc, companyId, instanceId, wamid) {
   try {
@@ -155,6 +221,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_request' });
   }
 
+  const scope = await resolveSendScope(svc, auth);
+  if (!scope.ok) {
+    return res.status(scope.status).json({ error: scope.error });
+  }
+
   // ── 6. Lookup de instância ─────────────────────────────────────────────────
   // Usa EXCLUSIVAMENTE auth.companyId — nunca req.body.company_id diretamente.
   //
@@ -202,30 +273,24 @@ export default async function handler(req, res) {
   // Nunca revelar se a conversa existe num tenant/instance diferente.
   //
   // wa_id derivado do registro validado — nunca aceito do body.
-  const { data: conversation, error: convErr } = await svc
-    .from('meta_conversations')
-    .select('id, wa_id, company_id, instance_id')
-    .eq('id', conversationId)
-    .eq('company_id', auth.companyId)
-    .eq('instance_id', instance.id)
-    .maybeSingle();
-
-  if (convErr) {
-    return res.status(500).json({ error: 'internal_error' });
+  const loaded = await loadAuthorizedConversation(
+    svc,
+    auth,
+    scope.scope,
+    conversationId,
+    instance.id,
+  );
+  if (!loaded.ok) {
+    return res.status(loaded.status).json({ error: loaded.error });
   }
-
-  if (!conversation) {
-    // Resposta genérica — não distingue inexistente / outro tenant / outra instance
-    return res.status(404).json({ error: 'conversation_not_found' });
-  }
+  const conversation = loaded.conversation;
 
   // Normalizar wa_id: strip de '+' inicial (precaução defensiva), somente dígitos.
   // wa_id em meta_conversations é persistido pelo webhook inbound sem '+', mas
   // a normalização garante robustez contra dados legados ou edge cases.
   // Falha de normalização = dado corrompido no banco → 500 internal_error.
-  const waIdRaw      = conversation.wa_id ?? '';
-  const toNormalized = waIdRaw.startsWith('+') ? waIdRaw.slice(1) : waIdRaw;
-  if (!/^[0-9]+$/.test(toNormalized) || toNormalized.length === 0) {
+  let toNormalized = normalizeWaId(conversation.wa_id);
+  if (!toNormalized) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
@@ -259,6 +324,23 @@ export default async function handler(req, res) {
       '[meta/messages/send] customer_service_window_unproven reason=unexpected_gate_error',
     );
     return res.status(409).json({ error: 'customer_service_window_unproven' });
+  }
+
+  // Releitura de membership, flag e atribuição depois da consulta da janela
+  // e antes de credencial, Graph e persistência. Não elimina TOCTOU.
+  const refreshed = await revalidateAuthorizedConversation(
+    req,
+    svc,
+    auth.companyId,
+    conversation.id,
+    instance.id,
+  );
+  if (!refreshed.ok) {
+    return res.status(refreshed.status).json({ error: refreshed.error });
+  }
+  toNormalized = normalizeWaId(refreshed.conversation.wa_id);
+  if (!toNormalized) {
+    return res.status(500).json({ error: 'internal_error' });
   }
 
   // ── 9. Lookup de credencial ────────────────────────────────────────────────

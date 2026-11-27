@@ -84,7 +84,7 @@ const FAKE_MSG_ID_C        = 'ffff0000-0000-0000-0000-000000000006';
 const FAKE_AUTH_OK = {
   ok:         true,
   companyId:  FAKE_COMPANY_ID,
-  userId:     'user0000-0000-0000-0000-000000000007',
+  userId:     'eeee0000-0000-0000-0000-000000000007',
   role:       'admin',
   accessPath: 'direct',
 };
@@ -93,6 +93,8 @@ const FAKE_AUTH_OK = {
 const FAKE_CONV_DB = {
   id:          FAKE_CONV_ID,
   instance_id: FAKE_INSTANCE_ID,
+  company_id:  FAKE_COMPANY_ID,
+  assigned_to: null,
 };
 
 // Mensagens fictícias — DB retorna DESC (mais recente primeiro).
@@ -249,8 +251,37 @@ const FAKE_AWS_CREDS = {
   bucket:            'lovoo-tenant-bucket',
 };
 
+let visibilityFlag = false;
+let visibilityError = null;
+const queuedFrom = [];
+
+function makeFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityError ? null : { chat_visibility_by_assigned_to: visibilityFlag },
+      error: visibilityError,
+    }),
+  };
+}
+
+function installFromRouter() {
+  queuedFrom.length = 0;
+  mockSvc.from.mockImplementation((table) => {
+    if (table === 'companies') return makeFlagChain();
+    return queuedFrom.shift();
+  });
+  mockSvc.from.mockReturnValueOnce = (value) => {
+    queuedFrom.push(value);
+    return mockSvc.from;
+  };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
+  visibilityFlag = false;
+  visibilityError = null;
   mockValidateMetaCaller.mockResolvedValue(FAKE_AUTH_OK);
   mockSignMetaInboundAudioGetUrl.mockResolvedValue({
     url:       FAKE_SIGNED_AUDIO_URL,
@@ -258,6 +289,7 @@ beforeEach(() => {
   });
   mockGetSignedUrl.mockResolvedValue(FAKE_SIGNED_AUDIO_URL);
   mockSvc.rpc = vi.fn().mockResolvedValue({ data: [FAKE_AWS_CREDS], error: null });
+  installFromRouter();
 });
 
 /** Configura happy path: conv lookup OK + messages query OK. */
@@ -444,17 +476,18 @@ describe('GET messages — conversation lookup', () => {
     await handler(req, res);
 
     expect(res._status).toBe(404);
-    // Apenas 1 chamada a from() — a de meta_conversations
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
-    expect(mockSvc.from.mock.calls[0][0]).toBe('meta_conversations');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
   });
 
   it('MSG-12: conversation cross-tenant → 404 idêntico', async () => {
     // Auth retorna companyId diferente do que teria a conversa
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
-      companyId:  'zzzz0000-0000-0000-0000-000000000099', // outro tenant
-      userId:     'user-1',
+      companyId:  'ffff0000-0000-0000-0000-000000000099',
+      userId:     'eeee0000-0000-0000-0000-000000000007',
       role:       'admin',
       accessPath: 'direct',
     });
@@ -467,12 +500,15 @@ describe('GET messages — conversation lookup', () => {
 
     // Resposta 404 — idêntica à conversa inexistente
     expect(res._status).toBe(404);
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
   });
 
   it('MSG-13: conversation archived → 404 idêntico', async () => {
-    // A query filtra status='active', então archived retorna null
-    mockSvc.from.mockReturnValueOnce(makeConvChain(null));
+    const convChain = makeConvChain(null);
+    mockSvc.from.mockReturnValueOnce(convChain);
 
     const req = makeReq();
     const res = makeRes();
@@ -480,8 +516,7 @@ describe('GET messages — conversation lookup', () => {
 
     expect(res._status).toBe(404);
     // Verificar que o filtro status='active' foi aplicado
-    const convChainEqCalls = mockSvc.from.mock.results[0]?.value?.eq?.mock?.calls ?? [];
-    const statusCall = convChainEqCalls.find(c => c[0] === 'status');
+    const statusCall = convChain.eq.mock.calls.find(c => c[0] === 'status');
     expect(statusCall).toBeDefined();
     expect(statusCall[1]).toBe('active');
   });
@@ -577,17 +612,20 @@ describe('GET messages — SELECT público', () => {
 
 describe('GET messages — auth.companyId na query', () => {
   it('MSG-17: messages query usa auth.companyId — nunca req.query.company_id', async () => {
-    const CHILD_COMPANY_ID = 'child000-0000-0000-0000-000000000099';
-    // Guard retorna companyId diferente do que veio na query string (Trilha 2)
+    const CHILD_COMPANY_ID = 'cccc0000-0000-0000-0000-000000000099';
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
       companyId:  CHILD_COMPANY_ID,
-      userId:     'user-1',
+      userId:     'eeee0000-0000-0000-0000-000000000007',
       role:       'super_admin',
       accessPath: 'parent',
     });
 
-    const convChain = makeConvChain({ id: FAKE_CONV_ID, instance_id: FAKE_INSTANCE_ID });
+    const convChain = makeConvChain({
+      id: FAKE_CONV_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      company_id: CHILD_COMPANY_ID,
+    });
     const msgChain  = makeMsgChain([]);
     mockSvc.from
       .mockReturnValueOnce(convChain)
@@ -619,8 +657,11 @@ describe('GET messages — auth.companyId na query', () => {
 describe('GET messages — IDs vêm do DB, não do caller', () => {
   it('MSG-18: conversation_id na query de messages vem do objeto DB', async () => {
     // O DB retorna um conversation_id específico
-    const DB_CONV_ID = 'db-conv00-0000-0000-0000-000000000001';
-    const convChain  = makeConvChain({ id: DB_CONV_ID, instance_id: FAKE_INSTANCE_ID });
+    const convChain  = makeConvChain({
+      id: FAKE_CONV_ID,
+      instance_id: FAKE_INSTANCE_ID,
+      company_id: FAKE_COMPANY_ID,
+    });
     const msgChain   = makeMsgChain([]);
     mockSvc.from
       .mockReturnValueOnce(convChain)
@@ -638,13 +679,17 @@ describe('GET messages — IDs vêm do DB, não do caller', () => {
     const eqCalls = msgChain.eq.mock.calls;
     const convIdCall = eqCalls.find(c => c[0] === 'conversation_id');
     expect(convIdCall).toBeDefined();
-    expect(convIdCall[1]).toBe(DB_CONV_ID);
+    expect(convIdCall[1]).toBe(FAKE_CONV_ID);
   });
 
   it('MSG-19: instance_id na query de messages vem do objeto DB', async () => {
     // O DB retorna um instance_id específico
     const DB_INST_ID = 'db-inst00-0000-0000-0000-000000000002';
-    const convChain  = makeConvChain({ id: FAKE_CONV_ID, instance_id: DB_INST_ID });
+    const convChain  = makeConvChain({
+      id: FAKE_CONV_ID,
+      instance_id: DB_INST_ID,
+      company_id: FAKE_COMPANY_ID,
+    });
     const msgChain   = makeMsgChain([]);
     mockSvc.from
       .mockReturnValueOnce(convChain)
@@ -851,7 +896,7 @@ describe('GET messages — template metadata (MVP4A.4)', () => {
 const FAKE_ASSET_ID_1    = 'aaaa1111-0000-0000-0000-000000000001';
 const FAKE_ASSET_ID_2    = 'aaaa2222-0000-0000-0000-000000000002';
 const FAKE_ASSET_ID_3    = 'aaaa3333-0000-0000-0000-000000000003';
-const OTHER_COMPANY_ID   = 'zzzz0000-0000-0000-0000-000000000099';
+const OTHER_COMPANY_ID   = 'ffff0000-0000-0000-0000-000000000099';
 
 /** Mensagem de template com media_asset_id */
 function makeMsgWithAsset(id, assetId, overrides = {}) {
@@ -897,9 +942,9 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
     await handler(req, res);
 
     expect(res._status).toBe(200);
-    // meta_conversations + meta_messages + janela
+    // companies + meta_conversations + meta_messages + janela
     // Nenhuma chamada para company_media_library
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     for (const msg of res._body.messages) {
       expect(msg.media).toBeNull();
     }
@@ -985,7 +1030,7 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 
     expect(res._status).toBe(200);
     // Apenas 1 chamada para company_media_library (deduplicado)
-    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
     expect(assetChain.in).toHaveBeenCalledTimes(1);
 
     const ids = assetChain.in.mock.calls[0][1];
@@ -1018,7 +1063,7 @@ describe('GET messages — MVP4B.6C media resolution (batched, tenant-safe)', ()
 
     expect(res._status).toBe(200);
     // UMA única chamada para company_media_library — não N+1
-    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
     expect(assetChain.in).toHaveBeenCalledTimes(1);
 
     const ids = assetChain.in.mock.calls[0][1];
@@ -1550,8 +1595,9 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     expect(mockSvc.from.mock.calls.map((c) => c[0])).toEqual([
+      'companies',
       'meta_conversations',
       'meta_messages',
       'meta_messages',
@@ -1584,7 +1630,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
     expect(res._body.messages[0].delivery_status).toBeNull();
     assertPublicDto(res._body.messages[0]);
   });
@@ -1622,7 +1668,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from.mock.calls[2][0]).toBe('meta_whatsapp_messages');
+    expect(mockSvc.from.mock.calls[3][0]).toBe('meta_whatsapp_messages');
     expect(trackingChain.select).toHaveBeenCalledWith('meta_message_id, status');
     expect(trackingChain.eq).toHaveBeenNthCalledWith(1, 'company_id', FAKE_COMPANY_ID);
     expect(trackingChain.eq).toHaveBeenNthCalledWith(2, 'instance_id', FAKE_INSTANCE_ID);
@@ -1645,7 +1691,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
     await handler(makeReq(), res);
 
     expect(res._status).toBe(200);
-    expect(mockSvc.from).toHaveBeenCalledTimes(4);
+    expect(mockSvc.from).toHaveBeenCalledTimes(5);
     expect(trackingChain.in).toHaveBeenCalledTimes(1);
     const ids = trackingChain.in.mock.calls[0][1];
     expect(ids).toHaveLength(2);
@@ -1748,7 +1794,7 @@ describe('GET messages — delivery_status (MVP5.B1.1)', () => {
 
     expect(res._status).toBe(200);
     expect(res._body.messages).toEqual(FAKE_MSGS_ASC_DTO);
-    expect(mockSvc.from).toHaveBeenCalledTimes(3);
+    expect(mockSvc.from).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -1887,7 +1933,7 @@ describe('GET messages — AWS inbound AUDIO signed URL (MVP5.B3.2.AWS-3)', () =
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
       companyId:  OTHER_COMPANY_ID,
-      userId:     'user-1',
+      userId:     'eeee0000-0000-0000-0000-000000000007',
       role:       'admin',
       accessPath: 'direct',
     });
@@ -2150,7 +2196,7 @@ describe('GET messages — AWS outbound AUDIO signed URL (E.2-C.1)', () => {
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
       companyId:  OTHER_COMPANY_ID,
-      userId:     'user-1',
+      userId:     'eeee0000-0000-0000-0000-000000000007',
       role:       'admin',
       accessPath: 'direct',
     });
@@ -2403,6 +2449,128 @@ describe('GET messages — janela de 24 horas', () => {
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(404);
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
+  });
+});
+
+describe('GET messages — visibilidade por atribuição', () => {
+  function asSeller() {
+    mockValidateMetaCaller.mockResolvedValue({
+      ...FAKE_AUTH_OK,
+      role: 'seller',
+    });
+  }
+
+  function ownConversation() {
+    return {
+      ...FAKE_CONV_DB,
+      assigned_to: FAKE_AUTH_OK.userId,
+    };
+  }
+
+  it('Q/U: histórico autorizado preserva mensagens e a janela de 24 horas', async () => {
+    asSeller();
+    visibilityFlag = true;
+    const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const convChain = makeConvChain(ownConversation());
+    const msgChain = makeMsgChain([]);
+    const windowChain = makeWindowChain({ provider_timestamp: recent });
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(msgChain)
+      .mockReturnValueOnce(windowChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.messages).toEqual([]);
+    expect(res._body.customerServiceWindow.state).toBe('open');
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('id', FAKE_CONV_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
+    expect(msgChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(msgChain.eq).toHaveBeenCalledWith('conversation_id', FAKE_CONV_ID);
+    expect(msgChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(windowChain.eq).toHaveBeenCalledWith('conversation_id', FAKE_CONV_ID);
+  });
+
+  it('R/S/T: histórico não autorizado não consulta mensagens nem assina mídia', async () => {
+    asSeller();
+    visibilityFlag = true;
+    const convChain = makeConvChain(null);
+    mockSvc.from.mockReturnValueOnce(convChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'Conversa não encontrada' });
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+    expect(mockGetSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('V/W: transferência e desativação são reavaliadas sem reutilizar a autorização anterior', async () => {
+    asSeller();
+    visibilityFlag = true;
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(makeMsgChain([]));
+
+    const opened = makeRes();
+    await handler(makeReq(), opened);
+    expect(opened._status).toBe(200);
+
+    const transferred = makeConvChain(null);
+    mockSvc.from.mockReturnValueOnce(transferred);
+    const moved = makeRes();
+    await handler(makeReq(), moved);
+    expect(moved._status).toBe(404);
+    expect(transferred.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(mockSignMetaInboundAudioGetUrl).not.toHaveBeenCalled();
+
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const callsBeforeDenial = mockSvc.from.mock.calls.length;
+    const disabled = makeRes();
+    await handler(makeReq(), disabled);
+    expect(disabled._status).toBe(403);
+    expect(mockSvc.from.mock.calls).toHaveLength(callsBeforeDenial);
+
+    asSeller();
+    mockSvc.from
+      .mockReturnValueOnce(makeConvChain(ownConversation()))
+      .mockReturnValueOnce(makeMsgChain([]));
+    const enabled = makeRes();
+    await handler(makeReq(), enabled);
+    expect(enabled._status).toBe(200);
+  });
+
+  it('X: admin com flag ligada mantém visão ampla no histórico', async () => {
+    visibilityFlag = true;
+    const convChain = makeConvChain(FAKE_CONV_DB);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeMsgChain([]));
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', expect.anything());
+    expect(res._body).toHaveProperty('customerServiceWindow');
   });
 });

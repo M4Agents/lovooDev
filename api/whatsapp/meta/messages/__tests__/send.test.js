@@ -90,7 +90,76 @@ import * as customerServiceWindow from '../../../../lib/meta-whatsapp/customerSe
 // Mocks (antes dos imports do handler)
 // =============================================================================
 
-const mockSvc = { from: vi.fn(), rpc: vi.fn() };
+const visibilityProbe = {
+  flag: false,
+  flagError: null,
+  conversationPasses: 0,
+  lastConversationChain: null,
+  flagChains: [],
+  revalidateChain: null,
+};
+
+function makeVisibilityFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityProbe.flagError
+        ? null
+        : { chat_visibility_by_assigned_to: visibilityProbe.flag },
+      error: visibilityProbe.flagError,
+    }),
+  };
+}
+
+let innerFrom = vi.fn();
+
+function hideTrackedCall() {
+  trackedFrom.mock.calls.pop();
+  trackedFrom.mock.results.pop();
+  trackedFrom.mock.invocationCallOrder.pop();
+}
+
+const trackedFrom = vi.fn((table) => {
+  if (typeof innerFrom !== 'function') return undefined;
+  if (table === 'meta_whatsapp_instances') {
+    visibilityProbe.conversationPasses = 0;
+    visibilityProbe.lastConversationChain = null;
+  }
+  if (table === 'companies') {
+    const chain = makeVisibilityFlagChain();
+    visibilityProbe.flagChains.push(chain);
+    hideTrackedCall();
+    return chain;
+  }
+  if (table === 'meta_conversations') {
+    visibilityProbe.conversationPasses += 1;
+    if (visibilityProbe.conversationPasses > 1) {
+      hideTrackedCall();
+      return visibilityProbe.revalidateChain || visibilityProbe.lastConversationChain;
+    }
+    const chain = innerFrom(table);
+    visibilityProbe.lastConversationChain = chain;
+    return chain;
+  }
+  return innerFrom(table);
+});
+trackedFrom.mockReturnValueOnce = (value) => {
+  innerFrom.mockReturnValueOnce(value);
+  return trackedFrom;
+};
+trackedFrom.mockReturnValue = (value) => {
+  innerFrom.mockReturnValue(value);
+  return trackedFrom;
+};
+
+const mockSvc = { rpc: vi.fn() };
+Object.defineProperty(mockSvc, 'from', {
+  configurable: true,
+  enumerable: true,
+  get() { return typeof innerFrom === 'function' ? trackedFrom : innerFrom; },
+  set(fn) { innerFrom = fn; },
+});
 
 vi.mock('../../../../lib/automation/supabaseAdmin.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSvc),
@@ -296,6 +365,12 @@ function setupHappyPath() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  visibilityProbe.flag = false;
+  visibilityProbe.flagError = null;
+  visibilityProbe.conversationPasses = 0;
+  visibilityProbe.lastConversationChain = null;
+  visibilityProbe.flagChains = [];
+  visibilityProbe.revalidateChain = null;
   mockSvc.rpc = vi.fn(); // rpc nunca deve ser chamado
   mockUpdateConversationPreview.mockResolvedValue({ outcome: 'applied' });
 });
@@ -2445,5 +2520,237 @@ describe('POST /api/whatsapp/meta/messages/send — reconciliação posterior', 
     await pending;
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ ok: true, message_id: FAKE_WAMID });
+  });
+});
+
+describe('POST /api/whatsapp/meta/messages/send — visibilidade por atribuição', () => {
+  const OTHER_USER_ID = 'abab0000-0000-0000-0000-000000000099';
+
+  function asSeller() {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      userId: FAKE_USER_ID,
+      companyId: FAKE_COMPANY_ID,
+      role: 'seller',
+      accessPath: 'direct',
+    });
+  }
+
+  function ownConversation() {
+    return { ...FAKE_CONVERSATION, assigned_to: FAKE_USER_ID };
+  }
+
+  function queueSend(conversation, windowChain = openWindowChain()) {
+    const convChain = makeConvChain(conversation);
+    mockDecryptMetaToken.mockReturnValue(FAKE_PLAIN_TOKEN);
+    mockSendTextMessage.mockResolvedValue({ messageId: FAKE_WAMID });
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(windowChain)
+      .mockReturnValueOnce(makeCredChain(FAKE_CRED))
+      .mockReturnValueOnce(makeInsertChain())
+      .mockReturnValueOnce(makeInsertChain());
+    return convChain;
+  }
+
+  it('A: seller com flag desligada envia sem filtrar assigned_to', async () => {
+    asSeller();
+    visibilityProbe.flag = false;
+    const convChain = queueSend(FAKE_CONVERSATION);
+    const res = makeRes();
+    await handler(makeReq({ body: { ...HAPPY_BODY, to: '5500000000000', assigned_to: OTHER_USER_ID } }), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('id', FAKE_CONVERSATION_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', expect.anything());
+    expect(mockSendTextMessage).toHaveBeenCalledWith(
+      FAKE_PLAIN_TOKEN,
+      FAKE_PHONE_NUM_ID,
+      FAKE_WA_ID,
+      FAKE_TEXT,
+    );
+  });
+
+  it('B/Q/AB: seller restrito envia a própria conversa dentro da janela e reconcilia', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const reconcile = vi.spyOn(outboundStatusTracking, 'reconcilePersistedOutboundStatus')
+      .mockResolvedValue({ ok: true });
+    const convChain = queueSend(ownConversation());
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    expect(visibilityProbe.flagChains[0].eq).toHaveBeenCalledWith('id', FAKE_COMPANY_ID);
+    expect(reconcile).toHaveBeenCalled();
+    reconcile.mockRestore();
+  });
+
+  it('C/D/E/M/P: atribuição alheia, nula ou ausente não chama Graph nem persiste', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    for (const conversation of [
+      { ...FAKE_CONVERSATION, assigned_to: OTHER_USER_ID },
+      { ...FAKE_CONVERSATION, assigned_to: null },
+      null,
+    ]) {
+      const convChain = makeConvChain(conversation);
+      mockSvc.from = vi.fn()
+        .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+        .mockReturnValueOnce(convChain);
+      const res = makeRes();
+      await handler(makeReq(), res);
+      expect(res._status).toBe(404);
+      expect(res._body).toEqual({ error: 'conversation_not_found' });
+      expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    }
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+  });
+
+  it('F/G/AC: outra empresa, outra instância e destinatário do cliente não ampliam o escopo', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const convChain = makeConvChain(null);
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain);
+    const res = makeRes();
+    await handler(makeReq({
+      body: {
+        ...HAPPY_BODY,
+        company_id: FAKE_COMPANY_ID,
+        to: '5500000000000',
+        assigned_to: OTHER_USER_ID,
+      },
+    }), res);
+
+    expect(res._status).toBe(404);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', OTHER_USER_ID);
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('H/I: partner sem atribuição e membership inativa não consultam conversa', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado a esta empresa' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('J: role desconhecido é negado antes da instância', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: true,
+      userId: FAKE_USER_ID,
+      companyId: FAKE_COMPANY_ID,
+      role: 'auditor',
+      accessPath: 'direct',
+    });
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('K: falha de leitura da flag não abre envio', async () => {
+    asSeller();
+    visibilityProbe.flagError = { message: 'flag down' };
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(503);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('flag down');
+    expect(mockSvc.from).not.toHaveBeenCalled();
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('L: falha de banco permanece 500', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(makeConvChain(null, { message: 'connection lost' }));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('connection lost');
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+  });
+
+  it('R: texto fora da janela continua bloqueado para o seller restrito', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    queueSend(ownConversation(), makeWindowChain({
+      data: { provider_timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
+    }));
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(409);
+    expect(res._body).toEqual({ error: 'customer_service_window_closed' });
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
+    expect(mockDecryptMetaToken).not.toHaveBeenCalled();
+  });
+
+  it('V/W: transferência e desativação são reavaliadas na requisição seguinte', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    queueSend(ownConversation());
+    const opened = makeRes();
+    await handler(makeReq(), opened);
+    expect(opened._status).toBe(200);
+
+    const transferred = makeConvChain(null);
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(transferred);
+    const moved = makeRes();
+    await handler(makeReq(), moved);
+    expect(moved._status).toBe(404);
+    expect(transferred.eq).toHaveBeenCalledWith('assigned_to', FAKE_USER_ID);
+
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const callsBefore = mockSvc.from.mock.calls.length;
+    const disabled = makeRes();
+    await handler(makeReq(), disabled);
+    expect(disabled._status).toBe(403);
+    expect(mockSvc.from.mock.calls).toHaveLength(callsBefore);
+  });
+
+  it('AD: revogação depois da janela impede credencial e Graph', async () => {
+    asSeller();
+    visibilityProbe.flag = true;
+    const convChain = queueSend(ownConversation());
+    const credChain = makeCredChain(FAKE_CRED);
+    visibilityProbe.revalidateChain = makeConvChain(null);
+    mockSvc.from = vi.fn()
+      .mockReturnValueOnce(makeInstChain(FAKE_INSTANCE))
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(openWindowChain())
+      .mockReturnValueOnce(credChain);
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'conversation_not_found' });
+    expect(credChain.maybeSingle).not.toHaveBeenCalled();
+    expect(mockSendTextMessage).not.toHaveBeenCalled();
   });
 });

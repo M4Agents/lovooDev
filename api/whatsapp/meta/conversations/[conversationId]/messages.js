@@ -56,6 +56,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSupabaseAdmin }                   from '../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../lib/meta-whatsapp/validateMetaCaller.js';
 import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../../lib/meta-whatsapp/metaConversationAccess.js';
+import {
   loadLastInboundTimestamp,
   resolveCustomerServiceWindow,
 } from '../../../../lib/meta-whatsapp/customerServiceWindow.js';
@@ -80,7 +84,7 @@ const LIMIT_DEFAULT = 50;
 
 // Campos públicos de meta_conversations necessários para o lookup.
 // SELECT mínimo: apenas o que é usado nas queries subsequentes.
-const CONV_FIELDS = 'id, instance_id';
+const CONV_FIELDS = 'id, instance_id, company_id, assigned_to';
 
 // Campos de meta_messages para o SELECT interno.
 // media_asset_id: usado apenas para resolução de mídia (Step 7); não exposto no DTO final.
@@ -330,20 +334,30 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ error: auth.error });
   }
 
-  // ── 5. Conversation lookup — somente após auth.ok ─────────────────────────
-  // PROIBIDO executar antes de auth. Segue padrão Meta (não o Instagram).
-  // Filtros obrigatórios:
-  //   id          = conversationId (do caller, já validado como UUID)
-  //   company_id  = auth.companyId (nunca req.query — trava no tenant autorizado)
-  //   status      = 'active'       (archived → 404, consistente com /conversations)
-  //
-  // Resposta 404 idêntica para: inexistente, outro tenant, archived.
-  // Impede Existence Oracle: caller não distingue os três casos.
-  const { data: conversation, error: convErr } = await svc
-    .from('meta_conversations')
-    .select(CONV_FIELDS)
-    .eq('id', conversationId)
-    .eq('company_id', auth.companyId)
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) {
+    const status = scope.status === 503 ? 503 : scope.status;
+    return res.status(status).json({
+      error: status === 503 ? 'internal_error' : scope.error,
+    });
+  }
+
+  // ── 5. Conversation lookup — somente após auth e escopo ───────────────────
+  // Empresa, conversa e assigned_to (quando restrito) entram na mesma consulta.
+  // status=active preserva o 404 de arquivada. A instância usada nas mensagens
+  // é a da linha autorizada, nunca um valor do cliente.
+  // meta_messages não tem assigned_to: a restrição da atribuição fica nesta
+  // consulta. RLS continua sendo a proteção futura dessa janela.
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONV_FIELDS),
+    scope,
+    { conversationId },
+  );
+  if (!filtered.ok) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  const { data: conversation, error: convErr } = await filtered.query
     .eq('status', 'active')
     .maybeSingle();
 
@@ -351,7 +365,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
-  if (!conversation) {
+  const conversationAllowed = conversation
+    && conversation.id === conversationId
+    && conversation.company_id === auth.companyId
+    && (scope.visibility !== 'assigned' || conversation.assigned_to === auth.userId);
+
+  if (!conversationAllowed) {
     return res.status(404).json({ error: 'Conversa não encontrada' });
   }
 

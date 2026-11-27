@@ -95,6 +95,15 @@ function setupGuardOk() {
   });
 }
 
+function mockDisconnectedLookup() {
+  mockSvc.from = vi.fn((table) => {
+    if (table === 'companies') {
+      return makeSelectChain({ chat_visibility_by_assigned_to: false });
+    }
+    return makeSelectChain(DISCONNECTED_INSTANCE);
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   setupGuardOk();
@@ -102,7 +111,7 @@ beforeEach(() => {
 
 describe('DC-17: envio bloqueado após desconexão', () => {
   it('texto: status disconnected → 409 instance_not_connected, zero Graph', async () => {
-    mockSvc.from = vi.fn().mockReturnValue(makeSelectChain(DISCONNECTED_INSTANCE));
+    mockDisconnectedLookup();
     const res = makeRes();
     await sendHandler({
       method:  'POST',
@@ -122,7 +131,7 @@ describe('DC-17: envio bloqueado após desconexão', () => {
   });
 
   it('template: status disconnected → 409 instance_not_connected, zero Graph', async () => {
-    mockSvc.from = vi.fn().mockReturnValue(makeSelectChain(DISCONNECTED_INSTANCE));
+    mockDisconnectedLookup();
     const res = makeRes();
     await sendTemplateHandler({
       method:  'POST',

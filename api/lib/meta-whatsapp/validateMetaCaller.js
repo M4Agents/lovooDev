@@ -3,7 +3,7 @@
 //
 // Helper de autenticação e autorização para endpoints Meta WhatsApp Cloud API.
 //
-// Valida (nesta ordem):
+// A autorização de empresa vem de validateCompanyCaller, nesta ordem:
 //   1. Authorization: Bearer <token>  — prefixo obrigatório
 //   2. svc.auth.getUser(token)        — JWT validado remotamente
 //   3. Formato UUID do companyId      — rejeitado se inválido
@@ -23,6 +23,7 @@
 // Roles disponíveis (exportadas para uso nos endpoints):
 //   META_VIEW_ROLES    — leitura de instâncias e configurações
 //   META_CONNECT_ROLES — iniciar onboarding, conectar, desconectar, rotacionar token
+//   META_SEND_ROLES    — envio de mensagens
 //
 // Retorna em sucesso:
 //   { ok: true, userId, companyId, role, accessPath }
@@ -42,12 +43,7 @@
 //   - Nenhum dado sensível (token, key, ciphertext) é lido ou logado.
 // =============================================================================
 
-// UUID v4 básico — rejeita inputs obviamente inválidos antes de qualquer query no banco.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// =============================================================================
-// Matrizes de roles por escopo de ação
-// =============================================================================
+import { validateCompanyCaller } from '../auth/validateCompanyCaller.js';
 
 /**
  * Roles que podem visualizar instâncias conectadas e configurações Meta.
@@ -94,205 +90,29 @@ export const META_SEND_ROLES = [
   'seller',
 ];
 
-// =============================================================================
-// Função principal
-// =============================================================================
-
 /**
  * Valida JWT + RBAC + feature flag para endpoints Meta WhatsApp Cloud API.
  *
  * @param {import('http').IncomingMessage} req
- *   Request Vercel — precisa de headers.authorization.
- *
  * @param {import('@supabase/supabase-js').SupabaseClient} svc
- *   Client Supabase com service_role. Passar via getSupabaseAdmin().
- *   Nunca instanciar dentro deste helper — injetar para testabilidade.
- *
  * @param {string} companyId
- *   UUID da empresa alvo. Vem do body/state — nunca assumido como confiável.
- *   O helper valida formato e membership antes de confiar no valor.
- *
  * @param {{ roles?: string[] }} [options]
- *   - roles: lista de roles permitidas (padrão: META_VIEW_ROLES).
- *
  * @returns {Promise<
- *   | { ok: true,  userId: string, companyId: string, role: string, accessPath: 'direct'|'partner'|'parent' }
+ *   | { ok: true, userId: string, companyId: string, role: string, accessPath: 'direct'|'partner'|'parent' }
  *   | { ok: false, status: number, error: string }
  * >}
  */
 export async function validateMetaCaller(req, svc, companyId, options = {}) {
-  const roles = options.roles ?? META_VIEW_ROLES;
-
-  // ── 1. Bearer token ────────────────────────────────────────────────────────
-  const authHeader = req.headers?.authorization ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return { ok: false, status: 401, error: 'Autenticação necessária' };
-  }
-  const token = authHeader.slice(7);
-
-  // ── 2. Validar JWT e obter usuário ─────────────────────────────────────────
-  // Sempre validado antes de qualquer checagem de input — consistente com
-  // validateInstagramCaller e validateNuvemshopCaller.
-  const { data: { user }, error: authErr } = await svc.auth.getUser(token);
-  if (authErr || !user) {
-    return { ok: false, status: 401, error: 'Sessão inválida ou expirada' };
-  }
-
-  // ── 3. Validar formato básico do companyId ─────────────────────────────────
-  // Executado após auth para garantir consistência na ordem de erros:
-  //   sem auth → 401, UUID inválido → 400, sem acesso → 403.
-  if (!companyId || !UUID_RE.test(companyId)) {
-    return { ok: false, status: 400, error: 'company_id inválido' };
-  }
-
-  // ── 4. Trilha 1: membership direta ────────────────────────────────────────
-  const { data: directMem } = await svc
-    .from('company_users')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('company_id', companyId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (directMem) {
-    // Role fora da matriz da ação solicitada → 403
-    if (!roles.includes(directMem.role)) {
-      return { ok: false, status: 403, error: 'Permissão insuficiente para esta operação' };
-    }
-
-    // ── 4a. Partner: assignment obrigatório ──────────────────────────────────
-    // role='partner' em company_users NUNCA é suficiente por si só.
-    // Exige vínculo ativo em partner_company_assignments.
-    if (directMem.role === 'partner') {
-      const { data: assignment } = await svc
-        .from('partner_company_assignments')
-        .select('id')
-        .eq('partner_user_id', user.id)
-        .eq('company_id', companyId)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (!assignment) {
-        return { ok: false, status: 403, error: 'Partner sem assignment ativo para esta empresa' };
-      }
-
-      return _checkFeatureFlagAndReturn(svc, {
-        companyId,
-        userId:     user.id,
-        role:       directMem.role,
-        accessPath: 'partner',
-      });
-    }
-
-    return _checkFeatureFlagAndReturn(svc, {
-      companyId,
-      userId:     user.id,
-      role:       directMem.role,
-      accessPath: 'direct',
-    });
-  }
-
-  // ── 5. Sem membership direta: partner herdado, depois admin da pai ────────
-  //
-  // Partner real tem company_users na empresa pai e assignment na filha.
-  // A role isolada não libera a filha. Membership direta ativa, já tratada
-  // acima, não chega aqui.
-  const { data: childCompany } = await svc
-    .from('companies')
-    .select('parent_company_id')
-    .eq('id', companyId)
-    .maybeSingle();
-
-  const parentCompanyId = childCompany?.parent_company_id ?? null;
-
-  if (parentCompanyId && roles.includes('partner')) {
-    const { data: partnerMem } = await svc
-      .from('company_users')
-      .select('role, company_id, companies!inner(company_type)')
-      .eq('user_id', user.id)
-      .eq('company_id', parentCompanyId)
-      .eq('is_active', true)
-      .eq('role', 'partner')
-      .maybeSingle();
-
-    const inheritedPartner = partnerMem?.role === 'partner'
-      && partnerMem.company_id === parentCompanyId
-      && partnerMem.companies?.company_type === 'parent';
-
-    if (inheritedPartner) {
-      const { data: inheritedAssignment } = await svc
-        .from('partner_company_assignments')
-        .select('id')
-        .eq('partner_user_id', user.id)
-        .eq('company_id', companyId)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (inheritedAssignment) {
-        return _checkFeatureFlagAndReturn(svc, {
-          companyId,
-          userId:     user.id,
-          role:       'partner',
-          accessPath: 'partner',
-        });
-      }
-    }
-  }
-
-  // ── 6. super_admin / system_admin da pai direta ───────────────────────────
-  //
-  // NÃO usar auth_user_is_platform_admin(): retorna true para qualquer usuário
-  // com role elevada em QUALQUER empresa parent, violando isolamento multi-tenant.
-  let parentQuery = svc
-    .from('company_users')
-    .select('role, company_id, companies!inner(company_type)')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .in('role', ['super_admin', 'system_admin']);
-
-  if (parentCompanyId) {
-    parentQuery = parentQuery.eq('company_id', parentCompanyId);
-  }
-
-  const { data: parentMem } = await parentQuery.maybeSingle();
-
-  if (!parentMem
-      || parentMem.companies?.company_type !== 'parent'
-      || (parentCompanyId && parentMem.company_id !== parentCompanyId)) {
-    return { ok: false, status: 403, error: 'Acesso negado a esta empresa' };
-  }
-
-  // Garantia anti-cross-tenant: a empresa alvo deve ser filha direta desta parent.
-  // Um super_admin de Parent A NÃO pode acessar empresas de Parent B.
-  const { data: childCheck } = await svc
-    .from('companies')
-    .select('id')
-    .eq('id', companyId)
-    .eq('parent_company_id', parentMem.company_id)
-    .maybeSingle();
-
-  if (!childCheck) {
-    return { ok: false, status: 403, error: 'Empresa não encontrada ou sem acesso' };
-  }
-
-  return _checkFeatureFlagAndReturn(svc, {
-    companyId,
-    userId:     user.id,
-    role:       parentMem.role,
-    accessPath: 'parent',
+  const companyAuth = await validateCompanyCaller(req, svc, companyId, {
+    roles: options.roles ?? META_VIEW_ROLES,
   });
+  if (!companyAuth.ok) return companyAuth;
+  return _checkFeatureFlagAndReturn(svc, companyAuth);
 }
 
-// =============================================================================
-// Helper interno — feature flag
-// =============================================================================
-
 /**
- * Verifica companies.meta_whatsapp_enabled para a empresa alvo e retorna
- * o resultado final. Chamado somente após autenticação, tenant e RBAC aprovados.
- *
- * A verificação é sempre obrigatória — não existe bypass público.
- * Se meta_whatsapp_enabled for false ou empresa não existir → 403.
+ * Verifica companies.meta_whatsapp_enabled depois da autorização de empresa.
+ * Não existe bypass. Flag ausente ou falsa nega o endpoint Meta.
  *
  * @private
  */

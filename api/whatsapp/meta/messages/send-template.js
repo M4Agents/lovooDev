@@ -79,6 +79,10 @@
 
 import { getSupabaseAdmin }                    from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_SEND_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../lib/meta-whatsapp/metaConversationAccess.js';
 import { decryptMetaToken }                    from '../../../lib/meta-whatsapp/tokenCrypto.js';
 import { listMessageTemplates,
          sendTemplateMessage,
@@ -107,6 +111,68 @@ function buildTemplateSidebarPreview(renderedBody, headerMediaFormat) {
 
 // UUID v4 básico — mesma regex de validateMetaCaller.js.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const CONVERSATION_FIELDS = 'id, wa_id, company_id, instance_id, assigned_to';
+
+function visibilityFailure(scope) {
+  const status = scope.status === 503 ? 503 : scope.status;
+  return {
+    ok: false,
+    status,
+    error: status === 503 ? 'internal_error' : scope.error,
+  };
+}
+
+function normalizeWaId(waId) {
+  const raw = waId ?? '';
+  const normalized = raw.startsWith('+') ? raw.slice(1) : raw;
+  if (!/^[0-9]+$/.test(normalized) || normalized.length === 0) return null;
+  return normalized;
+}
+
+async function resolveSendScope(svc, auth) {
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) return visibilityFailure(scope);
+  return { ok: true, scope };
+}
+
+async function loadAuthorizedConversation(svc, auth, scope, conversationId, instanceId) {
+  const instanceFilter = UUID_RE.test(instanceId) ? instanceId : null;
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONVERSATION_FIELDS),
+    scope,
+    { conversationId, instanceId: instanceFilter },
+  );
+  if (!filtered.ok) return { ok: false, status: 403, error: 'Acesso negado' };
+
+  const { data, error } = await filtered.query.maybeSingle();
+  if (error) return { ok: false, status: 500, error: 'internal_error' };
+
+  const instanceMatches = !data || instanceFilter == null || data.instance_id === instanceFilter;
+  const allowed = data
+    && data.id === conversationId
+    && data.company_id === auth.companyId
+    && instanceMatches
+    && (scope.visibility !== 'assigned' || data.assigned_to === auth.userId);
+  if (!allowed) return { ok: false, status: 404, error: 'conversation_not_found' };
+  return { ok: true, conversation: data };
+}
+
+async function revalidateAuthorizedConversation(req, svc, companyId, conversationId, instanceId) {
+  const auth = await validateMetaCaller(req, svc, companyId, { roles: META_SEND_ROLES });
+  if (!auth.ok) return { ok: false, status: auth.status, error: auth.error };
+  const scope = await resolveSendScope(svc, auth);
+  if (!scope.ok) return scope;
+  const loaded = await loadAuthorizedConversation(
+    svc,
+    auth,
+    scope.scope,
+    conversationId,
+    instanceId,
+  );
+  if (!loaded.ok) return loaded;
+  return { ok: true, auth, conversation: loaded.conversation };
+}
 
 async function settleOutboundReconcile(svc, companyId, instanceId, wamid) {
   try {
@@ -226,6 +292,11 @@ export default async function handler(req, res) {
     }
   }
 
+  const scope = await resolveSendScope(svc, auth);
+  if (!scope.ok) {
+    return res.status(scope.status).json({ error: scope.error });
+  }
+
   // ── 6. Lookup de instância ─────────────────────────────────────────────────
   const { data: instance, error: instErr } = await svc
     .from('meta_whatsapp_instances')
@@ -248,25 +319,21 @@ export default async function handler(req, res) {
   }
 
   // ── 8. Lookup de conversa ──────────────────────────────────────────────────
-  const { data: conversation, error: convErr } = await svc
-    .from('meta_conversations')
-    .select('id, wa_id, company_id, instance_id')
-    .eq('id', conversationId)
-    .eq('company_id', auth.companyId)
-    .eq('instance_id', instance.id)
-    .maybeSingle();
-
-  if (convErr) {
-    return res.status(500).json({ error: 'internal_error' });
+  const loaded = await loadAuthorizedConversation(
+    svc,
+    auth,
+    scope.scope,
+    conversationId,
+    instance.id,
+  );
+  if (!loaded.ok) {
+    return res.status(loaded.status).json({ error: loaded.error });
   }
-  if (!conversation) {
-    return res.status(404).json({ error: 'conversation_not_found' });
-  }
+  const conversation = loaded.conversation;
 
   // ── 9. Normalizar recipient ────────────────────────────────────────────────
-  const waIdRaw     = conversation.wa_id ?? '';
-  const toRecipient = waIdRaw.startsWith('+') ? waIdRaw.slice(1) : waIdRaw;
-  if (!/^[0-9]+$/.test(toRecipient) || toRecipient.length === 0) {
+  let toRecipient = normalizeWaId(conversation.wa_id);
+  if (!toRecipient) {
     return res.status(500).json({ error: 'internal_error' });
   }
 
@@ -444,6 +511,17 @@ export default async function handler(req, res) {
     uploadedMediaType = assetResult.mediaType;
     uploadedFilename  = assetResult.filename; // undefined para IMAGE/VIDEO
 
+    const beforeUpload = await revalidateAuthorizedConversation(
+      req,
+      svc,
+      auth.companyId,
+      conversation.id,
+      instance.id,
+    );
+    if (!beforeUpload.ok) {
+      return res.status(beforeUpload.status).json({ error: beforeUpload.error });
+    }
+
     // ── 17B. Upload para Graph /media (WRITE 1) ────────────────────────────
     // token e phone_number_id vêm EXCLUSIVAMENTE do banco — nunca do body.
     // blob e mimeType vêm EXCLUSIVAMENTE de assetResult (validado server-side).
@@ -503,6 +581,23 @@ export default async function handler(req, res) {
   // phone_number_id e toRecipient vêm EXCLUSIVAMENTE do banco.
   // components construídos server-side pelo engine.
   // Exatamente 1 fetch — sem retry.
+  // A listagem do template pode ter sido lenta. A autorização é relida
+  // imediatamente antes deste efeito externo.
+  const beforeSend = await revalidateAuthorizedConversation(
+    req,
+    svc,
+    auth.companyId,
+    conversation.id,
+    instance.id,
+  );
+  if (!beforeSend.ok) {
+    return res.status(beforeSend.status).json({ error: beforeSend.error });
+  }
+  toRecipient = normalizeWaId(beforeSend.conversation.wa_id);
+  if (!toRecipient) {
+    return res.status(500).json({ error: 'internal_error' });
+  }
+
   const templatePayload = {
     name:     templateName,
     language: { code: templateLanguage },

@@ -17,8 +17,9 @@
 //   4. Validar filter/limit — sem DB
 //   5. getSupabaseAdmin()
 //   6. validateMetaCaller() — auth + RBAC + feature flag
-//   7. [somente após auth.ok] Validar instância dentro do tenant
-//   8. Query meta_conversations com auth.companyId
+//   7. resolveMetaConversationVisibility() — flag da empresa autorizada
+//   8. [somente após auth.ok] Validar instância dentro do tenant
+//   9. Query com company_id, instância e assigned_to antes de paginação
 //
 // Segurança:
 //   - company_id da query identifica o tenant — nunca autoriza acesso
@@ -37,10 +38,15 @@
 //
 // Lista vazia é estado válido:
 //   Empresa ativa sem conversas ainda → 200 { conversations: [] }
+//   id inacessível, inexistente ou de outro escopo → 404 idêntico
 // =============================================================================
 
 import { getSupabaseAdmin }                   from '../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../lib/meta-whatsapp/metaConversationAccess.js';
 
 // UUID v4 básico — rejeita inputs obviamente inválidos antes de qualquer query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,6 +137,16 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ error: auth.error });
   }
 
+  // Escopo lido no banco para auth.companyId. Flag ausente ou erro não vira visão ampla.
+  // Parâmetros do cliente não substituem company_id nem assigned_to.
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) {
+    const status = scope.status === 503 ? 503 : scope.status;
+    return res.status(status).json({
+      error: status === 503 ? 'internal_error' : scope.error,
+    });
+  }
+
   // ── 7. Validar instance_id dentro do tenant autorizado ───────────────────
   // Executado somente após auth.ok — usa auth.companyId (nunca req.query).
   // Resposta 404 idêntica para: inexistente, de outro tenant, ou soft-deleted.
@@ -163,36 +179,42 @@ export default async function handler(req, res) {
   let queryErr;
 
   if (conversationId) {
-    // Leitura por ID: não aplica ordenação nem limit. Ausência, outro tenant,
-    // arquivada ou outra instância resolvem no mesmo 200 { conversations: [] }.
-    let byId = svc
-      .from('meta_conversations')
-      .select(PUBLIC_FIELDS)
-      .eq('id', conversationId)
-      .eq('company_id', auth.companyId)
-      .eq('status', 'active');
-
-    if (instanceId) {
-      byId = byId.eq('instance_id', instanceId);
+    // Empresa, conversa, instância e assigned_to entram antes de status e unread.
+    // Inexistência, outro tenant, outra instância e atribuição fora do seller
+    // restrito respondem o mesmo 404.
+    const filtered = applyMetaConversationFilters(
+      svc.from('meta_conversations').select(PUBLIC_FIELDS),
+      scope,
+      { conversationId, instanceId: instanceId ?? null },
+    );
+    if (!filtered.ok) {
+      return res.status(403).json({ error: 'Acesso negado' });
     }
+
+    let byId = filtered.query.eq('status', 'active');
     if (filterType === 'unread') {
       byId = byId.gt('unread_count', 0);
     }
 
     const byIdResult = await byId.maybeSingle();
     queryErr = byIdResult.error;
+    if (!queryErr && !byIdResult.data) {
+      return res.status(404).json({ error: 'Conversa não encontrada' });
+    }
     conversations = byIdResult.data ? [byIdResult.data] : [];
   } else {
-    let query = svc
-      .from('meta_conversations')
-      .select(PUBLIC_FIELDS)
-      .eq('company_id', auth.companyId)
+    const filtered = applyMetaConversationFilters(
+      svc.from('meta_conversations').select(PUBLIC_FIELDS),
+      scope,
+      { instanceId: instanceId ?? null },
+    );
+    if (!filtered.ok) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    let query = filtered.query
       .eq('status', 'active')
       .order('last_message_at', { ascending: false, nullsLast: true });
-
-    if (instanceId) {
-      query = query.eq('instance_id', instanceId);
-    }
 
     if (filterType === 'unread') {
       query = query.gt('unread_count', 0);

@@ -1,9 +1,9 @@
 // =============================================================================
 // POST /api/whatsapp/meta/conversations/:conversationId/leads/link
 //
-// Vincula um lead existente a uma conversa Meta. A decisão final é da RPC
-// public.link_meta_conversation_lead, sob locks. Este handler só valida a
-// entrada, identifica o usuário e traduz o retorno.
+// Vincula um lead existente a uma conversa Meta. A visibilidade da conversa
+// é resolvida antes da RPC. A decisão comercial final continua em
+// public.link_meta_conversation_lead, sob locks.
 //
 // Body:
 //   company_id        (UUID, obrigatório)
@@ -21,6 +21,10 @@
 
 import { getSupabaseAdmin } from '../../../../../lib/automation/supabaseAdmin.js';
 import { validateMetaCaller, META_VIEW_ROLES } from '../../../../../lib/meta-whatsapp/validateMetaCaller.js';
+import {
+  applyMetaConversationFilters,
+  resolveMetaConversationVisibility,
+} from '../../../../../lib/meta-whatsapp/metaConversationAccess.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,6 +38,8 @@ const BUSINESS_CODES = new Set([
 
 const RETRYABLE_SQLSTATE = new Set(['40001', '40P01']);
 
+const CONV_FIELDS = 'id, company_id, assigned_to, status';
+
 const OPAQUE_FORBIDDEN = { error: 'Permissão insuficiente para esta operação' };
 const OPAQUE_NOT_FOUND = { error: 'Registro não encontrado' };
 const CONFLICT = { error: 'conflict' };
@@ -46,6 +52,35 @@ function isUuid(value) {
 
 function isPositiveSafeInteger(value) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function visibilityFailure(scope) {
+  if (scope.status === 503) return { status: 503, error: 'internal_error' };
+  return { status: scope.status, error: scope.error };
+}
+
+async function loadAuthorizedConversation(svc, auth, conversationId) {
+  const scope = await resolveMetaConversationVisibility(svc, auth);
+  if (!scope.ok) return { ok: false, ...visibilityFailure(scope) };
+
+  const filtered = applyMetaConversationFilters(
+    svc.from('meta_conversations').select(CONV_FIELDS),
+    scope,
+    { conversationId },
+  );
+  if (!filtered.ok) return { ok: false, status: 403, error: 'Acesso negado' };
+
+  const { data, error } = await filtered.query.eq('status', 'active').maybeSingle();
+  if (error) return { ok: false, status: 500, error: 'internal_error' };
+
+  const assignedOk = scope.visibility !== 'assigned' || data?.assigned_to === auth.userId;
+  const allowed = Boolean(data)
+    && data.id === conversationId
+    && data.company_id === auth.companyId
+    && data.status === 'active'
+    && assignedOk;
+  if (!allowed) return { ok: false, status: 404, error: OPAQUE_NOT_FOUND.error };
+  return { ok: true };
 }
 
 export default async function handler(req, res) {
@@ -100,12 +135,22 @@ export default async function handler(req, res) {
       return res.status(auth.status).json({ error: auth.error });
     }
 
+    const loaded = await loadAuthorizedConversation(svc, auth, conversationId);
+    if (!loaded.ok) {
+      return res.status(loaded.status).json({ error: loaded.error });
+    }
+
+    const refreshed = await validateMetaCaller(req, svc, auth.companyId, { roles: META_VIEW_ROLES });
+    if (!refreshed.ok) {
+      return res.status(refreshed.status).json({ error: refreshed.error });
+    }
+
     const { data, error } = await svc.rpc('link_meta_conversation_lead', {
-      p_company_id: auth.companyId,
+      p_company_id: refreshed.companyId,
       p_conversation_id: conversationId,
       p_destination_lead_id: leadId,
       p_expected_lead_id: expectedLeadId,
-      p_actor_user_id: auth.userId,
+      p_actor_user_id: refreshed.userId,
     });
 
     if (error) {

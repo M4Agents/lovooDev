@@ -5,7 +5,7 @@
 // Busca DIRETA do Supabase (sem APIs intermediárias)
 // Mesma abordagem que funciona perfeitamente no chat
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Folder, File, Image, Video, Music, FileText, ChevronLeft, Upload, Plus } from 'lucide-react'
 import { DirectS3Upload } from '../../MediaLibrary/DirectS3Upload'
@@ -90,6 +90,9 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [cursor, setCursor] = useState<string | null>(null)
+  const folderListGeneration = useRef(0)
+  const listScopeRef = useRef({ companyId, folderId: currentFolderId })
+  listScopeRef.current = { companyId, folderId: currentFolderId }
   const PAGE_SIZE = 50
   
   // =====================================================
@@ -241,44 +244,65 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
     }
   }
   
-  const fetchFolderFiles = async (folderId: string) => {
+  const fetchFolderFiles = async (folderId: string, generation: number) => {
+    const requestedCompanyId = companyId
+    const stillThisList = () =>
+      generation === folderListGeneration.current &&
+      listScopeRef.current.companyId === requestedCompanyId &&
+      listScopeRef.current.folderId === folderId
+
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const requestedUserId = session?.user?.id
+      if (!token || !requestedUserId) {
+        if (stillThisList()) setFolderFiles([])
+        return
+      }
+      if (!stillThisList()) return
+
       const response = await fetch(
-        `/api/media-management/files/list?company_id=${companyId}&folder_id=${folderId}`
+        `/api/media-management/files/list?company_id=${encodeURIComponent(requestedCompanyId)}&folder_id=${encodeURIComponent(folderId)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
       )
-      
+
       if (!response.ok) {
+        if (!stillThisList()) return
         console.error('❌ Erro na API:', response.status)
         setFolderFiles([])
         return
       }
-      
+
       const data = await response.json()
+      const { data: { session: latest } } = await supabase.auth.getSession()
+      const sameUser = !!latest?.access_token && latest.user?.id === requestedUserId
+      if (!stillThisList() || !sameUser) {
+        if (stillThisList()) setFolderFiles([])
+        return
+      }
       const files = data.data?.files || []
-      
-      // ✅ FILTRO CORRIGIDO: Converter ambos para string para comparação robusta
-      // Trata null, undefined, e garante comparação correta
       const filteredFiles = files.filter((file: any) => {
         const fileFolderId = String(file.folder_id || '')
         const targetFolderId = String(folderId || '')
         return fileFolderId === targetFolderId
       })
-      
+      if (!stillThisList()) return
       setFolderFiles(filteredFiles)
     } catch (error) {
+      if (!stillThisList()) return
       console.error('❌ Erro ao buscar arquivos:', error)
       setFolderFiles([])
     }
   }
-  
-  // Buscar arquivos quando pasta for selecionada
+
+  // Buscar arquivos quando pasta ou empresa mudar. Geração descarta resposta atrasada.
   useEffect(() => {
+    const generation = ++folderListGeneration.current
+    setFolderFiles([])
     if (currentFolderId) {
-      fetchFolderFiles(currentFolderId)
-    } else {
-      setFolderFiles([])
+      void fetchFolderFiles(currentFolderId, generation)
     }
-  }, [currentFolderId])
+  }, [currentFolderId, companyId])
 
   const loadMore = async () => {
     if (!hasMore || loadingMore || !cursor) return
@@ -865,10 +889,9 @@ export const BibliotecaV2: React.FC<BibliotecaV2Props> = ({
                     companyId={companyId}
                     folderId={currentFolderId}
                     onUploadComplete={(fileId) => {
-                      // Recarregar lista de arquivos da pasta atual
-                      if (currentFolderId) {
-                        fetchFolderFiles(currentFolderId)
-                      }
+                      if (!currentFolderId) return
+                      const generation = ++folderListGeneration.current
+                      void fetchFolderFiles(currentFolderId, generation)
                     }}
                   />
                 </div>

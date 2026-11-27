@@ -167,10 +167,39 @@ function makeContactsChain(data, error = null) {
 // Setup padrão
 // =============================================================================
 
+let visibilityFlag = false;
+let visibilityError = null;
+const queuedFrom = [];
+
+function makeFlagChain() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: visibilityError ? null : { chat_visibility_by_assigned_to: visibilityFlag },
+      error: visibilityError,
+    }),
+  };
+}
+
+function installFromRouter() {
+  queuedFrom.length = 0;
+  mockSvc.from.mockImplementation((table) => {
+    if (table === 'companies') return makeFlagChain();
+    return queuedFrom.shift();
+  });
+  mockSvc.from.mockReturnValueOnce = (value) => {
+    queuedFrom.push(value);
+    return mockSvc.from;
+  };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  // Default: auth bem-sucedida
+  visibilityFlag = false;
+  visibilityError = null;
   mockValidateMetaCaller.mockResolvedValue(FAKE_AUTH_OK);
+  installFromRouter();
 });
 
 /**
@@ -345,8 +374,8 @@ describe('GET /api/whatsapp/meta/conversations — instance_id', () => {
     expect(res._status).toBe(200);
     expect(res._body.conversations).toHaveLength(1);
     // Instance lookup usou auth.companyId (não req.query.company_id)
-    const instChainCall = mockSvc.from.mock.calls[0];
-    expect(instChainCall[0]).toBe('meta_whatsapp_instances');
+    const instChainCall = mockSvc.from.mock.calls.find((call) => call[0] === 'meta_whatsapp_instances');
+    expect(instChainCall?.[0]).toBe('meta_whatsapp_instances');
   });
 
   it('CONV-11: instance inexistente/de outro tenant → 404', async () => {
@@ -358,8 +387,10 @@ describe('GET /api/whatsapp/meta/conversations — instance_id', () => {
     await handler(req, res);
 
     expect(res._status).toBe(404);
-    // Não deve chegar a fazer query em meta_conversations
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_whatsapp_instances',
+    ]);
   });
 });
 
@@ -480,7 +511,7 @@ describe('GET /api/whatsapp/meta/conversations — segurança de resposta e quer
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
       companyId:  CHILD_COMPANY_ID,   // companyId autorizado (child)
-      userId:     'user-1',
+      userId:     FAKE_AUTH_OK.userId,
       role:       'super_admin',
       accessPath: 'parent',
     });
@@ -538,7 +569,7 @@ describe('GET /api/whatsapp/meta/conversations — enriquecimento de foto (MVP3F
     mockValidateMetaCaller.mockResolvedValue({
       ok:         true,
       companyId:  CHILD_ID,
-      userId:     'user-1',
+      userId:     FAKE_AUTH_OK.userId,
       role:       'super_admin',
       accessPath: 'parent',
     });
@@ -573,8 +604,10 @@ describe('GET /api/whatsapp/meta/conversations — enriquecimento de foto (MVP3F
 
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ conversations: [] });
-    // from() só deve ter sido chamado 1 vez (meta_conversations), nunca chat_contacts.
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
   });
 
   it('CONV-23: erro em chat_contacts → HTTP 200, conversations preservadas, profile_picture_url null', async () => {
@@ -657,6 +690,7 @@ describe('GET /api/whatsapp/meta/conversations — DTO lead_id', () => {
     expect(conv).not.toHaveProperty('owner_id');
     expect(conv).not.toHaveProperty('assigned_to');
     expect(mockSvc.from.mock.calls.map(c => c[0])).toEqual([
+      'companies',
       'meta_conversations',
       'chat_contacts',
     ]);
@@ -772,8 +806,8 @@ describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
       company_id: OTHER_COMPANY_ID,
     }), res);
 
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ conversations: [] });
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'Conversa não encontrada' });
     expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
     expect(convChain.eq).not.toHaveBeenCalledWith('company_id', OTHER_COMPANY_ID);
   });
@@ -783,10 +817,13 @@ describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
     const res = makeRes();
     await handler(makeReq({ id: FAKE_CONV_ID_B }), res);
 
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ conversations: [] });
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'Conversa não encontrada' });
     expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_conversations',
+    ]);
   });
 
   it('CONV-35: instância inválida com id preserva 404 e não consulta a conversa', async () => {
@@ -798,8 +835,10 @@ describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
     }), res);
 
     expect(res._status).toBe(404);
-    expect(mockSvc.from).toHaveBeenCalledTimes(1);
-    expect(mockSvc.from).toHaveBeenCalledWith('meta_whatsapp_instances');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual([
+      'companies',
+      'meta_whatsapp_instances',
+    ]);
   });
 
   it('CONV-36: id de outra instância da empresa → lista vazia', async () => {
@@ -810,8 +849,8 @@ describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
       instance_id: FAKE_INSTANCE_ID,
     }), res);
 
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ conversations: [] });
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'Conversa não encontrada' });
     expect(convChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
   });
 
@@ -822,5 +861,224 @@ describe('GET /api/whatsapp/meta/conversations — leitura por id', () => {
 
     expect(res._status).toBe(200);
     expect(convChain.gt).toHaveBeenCalledWith('unread_count', 0);
+  });
+});
+
+describe('GET /api/whatsapp/meta/conversations — visibilidade por atribuição', () => {
+  const CLIENT_ASSIGNEE = 'abab0000-0000-0000-0000-000000000099';
+
+  function asRole(role, accessPath = 'direct') {
+    mockValidateMetaCaller.mockResolvedValue({
+      ...FAKE_AUTH_OK,
+      role,
+      accessPath,
+    });
+  }
+
+  function assignedCallBeforeLimit(chain) {
+    const index = chain.eq.mock.calls.findIndex((call) => call[0] === 'assigned_to');
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(chain.eq.mock.invocationCallOrder[index])
+      .toBeLessThan(chain.limit.mock.invocationCallOrder[0]);
+  }
+
+  it('A: seller com flag desligada consulta a empresa sem filtrar assigned_to', async () => {
+    asRole('seller');
+    visibilityFlag = false;
+    const convChain = makeConvChain([]);
+    mockSvc.from.mockReturnValueOnce(convChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', expect.anything());
+  });
+
+  it('B/C/D: seller restrito filtra assigned_to do usuário autenticado', async () => {
+    asRole('seller');
+    visibilityFlag = true;
+    const convChain = makeConvChain([]);
+    convChain.or = vi.fn().mockReturnThis();
+    mockSvc.from.mockReturnValueOnce(convChain);
+
+    const req = makeReq({ limit: '10' });
+    req.query.assigned_to = CLIENT_ASSIGNEE;
+    req.query.search = 'maria';
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', CLIENT_ASSIGNEE);
+    expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', null);
+    expect(convChain.or).not.toHaveBeenCalled();
+    expect(convChain.select).toHaveBeenCalledTimes(1);
+    expect(convChain.count).toBeUndefined();
+    assignedCallBeforeLimit(convChain);
+    expect(convChain.limit).toHaveBeenCalledWith(10);
+    expect(mockSvc.from.mock.calls.filter((call) => call[0] === 'meta_conversations')).toHaveLength(1);
+  });
+
+  it('H: acesso individual autorizado aplica os filtros e retorna a conversa', async () => {
+    asRole('seller');
+    visibilityFlag = true;
+    const convChain = makeConvByIdChain(FAKE_CONV);
+    mockSvc.from
+      .mockReturnValueOnce(convChain)
+      .mockReturnValueOnce(makeContactsChain([]));
+
+    const res = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), res);
+
+    expect(res._status).toBe(200);
+    expect(res._body.conversations).toHaveLength(1);
+    expect(convChain.eq).toHaveBeenCalledWith('id', FAKE_CONV_ID_A);
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(convChain.eq).toHaveBeenCalledWith('status', 'active');
+    expect(convChain.limit).toBeUndefined();
+  });
+
+  it('I/J/K: conversa inacessível responde 404 sem revelar o motivo', async () => {
+    asRole('seller');
+    visibilityFlag = true;
+    const convChain = makeConvByIdChain(null);
+    mockSvc.from
+      .mockReturnValueOnce(makeInstChain({ id: FAKE_INSTANCE_ID }))
+      .mockReturnValueOnce(convChain);
+
+    const req = makeReq({ id: FAKE_CONV_ID_A, instance_id: FAKE_INSTANCE_ID });
+    req.query.company_id = FAKE_COMPANY_ID;
+    req.query.assigned_to = CLIENT_ASSIGNEE;
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: 'Conversa não encontrada' });
+    expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('instance_id', FAKE_INSTANCE_ID);
+    expect(convChain.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).not.toContain('meta_messages');
+  });
+
+  it('L/M: partner sem atribuição e membership inativa não consultam conversas', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+
+    const res = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), res);
+
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado a esta empresa' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('N: role desconhecido é negado antes da consulta', async () => {
+    mockValidateMetaCaller.mockResolvedValue({
+      ...FAKE_AUTH_OK,
+      role: 'auditor',
+    });
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(403);
+    expect(res._body).toEqual({ error: 'Acesso negado' });
+    expect(mockSvc.from).not.toHaveBeenCalled();
+  });
+
+  it('O: falha de leitura da flag não consulta conversas', async () => {
+    visibilityError = { message: 'db down' };
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(503);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('db down');
+    expect(mockSvc.from.mock.calls.map((call) => call[0])).toEqual(['companies']);
+  });
+
+  it('P: falha de banco na listagem permanece 500', async () => {
+    const convChain = makeConvChain(null, { message: 'connection lost' });
+    mockSvc.from.mockReturnValueOnce(convChain);
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+
+    expect(res._status).toBe(500);
+    expect(res._body).toEqual({ error: 'internal_error' });
+    expect(JSON.stringify(res._body)).not.toContain('connection lost');
+  });
+
+  it('V/W: transferência, desativação e reativação são reavaliadas a cada requisição', async () => {
+    asRole('seller');
+    visibilityFlag = true;
+    const first = makeConvByIdChain(FAKE_CONV);
+    mockSvc.from
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(makeContactsChain([]));
+
+    const opened = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), opened);
+    expect(opened._status).toBe(200);
+    expect(first.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+
+    const transferred = makeConvByIdChain(null);
+    mockSvc.from.mockReturnValueOnce(transferred);
+    const moved = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), moved);
+    expect(moved._status).toBe(404);
+    expect(transferred.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+
+    mockValidateMetaCaller.mockResolvedValue({
+      ok: false,
+      status: 403,
+      error: 'Acesso negado a esta empresa',
+    });
+    const callsBeforeDenial = mockSvc.from.mock.calls.length;
+    const disabled = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), disabled);
+    expect(disabled._status).toBe(403);
+    expect(mockSvc.from.mock.calls).toHaveLength(callsBeforeDenial);
+
+    asRole('seller');
+    const restored = makeConvByIdChain(FAKE_CONV);
+    mockSvc.from
+      .mockReturnValueOnce(restored)
+      .mockReturnValueOnce(makeContactsChain([]));
+    const enabled = makeRes();
+    await handler(makeReq({ id: FAKE_CONV_ID_A }), enabled);
+    expect(enabled._status).toBe(200);
+    expect(restored.eq).toHaveBeenCalledWith('assigned_to', FAKE_AUTH_OK.userId);
+  });
+
+  it('X: roles de visão ampla não recebem filtro de assigned_to', async () => {
+    visibilityFlag = true;
+    const roles = [
+      ['super_admin', 'direct'],
+      ['system_admin', 'parent'],
+      ['admin', 'direct'],
+      ['manager', 'direct'],
+      ['partner', 'partner'],
+    ];
+
+    for (const [role, accessPath] of roles) {
+      asRole(role, accessPath);
+      const convChain = makeConvChain([]);
+      mockSvc.from.mockReturnValueOnce(convChain);
+      const res = makeRes();
+      await handler(makeReq(), res);
+
+      expect(res._status).toBe(200);
+      expect(convChain.eq).toHaveBeenCalledWith('company_id', FAKE_COMPANY_ID);
+      expect(convChain.eq).not.toHaveBeenCalledWith('assigned_to', expect.anything());
+    }
   });
 });
