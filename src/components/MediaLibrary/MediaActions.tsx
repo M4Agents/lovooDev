@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next'
 import { mediaManagement, MediaFolder } from '../../services/mediaManagement'
 import {
   Move,
-  Trash2,
   Download,
   X,
   Folder,
@@ -30,7 +29,7 @@ interface MediaActionsProps {
   onComplete: () => void
 }
 
-type ActionType = 'move' | 'delete' | 'download'
+type ActionType = 'move' | 'download'
 
 // =====================================================
 // COMPONENTE PRINCIPAL
@@ -88,33 +87,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
     }
   }
 
-  const handleDelete = async () => {
-    const confirmed = window.confirm(
-      t('mediaActions.confirmDeleteMany', { count: fileCount })
-    )
-
-    if (!confirmed) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const result = await mediaManagement.deleteMultipleFiles(companyId, selectedFileIds)
-      setResult(result)
-      
-      if (result.success) {
-        setTimeout(() => {
-          onComplete()
-        }, 1500)
-      }
-    } catch (error) {
-      console.error('Erro ao excluir arquivos:', error)
-      setError(error instanceof Error ? error.message : t('mediaActions.errorDelete'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleDownload = async () => {
     setLoading(true)
     setError(null)
@@ -146,9 +118,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
     switch (selectedAction) {
       case 'move':
         await handleMove()
-        break
-      case 'delete':
-        await handleDelete()
         break
       case 'download':
         await handleDownload()
@@ -199,22 +168,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
             </div>
           </div>
         </button>
-
-        {/* Excluir — oculto em pastas de sistema */}
-        {!isSystemFolder && (
-          <button
-            onClick={() => setSelectedAction('delete')}
-            className="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors"
-          >
-            <Trash2 className="w-6 h-6 text-red-600" />
-            <div className="text-left">
-              <div className="font-medium text-gray-900">{t('mediaActions.deleteTitle')}</div>
-              <div className="text-sm text-gray-600">
-                {t('mediaActions.deleteDescription')}
-              </div>
-            </div>
-          </button>
-        )}
 
         {/* Aviso quando em pasta de sistema */}
         {isSystemFolder && (
@@ -267,7 +220,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
   const renderConfirmAction = () => {
     const actionIcons = {
       move: <Move className="w-6 h-6 text-blue-600" />,
-      delete: <Trash2 className="w-6 h-6 text-red-600" />,
       download: <Download className="w-6 h-6 text-green-600" />
     }
 
@@ -287,9 +239,7 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                 verb:
                   selectedAction === 'move'
                     ? t('mediaActions.verbMove')
-                    : selectedAction === 'delete'
-                      ? t('mediaActions.verbDelete')
-                      : t('mediaActions.verbDownload'),
+                    : t('mediaActions.verbDownload'),
                 count: fileCount
               })}
           </p>
@@ -302,12 +252,6 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                     ? t('mediaActions.rootLibrary')
                     : folders.find(f => f.id === selectedFolderId)?.name ?? ''
               })}
-            </p>
-          )}
-          
-          {selectedAction === 'delete' && (
-            <p className="text-red-600 mt-2 font-medium">
-              {t('mediaActions.deleteWarning')}
             </p>
           )}
         </div>
@@ -414,16 +358,12 @@ export const MediaActions: React.FC<MediaActionsProps> = ({
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
                     selectedAction === 'move' && !selectedFolderId
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : selectedAction === 'delete'
-                      ? 'bg-red-600 text-white hover:bg-red-700'
                       : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
                 >
-                  {selectedAction === 'delete'
-                    ? t('mediaActions.executeDelete')
-                    : selectedAction === 'move'
-                      ? t('mediaActions.executeMove')
-                      : t('mediaActions.executeDownload')}
+                  {selectedAction === 'move'
+                    ? t('mediaActions.executeMove')
+                    : t('mediaActions.executeDownload')}
                 </button>
               </>
             ) : (

@@ -36,6 +36,7 @@ const HANDLERS = [
   'api/media-library/company/create-s3-folders.js',
   'api/media-library/leads/[leadId]/files.js',
   'api/media-library/leads/[leadId]/files-cache-bypass.js',
+  'api/media-management/files/delete.js',
 ]
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
@@ -75,7 +76,7 @@ function createReq(method) {
 }
 
 describe('desativacao das rotas legadas de midia', () => {
-  it('os vinte e um handlers tem o mesmo conteudo inerte', () => {
+  it('os vinte e dois handlers tem o mesmo conteudo inerte', () => {
     const contents = HANDLERS.map((rel) => readFileSync(path.join(ROOT, rel), 'utf8'))
     expect(new Set(contents).size).toBe(1)
     expect(contents[0]).toBe(STUB)
