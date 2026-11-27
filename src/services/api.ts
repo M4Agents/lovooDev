@@ -47,6 +47,90 @@ export const stopTrackingQueueProcessor = () => {
   }
 };
 
+type LeadFilterIdRow = {
+  lead_id: number | null;
+  total_count: number | string;
+};
+
+function phoneLookupVariants(value?: string): string[] {
+  if (!value) return [];
+  return brMobilePhoneLookupValues(value).filter((item) => /^\d{10,}$/.test(item));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isLeadFilterIdRow(value: unknown): value is LeadFilterIdRow {
+  if (!isRecord(value)) return false;
+  const leadIdOk = value.lead_id === null || typeof value.lead_id === 'number';
+  const totalOk = typeof value.total_count === 'number' || typeof value.total_count === 'string';
+  return leadIdOk && totalOk;
+}
+
+function readLeadFilterTotal(rows: LeadFilterIdRow[]): number {
+  const total = Number(rows[0]?.total_count);
+  const consistent = rows.every((row) => Number(row.total_count) === total);
+  if (!Number.isFinite(total) || !consistent) {
+    throw new Error('total_count inválido em list_lead_ids_for_filters');
+  }
+  return total;
+}
+
+const LEAD_LIST_SELECT = `
+  *,
+  lead_custom_values (
+    field_id,
+    value,
+    lead_custom_fields (
+      field_name,
+      field_label,
+      field_type
+    )
+  ),
+  lead_tag_assignments (
+    tag_id,
+    lead_tags (
+      id,
+      name,
+      color,
+      description,
+      is_active,
+      created_at,
+      updated_at
+    )
+  )
+`;
+
+type LeadListRow = {
+  id: number;
+  is_over_plan?: boolean | null;
+  lead_tag_assignments?: Array<{ lead_tags?: unknown } | null> | null;
+  phone?: string | null;
+  email?: string | null;
+  company_cnpj?: string | null;
+  company_phone?: string | null;
+  company_email?: string | null;
+};
+
+function mapLeadRows<T extends LeadListRow>(rows: T[]) {
+  return rows.map((lead) => {
+    const tags = (lead.lead_tag_assignments ?? [])
+      .map((assignment) => assignment?.lead_tags)
+      .filter((tag) => tag != null);
+    if (!lead.is_over_plan) return { ...lead, tags };
+    return {
+      ...lead,
+      tags,
+      phone: null,
+      email: null,
+      company_cnpj: null,
+      company_phone: null,
+      company_email: null,
+    };
+  });
+}
+
 export const api = {
   async createLandingPage(companyId: string, data: { name: string; url: string }) {
     
@@ -1040,55 +1124,59 @@ export const api = {
     console.log('API: getLeads called for company:', companyId);
 
     try {
-      // Step 1: Resolve qualifying IDs for tag filter (AND logic)
-      let qualifyingIds: number[] | null = null;
       if (filters?.tag_ids && filters.tag_ids.length > 0) {
-        const tagIds = filters.tag_ids;
-        const { data: assignments, error: tagError } = await supabase
-          .from('lead_tag_assignments')
-          .select('lead_id, tag_id')
-          .in('tag_id', tagIds);
-        if (tagError) throw tagError;
-        if (!assignments || assignments.length === 0) return { data: [], total: 0 };
-
-        const leadTagMap = new Map<number, Set<string>>();
-        for (const a of assignments) {
-          if (!leadTagMap.has(a.lead_id)) leadTagMap.set(a.lead_id, new Set());
-          leadTagMap.get(a.lead_id)!.add(a.tag_id);
+        const { data: idRows, error: idError } = await supabase.rpc(
+          'list_lead_ids_for_filters',
+          {
+            p_company_id: companyId,
+            p_tag_ids: filters.tag_ids,
+            p_start: filters.dateRange?.start ?? null,
+            p_end: filters.dateRange?.end ?? null,
+            p_status: filters.status ?? null,
+            p_origin: filters.origin ?? null,
+            p_responsible_user_id: filters.responsible_user_id ?? null,
+            p_search: filters.search ?? null,
+            p_search_phone_variants: phoneLookupVariants(filters.search),
+            p_name: filters.name ?? null,
+            p_phone: filters.phone ?? null,
+            p_phone_variants: phoneLookupVariants(filters.phone),
+            p_email: filters.email ?? null,
+            p_limit: filters.limit ?? null,
+            p_offset: filters.offset ?? null,
+          }
+        );
+        if (idError) throw idError;
+        if (!Array.isArray(idRows) || idRows.length === 0 || !idRows.every(isLeadFilterIdRow)) {
+          throw new Error('Resposta inválida de list_lead_ids_for_filters');
         }
-        qualifyingIds = Array.from(leadTagMap.entries())
-          .filter(([, tagSet]) => tagIds.every(tid => tagSet.has(tid)))
-          .map(([leadId]) => leadId);
-        if (qualifyingIds.length === 0) return { data: [], total: 0 };
+
+        const total = readLeadFilterTotal(idRows);
+        const orderedIds = idRows
+          .map((row) => row.lead_id)
+          .filter((id): id is number => typeof id === 'number');
+        if (orderedIds.length === 0) return { data: [], total };
+
+        const { data, error } = await supabase
+          .from('leads')
+          .select(LEAD_LIST_SELECT)
+          .in('id', orderedIds)
+          .eq('company_id', companyId)
+          .is('deleted_at', null);
+        if (error) throw error;
+
+        const byId = new Map(mapLeadRows(data || []).map((lead) => [lead.id, lead]));
+        const leads = orderedIds.flatMap((id) => {
+          const lead = byId.get(id);
+          return lead ? [lead] : [];
+        });
+        console.log('API: Leads retrieved successfully:', leads.length, 'of', total);
+        return { data: leads, total };
       }
 
       // Step 2: Build data query
       let query = supabase
         .from('leads')
-        .select(`
-          *,
-          lead_custom_values (
-            field_id,
-            value,
-            lead_custom_fields (
-              field_name,
-              field_label,
-              field_type
-            )
-          ),
-          lead_tag_assignments (
-            tag_id,
-            lead_tags (
-              id,
-              name,
-              color,
-              description,
-              is_active,
-              created_at,
-              updated_at
-            )
-          )
-        `)
+        .select(LEAD_LIST_SELECT)
         .eq('company_id', companyId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -1152,10 +1240,6 @@ export const api = {
         query = query.gte('created_at', filters.dateRange.start).lte('created_at', filters.dateRange.end);
         countQuery = countQuery.gte('created_at', filters.dateRange.start).lte('created_at', filters.dateRange.end);
       }
-      if (qualifyingIds !== null) {
-        query = query.in('id', qualifyingIds);
-        countQuery = countQuery.in('id', qualifyingIds);
-      }
 
       // Step 5: Apply pagination only to data query
       if (filters?.offset !== undefined && filters.offset > 0 && filters?.limit) {
@@ -1169,21 +1253,7 @@ export const api = {
 
       if (error) throw error;
 
-      const leads = (data || []).map((lead: any) => {
-        const tags = (lead.lead_tag_assignments || [])
-          .map((a: any) => a.lead_tags)
-          .filter(Boolean);
-        if (!lead.is_over_plan) return { ...lead, tags };
-        return {
-          ...lead,
-          tags,
-          phone: null,
-          email: null,
-          company_cnpj: null,
-          company_phone: null,
-          company_email: null,
-        };
-      });
+      const leads = mapLeadRows(data || []);
 
       console.log('API: Leads retrieved successfully:', leads.length, 'of', count);
       return { data: leads, total: count ?? 0 };
