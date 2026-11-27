@@ -35,6 +35,8 @@ const HANDLERS = [
   'src/pages/api/media-management/files/upload.js',
   'api/media-management/files/upload-cache-bypass-final.js',
   'src/pages/api/media-management/files/upload-cache-bypass-final.js',
+  'api/setup-s3-cors.js',
+  'api/media-library/company/files.js',
 ]
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
@@ -74,9 +76,9 @@ function createReq(method) {
 }
 
 describe('desativacao das rotas legadas de midia', () => {
-  it('os vinte handlers tem o mesmo conteudo inerte', () => {
+  it('os vinte e dois handlers tem o mesmo conteudo inerte', () => {
     const contents = HANDLERS.map((rel) => readFileSync(path.join(ROOT, rel), 'utf8'))
-    expect(HANDLERS).toHaveLength(20)
+    expect(HANDLERS).toHaveLength(22)
     expect(new Set(contents).size).toBe(1)
     expect(contents[0]).toBe(STUB)
   })
